@@ -15,7 +15,6 @@ import { AppView } from './types';
 import { Trophy } from 'lucide-react';
 
 const App: React.FC = () => {
-  // Demo starts at Landing for a professional public entry point
   const [currentView, setCurrentView] = React.useState<AppView>('landing');
   const [registeredEmail, setRegisteredEmail] = React.useState<string>('');
 
@@ -47,7 +46,7 @@ const App: React.FC = () => {
              <div className="w-20 h-20 bg-lime-100 text-lime-600 rounded-full flex items-center justify-center mb-6">
                 <Trophy size={40} />
              </div>
-             <h2 className="text-3xl font-black font-brand uppercase tracking-tighter">MIS PREDICCIONES</h2>
+             <h2 className="text-3xl font-black font-brand uppercase tracking-tighter">MIS PRONÓSTICOS</h2>
              <p className="text-slate-500 max-w-sm mt-2 font-medium">Aquí aparecerán los torneos en los que participas. Actualmente el sistema está en modo demostración.</p>
           </div>
         );
@@ -63,14 +62,14 @@ const App: React.FC = () => {
                       pos === 2 ? 'bg-slate-100 text-slate-400' :
                       pos === 3 ? 'bg-orange-100 text-orange-600' : 'text-slate-300'
                     }`}>#{pos}</span>
-                    <img src={`https://picsum.photos/seed/user${pos}/60/60`} className="w-12 h-12 rounded-full ring-2 ring-white shadow-sm" alt="User" />
+                    <img src={`https://picsum.photos/seed/user${pos}/60/60`} className="w-12 h-12 rounded-full ring-2 ring-white shadow-sm" alt="Usuario" />
                     <div className="flex-1">
                       <p className="font-black text-slate-900">Usuario Ganador {pos}</p>
                       <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">@liga_pro_crack</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-black text-lime-600">{150 - pos * 5} pts</p>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Trending Up</p>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Subiendo</p>
                     </div>
                   </div>
                 ))}

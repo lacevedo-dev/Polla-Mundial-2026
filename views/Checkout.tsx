@@ -9,157 +9,146 @@ import {
   Lock, 
   Globe, 
   CheckCircle2,
-  Crown,
-  Zap
+  Diamond,
+  Check,
+  Sparkles,
+  ArrowRight,
+  Shield,
+  User,
+  Calendar
 } from 'lucide-react';
 
 interface CheckoutProps {
   onViewChange: (view: AppView) => void;
+  initialPlan?: 'gold' | 'diamond';
 }
 
-const Checkout: React.FC<CheckoutProps> = ({ onViewChange }) => {
+const Checkout: React.FC<CheckoutProps> = ({ onViewChange, initialPlan = 'gold' }) => {
   const [isLoading, setIsLoading] = React.useState(false);
-  const [step, setStep] = React.useState(1);
+  const [step, setStep] = React.useState<1 | 2 | 3>(1);
+  const [selectedPlan, setSelectedPlan] = React.useState<'gold' | 'diamond'>(initialPlan);
+  
+  // DEMO DATA
+  const [paymentData, setPaymentData] = React.useState({
+    holder: 'JUAN MUNDIALISTA',
+    cardNumber: '4242 4242 4242 4242',
+    expiry: '12/26',
+    cvc: '123'
+  });
+
+  const plans = {
+    gold: {
+      id: 'gold',
+      name: 'PREMIUM GOLD',
+      price: '29.900',
+      icon: <Sparkles size={20} className="text-amber-400" />,
+      theme: 'amber',
+      badge: 'bg-amber-400 text-slate-950',
+      description: 'Ideal para grupos de amigos y pequeñas ligas.',
+      features: ['Uso de IA Ilimitado', 'Hasta 50 Jugadores', 'Estética Gold', 'Soporte Estándar']
+    },
+    diamond: {
+      id: 'diamond',
+      name: 'EMPRESA DIAMOND',
+      price: '89.900',
+      icon: <Diamond size={20} className="text-cyan-400" />,
+      theme: 'cyan',
+      badge: 'bg-cyan-400 text-slate-950',
+      description: 'Nivel profesional para empresas y marcas.',
+      features: ['Logo Personalizado', 'Jugadores Ilimitados', 'Dashboard Analytics', 'Soporte 24/7 VIP']
+    }
+  };
 
   const handlePayment = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-      setStep(2);
+      setStep(3);
     }, 2000);
   };
 
+  const currentPlan = plans[selectedPlan];
+
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <button 
-          onClick={() => onViewChange('landing')} 
-          className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-black mb-8 transition-colors"
-        >
-          <ArrowLeft size={16} /> Volver a Landing
-        </button>
+    <div className="min-h-screen bg-slate-50 py-4 px-4 flex flex-col items-center justify-center overflow-hidden">
+      <div className="max-w-4xl w-full space-y-3">
+        
+        <div className="flex justify-between items-center px-2">
+          <button onClick={() => step === 1 ? onViewChange('create-league') : setStep(1)} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400"><ArrowLeft size={12} /> {step === 1 ? 'VOLVER' : 'REGRESAR'}</button>
+          <div className="flex gap-1">{[1, 2, 3].map(s => <div key={s} className={`w-5 h-1 rounded-full ${step >= s ? 'bg-lime-500' : 'bg-slate-200'}`}></div>)}</div>
+        </div>
 
-        {step === 1 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Formulario de Pago */}
-            <Card className="p-8 md:p-12 space-y-8 shadow-2xl">
-              <div className="space-y-2">
-                <h2 className="text-2xl font-black font-brand uppercase tracking-tight">Finalizar Compra</h2>
-                <p className="text-slate-500 text-sm font-medium">Estás a un paso de liderar tu propia Liga Pro.</p>
-              </div>
+        {step === 1 && (
+          <div className="space-y-3 animate-in fade-in duration-500">
+            <div className="text-center"><h2 className="text-2xl font-black font-brand uppercase tracking-tighter">MEJORA TU <span className="text-lime-500">PLAN.</span></h2></div>
 
-              <form onSubmit={handlePayment} className="space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Número de Tarjeta</label>
-                    <Input leftIcon={<CreditCard size={16} />} placeholder="0000 0000 0000 0000" required />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Expira</label>
-                      <Input placeholder="MM/YY" required />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">CVC</label>
-                      <Input placeholder="123" required />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
-                   <div className="flex justify-between text-xs font-bold uppercase tracking-tight text-slate-500">
-                      <span>Subtotal Liga Pro</span>
-                      <span>$29.00</span>
-                   </div>
-                   <div className="flex justify-between text-xs font-bold uppercase tracking-tight text-slate-500">
-                      <span>Impuestos (0%)</span>
-                      <span>$0.00</span>
-                   </div>
-                   <div className="h-px bg-slate-200"></div>
-                   <div className="flex justify-between text-lg font-black uppercase tracking-tighter text-black">
-                      <span>Total a Pagar</span>
-                      <span>$29.00</span>
-                   </div>
-                </div>
-
-                <Button type="submit" size="lg" className="w-full h-16 rounded-2xl font-black text-lg gap-2" variant="secondary" isLoading={isLoading}>
-                   <Lock size={20} /> PAGAR AHORA
-                </Button>
-
-                <div className="flex items-center justify-center gap-4 text-slate-400">
-                   <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
-                      <ShieldCheck size={12} className="text-lime-500" /> Secure SSL
-                   </div>
-                   <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
-                      <Globe size={12} className="text-lime-500" /> Global Support
-                   </div>
-                </div>
-              </form>
-            </Card>
-
-            {/* Resumen del Producto */}
-            <div className="space-y-8">
-               <Card className="bg-black text-white p-8 space-y-6 relative overflow-hidden border-0">
-                  <Crown size={150} className="absolute -bottom-10 -right-10 opacity-10 text-lime-400" />
-                  <Badge color="bg-lime-400 text-black">Plan Pro Seleccionado</Badge>
-                  <h3 className="text-3xl font-black font-brand uppercase tracking-tighter">LIGA PRO <br/>ACTIVA.</h3>
-                  <p className="text-slate-400 text-sm leading-relaxed">Incluye todas las herramientas para gestionar tu comunidad sin límites durante todo el Mundial 2026.</p>
-                  
-                  <div className="space-y-4 pt-4 border-t border-white/10">
-                    {[
-                      'Jugadores Ilimitados',
-                      'Dashboard de Admin Pro',
-                      'Publicidad Eliminada',
-                      'Soporte Prioritario',
-                      'Exportación de Datos'
-                    ].map((item, i) => (
-                      <div key={i} className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-300">
-                         <CheckCircle2 size={14} className="text-lime-400" /> {item}
-                      </div>
-                    ))}
-                  </div>
-               </Card>
-
-               <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-lime-50 text-lime-600 rounded-2xl flex items-center justify-center">
-                    <Zap size={24} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest">Activación Instantánea</h4>
-                    <p className="text-xs text-slate-500">Tu liga estará lista inmediatamente después del pago.</p>
-                  </div>
-               </div>
+            <div className="flex p-1 bg-slate-200 rounded-2xl gap-1 max-w-[320px] mx-auto">
+               <button onClick={() => setSelectedPlan('gold')} className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase transition-all ${selectedPlan === 'gold' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500'}`}>GOLD</button>
+               <button onClick={() => setSelectedPlan('diamond')} className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase transition-all ${selectedPlan === 'diamond' ? 'bg-[#0a0f1d] text-white shadow-md' : 'text-slate-500'}`}>DIAMOND</button>
             </div>
-          </div>
-        ) : (
-          <div className="max-w-md mx-auto animate-in zoom-in duration-500">
-            <Card className="p-12 text-center space-y-8 shadow-2xl overflow-hidden relative border-0">
-               <div className="absolute top-0 left-0 w-full h-2 bg-lime-400"></div>
-               <div className="w-24 h-24 bg-lime-100 text-lime-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 size={56} />
-               </div>
-               <div className="space-y-2">
-                 <h2 className="text-3xl font-black font-brand uppercase tracking-tighter">¡COMPRA EXITOSA!</h2>
-                 <p className="text-slate-500 font-medium">Tu licencia Pro ha sido activada y vinculada a tu cuenta.</p>
-               </div>
-               
-               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-left space-y-3">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumen de Orden</p>
-                  <div className="flex justify-between font-bold text-sm">
-                    <span>Orden #</span>
-                    <span className="font-mono">POL-26-4829</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-sm">
-                    <span>Producto</span>
-                    <span>Licencia Liga Pro</span>
-                  </div>
-               </div>
 
-               <div className="space-y-4">
-                 <Button onClick={() => onViewChange('dashboard')} className="w-full h-14 rounded-2xl font-black uppercase tracking-widest" size="lg">Ir al Dashboard</Button>
-                 <Button onClick={() => onViewChange('register')} variant="outline" className="w-full h-14 rounded-2xl font-black uppercase tracking-widest border-slate-300" size="lg">Crear Mi Primera Liga</Button>
+            <Card className={`p-0 overflow-hidden border-2 rounded-[2.5rem] transition-all duration-700 ${selectedPlan === 'gold' ? 'border-amber-400 bg-white' : 'border-cyan-400 bg-[#0a0f1d] text-white'}`}>
+               <div className="p-6 md:p-8 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="space-y-1"><Badge color={currentPlan.badge}>OFERTA</Badge><h3 className="text-2xl font-black font-brand uppercase leading-none">{currentPlan.name}</h3></div>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedPlan === 'gold' ? 'bg-amber-50' : 'bg-white/5'}`}>{currentPlan.icon}</div>
+                  </div>
+
+                  <div className={`p-4 rounded-[1.5rem] flex items-center justify-between border ${selectedPlan === 'gold' ? 'bg-slate-50 border-slate-100' : 'bg-white/5 border-white/10'}`}>
+                    <div className="shrink-0">
+                      <p className="text-[7px] font-black uppercase text-slate-400 mb-0.5">INVERSIÓN ÚNICA</p>
+                      <div className="flex items-baseline gap-1"><span className="text-2xl font-black font-brand tracking-tighter leading-none">${currentPlan.price}</span><span className="text-[8px] font-black text-slate-400">COP</span></div>
+                    </div>
+                    <Button onClick={() => setStep(2)} className={`h-10 px-5 rounded-xl font-black text-[9px] uppercase tracking-widest ${selectedPlan === 'gold' ? 'bg-amber-400 text-slate-950' : 'bg-cyan-400 text-slate-950'}`}>SELECCIONAR <ArrowRight size={12} className="ml-1" /></Button>
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 leading-relaxed">{currentPlan.description}</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {currentPlan.features.map((feat, i) => (
+                        <div key={i} className="flex items-center gap-2"><Check size={10} className={selectedPlan === 'gold' ? 'text-amber-500' : 'text-cyan-400'} /><span className="text-[9px] font-black uppercase text-slate-400">{feat}</span></div>
+                      ))}
+                    </div>
+                  </div>
                </div>
+            </Card>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="animate-in fade-in duration-500 space-y-4">
+             <div className={`p-4 rounded-[1.5rem] flex justify-between items-center ${selectedPlan === 'gold' ? 'bg-amber-400' : 'bg-cyan-400'} text-slate-950`}>
+                 <span className="text-[10px] font-black uppercase tracking-widest">{currentPlan.name}</span>
+                 <span className="text-lg font-black font-brand">${currentPlan.price}</span>
+             </div>
+             <Card className="p-6 md:p-10 space-y-6 rounded-[2.5rem] border-0">
+                <div className="flex items-center gap-3"><Shield size={20} className="text-lime-600" /><h2 className="text-xl font-black font-brand uppercase tracking-tight">PAGO SEGURO</h2></div>
+                <form onSubmit={handlePayment} className="space-y-4">
+                   <div className="space-y-3">
+                      <Input placeholder="Nombre del Titular" required value={paymentData.holder} onChange={e => setPaymentData({...paymentData, holder: e.target.value.toUpperCase()})} leftIcon={<User size={16}/>} className="text-xs font-bold" />
+                      <Input placeholder="Número de Tarjeta" required value={paymentData.cardNumber} leftIcon={<CreditCard size={16}/>} className="text-xs font-mono" />
+                      <div className="grid grid-cols-2 gap-3">
+                         <Input placeholder="MM / YY" required value={paymentData.expiry} leftIcon={<Calendar size={14}/>} className="text-xs text-center font-bold" />
+                         <Input placeholder="CVC" required value={paymentData.cvc} leftIcon={<Lock size={14}/>} className="text-xs text-center font-bold" />
+                      </div>
+                   </div>
+                   <Button type="submit" className="w-full h-14 rounded-[2rem] font-black text-[10px] tracking-widest shadow-xl" variant="primary" isLoading={isLoading}><ShieldCheck size={16} className="mr-2" /> FINALIZAR COMPRA</Button>
+                </form>
+             </Card>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="max-w-md mx-auto animate-in zoom-in duration-500">
+            <Card className="p-8 text-center space-y-6 rounded-[3rem] border-0">
+               <div className="w-16 h-16 bg-lime-100 text-lime-600 rounded-3xl flex items-center justify-center mx-auto"><CheckCircle2 size={32} /></div>
+               <h2 className="text-2xl font-black font-brand uppercase tracking-tighter">¡ÉXITO TOTAL!</h2>
+               <div className="bg-slate-50 p-5 rounded-[2rem] text-left space-y-3 border border-slate-100">
+                  <div className="flex justify-between font-black text-[9px] uppercase text-slate-600"><span>PLAN ACTIVADO</span><span className="text-slate-900">{currentPlan.name}</span></div>
+                  <div className="flex justify-between font-black text-[9px] uppercase text-slate-600 border-t border-slate-200 pt-2"><span>VALOR</span><span className="text-lime-600">${currentPlan.price} COP</span></div>
+               </div>
+               <Button onClick={() => onViewChange('dashboard')} className="w-full h-14 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em]">IR AL TABLERO</Button>
             </Card>
           </div>
         )}

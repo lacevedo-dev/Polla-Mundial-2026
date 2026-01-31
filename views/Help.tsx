@@ -18,7 +18,9 @@ import {
   UserPlus,
   ArrowRight,
   ListFilter,
-  DollarSign
+  DollarSign,
+  // Added MessageCircle to fix the 'Cannot find name MessageCircle' error
+  MessageCircle
 } from 'lucide-react';
 
 const Help: React.FC = () => {

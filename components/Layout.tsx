@@ -12,7 +12,6 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
-  // Don't show the standard sidebar/header for auth and landing views
   const isPublicView = activeView === 'login' || activeView === 'register' || activeView === 'landing' || activeView === 'email-verification';
 
   if (isPublicView) {
@@ -30,7 +29,6 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
-      {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-black text-white h-screen sticky top-0 shadow-xl z-20">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8 cursor-pointer" onClick={() => onViewChange('dashboard')}>
@@ -59,8 +57,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
             <div className="flex items-center gap-3">
               <img src="https://picsum.photos/seed/user/40/40" className="rounded-full ring-2 ring-lime-400" alt="Avatar" />
               <div>
-                <p className="text-sm font-bold">Admin User</p>
-                <p className="text-xs text-slate-500">Premium</p>
+                <p className="text-sm font-bold">Administrador</p>
+                <p className="text-xs text-slate-500">Miembro Premium</p>
               </div>
             </div>
             <button onClick={() => onViewChange('landing')} className="text-slate-400 hover:text-rose-400 transition-colors">
@@ -70,7 +68,6 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
         </div>
       </aside>
 
-      {/* Header - Mobile */}
       <header className="md:hidden flex items-center justify-between p-4 bg-black text-white sticky top-0 z-30 shadow-md">
         <div className="flex items-center gap-2" onClick={() => onViewChange('dashboard')}>
           <div className="w-8 h-8 bg-white rounded flex items-center justify-center font-brand text-black text-xl font-black">26</div>
@@ -81,7 +78,6 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
         </button>
       </header>
 
-      {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-black z-40 p-6 md:hidden overflow-y-auto">
           <div className="flex justify-between items-center mb-8">
@@ -118,14 +114,12 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
         </div>
       )}
 
-      {/* Main Content */}
       <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
         <div className="max-w-6xl mx-auto p-4 md:p-8">
           {children}
         </div>
       </main>
 
-      {/* Mobile Bottom Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">
         {navItems.slice(0, 4).map((item) => (
           <button
