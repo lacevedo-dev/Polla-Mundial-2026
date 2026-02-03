@@ -81,7 +81,7 @@ const Checkout: React.FC<CheckoutProps> = ({ onViewChange, initialPlan = 'gold' 
 
         {step === 1 && (
           <div className="space-y-3 animate-in fade-in duration-500">
-            <div className="text-center"><h2 className="text-2xl font-black font-brand uppercase tracking-tighter">MEJORA TU <span className="text-lime-500">PLAN.</span></h2></div>
+            <div className="text-center"><h2 className="text-2xl font-black font-brand uppercase tracking-tighter">MEJORA TU <span className="text-lime-600">PLAN.</span></h2></div>
 
             <div className="flex p-1 bg-slate-200 rounded-2xl gap-1 max-w-[320px] mx-auto">
                <button onClick={() => setSelectedPlan('gold')} className={`flex-1 py-2 rounded-xl font-black text-[9px] uppercase transition-all ${selectedPlan === 'gold' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500'}`}>GOLD</button>

@@ -55,6 +55,7 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
   
   // Validation states
   const [nombreStatus, setNombreStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
+  const [emailStatus, setEmailStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
   const [usernameStatus, setUsernameStatus] = React.useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
   const [phoneStatus, setPhoneStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
   const [birthDateStatus, setBirthDateStatus] = React.useState<'idle' | 'valid' | 'underage' | 'invalid'>('idle');
@@ -108,6 +109,16 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
     }
     setNombreStatus(formData.nombre.trim().length >= 3 ? 'valid' : 'invalid');
   }, [formData.nombre]);
+
+  // Validation for Email
+  React.useEffect(() => {
+    if (!formData.email) {
+      setEmailStatus('idle');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    setEmailStatus(emailRegex.test(formData.email) ? 'valid' : 'invalid');
+  }, [formData.email]);
 
   React.useEffect(() => {
     const cleanPhone = formData.celular.replace(/\D/g, '');
@@ -235,7 +246,7 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
   const metCount = requirements.filter(r => r.test(formData.password)).length;
 
   const isStepValid = () => {
-    if (step === 1) return nombreStatus === 'valid' && phoneStatus === 'valid' && formData.email.includes('@') && birthDateStatus === 'valid';
+    if (step === 1) return nombreStatus === 'valid' && phoneStatus === 'valid' && emailStatus === 'valid' && birthDateStatus === 'valid';
     if (step === 2) return metCount === requirements.length && usernameStatus === 'available';
     if (step === 3) return !uploadError && !isProcessingFile;
     return true;
@@ -385,7 +396,15 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">E-mail *</label>
-                  <EmailAutocompleteInput placeholder="tu@correo.com" required value={formData.email} onValueChange={v => handleInputChange('email', v)} />
+                  <EmailAutocompleteInput 
+                    placeholder="tu@correo.com" 
+                    required 
+                    value={formData.email} 
+                    onValueChange={v => handleInputChange('email', v)}
+                    className={emailStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : emailStatus === 'invalid' ? 'border-rose-400 bg-rose-50/20' : ''}
+                    rightIcon={emailStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : emailStatus === 'invalid' ? <XCircle size={16} className="text-rose-500" /> : null}
+                  />
+                  {emailStatus === 'invalid' && <p className="text-[10px] font-bold text-rose-500 ml-1">Ingresa un correo electrónico válido.</p>}
                 </div>
               </div>
             )}

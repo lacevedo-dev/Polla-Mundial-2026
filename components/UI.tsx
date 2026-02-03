@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Loader2, ChevronRight, Check } from 'lucide-react';
 
@@ -23,14 +24,14 @@ export const Button: React.FC<ButtonProps> = ({
       ? "bg-slate-800 text-white shadow-inner cursor-wait" 
       : "bg-black text-white hover:bg-slate-900 shadow-lg shadow-black/10",
     secondary: isLoading 
-      ? "bg-lime-300 text-black shadow-inner cursor-wait" 
-      : "bg-lime-400 text-black hover:bg-lime-500 shadow-lg shadow-lime-400/20",
+      ? "bg-lime-300 text-slate-900 shadow-inner cursor-wait" 
+      : "bg-lime-400 text-slate-950 hover:bg-lime-500 shadow-lg shadow-lime-400/20",
     outline: isLoading 
-      ? "bg-slate-50 border-2 border-slate-100 text-slate-300 cursor-wait" 
-      : "border-2 border-slate-200 text-slate-900 hover:bg-slate-50",
+      ? "bg-slate-50 border-2 border-slate-200 text-slate-400 cursor-wait" 
+      : "bg-white border-2 border-slate-300 text-slate-700 hover:border-slate-400 hover:bg-slate-50",
     ghost: isLoading 
       ? "bg-slate-50 text-slate-300 cursor-wait" 
-      : "text-slate-600 hover:bg-slate-100"
+      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
   };
 
   const sizes = {
@@ -51,7 +52,7 @@ export const Button: React.FC<ButtonProps> = ({
       
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center animate-in fade-in zoom-in duration-500">
-          <Loader2 className={`h-5 w-5 animate-spin ${variant === 'secondary' || variant === 'ghost' ? 'text-black' : 'text-white'}`} />
+          <Loader2 className={`h-5 w-5 animate-spin ${variant === 'secondary' || variant === 'ghost' ? 'text-slate-900' : 'text-white'}`} />
         </div>
       )}
     </button>
@@ -68,17 +69,17 @@ export const Input: React.FC<InputProps> = ({ className = '', isLoading, leftIco
   return (
     <div className="relative w-full group">
       {leftIcon && (
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-lime-500">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-lime-600">
           {leftIcon}
         </div>
       )}
       <input 
-        className={`w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-lime-400 focus:border-lime-400 outline-none transition-all text-slate-900 placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-400 ${leftIcon ? 'pl-11' : ''} ${rightIcon || isLoading ? 'pr-11' : ''} ${className}`}
+        className={`w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-lime-400 focus:border-lime-500 outline-none transition-all text-slate-900 placeholder:text-slate-400 font-medium disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 ${leftIcon ? 'pl-11' : ''} ${rightIcon || isLoading ? 'pr-11' : ''} ${className}`}
         {...props}
       />
       <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
         {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-lime-500" />
+          <Loader2 className="h-4 w-4 animate-spin text-lime-600" />
         ) : (
           rightIcon
         )}
@@ -104,12 +105,12 @@ export const Checkbox: React.FC<{
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
           disabled={disabled}
-          className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-200 transition-all checked:border-lime-400 checked:bg-lime-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 transition-all checked:border-lime-500 checked:bg-lime-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
         <Check 
           size={14} 
           strokeWidth={4}
-          className="absolute left-1 top-1 pointer-events-none opacity-0 transition-opacity peer-checked:opacity-100 text-black" 
+          className="absolute left-1 top-1 pointer-events-none opacity-0 transition-opacity peer-checked:opacity-100 text-slate-950" 
         />
       </div>
       <label
@@ -189,7 +190,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
                     <span className="text-slate-600 font-medium">{suggestion}</span>
                   )}
                 </div>
-                <ChevronRight size={14} className="text-slate-300 group-hover:text-lime-500 group-hover:translate-x-1 transition-all" />
+                <ChevronRight size={14} className="text-slate-300 group-hover:text-lime-600 group-hover:translate-x-1 transition-all" />
               </button>
             ))}
           </div>
@@ -226,7 +227,7 @@ export const EmailAutocompleteInput: React.FC<InputProps & { onValueChange: (val
         return (
           <div className="flex items-center">
             <span className="text-slate-400 font-medium truncate">{user}@</span>
-            <span className="text-lime-600 font-black">{domain}</span>
+            <span className="text-lime-700 font-black">{domain}</span>
           </div>
         );
       }}
@@ -236,7 +237,7 @@ export const EmailAutocompleteInput: React.FC<InputProps & { onValueChange: (val
 
 export const Card: React.FC<{ children: React.ReactNode, className?: string }> = ({ children, className = '' }) => {
   return (
-    <div className={`bg-white border border-slate-100 rounded-3xl shadow-sm hover:shadow-md transition-shadow p-6 ${className}`}>
+    <div className={`bg-white border border-slate-200 rounded-3xl shadow-sm hover:shadow-md transition-shadow p-6 ${className}`}>
       {children}
     </div>
   );

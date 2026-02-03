@@ -7,13 +7,13 @@ const DesignSystem: React.FC = () => {
   return (
     <div className="space-y-12 pb-20">
       <header>
-        <h1 className="text-4xl font-black font-brand mb-2 uppercase tracking-tighter">DESIGN SYSTEM <span className="text-lime-500">V1.0</span></h1>
+        <h1 className="text-4xl font-black font-brand mb-2 uppercase tracking-tighter text-slate-900">DESIGN SYSTEM <span className="text-lime-500">V1.0</span></h1>
         <p className="text-slate-500 text-lg">Guía de unificación visual para Polla Mundial 2026.</p>
       </header>
 
       {/* Colors */}
       <section>
-        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-900">
           <div className="w-1.5 h-6 bg-lime-400 rounded-full"></div>
           Paleta de Colores
         </h2>
@@ -21,10 +21,10 @@ const DesignSystem: React.FC = () => {
           {Object.entries(COLORS).map(([name, val]) => (
              typeof val === 'string' && (
               <div key={name} className="space-y-2">
-                <div className="h-24 rounded-3xl shadow-inner border border-slate-100" style={{ backgroundColor: val }}></div>
+                <div className="h-24 rounded-3xl shadow-inner border border-slate-200" style={{ backgroundColor: val }}></div>
                 <div>
-                  <p className="text-xs font-bold uppercase text-slate-400">{name}</p>
-                  <p className="text-sm font-mono font-medium">{val}</p>
+                  <p className="text-xs font-black uppercase text-slate-500 tracking-wider">{name}</p>
+                  <p className="text-sm font-mono font-bold text-slate-900">{val}</p>
                 </div>
               </div>
              )
@@ -35,25 +35,25 @@ const DesignSystem: React.FC = () => {
       {/* Typography */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-12">
         <div>
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-900">
             <div className="w-1.5 h-6 bg-purple-500 rounded-full"></div>
             Tipografía
           </h2>
           <div className="space-y-6">
             <div>
               <p className="text-xs text-slate-400 mb-2 font-bold uppercase tracking-widest">Brand / Headings</p>
-              <h3 className="font-brand text-4xl font-black uppercase">Montserrat Black</h3>
+              <h3 className="font-brand text-4xl font-black uppercase text-slate-900">Montserrat Black</h3>
             </div>
             <div>
               <p className="text-xs text-slate-400 mb-2 font-bold uppercase tracking-widest">Body / Interface</p>
-              <h3 className="text-2xl font-medium">Inter Sans Regular/Bold</h3>
+              <h3 className="text-2xl font-black text-slate-900">Inter Sans Regular/Bold</h3>
               <p className="text-slate-600 mt-2">Usado para legibilidad en datos, formularios y textos largos.</p>
             </div>
           </div>
         </div>
 
         <div>
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-900">
             <div className="w-1.5 h-6 bg-cyan-500 rounded-full"></div>
             Componentes Base
           </h2>
@@ -78,13 +78,13 @@ const DesignSystem: React.FC = () => {
 
       {/* Tokens Table */}
       <section>
-        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-900">
           <div className="w-1.5 h-6 bg-slate-900 rounded-full"></div>
           Design Tokens
         </h2>
-        <Card className="overflow-hidden !p-0">
+        <Card className="overflow-hidden !p-0 border-slate-200">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b border-slate-100">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-6 py-4 text-xs font-black uppercase text-slate-500 tracking-wider">Categoría</th>
                 <th className="px-6 py-4 text-xs font-black uppercase text-slate-500 tracking-wider">Valor Token</th>
@@ -93,18 +93,18 @@ const DesignSystem: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               <tr>
-                <td className="px-6 py-4 font-bold">Borders</td>
-                <td className="px-6 py-4 font-mono text-sm">rounded-3xl (24px)</td>
+                <td className="px-6 py-4 font-bold text-slate-900">Borders</td>
+                <td className="px-6 py-4 font-mono text-sm text-slate-700">rounded-3xl (24px)</td>
                 <td className="px-6 py-4 text-slate-600">Tarjetas principales</td>
               </tr>
               <tr>
-                <td className="px-6 py-4 font-bold">Shadows</td>
-                <td className="px-6 py-4 font-mono text-sm">shadow-sm / hover:shadow-md</td>
+                <td className="px-6 py-4 font-bold text-slate-900">Shadows</td>
+                <td className="px-6 py-4 font-mono text-sm text-slate-700">shadow-sm / hover:shadow-md</td>
                 <td className="px-6 py-4 text-slate-600">Elevación consistente</td>
               </tr>
               <tr>
-                <td className="px-6 py-4 font-bold">Grid</td>
-                <td className="px-6 py-4 font-mono text-sm">gap-6 (1.5rem)</td>
+                <td className="px-6 py-4 font-bold text-slate-900">Grid</td>
+                <td className="px-6 py-4 font-mono text-sm text-slate-700">gap-6 (1.5rem)</td>
                 <td className="px-6 py-4 text-slate-600">Espaciado base entre elementos</td>
               </tr>
             </tbody>

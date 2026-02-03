@@ -47,7 +47,7 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({ onViewChange, ema
           <Badge color="bg-lime-100 text-lime-700 mb-4">Casi Listo</Badge>
           
           <h2 className="text-3xl font-black font-brand leading-tight uppercase mb-4 tracking-tighter">
-            VERIFICA TU <span className="text-lime-500">CORREO</span>
+            VERIFICA TU <span className="text-lime-600">CORREO</span>
           </h2>
           
           <div className="mb-8 p-4 bg-slate-50 rounded-2xl border border-slate-100 w-full">

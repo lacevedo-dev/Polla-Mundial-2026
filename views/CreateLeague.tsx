@@ -25,10 +25,25 @@ import {
   Mail,
   Phone,
   Eye,
-  Info,
   CheckCircle2,
-  DollarSign,
-  Briefcase
+  QrCode,
+  Share2,
+  Download,
+  Ticket,
+  Instagram,
+  MessageCircle,
+  Twitter,
+  Diamond,
+  AlertCircle,
+  FileText,
+  Crown,
+  Info,
+  Wallet,
+  Megaphone,
+  RefreshCw,
+  AlertTriangle,
+  Calculator,
+  ChevronDown
 } from 'lucide-react';
 
 interface CreateLeagueProps {
@@ -44,12 +59,21 @@ interface InvitedUser {
   avatar?: string;
 }
 
+// Mock database for existing users validation
+const MOCK_DB = [
+  { phone: '3001234567', name: 'Carlos Gomez', email: 'carlos.g@email.com', avatar: 'https://picsum.photos/seed/carlos/40/40' },
+  { phone: '3109876543', name: 'Ana Maria', email: 'ana.m@email.com', avatar: 'https://picsum.photos/seed/ana/40/40' },
+  { phone: '3205551234', name: 'David Torres', email: 'david.t@email.com', avatar: 'https://picsum.photos/seed/david/40/40' },
+];
+
 const MINOR_WORDS = ['de', 'la', 'del', 'el', 'los', 'las', 'y', 'en', 'por', 'con', 'a', 'para', 'o', 'u', 'e'];
 
 const formatSpanishTitleCase = (str: string) => {
   if (!str) return '';
-  const words = str.split(' ');
-  return words
+  const hasTrailingSpace = str.endsWith(' ');
+  const words = str.trim().split(/\s+/);
+  
+  const formatted = words
     .map((word, index) => {
       if (!word) return '';
       const lowerWord = word.toLowerCase();
@@ -59,6 +83,8 @@ const formatSpanishTitleCase = (str: string) => {
       return lowerWord;
     })
     .join(' ');
+    
+  return hasTrailingSpace ? `${formatted} ` : formatted;
 };
 
 const getInitialDistribution = (winnersCount: number, adminFee: number): PrizeWinner[] => {
@@ -68,79 +94,99 @@ const getInitialDistribution = (winnersCount: number, adminFee: number): PrizeWi
     percentage: 0,
     active: false
   }));
-
   const netPool = 100 - adminFee;
-  
   const templates: Record<number, number[]> = {
-    1: [100],
-    2: [60, 40],
-    3: [50, 30, 20],
-    4: [40, 30, 20, 10],
-    5: [35, 25, 20, 10, 10],
-    6: [30, 20, 15, 15, 10, 10],
-    7: [25, 20, 15, 10, 10, 10, 10],
-    8: [20, 15, 15, 10, 10, 10, 10, 10],
-    9: [20, 15, 10, 10, 10, 10, 10, 10, 5],
-    10: [15, 15, 10, 10, 10, 10, 10, 10, 5, 5]
+    1: [100], 2: [60, 40], 3: [50, 30, 20], 4: [40, 30, 20, 10], 5: [35, 25, 20, 10, 10],
+    6: [30, 20, 15, 15, 10, 10], 7: [25, 20, 15, 10, 10, 10, 10], 8: [20, 15, 15, 10, 10, 10, 10, 10],
+    9: [20, 15, 10, 10, 10, 10, 10, 10, 5], 10: [15, 15, 10, 10, 10, 10, 10, 10, 5, 5]
   };
-
   const weights = templates[winnersCount] || Array(winnersCount).fill(100 / winnersCount);
   let currentSum = 0;
-
   for (let i = 0; i < winnersCount; i++) {
     prizes[i].active = true;
     let val = Math.round((netPool * (weights[i] / 100)) / 5) * 5;
-    if (i === winnersCount - 1) {
-      val = netPool - currentSum;
-    }
+    if (i === winnersCount - 1) val = netPool - currentSum;
     prizes[i].percentage = val;
     currentSum += val;
   }
   return prizes;
 };
 
+const PLAN_LIMITS = {
+  free: 10,
+  gold: 50,
+  diamond: 500
+};
+
+const STORAGE_KEY = 'polla_league_wizard_state';
+
 const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
-  const [step, setStep] = React.useState(1);
-  const [activeCategory, setActiveCategory] = React.useState<StageType | 'general'>('general');
-  const [invitedUsers, setInvitedUsers] = React.useState<InvitedUser[]>([]);
-  const [newUserInput, setNewUserInput] = React.useState({ name: '', email: '', phone: '' });
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [leagueId] = React.useState(() => Math.random().toString(36).substr(2, 6).toUpperCase());
+  const getSavedState = () => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  };
   
-  const [leagueData, setLeagueData] = React.useState<LeagueData>(() => {
-    const adminFee = 20;
-    const genWinners = 4;
-    return {
-      name: '',
-      description: '',
-      privacy: 'private',
-      logo: null,
-      participantsCount: 10,
-      includeBaseFee: true,
-      baseFeeAmount: '50000',
-      includeStageFees: true,
-      stageFees: {
-        match: { active: true, amount: '2000' },
-        round: { active: true, amount: '5000' },
-        phase: { active: true, amount: '10000' }
-      },
-      adminFeePercent: adminFee,
-      distributions: {
-        general: { winnersCount: genWinners, distribution: getInitialDistribution(genWinners, adminFee) },
-        match: { winnersCount: 1, distribution: getInitialDistribution(1, adminFee) },
-        round: { winnersCount: 1, distribution: getInitialDistribution(1, adminFee) },
-        phase: { winnersCount: 1, distribution: getInitialDistribution(1, adminFee) }
-      },
-      currency: 'COP',
-      plan: 'free'
-    };
+  const saved = getSavedState();
+
+  const [step, setStep] = React.useState<number>(saved?.step || 1);
+  const [activeCategory, setActiveCategory] = React.useState<StageType | 'general'>(saved?.activeCategory || 'general');
+  const [invitedUsers, setInvitedUsers] = React.useState<InvitedUser[]>(saved?.invitedUsers || []);
+  const [newUserInput, setNewUserInput] = React.useState(saved?.newUserInput || { name: '', email: '', phone: '' });
+  const [searchQuery, setSearchQuery] = React.useState(saved?.searchQuery || '');
+  const [leagueId] = React.useState<string>(saved?.leagueId || Math.random().toString(36).substr(2, 6).toUpperCase());
+  const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(false);
+  
+  // DEFAULT SETTINGS UPDATED: 10% Admin Fee, 3 Winners
+  const [leagueData, setLeagueData] = React.useState<LeagueData>(() => saved?.leagueData || {
+    name: '', description: '', privacy: 'private', logo: null, participantsCount: 10,
+    includeBaseFee: true, baseFeeAmount: '50000', includeStageFees: true,
+    stageFees: { match: { active: true, amount: '2000' }, round: { active: true, amount: '5000' }, phase: { active: true, amount: '10000' } },
+    adminFeePercent: 10, // Default 10%
+    distributions: {
+      general: { winnersCount: 3, distribution: getInitialDistribution(3, 10) }, // Default 3 winners
+      match: { winnersCount: 1, distribution: getInitialDistribution(1, 10) },
+      round: { winnersCount: 1, distribution: getInitialDistribution(1, 10) },
+      phase: { winnersCount: 1, distribution: getInitialDistribution(1, 10) }
+    },
+    currency: 'COP', plan: 'free'
   });
 
-  const isCategoryEnabled = (cat: string) => {
-    if (cat === 'general') return leagueData.includeBaseFee;
-    return leagueData.includeStageFees && leagueData.stageFees[cat as StageType]?.active;
+  React.useEffect(() => {
+    const state = {
+      step,
+      activeCategory,
+      invitedUsers,
+      newUserInput,
+      searchQuery,
+      leagueId,
+      leagueData
+    };
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [step, activeCategory, invitedUsers, newUserInput, searchQuery, leagueId, leagueData]);
+
+  // Validar si la categoría actual sigue activa, sino cambiar a una disponible
+  React.useEffect(() => {
+    if (step === 3) {
+      const isCurrentActive = activeCategory === 'general' ? leagueData.includeBaseFee : leagueData.includeStageFees && leagueData.stageFees[activeCategory as StageType]?.active;
+      if (!isCurrentActive) {
+        if (leagueData.includeBaseFee) setActiveCategory('general');
+        else if (leagueData.includeStageFees) {
+          if (leagueData.stageFees.match.active) setActiveCategory('match');
+          else if (leagueData.stageFees.round.active) setActiveCategory('round');
+          else if (leagueData.stageFees.phase.active) setActiveCategory('phase');
+        }
+      }
+    }
+  }, [step, leagueData.includeBaseFee, leagueData.includeStageFees, leagueData.stageFees]);
+
+  const handleFinish = () => {
+    sessionStorage.removeItem(STORAGE_KEY);
+    onViewChange('dashboard');
   };
 
+  const isCategoryEnabled = (cat: string) => cat === 'general' ? leagueData.includeBaseFee : leagueData.includeStageFees && leagueData.stageFees[cat as StageType]?.active;
   const calculateTotalGrossForCategory = (cat: StageType | 'general') => {
     const base = leagueData.includeBaseFee ? parseInt(leagueData.baseFeeAmount || '0') : 0;
     const participants = leagueData.participantsCount;
@@ -149,27 +195,29 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
     const multiplier = cat === 'match' ? 104 : cat === 'round' ? 15 : 1; 
     return amount * multiplier * participants;
   };
+  const calculateNetForCategory = (cat: StageType | 'general') => calculateTotalGrossForCategory(cat) * ((100 - leagueData.adminFeePercent) / 100);
+  
+  // GLOBAL CALCULATIONS (Sum of all active tabs)
+  const totalPotentialGross = calculateTotalGrossForCategory('general') + (leagueData.includeStageFees ? (calculateTotalGrossForCategory('match') + calculateTotalGrossForCategory('round') + calculateTotalGrossForCategory('phase')) : 0);
+  const totalNetPrizes = calculateNetForCategory('general') + (leagueData.includeStageFees ? (calculateNetForCategory('match') + calculateNetForCategory('round') + calculateNetForCategory('phase')) : 0);
+  const totalAdminFee = totalPotentialGross * (leagueData.adminFeePercent / 100);
 
-  const calculateNetForCategory = (cat: StageType | 'general') => {
-    const gross = calculateTotalGrossForCategory(cat);
-    return gross * ((100 - leagueData.adminFeePercent) / 100);
-  };
+  const requiredPlan = leagueData.participantsCount > 50 ? 'diamond' : leagueData.participantsCount > 10 ? 'gold' : 'free';
+  const isLimitExceeded = (leagueData.plan === 'free' && leagueData.participantsCount > 10) || 
+                          (leagueData.plan === 'gold' && leagueData.participantsCount > 50);
 
-  const calculateAdminCutForCategory = (cat: StageType | 'general') => {
-    const gross = calculateTotalGrossForCategory(cat);
-    return gross * (leagueData.adminFeePercent / 100);
-  };
-
-  const updateWinnerCount = (cat: string, newCount: number) => {
-    const count = Math.max(1, Math.min(10, newCount));
-    const newDist = getInitialDistribution(count, leagueData.adminFeePercent);
-    setLeagueData(prev => ({
-      ...prev,
-      distributions: {
-        ...prev.distributions,
-        [cat]: { winnersCount: count, distribution: newDist }
-      }
-    }));
+  const updateWinnerCount = (category: StageType | 'general', count: number) => {
+    if (count < 1 || count > 10) return;
+    setLeagueData(prev => {
+      const newDists = { ...prev.distributions };
+      const catKey = category as keyof typeof newDists;
+      newDists[catKey] = {
+        ...newDists[catKey],
+        winnersCount: count,
+        distribution: getInitialDistribution(count, prev.adminFeePercent)
+      };
+      return { ...prev, distributions: newDists };
+    });
   };
 
   const handleAdminFeeChange = (val: number) => {
@@ -183,54 +231,63 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
     });
   };
 
-  const handleToggleStageFees = (v: boolean) => {
-    setLeagueData(prev => ({
-      ...prev,
-      includeStageFees: v,
-      stageFees: {
-        match: { ...prev.stageFees.match, active: v },
-        round: { ...prev.stageFees.round, active: v },
-        phase: { ...prev.stageFees.phase, active: v }
-      }
-    }));
-    if (!v && activeCategory !== 'general') setActiveCategory('general');
+  const handleIncrementParticipants = () => {
+    if (leagueData.participantsCount >= 500) return; 
+    setLeagueData({...leagueData, participantsCount: leagueData.participantsCount+1});
   };
 
+  const handleDecrementParticipants = () => {
+    setLeagueData({...leagueData, participantsCount: Math.max(2, leagueData.participantsCount-1)});
+  }
+
+  const handleResetToFreeLimit = () => {
+      setLeagueData({...leagueData, participantsCount: 10});
+  }
+
   const handleAddExistingUser = (name: string) => {
-    const newUser: InvitedUser = {
-      id: Math.random().toString(36).substr(2, 9),
-      name,
-      email: `${name.toLowerCase().replace(' ', '.')}@gmail.com`,
-      phone: '3000000000',
-      type: 'existing',
-      avatar: `https://picsum.photos/seed/${name}/40/40`
-    };
+    const newUser: InvitedUser = { id: Math.random().toString(36).substr(2, 9), name, email: `${name.toLowerCase().replace(' ', '.')}@gmail.com`, phone: '3000000000', type: 'existing', avatar: `https://picsum.photos/seed/${name}/40/40` };
     setInvitedUsers([...invitedUsers, newUser]);
     setSearchQuery('');
   };
 
-  const handleAddNewUser = () => {
-    if (!newUserInput.email || !newUserInput.phone) return;
-    const newUser: InvitedUser = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newUserInput.name || 'Nuevo Usuario',
-      email: newUserInput.email,
-      phone: newUserInput.phone,
-      type: 'new'
-    };
-    setInvitedUsers([...invitedUsers, newUser]);
-    setNewUserInput({ name: '', email: '', phone: '' });
+  const handleCheckUser = (phone: string) => {
+    setNewUserInput({ ...newUserInput, phone });
+    const existing = MOCK_DB.find(u => u.phone === phone);
+    if (existing) {
+      setNewUserInput({ name: existing.name, email: existing.email, phone: existing.phone });
+      setFoundExistingUser(true);
+    } else {
+      if (foundExistingUser) {
+         setNewUserInput({ ...newUserInput, name: '', email: '', phone });
+         setFoundExistingUser(false);
+      }
+    }
   };
+
+  const handleStageFeeActiveChange = (key: StageType, isActive: boolean) => {
+    setLeagueData(prev => ({
+      ...prev,
+      stageFees: {
+        ...prev.stageFees,
+        [key]: {
+          ...prev.stageFees[key],
+          active: isActive
+        }
+      }
+    }));
+  };
+
+  const existingUsersPool = ["Luis Morales", "Leo Castiblanco", "Nubia Sarmiento", "Carlos Ruiz", "Andres Cepeda"];
+  const filteredSearch = existingUsersPool.filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()) && !invitedUsers.some(i => i.name === u));
 
   const currentDist = leagueData.distributions[activeCategory as keyof typeof leagueData.distributions];
   const activeWinners = currentDist.distribution.filter((p) => p.active);
   const totalPercent = activeWinners.reduce((acc, curr) => acc + (curr.percentage || 0), 0) + leagueData.adminFeePercent;
   const isFinancialValid = Math.round(totalPercent) === 100;
-  
-  const currentNetPoolValue = calculateNetForCategory(activeCategory);
 
-  const existingUsersPool = ["Luis Morales", "Leo Castiblanco", "Nubia Sarmiento", "Carlos Ruiz", "Andres Cepeda"];
-  const filteredSearch = existingUsersPool.filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()) && !invitedUsers.some(i => i.name === u));
+  // Logic for 30% suggestion
+  const suggestedMaxWinners = Math.max(1, Math.floor(leagueData.participantsCount * 0.3));
+  const isWinnerCountHigh = currentDist.winnersCount > suggestedMaxWinners;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-2 md:p-8">
@@ -240,13 +297,9 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
         <div className="hidden md:flex flex-col justify-between bg-black p-12 text-white relative overflow-hidden">
           <div className="relative z-10">
             <div className="w-10 h-10 bg-white rounded flex items-center justify-center font-brand text-black font-black mb-8 shadow-xl shadow-lime-500/10">26</div>
-            <h2 className="text-5xl font-black font-brand leading-tight mb-8 uppercase tracking-tighter">DISEÑA <br/><span className="text-lime-400">GANANCIAS.</span></h2>
+            <h2 className="text-5xl font-black font-brand leading-tight mb-8 uppercase tracking-tighter">EL PASO <br/><span className="text-lime-400">FINAL.</span></h2>
             <div className="space-y-6">
-              {[
-                { label: "Bolsa Base 100% Bruto", icon: Coins },
-                { label: "Invitación a Amigos", icon: UserPlus },
-                { label: "Validación Final Maestro", icon: ShieldCheck }
-              ].map((b, i) => (
+              {[{ label: "Diseño FIFA Pass", icon: Ticket }, { label: "QR de Invitación", icon: QrCode }, { label: "Compartir en Redes", icon: Share2 }].map((b, i) => (
                 <div key={i} className="flex items-center gap-4 text-slate-300">
                   <div className="w-8 h-8 rounded-xl bg-lime-400/20 flex items-center justify-center text-lime-400"><b.icon size={16} /></div>
                   <span className="font-medium text-sm">{b.label}</span>
@@ -255,24 +308,28 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
             </div>
           </div>
           <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-lime-400/10 rounded-full blur-3xl"></div>
-          <div className="relative z-10"><Badge color="bg-lime-400 text-black text-[8px] px-3 py-1 font-black uppercase">MUNDIAL 2026</Badge></div>
+          <div className="relative z-10"><Badge color="bg-lime-400 text-black text-[8px] px-3 py-1 font-black uppercase">POLLA DIGITAL</Badge></div>
         </div>
 
         {/* Formulario */}
-        <div className="p-4 md:p-12 flex flex-col h-full relative">
+        <div className="p-4 md:p-12 flex flex-col h-full relative overflow-hidden">
           
-          {/* Cabecera Pasos */}
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-xl md:text-2xl font-black font-brand uppercase tracking-tighter">CREA TU <span className="text-lime-500">POLLA.</span></h3>
-              <Badge color="bg-slate-100 text-slate-500 text-[8px] px-3">PLAN {leagueData.plan.toUpperCase()}</Badge>
-            </div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PASO {step} DE 5</span>
-              <div className="flex gap-1.5 w-32 h-1.5">
-                {[1, 2, 3, 4, 5].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-400' : 'bg-slate-100'}`}></div>)}
-              </div>
-            </div>
+          {/* Cabecera Pasos RE-DISEÑADA */}
+          <div className="mb-6 flex items-end justify-between">
+             <div>
+                <h3 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
+                  CREA TU <span className="text-lime-600">POLLA.</span>
+                </h3>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 block">PASO {step} DE 6</span>
+             </div>
+             <div className="mb-1">
+               <Badge color="bg-slate-100 text-slate-600 font-bold text-[9px] px-3 border border-slate-200">
+                  PLAN {leagueData.plan === 'free' ? 'GRATUITO' : leagueData.plan.toUpperCase()}
+               </Badge>
+             </div>
+          </div>
+          <div className="flex gap-1 h-1 w-full mb-6">
+             {[1, 2, 3, 4, 5, 6].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-500' : 'bg-slate-200'}`}></div>)}
           </div>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide pr-1">
@@ -280,26 +337,47 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
             {step === 1 && (
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 <div className="flex flex-col items-center gap-6">
-                  <button className="w-24 h-24 rounded-[2rem] border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-slate-400 hover:border-lime-400 transition-all">
+                  <button className="w-24 h-24 rounded-[2rem] border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-500 hover:border-lime-500 hover:text-lime-600 transition-all">
                     <Camera size={24} /><span className="text-[8px] font-black mt-2 uppercase">SUBIR LOGO</span>
                   </button>
                   <div className="w-full space-y-4">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Nombre de la Polla *</label>
+                      <div className="flex justify-between items-center ml-1">
+                        <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Nombre de la Polla *</label>
+                        <span className={`text-[9px] font-bold ${leagueData.name.length >= 50 ? 'text-rose-500' : 'text-slate-400'}`}>
+                            {leagueData.name.length}/50
+                        </span>
+                      </div>
                       <Input 
                         placeholder="Ej. Polla del Barrio" 
                         value={leagueData.name} 
-                        onChange={(e) => setLeagueData({...leagueData, name: formatSpanishTitleCase(e.target.value)})}
-                        className="h-12 text-center font-black rounded-2xl border-2" 
+                        maxLength={50}
+                        onChange={(e) => setLeagueData({...leagueData, name: formatSpanishTitleCase(e.target.value)})} 
+                        className={`h-12 text-center font-black rounded-2xl border-2 transition-all ${leagueData.name.length >= 3 ? 'border-lime-400 focus:border-lime-500 bg-lime-50/10' : 'border-slate-300'}`} 
+                        rightIcon={leagueData.name.length >= 3 ? <CheckCircle2 size={18} className="text-lime-600" /> : undefined}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button onClick={() => setLeagueData({...leagueData, privacy: 'private'})} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'private' ? 'border-lime-400 bg-lime-50/20' : 'border-slate-50 text-slate-400'}`}>
-                        <Lock size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Privada</span>
-                      </button>
-                      <button onClick={() => setLeagueData({...leagueData, privacy: 'public'})} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'public' ? 'border-lime-400 bg-lime-50/20' : 'border-slate-50 text-slate-400'}`}>
-                        <Globe size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Pública</span>
-                      </button>
+
+                    {leagueData.name.length >= 3 && (
+                      <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex justify-between items-center ml-1">
+                           <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Descripción (Opcional)</label>
+                           <span className="text-[9px] font-bold text-slate-400">{leagueData.description?.length || 0}/100</span>
+                        </div>
+                        <Input 
+                           placeholder="¿De qué trata tu liga?" 
+                           value={leagueData.description} 
+                           onChange={(e) => setLeagueData({...leagueData, description: e.target.value})} 
+                           className="h-10 text-center font-medium rounded-xl border-slate-300 text-sm"
+                           maxLength={100}
+                           leftIcon={<FileText size={14} />}
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <button onClick={() => setLeagueData({...leagueData, privacy: 'private'})} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'private' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Lock size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Privada</span></button>
+                      <button onClick={() => setLeagueData({...leagueData, privacy: 'public'})} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'public' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Globe size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Pública</span></button>
                     </div>
                   </div>
                 </div>
@@ -308,30 +386,43 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
 
             {step === 2 && (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-                <Card className={`p-6 rounded-[2.2rem] border-2 transition-all ${leagueData.includeBaseFee ? 'border-lime-400 shadow-xl shadow-lime-500/5' : 'border-slate-100 opacity-60 grayscale'}`}>
+                <Card className={`p-6 rounded-[2.2rem] border-2 transition-all ${leagueData.includeBaseFee ? 'border-lime-500 shadow-xl shadow-lime-500/5' : 'border-slate-200 opacity-60 grayscale'}`}>
                    <div className="flex justify-between items-center mb-4">
-                      <div className="flex items-center gap-3"><Coins size={20} className="text-lime-500" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">CUOTA GENERAL</span></div>
+                      <div className="flex items-center gap-3"><Coins size={20} className="text-lime-600" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">CUOTA GENERAL</span></div>
                       <Checkbox id="base-fee" label="" checked={leagueData.includeBaseFee} onChange={v => setLeagueData({...leagueData, includeBaseFee: v})} />
                    </div>
-                   <div className={`relative h-16 rounded-2xl bg-slate-50 flex items-center justify-center border-2 border-slate-100 ${!leagueData.includeBaseFee ? 'pointer-events-none opacity-50' : ''}`}>
-                      <span className="absolute left-6 text-slate-300 text-2xl font-black">$</span>
+                   <div className={`relative h-16 rounded-2xl bg-slate-50 flex items-center justify-center border-2 border-slate-200 ${!leagueData.includeBaseFee ? 'pointer-events-none opacity-50' : ''}`}>
+                      <span className="absolute left-6 text-slate-400 text-2xl font-black">$</span>
                       <input type="number" value={leagueData.baseFeeAmount} onChange={e => setLeagueData({...leagueData, baseFeeAmount: e.target.value})} className="w-full text-center text-4xl font-black font-brand tracking-tighter bg-transparent outline-none text-slate-900" />
                    </div>
                 </Card>
-
-                <Card className={`p-6 rounded-[2.2rem] border-2 transition-all ${leagueData.includeStageFees ? 'border-lime-400 shadow-xl shadow-lime-500/5' : 'border-slate-100 opacity-60 grayscale'}`}>
+                <Card className={`p-6 rounded-[2.2rem] border-2 transition-all ${leagueData.includeStageFees ? 'border-lime-500 shadow-xl shadow-lime-500/5' : 'border-slate-200 opacity-60 grayscale'}`}>
                   <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center gap-3"><Calendar size={20} className="text-lime-500" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">EXTRAS POR ETAPA</span></div>
-                    <Checkbox id="stage-fees" label="" checked={leagueData.includeStageFees} onChange={handleToggleStageFees} />
+                    <div className="flex items-center gap-3"><Calendar size={20} className="text-lime-600" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">EXTRAS POR ETAPA</span></div>
+                    <Checkbox id="stage-fees" label="" checked={leagueData.includeStageFees} onChange={v => setLeagueData({...leagueData, includeStageFees: v})} />
                   </div>
                   <div className="space-y-2">
                     {(['match', 'round', 'phase'] as const).map(key => (
-                      <div key={key} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${leagueData.includeStageFees && leagueData.stageFees[key].active ? 'border-lime-100 bg-lime-50/20' : 'opacity-40 grayscale pointer-events-none'}`}>
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${leagueData.stageFees[key].active ? 'bg-lime-400 text-black shadow-lg shadow-lime-400/20' : 'bg-slate-100'}`}><Zap size={16} /></div>
+                      <div key={key} className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${!leagueData.includeStageFees ? 'opacity-40 grayscale pointer-events-none' : leagueData.stageFees[key].active ? 'border-lime-200 bg-lime-50/20' : 'border-slate-200 bg-slate-50 opacity-80'}`}>
+                        <div className={`${!leagueData.includeStageFees ? 'pointer-events-none' : ''}`}>
+                             <Checkbox 
+                                id={`check-${key}`} 
+                                label="" 
+                                checked={leagueData.stageFees[key].active} 
+                                onChange={(v) => handleStageFeeActiveChange(key, v)}
+                                disabled={!leagueData.includeStageFees}
+                             />
+                        </div>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${leagueData.includeStageFees && leagueData.stageFees[key].active ? 'bg-lime-400 text-black shadow-lg shadow-lime-400/20' : 'bg-slate-200 text-slate-400'}`}><Zap size={16} /></div>
                         <span className="flex-1 text-[8px] font-black uppercase text-slate-900 tracking-widest">{key === 'match' ? 'PARTIDO' : key === 'round' ? 'RONDA' : 'FASE'}</span>
-                        <div className="relative w-28">
-                          <input type="number" value={leagueData.stageFees[key].amount} onChange={(e) => setLeagueData({...leagueData, stageFees: {...leagueData.stageFees, [key]: {...leagueData.stageFees[key], amount: e.target.value}}})} className="w-full h-10 text-right pr-4 font-black text-sm bg-white border border-slate-200 rounded-xl outline-none" />
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-200 text-[10px] font-black">$</span>
+                        <div className={`relative w-28 transition-all ${leagueData.stageFees[key].active ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                          <input 
+                            type="number" 
+                            value={leagueData.stageFees[key].amount} 
+                            onChange={(e) => setLeagueData({...leagueData, stageFees: {...leagueData.stageFees, [key]: {...leagueData.stageFees[key], amount: e.target.value}}})} 
+                            className={`w-full h-10 text-right pr-4 font-black text-sm border rounded-xl outline-none focus:border-lime-500 focus:ring-2 focus:ring-lime-100 transition-all ${leagueData.stageFees[key].active ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-100 border-slate-200 text-slate-400'}`} 
+                          />
+                          <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-black ${leagueData.stageFees[key].active ? 'text-slate-400' : 'text-slate-300'}`}>$</span>
                         </div>
                       </div>
                     ))}
@@ -341,72 +432,110 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
             )}
 
             {step === 3 && (
-              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-                <div className="grid grid-cols-2 gap-3">
-                   <Card className="p-5 rounded-[2rem] flex flex-col items-center gap-2 border-slate-100">
-                      <span className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] leading-none">PARTICIPANTES</span>
-                      <div className="flex items-center gap-6 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
-                         <button onClick={() => setLeagueData({...leagueData, participantsCount: Math.max(2, leagueData.participantsCount-1)})} className="p-1 hover:bg-white rounded-lg transition-all text-slate-300 hover:text-slate-900"><Minus size={18} /></button>
-                         <span className="text-3xl font-black font-brand text-slate-900 leading-none">{leagueData.participantsCount}</span>
-                         <button onClick={() => setLeagueData({...leagueData, participantsCount: leagueData.participantsCount+1})} className="p-1 hover:bg-white rounded-lg transition-all text-slate-300 hover:text-slate-900"><Plus size={18} /></button>
+              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 flex flex-col h-full">
+                
+                {/* Indicador de Plan de Suscripción RE-DISEÑADO */}
+                <div className="border border-slate-200 rounded-3xl p-4 flex items-center justify-between bg-white shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
+                            <ShieldCheck size={20} className="text-slate-500" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Nivel de Cuenta</p>
+                            <p className="text-sm font-black text-slate-900 uppercase">
+                                {leagueData.plan === 'free' ? 'Plan Gratuito' : leagueData.plan.toUpperCase()}
+                            </p>
+                        </div>
+                    </div>
+                    {leagueData.plan === 'free' && (
+                        <Button variant="outline" size="sm" onClick={() => onViewChange('checkout')} className="h-8 text-[10px] font-black uppercase tracking-widest px-4 border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400">Mejorar</Button>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   {/* PARTICIPANTES - NUEVO DISEÑO */}
+                   <Card className="p-4 flex flex-col items-center justify-center gap-3 rounded-[2rem] border-slate-100 shadow-sm border">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Participantes</span>
+                      <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-1.5 border border-slate-100">
+                         <button onClick={handleDecrementParticipants} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-white rounded-lg transition-all"><Minus size={18}/></button>
+                         <span className="text-2xl font-black font-brand text-slate-900 w-10 text-center">{leagueData.participantsCount}</span>
+                         <button onClick={handleIncrementParticipants} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-white rounded-lg transition-all"><Plus size={18}/></button>
                       </div>
+                      {isLimitExceeded && (
+                          <div className="flex items-center gap-1.5">
+                              <AlertCircle size={10} className="text-rose-500" />
+                              <span className="text-[8px] font-bold text-rose-500">Límite: {PLAN_LIMITS[leagueData.plan]}</span>
+                          </div>
+                      )}
                    </Card>
-                   <Card className="p-5 rounded-[2rem] space-y-3 border-slate-100">
-                      <div className="flex justify-between items-center px-1"><span className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">% ADMIN</span><span className="text-base font-black text-lime-600">{leagueData.adminFeePercent}%</span></div>
+
+                   {/* % ADMIN - NUEVO DISEÑO */}
+                   <Card className="p-4 flex flex-col justify-center gap-4 rounded-[2rem] border-slate-100 shadow-sm border">
+                      <div className="flex justify-between w-full px-1 items-center">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">% Admin</span>
+                          <span className="text-sm font-black text-lime-600">{leagueData.adminFeePercent}%</span>
+                      </div>
                       <input 
                         type="range" 
-                        min="0" max="40" step="5" 
+                        min="0" 
+                        max="40" 
+                        step="5" 
                         value={leagueData.adminFeePercent} 
                         onChange={e => handleAdminFeeChange(parseInt(e.target.value))} 
                         className="w-full h-2 bg-slate-100 rounded-lg appearance-none accent-lime-500 cursor-pointer" 
                       />
                    </Card>
                 </div>
-
-                <div className="flex p-1 bg-slate-100 rounded-[1.8rem] gap-1 border border-slate-200">
-                   {(['general', 'match', 'round', 'phase'] as const).map(cat => (
-                     <button key={cat} disabled={!isCategoryEnabled(cat)} onClick={() => setActiveCategory(cat)} className={`flex-1 py-3 rounded-[1.5rem] font-black text-[9px] tracking-[0.15em] transition-all uppercase ${activeCategory === cat ? 'bg-white text-black shadow-lg shadow-black/5' : 'text-slate-400 opacity-50'}`}>
-                      {cat === 'general' ? 'GRAL' : cat === 'match' ? 'PART' : cat === 'round' ? 'ROND' : 'FASE'}
-                     </button>
+                
+                {/* Pestañas Filtradas - DISEÑO CAPSULA */}
+                <div className="flex p-1 bg-white rounded-[2rem] gap-1 border border-slate-100 shadow-sm overflow-x-auto scrollbar-hide">
+                   {([
+                     { id: 'general', label: 'GENERAL', active: leagueData.includeBaseFee },
+                     { id: 'match', label: 'PARTIDO', active: leagueData.includeStageFees && leagueData.stageFees.match.active },
+                     { id: 'round', label: 'RONDA', active: leagueData.includeStageFees && leagueData.stageFees.round.active },
+                     { id: 'phase', label: 'FASE', active: leagueData.includeStageFees && leagueData.stageFees.phase.active }
+                   ] as const).filter(t => t.active).map(cat => (
+                     <button key={cat.id} onClick={() => setActiveCategory(cat.id as StageType | 'general')} className={`flex-1 py-2.5 px-4 rounded-[1.8rem] font-black text-[9px] tracking-widest transition-all uppercase whitespace-nowrap ${activeCategory === cat.id ? 'bg-white text-black shadow-md border border-slate-100' : 'text-slate-400 hover:bg-slate-50'}`}>{cat.label}</button>
                    ))}
                 </div>
 
-                <Card className="p-6 rounded-[2.8rem] shadow-2xl space-y-5 border-lime-400 border-2 relative overflow-hidden">
-                   <div className="flex justify-between items-center relative z-10">
-                      <div className="flex items-center gap-2"><PieChart size={20} className="text-lime-500" /><span className="text-[11px] font-black uppercase tracking-widest text-slate-900">PUESTOS A PREMIAR</span></div>
-                      <div className="flex items-center gap-6 bg-slate-50 p-1.5 px-6 rounded-2xl border border-slate-100 shadow-inner">
-                         <button onClick={() => updateWinnerCount(activeCategory, currentDist.winnersCount - 1)} className="text-slate-300 hover:text-slate-900 transition-colors"><Minus size={20}/></button>
-                         <span className="text-4xl font-black font-brand text-slate-900 w-12 text-center">{currentDist.winnersCount}</span>
-                         <button onClick={() => updateWinnerCount(activeCategory, currentDist.winnersCount + 1)} className="text-slate-300 hover:text-slate-900 transition-colors"><Plus size={20}/></button>
+                <Card className="p-0 rounded-[2.5rem] shadow-xl border-lime-500 border relative overflow-hidden flex flex-col flex-1 bg-white">
+                   <div className="flex justify-between items-center p-6 bg-white">
+                      <div className="flex items-center gap-2">
+                        <PieChart size={18} className="text-lime-600" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">PUESTOS A PREMIAR</span>
+                      </div>
+                      <div className="flex items-center gap-4 bg-slate-50 p-1 px-4 rounded-xl border border-slate-200">
+                         <button onClick={() => updateWinnerCount(activeCategory, currentDist.winnersCount - 1)} className="text-slate-400 hover:text-slate-900"><Minus size={16}/></button>
+                         <span className="text-2xl font-black font-brand text-slate-900 w-8 text-center">{currentDist.winnersCount}</span>
+                         <button onClick={() => updateWinnerCount(activeCategory, currentDist.winnersCount + 1)} className="text-slate-400 hover:text-slate-900"><Plus size={16}/></button>
                       </div>
                    </div>
 
-                   <div className="space-y-1.5 pt-3 border-t border-slate-100 relative z-10">
-                      <div className="flex justify-between items-center px-1 mb-3">
-                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">DISTRIBUCIÓN CATEGORÍA: {activeCategory === 'general' ? 'GENERAL' : activeCategory.toUpperCase()}</span>
-                         <Badge color={`${isFinancialValid ? 'bg-lime-400 text-slate-900' : 'bg-rose-500 text-white'} text-[9px] font-black shadow-lg`}>{isFinancialValid ? '100% OK' : 'REVISAR'}</Badge>
-                      </div>
-                      <div className="grid grid-cols-1 gap-1 max-h-56 overflow-y-auto scrollbar-hide">
-                         {activeWinners.map((winner, idx) => (
-                           <div key={idx} className="flex justify-between items-center p-3 bg-white border border-slate-50 rounded-2xl hover:border-lime-200 transition-all hover:shadow-sm">
-                              <span className="text-[11px] font-black text-slate-900 uppercase tracking-tight">{winner.label}</span>
-                              <div className="flex items-center gap-6">
-                                <span className="text-[11px] font-black text-slate-400">{winner.percentage}%</span>
-                                <span className="text-[12px] font-black text-lime-600">${Math.round(currentNetPoolValue * (winner.percentage / 100)).toLocaleString()}</span>
-                              </div>
+                   {/* Linea Separadora */}
+                   <div className="h-px bg-slate-100 mx-6"></div>
+                   
+                   <div className="flex-1 overflow-y-auto scrollbar-hide p-6 space-y-3 bg-white mb-20">
+                      {activeWinners.map((winner, idx) => (
+                        <div key={idx} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
+                           <span className="text-[10px] font-black text-slate-900 uppercase">{winner.label}</span>
+                           <div className="flex items-center gap-6">
+                             <span className="text-[10px] font-black text-slate-400">{winner.percentage}%</span>
+                             <span className="text-sm font-black text-lime-600">${Math.round(calculateNetForCategory(activeCategory) * (winner.percentage / (100 - leagueData.adminFeePercent))).toLocaleString()}</span>
                            </div>
-                         ))}
-                      </div>
+                        </div>
+                      ))}
                    </div>
-
-                   <div className="p-6 bg-[#0a0f1d] rounded-[2rem] flex justify-between items-center border border-white/10 shadow-2xl mt-4">
-                      <div className="flex flex-col">
-                        <p className="text-[8px] font-black uppercase text-lime-400 tracking-[0.2em] leading-none mb-1">FONDO NETO {activeCategory.toUpperCase()}</p>
-                        <p className="text-2xl font-black text-white font-brand tracking-tighter leading-none">${Math.round(currentNetPoolValue).toLocaleString()}</p>
+                   
+                   {/* FOOTER TOTAL - DARK THEME */}
+                   <div className="absolute bottom-0 left-0 right-0 px-6 py-5 bg-slate-900 flex justify-between items-center border-t border-white/10 z-20 rounded-b-[2.3rem]">
+                      <div className="space-y-1">
+                          <p className="text-[7px] font-black uppercase text-lime-500 tracking-widest">FONDO NETO GENERAL</p>
+                          <p className="text-2xl font-black text-white font-brand leading-none">${Math.round(calculateNetForCategory(activeCategory)).toLocaleString()}</p>
                       </div>
-                      <div className="text-right flex flex-col items-end">
-                        <p className="text-[8px] font-black uppercase text-rose-400 tracking-[0.2em] leading-none mb-1">ADMIN ({leagueData.adminFeePercent}%)</p>
-                        <p className="text-lg font-black text-white/80 font-brand tracking-tighter leading-none">${Math.round(calculateAdminCutForCategory(activeCategory)).toLocaleString()}</p>
+                      <div className="text-right space-y-1">
+                          <p className="text-[7px] font-black uppercase text-rose-400 tracking-widest">ADMIN ({leagueData.adminFeePercent}%)</p>
+                          <p className="text-lg font-black text-white/80 font-brand leading-none">${Math.round(calculateTotalGrossForCategory(activeCategory) * (leagueData.adminFeePercent / 100)).toLocaleString()}</p>
                       </div>
                    </div>
                 </Card>
@@ -414,63 +543,42 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
             )}
 
             {step === 4 && (
-              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                <div className="text-center space-y-2">
-                   <h4 className="text-2xl font-black font-brand uppercase tracking-tighter">INVITA A TU <span className="text-lime-500">GRUPO.</span></h4>
-                </div>
-
-                <Card className="p-6 rounded-[2rem] border-slate-100 shadow-sm space-y-4">
-                   <div className="relative">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input 
-                        type="text" 
-                        placeholder="Buscar amigos en Polla2026..." 
-                        className="w-full h-12 pl-12 pr-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-lime-400 font-bold text-sm"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                   </div>
+              <div className="space-y-5 animate-in slide-in-from-right-4 duration-300">
+                <div className="text-center space-y-1"><h4 className="text-xl font-black font-brand uppercase tracking-tighter text-slate-900">INVITA A TU <span className="text-lime-600">GRUPO.</span></h4></div>
+                <Card className="p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3">
+                   <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} /><input type="text" placeholder="Buscar amigos..." className="w-full h-11 pl-11 pr-4 bg-white border border-slate-300 rounded-xl outline-none focus:border-lime-500 font-bold text-xs text-slate-900 placeholder:text-slate-400" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                    {searchQuery && filteredSearch.length > 0 && (
-                     <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-hide">
+                     <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-hide">
                         {filteredSearch.map(name => (
-                          <button key={name} onClick={() => handleAddExistingUser(name)} className="w-full flex items-center gap-3 p-3 hover:bg-lime-50 rounded-xl transition-all">
-                             <img src={`https://picsum.photos/seed/${name}/40/40`} className="w-8 h-8 rounded-lg" />
-                             <span className="text-xs font-black text-slate-900 uppercase">{name}</span>
-                             <Plus size={14} className="ml-auto text-lime-500" />
-                          </button>
+                          <button key={name} onClick={() => handleAddExistingUser(name)} className="w-full flex items-center gap-3 p-2.5 hover:bg-lime-50 rounded-xl transition-all"><img src={`https://picsum.photos/seed/${name}/40/40`} className="w-8 h-8 rounded-lg" /><span className="text-xs font-black text-slate-900 uppercase">{name}</span><Plus size={14} className="ml-auto text-lime-500" /></button>
                         ))}
                      </div>
                    )}
                 </Card>
+                <Card className={`p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3 relative overflow-hidden transition-colors duration-500 ${foundExistingUser ? 'bg-lime-50 border-lime-300' : 'bg-white'}`}>
+                   <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest block">INVITAR NUEVO</span>
+                   <div className="grid grid-cols-1 gap-2 relative z-10">
+                      <Input placeholder="Celular" value={newUserInput.phone} onChange={e => handleCheckUser(e.target.value)} className="h-10 text-xs font-bold rounded-xl" leftIcon={<Phone size={14}/>} />
+                      <Input placeholder="Correo" value={newUserInput.email} onChange={e => setNewUserInput({...newUserInput, email: e.target.value})} className="h-10 text-xs font-bold rounded-xl" leftIcon={<Mail size={14}/>} disabled={foundExistingUser} />
+                      
+                      {foundExistingUser && (
+                         <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-lime-200 shadow-sm animate-in fade-in slide-in-from-top-2">
+                            <img src={MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar} className="w-8 h-8 rounded-lg" />
+                            <div>
+                               <p className="text-[10px] font-black text-slate-900 uppercase">¡Usuario Encontrado!</p>
+                               <p className="text-[9px] font-bold text-slate-500">{newUserInput.name}</p>
+                            </div>
+                            <CheckCircle2 size={16} className="ml-auto text-lime-600" />
+                         </div>
+                      )}
 
-                <Card className="p-6 rounded-[2rem] border-slate-100 shadow-sm space-y-4">
-                   <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">INVITAR NUEVO USUARIO</span>
-                   <div className="grid grid-cols-1 gap-3">
-                      <Input placeholder="Nombre (Opcional)" value={newUserInput.name} onChange={e => setNewUserInput({...newUserInput, name: e.target.value})} className="h-10 text-xs font-bold rounded-xl" />
-                      <div className="grid grid-cols-2 gap-3">
-                         <Input placeholder="Celular" value={newUserInput.phone} onChange={e => setNewUserInput({...newUserInput, phone: e.target.value})} className="h-10 text-xs font-bold rounded-xl" leftIcon={<Phone size={14}/>} />
-                         <Input placeholder="Correo" value={newUserInput.email} onChange={e => setNewUserInput({...newUserInput, email: e.target.value})} className="h-10 text-xs font-bold rounded-xl" leftIcon={<Mail size={14}/>} />
-                      </div>
-                      <Button onClick={handleAddNewUser} variant="outline" className="h-10 rounded-xl font-black text-[9px] uppercase tracking-widest border-lime-400 text-lime-600 hover:bg-lime-50" disabled={!newUserInput.email || !newUserInput.phone}>
-                         AGREGAR <Plus size={14} className="ml-2"/>
-                      </Button>
+                      <Button onClick={() => { if(newUserInput.email && newUserInput.phone) { setInvitedUsers([...invitedUsers, {id: Math.random().toString(), name: newUserInput.name || 'Invitado', email: newUserInput.email, phone: newUserInput.phone, type: 'new'}]); setNewUserInput({name: '', email: '', phone: ''}); setFoundExistingUser(false); } }} variant={foundExistingUser ? 'secondary' : 'outline'} className={`h-10 rounded-xl font-black text-[9px] uppercase tracking-widest ${foundExistingUser ? '' : 'border-lime-400 text-lime-700 hover:bg-lime-50'}`}>{foundExistingUser ? 'AGREGAR (EXISTENTE)' : 'AGREGAR'} <Plus size={14} className="ml-2"/></Button>
                    </div>
                 </Card>
-
-                <div className="space-y-2">
-                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
+                <div className="space-y-2"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto scrollbar-hide">
                       {invitedUsers.map(user => (
-                        <div key={user.id} className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-2xl">
-                           <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
-                             {user.avatar ? <img src={user.avatar} className="w-full h-full rounded-xl" /> : <UserPlus size={18}/>}
-                           </div>
-                           <div className="flex-1">
-                              <p className="text-xs font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{user.email}</p>
-                           </div>
-                           <button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400"><X size={16}/></button>
-                        </div>
+                        <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14}/>}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14}/></button></div>
                       ))}
                    </div>
                 </div>
@@ -478,138 +586,338 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
             )}
 
             {step === 5 && (
-              <div className="space-y-6 animate-in zoom-in duration-300 py-4 flex flex-col items-center">
-                 <div className="text-center space-y-2 mb-2">
-                    <h4 className="text-2xl font-black font-brand uppercase tracking-tighter leading-none">PREVIO DE <span className="text-lime-500">RESUMEN.</span></h4>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valida que toda la información sea correcta.</p>
-                 </div>
-
-                 <Card className="p-0 rounded-[2.8rem] bg-white shadow-3xl overflow-hidden flex flex-col w-full max-w-[360px] border border-slate-100 animate-in slide-in-from-bottom-8">
-                    {/* Carnet Header (Dark Theme) */}
-                    <div className="bg-[#0a0f1d] p-6 text-white space-y-4 relative overflow-hidden">
-                       <div className="flex justify-between items-start relative z-10">
-                          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-slate-950 shadow-2xl overflow-hidden">
-                             {leagueData.logo ? <img src={leagueData.logo} className="w-full h-full object-cover" /> : <Award size={28} />}
-                          </div>
-                          <Badge color="bg-lime-400 text-black uppercase tracking-widest text-[9px] font-black shadow-lg shadow-lime-400/20 px-4 py-1.5">VALIDADO</Badge>
-                       </div>
-                       <div className="relative z-10">
-                          <h4 className="text-2xl font-black font-brand uppercase tracking-tighter truncate leading-none mb-1.5">{leagueData.name || 'CREANDO LIGA...'}</h4>
-                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.4em] leading-none">ID LIGA: #{leagueId}</span>
-                       </div>
-                       <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none -rotate-12"><Trophy size={140} /></div>
-                    </div>
-
-                    {/* Carnet Body (Detailed Info) */}
-                    <div className="p-6 space-y-6 bg-white max-h-[400px] overflow-y-auto scrollbar-hide">
-                       
-                       {/* Configuración Base */}
-                       <div className="grid grid-cols-2 gap-6">
-                          <div className="space-y-1.5">
-                             <div className="flex items-center gap-1.5 text-slate-400"><Lock size={12}/><span className="text-[8px] font-black uppercase tracking-widest">PRIVACIDAD</span></div>
-                             <p className="text-xs font-black uppercase text-slate-900">{leagueData.privacy === 'private' ? 'Liga Privada' : 'Liga Pública'}</p>
-                          </div>
-                          <div className="space-y-1.5">
-                             <div className="flex items-center gap-1.5 text-slate-400"><Sparkles size={12}/><span className="text-[8px] font-black uppercase tracking-widest">PLAN ACTUAL</span></div>
-                             <p className="text-xs font-black uppercase text-lime-600">{leagueData.plan.toUpperCase()} PLAN</p>
-                          </div>
-                       </div>
-
-                       {/* Desglose de Costos */}
-                       <div className="pt-6 border-t border-slate-50 space-y-4">
-                          <div className="flex items-center gap-2 mb-2"><Coins size={14} className="text-slate-400"/><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">COSTOS POR JUGADOR</span></div>
-                          <div className="space-y-2">
-                             {leagueData.includeBaseFee && (
-                               <div className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl">
-                                  <span className="text-[10px] font-black text-slate-500 uppercase">CUOTA ÚNICA BASE</span>
-                                  <span className="text-sm font-black text-slate-950">${parseInt(leagueData.baseFeeAmount).toLocaleString()}</span>
-                               </div>
-                             )}
-                             {leagueData.includeStageFees && (['match', 'round', 'phase'] as StageType[]).map(key => (
-                               leagueData.stageFees[key].active && (
-                                 <div key={key} className="flex justify-between items-center px-3 py-1 border-b border-slate-50">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase">EXTRA POR {key === 'match' ? 'PARTIDO' : key === 'round' ? 'RONDA' : 'FASE'}</span>
-                                    <span className="text-[11px] font-black text-slate-700">${parseInt(leagueData.stageFees[key].amount).toLocaleString()}</span>
-                                 </div>
-                               )
-                             ))}
-                          </div>
-                       </div>
-
-                       {/* Premiación Detallada */}
-                       <div className="pt-6 border-t border-slate-50 space-y-4">
-                          <div className="flex items-center justify-between">
-                             <div className="flex items-center gap-2"><PieChart size={14} className="text-slate-400"/><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">PLAN DE PREMIOS ({activeCategory === 'general' ? 'GRAL' : activeCategory.toUpperCase()})</span></div>
-                             <button onClick={() => setStep(3)} className="text-[8px] font-black text-lime-600 uppercase">CAMBIAR</button>
-                          </div>
-                          <div className="space-y-1.5">
-                             {activeWinners.map((winner, idx) => (
-                               <div key={idx} className="flex justify-between items-center px-3 py-2 bg-lime-50/30 rounded-xl">
-                                  <span className="text-[10px] font-black text-slate-600 uppercase">{winner.label} ({winner.percentage}%)</span>
-                                  <span className="text-xs font-black text-lime-600">${Math.round(currentNetPoolValue * (winner.percentage / 100)).toLocaleString()}</span>
-                               </div>
-                             ))}
-                          </div>
-                       </div>
-
-                       {/* Participantes */}
-                       <div className="pt-6 border-t border-slate-50 space-y-4">
-                          <div className="flex items-center gap-2"><Users size={14} className="text-slate-400"/><span className="text-[10px] font-black uppercase tracking-widest text-slate-900">PARTICIPANTES</span></div>
-                          <div className="grid grid-cols-2 gap-3">
-                             <div className="p-4 bg-slate-900 rounded-[1.8rem] text-center">
-                                <p className="text-[8px] font-black text-slate-500 uppercase mb-1">CUPOS TOTALES</p>
-                                <p className="text-xl font-black text-white">{leagueData.participantsCount}</p>
+              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                {/* Summary Card RE-DESIGNED */}
+                <div className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xl mt-4">
+                    {/* Header */}
+                    <div className="bg-slate-900 p-6 flex justify-between items-center">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-white shrink-0">
+                              <Trophy size={24} />
+                            </div>
+                            <h3 className="text-2xl font-black font-brand text-white uppercase truncate">
+                              {leagueData.name || 'MI LIGA'}
+                            </h3>
+                        </div>
+                        <div className="shrink-0">
+                           <Badge color={leagueData.privacy === 'private' ? 'bg-slate-800 text-slate-200 border border-slate-700 pl-2 pr-3' : 'bg-lime-400 text-black border border-lime-300 pl-2 pr-3'}>
+                             <div className="flex items-center gap-1.5">
+                               {leagueData.privacy === 'private' ? <Lock size={10} /> : <Globe size={10} />}
+                               <span className="text-[9px]">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</span>
                              </div>
-                             <div className="p-4 bg-lime-400 rounded-[1.8rem] text-center">
-                                <p className="text-[8px] font-black text-slate-950/40 uppercase mb-1">INVITADOS</p>
-                                <p className="text-xl font-black text-slate-950">{invitedUsers.length}</p>
-                             </div>
-                          </div>
-                       </div>
+                           </Badge>
+                        </div>
                     </div>
 
-                    {/* Carnet Footer - Total Gross (Calculated from all active) */}
-                    <div className="p-8 bg-slate-50 border-t border-slate-100 text-center space-y-1">
-                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">RECAUDO BRUTO POTENCIAL</p>
-                       <span className="text-4xl font-black font-brand text-slate-950 tracking-tighter leading-none">
-                        ${(
-                          calculateTotalGrossForCategory('general') + 
-                          (leagueData.includeStageFees ? (calculateTotalGrossForCategory('match') + calculateTotalGrossForCategory('round') + calculateTotalGrossForCategory('phase')) : 0)
-                        ).toLocaleString()}
-                       </span>
-                       <div className="pt-4 flex flex-col items-center">
-                          <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-lime-500"/><span className="text-[8px] font-black text-slate-900 uppercase tracking-widest">COMISIÓN ADMIN ({leagueData.adminFeePercent}%) INCLUIDA</span></div>
-                       </div>
+                    {/* Details Body */}
+                    <div className="p-6 space-y-6">
+                        {/* Sub-header info */}
+                        <div className="flex justify-between items-end border-b border-slate-100 pb-4">
+                            <div>
+                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">ID DE LIGA</p>
+                                <p className="text-sm font-mono font-bold text-slate-700">#{leagueId}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">PLAN</p>
+                                <div className="flex items-center gap-1.5 justify-end">
+                                   {leagueData.plan === 'diamond' ? <Diamond size={12} className="text-cyan-500"/> : <Sparkles size={12} className="text-amber-500"/>}
+                                   <span className="text-xs font-black text-slate-900 uppercase">{leagueData.plan === 'free' ? 'GRATUITO' : leagueData.plan}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Costos de Entrada */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                                <Coins size={12} /> COSTOS POR JUGADOR
+                            </div>
+                            <div className="bg-slate-50 rounded-xl p-1 space-y-1">
+                                {!leagueData.includeBaseFee && !leagueData.includeStageFees ? (
+                                   <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCIÓN</div>
+                                ) : (
+                                  <>
+                                    {leagueData.includeBaseFee && (
+                                      <div className="flex justify-between items-center p-2 px-3 bg-white rounded-lg shadow-sm">
+                                        <span className="text-[10px] font-black uppercase text-slate-700">CUOTA BASE</span>
+                                        <span className="text-xs font-bold text-slate-900">${parseInt(leagueData.baseFeeAmount).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {leagueData.includeStageFees && leagueData.stageFees.match.active && (
+                                      <div className="flex justify-between items-center p-2 px-3 bg-white rounded-lg shadow-sm border border-slate-100/50">
+                                        <span className="text-[10px] font-bold uppercase text-slate-500">POR PARTIDO</span>
+                                        <span className="text-xs font-bold text-slate-900">${parseInt(leagueData.stageFees.match.amount).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {leagueData.includeStageFees && leagueData.stageFees.round.active && (
+                                      <div className="flex justify-between items-center p-2 px-3 bg-white rounded-lg shadow-sm border border-slate-100/50">
+                                        <span className="text-[10px] font-bold uppercase text-slate-500">POR RONDA</span>
+                                        <span className="text-xs font-bold text-slate-900">${parseInt(leagueData.stageFees.round.amount).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {leagueData.includeStageFees && leagueData.stageFees.phase.active && (
+                                      <div className="flex justify-between items-center p-2 px-3 bg-white rounded-lg shadow-sm border border-slate-100/50">
+                                        <span className="text-[10px] font-bold uppercase text-slate-500">POR FASE</span>
+                                        <span className="text-xs font-bold text-slate-900">${parseInt(leagueData.stageFees.phase.amount).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* Totals Breakdown */}
+                        <div className="bg-slate-900 rounded-2xl p-5 text-white relative overflow-hidden">
+                           <div className="relative z-10 space-y-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Calculator size={14} className="text-lime-400" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCIÓN DE FONDOS</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center text-xs opacity-80">
+                                 <span>Recaudo Bruto</span>
+                                 <span className="font-mono">${totalPotentialGross.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs text-rose-400">
+                                 <span>Admin ({leagueData.adminFeePercent}%)</span>
+                                 <span className="font-mono">-${totalAdminFee.toLocaleString()}</span>
+                              </div>
+                              <div className="h-px bg-white/10 my-2"></div>
+                              <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-black uppercase text-lime-400">BOLSA DE PREMIOS</span>
+                                 <span className="text-xl font-black font-brand">${totalNetPrizes.toLocaleString()}</span>
+                              </div>
+                           </div>
+                           {/* Decoration */}
+                           <div className="absolute -top-10 -right-10 w-32 h-32 bg-lime-500/10 rounded-full blur-2xl"></div>
+                        </div>
+
+                        <button onClick={() => setStep(2)} className="w-full text-center text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 pt-2">
+                            <Eye size={12} /> REVISAR CONFIGURACIÓN
+                        </button>
                     </div>
-                 </Card>
+                </div>
               </div>
             )}
+
+            {step === 6 && (
+              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 flex flex-col items-center">
+                <div className="text-center space-y-2">
+                    <h4 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
+                    ¡LIGA <span className="text-lime-600">LISTA!</span>
+                    </h4>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACIÓN.</p>
+                </div>
+
+                {/* Ticket Card - EXTENDED VERSION */}
+                <div className="w-full max-w-sm bg-slate-900 rounded-[2.5rem] overflow-hidden relative shadow-2xl text-white transform transition-all hover:scale-[1.01] duration-500">
+                    
+                    {/* Top Part */}
+                    <div className="p-8 flex flex-col items-center text-center space-y-6 relative pb-8">
+                        
+                        {/* Glossy effect */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-lime-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+
+                        {/* Icon */}
+                        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-lime-600 shadow-lg shadow-lime-900/50 relative z-10">
+                            <Trophy size={40} strokeWidth={1.5} />
+                        </div>
+                        
+                        <div className="space-y-2 relative z-10">
+                            <h3 className="text-2xl font-black font-brand uppercase leading-tight tracking-tight text-white">
+                              {leagueData.name || 'POLLA MUNDIALISTA'}
+                            </h3>
+                            <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACIÓN EXCLUSIVA</p>
+                        </div>
+
+                        {/* Grid Info High Level */}
+                        <div className="grid grid-cols-2 gap-4 w-full pt-2">
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
+                                <Calendar size={14} className="text-slate-400 mb-1" />
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">INICIO</p>
+                                <p className="text-xs font-bold text-white">11 JUN 2026</p>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
+                                <Wallet size={14} className="text-slate-400 mb-1" />
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">CUOTA</p>
+                                <p className="text-xs font-bold text-lime-400">
+                                  {leagueData.includeBaseFee 
+                                    ? `$${parseInt(leagueData.baseFeeAmount).toLocaleString()}` 
+                                    : 'GRATIS'}
+                                </p>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
+                                <Trophy size={14} className="text-slate-400 mb-1" />
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">BOLSA EST.</p>
+                                <p className="text-xs font-bold text-white">${totalNetPrizes.toLocaleString()}</p>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
+                                {leagueData.privacy === 'private' ? <Lock size={14} className="text-slate-400 mb-1" /> : <Globe size={14} className="text-slate-400 mb-1" />}
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TIPO</p>
+                                <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</p>
+                            </div>
+                        </div>
+
+                        {/* Detailed Breakdown Section (The "Complete" Information) */}
+                        <div className="w-full space-y-4 pt-4 border-t border-white/10 mt-2">
+                             
+                             {/* Costos Detallados */}
+                             {(leagueData.includeBaseFee || leagueData.includeStageFees) && (
+                               <div className="bg-white/5 rounded-2xl p-4 border border-white/10 text-left">
+                                  <div className="flex items-center gap-2 mb-3">
+                                     <Coins size={12} className="text-lime-400" />
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DESGLOSE DE APORTES</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                     {leagueData.includeBaseFee && (
+                                       <div className="flex justify-between text-[10px] font-bold">
+                                          <span className="text-slate-300">CUOTA BASE</span>
+                                          <span className="text-white">${parseInt(leagueData.baseFeeAmount).toLocaleString()}</span>
+                                       </div>
+                                     )}
+                                     {leagueData.includeStageFees && leagueData.stageFees.match.active && (
+                                       <div className="flex justify-between text-[10px] font-bold">
+                                          <span className="text-slate-300">POR PARTIDO</span>
+                                          <span className="text-white">${parseInt(leagueData.stageFees.match.amount).toLocaleString()}</span>
+                                       </div>
+                                     )}
+                                     {leagueData.includeStageFees && leagueData.stageFees.round.active && (
+                                       <div className="flex justify-between text-[10px] font-bold">
+                                          <span className="text-slate-300">POR RONDA</span>
+                                          <span className="text-white">${parseInt(leagueData.stageFees.round.amount).toLocaleString()}</span>
+                                       </div>
+                                     )}
+                                     {leagueData.includeStageFees && leagueData.stageFees.phase.active && (
+                                       <div className="flex justify-between text-[10px] font-bold">
+                                          <span className="text-slate-300">POR FASE</span>
+                                          <span className="text-white">${parseInt(leagueData.stageFees.phase.amount).toLocaleString()}</span>
+                                       </div>
+                                     )}
+                                  </div>
+                               </div>
+                             )}
+
+                             {/* Distribución de Fondos */}
+                             <div className="bg-white/5 rounded-2xl p-4 border border-white/10 text-left">
+                                  <div className="flex items-center gap-2 mb-3">
+                                     <Calculator size={12} className="text-lime-400" />
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCIÓN ESTIMADA</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                     <div className="flex justify-between text-[10px] font-bold">
+                                        <span className="text-slate-400">RECAUDO BRUTO</span>
+                                        <span className="text-slate-300 font-mono">${totalPotentialGross.toLocaleString()}</span>
+                                     </div>
+                                     <div className="flex justify-between text-[10px] font-bold">
+                                        <span className="text-rose-400">ADMIN ({leagueData.adminFeePercent}%)</span>
+                                        <span className="text-rose-400 font-mono">-${totalAdminFee.toLocaleString()}</span>
+                                     </div>
+                                     <div className="h-px bg-white/10 my-1"></div>
+                                     <div className="flex justify-between text-xs font-black">
+                                        <span className="text-lime-400 uppercase">BOLSA PREMIOS</span>
+                                        <span className="text-white font-brand">${totalNetPrizes.toLocaleString()}</span>
+                                     </div>
+                                  </div>
+                             </div>
+                        </div>
+
+                    </div>
+
+                    {/* Divider with notches */}
+                    <div className="relative flex items-center justify-center h-6 bg-slate-900">
+                         <div className="absolute left-0 w-8 h-8 bg-white rounded-full -translate-x-1/2"></div>
+                         <div className="w-full border-t-2 border-dashed border-white/10 mx-10"></div>
+                         <div className="absolute right-0 w-8 h-8 bg-white rounded-full translate-x-1/2"></div>
+                    </div>
+
+                    {/* Bottom Part */}
+                    <div className="p-8 pt-6 flex items-center justify-between bg-slate-900 relative">
+                         <div>
+                            <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">CÓDIGO DE ACCESO</p>
+                            <p className="text-3xl font-black font-brand text-white tracking-widest">{leagueId}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                                <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white">A</div>
+                                <p className="text-[10px] font-bold text-slate-400">Admin: Tú</p>
+                            </div>
+                         </div>
+                         <div className="bg-white p-2 rounded-xl">
+                            <QrCode size={64} className="text-black" />
+                         </div>
+                    </div>
+                </div>
+                
+                {/* Share Buttons */}
+                <div className="flex gap-3 w-full max-w-sm justify-between">
+                    <button className="flex-1 h-14 rounded-2xl bg-[#25D366] text-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform hover:shadow-[#25D366]/30">
+                        <MessageCircle size={24} fill="white" />
+                    </button>
+                    <button className="flex-1 h-14 rounded-2xl bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 text-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform hover:shadow-purple-500/30">
+                        <Instagram size={24} />
+                    </button>
+                    <button className="flex-1 h-14 rounded-2xl bg-black text-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform hover:shadow-black/30">
+                        <Twitter size={24} fill="white" />
+                    </button>
+                    <button onClick={() => {navigator.clipboard.writeText(leagueId)}} className="flex-1 h-14 rounded-2xl bg-slate-200 text-slate-600 flex items-center justify-center shadow-lg hover:scale-105 transition-transform hover:bg-slate-300">
+                        <Download size={24} />
+                    </button>
+                </div>
+
+                <div className="w-full pt-4 flex gap-4">
+                     <Button 
+                        variant="outline" 
+                        className="w-16 h-16 rounded-full border-2 border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 p-0 flex items-center justify-center shrink-0" 
+                        onClick={() => setStep(5)}
+                    >
+                        <ArrowLeft size={24} />
+                    </Button>
+                    <Button 
+                        variant="secondary" 
+                        className="flex-1 h-16 rounded-[2rem] font-black text-[12px] tracking-[0.2em] shadow-2xl hover:bg-lime-500 hover:scale-[1.02] transition-all" 
+                        onClick={handleFinish}
+                    >
+                        FINALIZAR E IR AL TABLERO 
+                        <ArrowRight size={24} className="ml-2" />
+                    </Button>
+                </div>
+
+                <div className="flex gap-6 text-[9px] font-black uppercase tracking-widest text-slate-300">
+                    <span className="flex items-center gap-1"><ShieldCheck size={12} /> ENCRIPTADO</span>
+                    <span className="flex items-center gap-1"><Globe size={12} /> MUNDIAL 2026</span>
+                </div>
+              </div>
+            )}
+            
           </div>
 
-          {/* Botones de Navegación */}
-          <div className="mt-6 flex gap-3 pt-6 border-t border-slate-100">
-             {step > 1 && (
-               <Button variant="outline" className="w-16 h-16 rounded-[1.8rem] border-slate-200" onClick={() => setStep(step - 1)}>
-                  <ArrowLeft size={24} className="text-slate-400" />
-               </Button>
-             )}
-             <Button 
-              variant="secondary"
-              className={`flex-1 h-16 rounded-[1.8rem] font-black text-[12px] tracking-[0.2em] shadow-2xl bg-lime-400 text-slate-950 hover:bg-lime-500 active:scale-95 transition-all ${step === 3 && !isFinancialValid ? 'opacity-50 grayscale cursor-not-allowed' : ''}`} 
-              onClick={() => {
-                if (step === 3 && !isFinancialValid) return;
-                step < 5 ? setStep(step + 1) : onViewChange('dashboard');
-              }}
-              disabled={step === 1 && leagueData.name.length < 3}
-             >
-                {step === 5 ? 'CONFIRMAR Y ACTIVAR LIGA' : 'SIGUIENTE PASO'} <ArrowRight size={24} className="ml-2" />
-             </Button>
-          </div>
+          {step !== 6 && (
+            <div className="mt-6 flex gap-3 pt-6 border-t border-slate-200 relative z-20">
+               {step > 1 && <Button variant="outline" className="w-16 h-16 rounded-[1.8rem] border-slate-300 text-slate-500 hover:text-slate-900" onClick={() => setStep(step - 1)}><ArrowLeft size={24} /></Button>}
+               {step < 6 && (
+                  <Button 
+                      variant="secondary" 
+                      className={`flex-1 h-16 rounded-[1.8rem] font-black text-[12px] tracking-[0.2em] shadow-2xl transition-all ${
+                      step === 3 && isLimitExceeded && leagueData.plan === 'free' 
+                          ? 'bg-slate-200 text-slate-400 hover:bg-slate-200 shadow-none' 
+                          : 'bg-lime-400 text-slate-950 hover:bg-lime-500'
+                      } ${step === 3 && !isFinancialValid && !isLimitExceeded ? 'opacity-50 grayscale cursor-not-allowed' : ''}`} 
+                      onClick={() => { 
+                      if (step === 3) {
+                          if (isLimitExceeded && leagueData.plan === 'free') {
+                              onViewChange('checkout');
+                              return;
+                          }
+                          if (!isFinancialValid) return;
+                      }
+                      step < 6 ? setStep(step + 1) : handleFinish(); 
+                      }} 
+                      disabled={step === 1 && leagueData.name.length < 3}
+                  >
+                      {step === 3 && isLimitExceeded && leagueData.plan === 'free' ? 'MEJORAR PLAN PARA CONTINUAR' : 'SIGUIENTE PASO'} 
+                      <ArrowRight size={24} className="ml-2" />
+                  </Button>
+               )}
+            </div>
+          )}
 
-          <div className="mt-4 flex justify-center gap-10 text-[8px] font-black text-slate-400 uppercase tracking-widest opacity-60">
-             <div className="flex items-center gap-2"><ShieldCheck size={12}/> ENCRIPTADO</div>
-             <div className="flex items-center gap-2"><Globe size={12}/> SOPORTE GLOBAL</div>
-          </div>
         </div>
       </div>
     </div>
