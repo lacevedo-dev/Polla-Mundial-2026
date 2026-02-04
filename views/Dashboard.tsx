@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Button, Card, Badge, Input, Checkbox } from '../components/UI';
+import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
 import { Match, AppView, PrizeWinner, CategoryDistribution, StageType } from '../types';
 import { 
   Trophy, 
@@ -111,8 +111,8 @@ type CardStyle = 'neon' | 'pro' | 'stadium' | 'ai-generated';
 interface Recipient {
   id: string;
   name: string;
-  contact: string; // Email or Phone
-  type: 'email' | 'phone';
+  email?: string; // Changed: Specific field
+  phone?: string; // Changed: Specific field
   selectedChannels: InviteChannel[];
 }
 
@@ -286,8 +286,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   
   // New Input States (Manual vs Bulk)
   const [inviteMode, setInviteMode] = React.useState<'single' | 'bulk'>('single');
-  const [contactType, setContactType] = React.useState<'email' | 'phone'>('phone');
-  const [newRecipient, setNewRecipient] = React.useState({ name: '', contact: '' });
+  // Unified Input State
+  const [newRecipient, setNewRecipient] = React.useState({ name: '', phone: '', email: '' });
+  
   const [bulkText, setBulkText] = React.useState('');
   const [isProcessingBulk, setIsProcessingBulk] = React.useState(false);
   
@@ -457,19 +458,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   // --- INVITE LOGIC ---
 
   const addRecipient = () => {
-      if (!newRecipient.name || !newRecipient.contact) return;
+      if (!newRecipient.name) return;
+      if (!newRecipient.email && !newRecipient.phone) return;
       
-      // Auto-select channels based on user choice
-      const initialChannels: InviteChannel[] = contactType === 'email' ? ['email'] : ['whatsapp', 'sms'];
+      // Auto-calculate available channels based on data
+      const channels: InviteChannel[] = [];
+      if (newRecipient.phone) {
+          channels.push('whatsapp');
+          channels.push('sms');
+      }
+      if (newRecipient.email) {
+          channels.push('email');
+      }
 
       setRecipients(prev => [...prev, {
           id: Math.random().toString(36).substr(2, 9),
           name: newRecipient.name,
-          contact: newRecipient.contact,
-          type: contactType,
-          selectedChannels: initialChannels
+          email: newRecipient.email,
+          phone: newRecipient.phone,
+          selectedChannels: channels
       }]);
-      setNewRecipient({ name: '', contact: '' });
+      setNewRecipient({ name: '', email: '', phone: '' });
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
@@ -526,14 +535,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
               const isPhone = /\d{7,}/.test(contact.replace(/\D/g, ''));
 
               if (isEmail || isPhone) {
-                  const type = isEmail ? 'email' : 'phone';
                   const channels: InviteChannel[] = isEmail ? ['email'] : ['whatsapp', 'sms'];
                   
                   newRecipients.push({
                       id: Math.random().toString(36).substr(2, 9),
                       name: name,
-                      contact: contact,
-                      type,
+                      email: isEmail ? contact : undefined,
+                      phone: isPhone ? contact : undefined,
                       selectedChannels: channels
                   });
               }
@@ -548,6 +556,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   const toggleRecipientChannel = (id: string, channel: InviteChannel) => {
       setRecipients(prev => prev.map(r => {
           if (r.id !== id) return r;
+          
+          // Validation: Can't enable Email channel if no email exists, etc.
+          if (channel === 'email' && !r.email) return r;
+          if ((channel === 'whatsapp' || channel === 'sms') && !r.phone) return r;
+
           const current = r.selectedChannels;
           const updated = current.includes(channel) ? current.filter(c => c !== channel) : [...current, channel];
           return { ...r, selectedChannels: updated };
@@ -1127,8 +1140,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                     {showShareCard ? (
                         <div className="flex flex-col items-center space-y-6 animate-in zoom-in duration-300">
-                            
-                            {/* Template Controls */}
+                            {/* ... (Share Card Content) ... */}
                             <div className="flex items-center gap-2 w-full max-w-sm">
                                 <div className="flex bg-slate-100 p-1 rounded-xl overflow-hidden flex-1">
                                     {(['neon', 'pro', 'stadium'] as CardStyle[]).map(style => (
@@ -1283,22 +1295,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                               
                               {inviteMode === 'single' ? (
                                   <div className="space-y-3 animate-in fade-in slide-in-from-right-2">
-                                      {/* NEW: Contact Type Toggle */}
-                                      <div className="bg-slate-50 p-1 rounded-xl flex gap-1 mb-1">
-                                          <button 
-                                              onClick={() => { setContactType('phone'); setNewRecipient({...newRecipient, contact: ''}); }}
-                                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${contactType === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                          >
-                                              <Smartphone size={14} /> Celular
-                                          </button>
-                                          <button 
-                                              onClick={() => { setContactType('email'); setNewRecipient({...newRecipient, contact: ''}); }}
-                                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${contactType === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                          >
-                                              <Mail size={14} /> Correo
-                                          </button>
-                                      </div>
-
                                       <div className="flex flex-col gap-3">
                                          <Input 
                                             placeholder="Nombre del Amigo *" 
@@ -1309,33 +1305,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                                             leftIcon={<User size={14} />}
                                          />
                                          
-                                         {contactType === 'phone' ? (
+                                         {/* Unified Contact Inputs */}
+                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                              <Input 
-                                                placeholder="Número de Celular" 
+                                                placeholder="Celular (Opcional)" 
                                                 className="text-xs h-11" 
-                                                value={newRecipient.contact}
-                                                onChange={(e) => setNewRecipient({...newRecipient, contact: e.target.value})}
+                                                value={newRecipient.phone}
+                                                onChange={(e) => setNewRecipient({...newRecipient, phone: e.target.value})}
                                                 leftIcon={<Smartphone size={14}/>}
                                                 onKeyDown={handleInputKeyDown}
                                                 type="tel"
                                              />
-                                         ) : (
                                              <Input 
-                                                placeholder="Correo Electrónico" 
+                                                placeholder="Correo (Opcional)" 
                                                 className="text-xs h-11" 
-                                                value={newRecipient.contact}
-                                                onChange={(e) => setNewRecipient({...newRecipient, contact: e.target.value})}
+                                                value={newRecipient.email}
+                                                onChange={(e) => setNewRecipient({...newRecipient, email: e.target.value})}
                                                 leftIcon={<Mail size={14}/>}
                                                 onKeyDown={handleInputKeyDown}
                                                 type="email"
                                              />
-                                         )}
+                                         </div>
                                          
                                          <Button 
                                             variant="secondary" 
                                             className="h-11 w-full rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md" 
                                             onClick={addRecipient}
-                                            disabled={!newRecipient.name || !newRecipient.contact}
+                                            disabled={!newRecipient.name || (!newRecipient.phone && !newRecipient.email)}
                                          >
                                             <Plus size={14} className="mr-2"/> AGREGAR A LA LISTA
                                          </Button>
@@ -1380,20 +1376,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                                               <div>
                                                   <p className="text-xs font-black text-slate-900 uppercase">{recipient.name}</p>
                                                   <div className="flex flex-wrap gap-2">
-                                                      <p className="text-[9px] font-medium text-slate-400 flex items-center gap-1">{recipient.contact}</p>
+                                                      {recipient.phone && <p className="text-[9px] font-medium text-slate-400 flex items-center gap-1"><Smartphone size={10}/> {recipient.phone}</p>}
+                                                      {recipient.email && <p className="text-[9px] font-medium text-slate-400 flex items-center gap-1"><Mail size={10}/> {recipient.email}</p>}
                                                   </div>
                                               </div>
                                           </div>
                                           <div className="flex gap-2">
                                               <button 
                                                 onClick={() => toggleRecipientChannel(recipient.id, 'whatsapp')}
-                                                disabled={recipient.type === 'email'}
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${recipient.selectedChannels.includes('whatsapp') ? 'bg-green-100 text-green-600 border border-green-200' : 'bg-slate-50 text-slate-300'} ${recipient.type === 'email' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                disabled={!recipient.phone}
+                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${recipient.selectedChannels.includes('whatsapp') ? 'bg-green-100 text-green-600 border border-green-200' : 'bg-slate-50 text-slate-300'} ${!recipient.phone ? 'opacity-30 cursor-not-allowed' : ''}`}
                                               ><MessageCircle size={14}/></button>
                                               <button 
                                                 onClick={() => toggleRecipientChannel(recipient.id, 'email')}
-                                                disabled={recipient.type === 'phone'}
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${recipient.selectedChannels.includes('email') ? 'bg-blue-100 text-blue-600 border border-blue-200' : 'bg-slate-50 text-slate-300'} ${recipient.type === 'phone' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                disabled={!recipient.email}
+                                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${recipient.selectedChannels.includes('email') ? 'bg-blue-100 text-blue-600 border border-blue-200' : 'bg-slate-50 text-slate-300'} ${!recipient.email ? 'opacity-30 cursor-not-allowed' : ''}`}
                                               ><Mail size={14}/></button>
                                               
                                               {/* NEW: PUSH CHANNEL BUTTON */}

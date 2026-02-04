@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Layout from './components/Layout';
 import Landing from './views/Landing';
@@ -12,6 +13,7 @@ import Checkout from './views/Checkout';
 import CreateLeague from './views/CreateLeague';
 import ManagePayments from './views/ManagePayments';
 import JoinLeague from './views/JoinLeague';
+import Predictions from './views/Predictions';
 import { AppView } from './types';
 import { Trophy } from 'lucide-react';
 
@@ -46,15 +48,7 @@ const App: React.FC = () => {
       case 'before-after':
         return <BeforeAfter />;
       case 'predictions':
-        return (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-             <div className="w-20 h-20 bg-lime-100 text-lime-600 rounded-full flex items-center justify-center mb-6">
-                <Trophy size={40} />
-             </div>
-             <h2 className="text-3xl font-black font-brand uppercase tracking-tighter">MIS PRONÓSTICOS</h2>
-             <p className="text-slate-500 max-w-sm mt-2 font-medium">Aquí aparecerán los torneos en los que participas. Actualmente el sistema está en modo demostración.</p>
-          </div>
-        );
+        return <Predictions onViewChange={setCurrentView} />;
       case 'ranking':
         return (
           <div className="space-y-6">

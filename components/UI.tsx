@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Loader2, ChevronRight, Check } from 'lucide-react';
 
@@ -235,13 +234,14 @@ export const EmailAutocompleteInput: React.FC<InputProps & { onValueChange: (val
   );
 };
 
-export const Card: React.FC<{ children: React.ReactNode, className?: string }> = ({ children, className = '' }) => {
+export const Card = React.forwardRef<HTMLDivElement, { children: React.ReactNode, className?: string }>(({ children, className = '' }, ref) => {
   return (
-    <div className={`bg-white border border-slate-200 rounded-3xl shadow-sm hover:shadow-md transition-shadow p-6 ${className}`}>
+    <div ref={ref} className={`bg-white border border-slate-200 rounded-3xl shadow-sm hover:shadow-md transition-shadow p-6 ${className}`}>
       {children}
     </div>
   );
-};
+});
+Card.displayName = 'Card';
 
 export const Badge: React.FC<{ children: React.ReactNode, color?: string }> = ({ children, color = 'bg-slate-100 text-slate-700' }) => {
   return (
