@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { Card, Button, Badge, Input, Checkbox } from '../components/UI';
+import { Button, Card, Badge, Input, Checkbox } from '../components/UI';
 import { Match, AppView, PrizeWinner, CategoryDistribution, StageType } from '../types';
 import { 
   Trophy, 
@@ -483,31 +484,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       setIsProcessingBulk(true);
 
       setTimeout(() => {
-          const lines = bulkText.split('\n');
+          // Soporte para listas separadas por nueva línea (\n) o punto y coma (;) estilo Outlook
+          const rawEntries = bulkText.split(/[\n;]+/);
           const newRecipients: Recipient[] = [];
 
-          lines.forEach(line => {
-              const cleanLine = line.trim();
+          rawEntries.forEach(entry => {
+              const cleanLine = entry.trim();
               if (!cleanLine) return;
 
               let name = 'Amigo';
               let contact = cleanLine;
 
-              // Check CSV style "Name, Contact" or "Contact"
-              if (cleanLine.includes(',') || cleanLine.includes('\t')) {
-                  const parts = cleanLine.split(/,|\t/);
-                  if (parts.length >= 2) {
-                      name = parts[0].trim();
-                      contact = parts[1].trim();
+              // 1. Detección Formato Outlook: Nombre <email>
+              // Ej: ADRIANA AGUDELO <ayagudelo@educacionbogota.gov.co>
+              const outlookMatch = cleanLine.match(/^(.*)<(.+)>$/);
+
+              if (outlookMatch) {
+                  name = outlookMatch[1].trim().replace(/['"]/g, ''); // Limpiar comillas si existen
+                  contact = outlookMatch[2].trim();
+              } else {
+                  // 2. Lógica existente (CSV, Tabs, Espacios)
+                  if (cleanLine.includes(',') || cleanLine.includes('\t')) {
+                      const parts = cleanLine.split(/,|\t/);
+                      if (parts.length >= 2) {
+                          name = parts[0].trim();
+                          contact = parts[1].trim();
+                      }
+                  } else if (cleanLine.includes(' ')) {
+                       // Heurística: ¿La última parte es el contacto?
+                       const parts = cleanLine.split(' ');
+                       const potentialContact = parts[parts.length - 1];
+                       if (potentialContact.includes('@') || /\d{7,}/.test(potentialContact)) {
+                           contact = potentialContact;
+                           name = parts.slice(0, parts.length - 1).join(' ').trim() || 'Amigo';
+                       }
                   }
-              } else if (cleanLine.includes(' ')) {
-                   // Heuristic: Last part is contact?
-                   const parts = cleanLine.split(' ');
-                   const potentialContact = parts[parts.length - 1];
-                   if (potentialContact.includes('@') || /\d{7,}/.test(potentialContact)) {
-                       contact = potentialContact;
-                       name = parts.slice(0, parts.length - 1).join(' ').trim() || 'Amigo';
-                   }
               }
 
               // Detect Type (Email vs Phone)
@@ -1335,12 +1346,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                                           <textarea 
                                               className="w-full h-24 bg-transparent outline-none text-xs font-mono resize-none placeholder:text-slate-400"
-                                              placeholder={`Ejemplos:\nJuan Perez, 3001234567\nMaria, maria@email.com\n3109876543\npepe@gmail.com`}
+                                              placeholder={`Formatos soportados:\nJuan Perez, 3001234567\nMaria <maria@email.com>; Pedro <pedro@email.com>\npepe@gmail.com`}
                                               value={bulkText}
                                               onChange={(e) => setBulkText(e.target.value)}
                                           />
                                           <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-200">
-                                              <p className="text-[9px] text-slate-400 font-medium">Detecta Emails y Celulares automáticamente.</p>
+                                              <p className="text-[9px] text-slate-400 font-medium">Soporta Excel, CSV y listas de Outlook (;)</p>
                                               <Button 
                                                   variant="secondary" 
                                                   size="sm" 
