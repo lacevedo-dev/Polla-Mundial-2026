@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
 import { AppView, PrizeWinner, StageType, LeagueData } from '../types';
@@ -8,7 +7,7 @@ import {
   Plus, 
   Minus, 
   Coins, 
-  Calendar,
+  Calendar, 
   ShieldCheck,
   Trophy, 
   Zap, 
@@ -159,10 +158,12 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
   const [inputErrors, setInputErrors] = React.useState({ email: '', phone: '' });
   const [searchQuery, setSearchQuery] = React.useState(saved?.searchQuery || '');
   const [leagueId] = React.useState<string>(saved?.leagueId || Math.random().toString(36).substr(2, 6).toUpperCase());
-  const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(false);
+  const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(saved?.foundExistingUser || false);
   
   // Phone selection state
-  const [selectedCountry, setSelectedCountry] = React.useState<Country>(COUNTRY_CODES[0]);
+  const [selectedCountry, setSelectedCountry] = React.useState<Country>(
+    saved?.selectedCountry ? (COUNTRY_CODES.find(c => c.code === saved.selectedCountry.code) || COUNTRY_CODES[0]) : COUNTRY_CODES[0]
+  );
   const [isCountrySelectorOpen, setIsCountrySelectorOpen] = React.useState(false);
   const [countrySearch, setCountrySearch] = React.useState('');
   const selectorRef = React.useRef<HTMLDivElement>(null);
@@ -190,10 +191,12 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
       newUserInput,
       searchQuery,
       leagueId,
-      leagueData
+      leagueData,
+      selectedCountry,
+      foundExistingUser
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [step, activeCategory, invitedUsers, newUserInput, searchQuery, leagueId, leagueData]);
+  }, [step, activeCategory, invitedUsers, newUserInput, searchQuery, leagueId, leagueData, selectedCountry, foundExistingUser]);
 
   // Click outside for country selector
   React.useEffect(() => {

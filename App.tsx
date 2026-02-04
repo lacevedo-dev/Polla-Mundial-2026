@@ -1,4 +1,3 @@
-
 import React from 'react';
 import Layout from './components/Layout';
 import Landing from './views/Landing';
@@ -12,6 +11,7 @@ import EmailVerification from './views/EmailVerification';
 import Checkout from './views/Checkout';
 import CreateLeague from './views/CreateLeague';
 import ManagePayments from './views/ManagePayments';
+import JoinLeague from './views/JoinLeague';
 import { AppView } from './types';
 import { Trophy } from 'lucide-react';
 
@@ -35,6 +35,8 @@ const App: React.FC = () => {
         return <CreateLeague onViewChange={setCurrentView} />;
       case 'manage-payments':
         return <ManagePayments onViewChange={setCurrentView} />;
+      case 'join-league':
+        return <JoinLeague onViewChange={setCurrentView} />;
       case 'help':
         return <Help />;
       case 'dashboard':
