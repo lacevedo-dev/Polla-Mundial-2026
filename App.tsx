@@ -11,6 +11,7 @@ import Help from './views/Help';
 import EmailVerification from './views/EmailVerification';
 import Checkout from './views/Checkout';
 import CreateLeague from './views/CreateLeague';
+import ManagePayments from './views/ManagePayments';
 import { AppView } from './types';
 import { Trophy } from 'lucide-react';
 
@@ -32,6 +33,8 @@ const App: React.FC = () => {
         return <Checkout onViewChange={setCurrentView} />;
       case 'create-league':
         return <CreateLeague onViewChange={setCurrentView} />;
+      case 'manage-payments':
+        return <ManagePayments onViewChange={setCurrentView} />;
       case 'help':
         return <Help />;
       case 'dashboard':

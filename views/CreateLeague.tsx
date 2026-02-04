@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Button, Card, Badge, Input, Checkbox } from '../components/UI';
+import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
 import { AppView, PrizeWinner, StageType, LeagueData } from '../types';
 import { 
   ArrowRight, 
@@ -43,7 +43,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Calculator,
-  ChevronDown
+  ChevronDown,
+  Check
 } from 'lucide-react';
 
 interface CreateLeagueProps {
@@ -58,6 +59,27 @@ interface InvitedUser {
   type: 'existing' | 'new';
   avatar?: string;
 }
+
+interface Country {
+  code: string;
+  name: string;
+  iso: string;
+  length: number;
+  placeholder: string;
+  regex?: RegExp;
+}
+
+const COUNTRY_CODES: Country[] = [
+  { code: '+57', name: 'Colombia', iso: 'co', length: 10, placeholder: '310 123 4567', regex: /^3\d{9}$/ },
+  { code: '+52', name: 'México', iso: 'mx', length: 10, placeholder: '55 1234 5678' },
+  { code: '+1', name: 'USA / Canadá', iso: 'us', length: 10, placeholder: '202 555 0123' },
+  { code: '+34', name: 'España', iso: 'es', length: 9, placeholder: '612 345 678' },
+  { code: '+54', name: 'Argentina', iso: 'ar', length: 10, placeholder: '11 1234 5678' },
+  { code: '+56', name: 'Chile', iso: 'cl', length: 9, placeholder: '9 1234 5678' },
+  { code: '+58', name: 'Venezuela', iso: 've', length: 10, placeholder: '412 123 4567' },
+  { code: '+51', name: 'Perú', iso: 'pe', length: 9, placeholder: '912 345 678' },
+  { code: '+55', name: 'Brasil', iso: 'br', length: 11, placeholder: '11 91234 5678' },
+];
 
 // Mock database for existing users validation
 const MOCK_DB = [
@@ -134,10 +156,17 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
   const [activeCategory, setActiveCategory] = React.useState<StageType | 'general'>(saved?.activeCategory || 'general');
   const [invitedUsers, setInvitedUsers] = React.useState<InvitedUser[]>(saved?.invitedUsers || []);
   const [newUserInput, setNewUserInput] = React.useState(saved?.newUserInput || { name: '', email: '', phone: '' });
+  const [inputErrors, setInputErrors] = React.useState({ email: '', phone: '' });
   const [searchQuery, setSearchQuery] = React.useState(saved?.searchQuery || '');
   const [leagueId] = React.useState<string>(saved?.leagueId || Math.random().toString(36).substr(2, 6).toUpperCase());
   const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(false);
   
+  // Phone selection state
+  const [selectedCountry, setSelectedCountry] = React.useState<Country>(COUNTRY_CODES[0]);
+  const [isCountrySelectorOpen, setIsCountrySelectorOpen] = React.useState(false);
+  const [countrySearch, setCountrySearch] = React.useState('');
+  const selectorRef = React.useRef<HTMLDivElement>(null);
+
   // DEFAULT SETTINGS UPDATED: 10% Admin Fee, 3 Winners
   const [leagueData, setLeagueData] = React.useState<LeagueData>(() => saved?.leagueData || {
     name: '', description: '', privacy: 'private', logo: null, participantsCount: 10,
@@ -165,6 +194,17 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [step, activeCategory, invitedUsers, newUserInput, searchQuery, leagueId, leagueData]);
+
+  // Click outside for country selector
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setIsCountrySelectorOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Validar si la categoría actual sigue activa, sino cambiar a una disponible
   React.useEffect(() => {
@@ -250,17 +290,101 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
     setSearchQuery('');
   };
 
-  const handleCheckUser = (phone: string) => {
-    setNewUserInput({ ...newUserInput, phone });
-    const existing = MOCK_DB.find(u => u.phone === phone);
-    if (existing) {
-      setNewUserInput({ name: existing.name, email: existing.email, phone: existing.phone });
-      setFoundExistingUser(true);
-    } else {
-      if (foundExistingUser) {
-         setNewUserInput({ ...newUserInput, name: '', email: '', phone });
-         setFoundExistingUser(false);
+  // VALIDATION LOGIC
+  const validateAndCheckUser = (phone: string, country: Country) => {
+      let isValidLength = false;
+      if (country.regex) {
+        isValidLength = country.regex.test(phone);
+      } else {
+        isValidLength = phone.length === country.length;
       }
+      
+      if (!isValidLength) {
+          setInputErrors(prev => ({ ...prev, phone: `El número debe tener ${country.length} dígitos` }));
+          if (foundExistingUser) setFoundExistingUser(false);
+          return true; // Error exists
+      } else {
+          setInputErrors(prev => ({ ...prev, phone: '' }));
+          // Check DB
+          const existing = MOCK_DB.find(u => u.phone === phone);
+          if (existing) {
+             setNewUserInput({ name: existing.name, email: existing.email, phone: phone });
+             setFoundExistingUser(true);
+             setInputErrors(prev => ({ ...prev, email: '' }));
+          } else {
+             if (foundExistingUser) {
+                setNewUserInput(prev => ({ ...prev, name: '', email: '' }));
+                setFoundExistingUser(false);
+             }
+          }
+          return false; // No error
+      }
+  };
+
+  const validatePhone = (phone: string) => {
+    // This is now handled by validateAndCheckUser mainly, but kept for submit check
+    if (inputErrors.phone) return inputErrors.phone;
+    if (!phone) return "Campo requerido";
+    return "";
+  };
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return "Formato de correo inválido.";
+    return "";
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    
+    // Check for country code paste (e.g. +57300...)
+    const matchedCountry = COUNTRY_CODES.find(c => val.startsWith(c.code));
+    if (matchedCountry) {
+        setSelectedCountry(matchedCountry);
+        const stripped = val.replace(matchedCountry.code, '').trim().replace(/\D/g, '');
+        
+        setNewUserInput(prev => ({ ...prev, phone: stripped }));
+        validateAndCheckUser(stripped, matchedCountry);
+    } else {
+        const cleanVal = val.replace(/\D/g, '');
+        if (cleanVal.length <= selectedCountry.length) { 
+            setNewUserInput(prev => ({ ...prev, phone: cleanVal }));
+            validateAndCheckUser(cleanVal, selectedCountry);
+        }
+    }
+  };
+
+  const handleEmailChange = (email: string) => {
+    setNewUserInput(prev => ({ ...prev, email }));
+    const error = validateEmail(email);
+    setInputErrors(prev => ({ ...prev, email: error }));
+  };
+
+  const handleAddUser = () => {
+    // Final Validation
+    const phoneError = validateAndCheckUser(newUserInput.phone, selectedCountry) ? inputErrors.phone : "";
+    const emailError = validateEmail(newUserInput.email);
+
+    if (phoneError || emailError) {
+      setInputErrors({ phone: phoneError, email: emailError });
+      return;
+    }
+
+    if(newUserInput.email && newUserInput.phone) { 
+        setInvitedUsers([
+          ...invitedUsers, 
+          {
+            id: Math.random().toString(), 
+            name: newUserInput.name || 'Invitado', 
+            email: newUserInput.email, 
+            phone: `${selectedCountry.code} ${newUserInput.phone}`, 
+            type: foundExistingUser ? 'existing' : 'new',
+            avatar: foundExistingUser ? MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar : undefined
+          }
+        ]); 
+        setNewUserInput({name: '', email: '', phone: ''}); 
+        setFoundExistingUser(false); 
+        setInputErrors({ email: '', phone: '' });
     }
   };
 
@@ -279,6 +403,11 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
 
   const existingUsersPool = ["Luis Morales", "Leo Castiblanco", "Nubia Sarmiento", "Carlos Ruiz", "Andres Cepeda"];
   const filteredSearch = existingUsersPool.filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()) && !invitedUsers.some(i => i.name === u));
+  
+  const filteredCountries = COUNTRY_CODES.filter(c => 
+    c.name.toLowerCase().includes(countrySearch.toLowerCase()) || 
+    c.code.includes(countrySearch)
+  );
 
   const currentDist = leagueData.distributions[activeCategory as keyof typeof leagueData.distributions];
   const activeWinners = currentDist.distribution.filter((p) => p.active);
@@ -291,6 +420,21 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-2 md:p-8">
+      <style>{`
+        .scrollbar-custom::-webkit-scrollbar {
+            width: 4px;
+        }
+        .scrollbar-custom::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scrollbar-custom::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+        .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+            background-color: #94a3b8;
+        }
+      `}</style>
       <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl overflow-hidden min-h-[720px] transition-all duration-700">
         
         {/* Lado Branding (Desktop) */}
@@ -543,9 +687,9 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
             )}
 
             {step === 4 && (
-              <div className="space-y-5 animate-in slide-in-from-right-4 duration-300">
+              <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 h-full flex flex-col">
                 <div className="text-center space-y-1"><h4 className="text-xl font-black font-brand uppercase tracking-tighter text-slate-900">INVITA A TU <span className="text-lime-600">GRUPO.</span></h4></div>
-                <Card className="p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3">
+                <Card className="p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3 relative z-10">
                    <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} /><input type="text" placeholder="Buscar amigos..." className="w-full h-11 pl-11 pr-4 bg-white border border-slate-300 rounded-xl outline-none focus:border-lime-500 font-bold text-xs text-slate-900 placeholder:text-slate-400" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                    {searchQuery && filteredSearch.length > 0 && (
                      <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-hide">
@@ -555,30 +699,114 @@ const CreateLeague: React.FC<CreateLeagueProps> = ({ onViewChange }) => {
                      </div>
                    )}
                 </Card>
-                <Card className={`p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3 relative overflow-hidden transition-colors duration-500 ${foundExistingUser ? 'bg-lime-50 border-lime-300' : 'bg-white'}`}>
+                <Card className={`p-5 rounded-[1.8rem] border-2 shadow-sm space-y-3 relative transition-all duration-500 z-20 overflow-visible ${foundExistingUser ? 'bg-lime-50 border-lime-400' : 'bg-white border-slate-200'}`}>
                    <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest block">INVITAR NUEVO</span>
-                   <div className="grid grid-cols-1 gap-2 relative z-10">
-                      <Input placeholder="Celular" value={newUserInput.phone} onChange={e => handleCheckUser(e.target.value)} className="h-10 text-xs font-bold rounded-xl" leftIcon={<Phone size={14}/>} />
-                      <Input placeholder="Correo" value={newUserInput.email} onChange={e => setNewUserInput({...newUserInput, email: e.target.value})} className="h-10 text-xs font-bold rounded-xl" leftIcon={<Mail size={14}/>} disabled={foundExistingUser} />
+                   <div className="grid grid-cols-1 gap-2 relative">
+                      
+                      <div className="space-y-1 relative" ref={selectorRef}>
+                         <div className="flex gap-2">
+                             <button 
+                                type="button"
+                                className="flex items-center gap-2 px-3 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors min-w-[100px]"
+                                onClick={() => setIsCountrySelectorOpen(!isCountrySelectorOpen)}
+                              >
+                                 <img 
+                                   src={`https://flagcdn.com/w40/${selectedCountry.iso}.png`}
+                                   srcSet={`https://flagcdn.com/w80/${selectedCountry.iso}.png 2x`}
+                                   width="24"
+                                   alt={selectedCountry.name}
+                                   className="rounded-sm object-cover shadow-sm"
+                                 />
+                                 <span className="text-xs font-bold text-slate-700">{selectedCountry.code}</span>
+                                 <ChevronDown size={14} className="text-slate-400 ml-auto" />
+                              </button>
+                             <Input 
+                                placeholder="Celular" 
+                                value={newUserInput.phone} 
+                                onChange={handlePhoneChange} 
+                                className={`h-10 text-xs font-bold rounded-xl ${inputErrors.phone ? 'border-rose-400 focus:border-rose-500' : ''}`} 
+                                // leftIcon={<Phone size={14}/>} 
+                             />
+                         </div>
+                         {isCountrySelectorOpen && (
+                            <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 w-72 p-2 animate-in fade-in slide-in-from-top-2">
+                               <div className="relative mb-2">
+                                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                  <input 
+                                    className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-lime-100" 
+                                    placeholder="Buscar país..." 
+                                    value={countrySearch}
+                                    onChange={(e) => setCountrySearch(e.target.value)}
+                                  />
+                               </div>
+                               <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-custom">
+                                  {filteredCountries.map(c => (
+                                     <button 
+                                       key={c.name}
+                                       type="button"
+                                       className="w-full flex items-center gap-3 p-2 hover:bg-lime-50 rounded-xl transition-colors text-left group"
+                                       onClick={() => { setSelectedCountry(c); setIsCountrySelectorOpen(false); setCountrySearch(''); }}
+                                     >
+                                        <img 
+                                          src={`https://flagcdn.com/w40/${c.iso}.png`}
+                                          srcSet={`https://flagcdn.com/w80/${c.iso}.png 2x`}
+                                          width="24"
+                                          alt={c.name}
+                                          className="rounded-sm shadow-sm group-hover:scale-110 transition-transform"
+                                        />
+                                        <div className="flex-1">
+                                           <p className="text-xs font-bold text-slate-900">{c.name}</p>
+                                           <p className="text-[10px] font-medium text-slate-500">{c.code}</p>
+                                        </div>
+                                        {selectedCountry.code === c.code && <Check size={14} className="text-lime-600" />}
+                                     </button>
+                                  ))}
+                               </div>
+                            </div>
+                         )}
+                         {inputErrors.phone && <p className="text-[9px] text-rose-500 font-bold ml-1 mt-1 animate-in slide-in-from-top-1">{inputErrors.phone}</p>}
+                      </div>
+
+                      <div className="space-y-1 relative z-0">
+                        <EmailAutocompleteInput 
+                          placeholder="Correo" 
+                          value={newUserInput.email} 
+                          onValueChange={handleEmailChange} 
+                          className={`h-10 text-xs font-bold rounded-xl ${inputErrors.email ? 'border-rose-400 focus:border-rose-500' : ''}`} 
+                          leftIcon={<Mail size={14}/>} 
+                          disabled={foundExistingUser} 
+                        />
+                        {inputErrors.email && <p className="text-[9px] text-rose-500 font-bold ml-1 animate-in slide-in-from-top-1">{inputErrors.email}</p>}
+                      </div>
                       
                       {foundExistingUser && (
-                         <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-lime-200 shadow-sm animate-in fade-in slide-in-from-top-2">
-                            <img src={MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar} className="w-8 h-8 rounded-lg" />
+                         <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-lime-200 shadow-sm animate-in fade-in slide-in-from-top-2">
+                            <img src={MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar} className="w-10 h-10 rounded-lg shadow-sm" />
                             <div>
-                               <p className="text-[10px] font-black text-slate-900 uppercase">¡Usuario Encontrado!</p>
-                               <p className="text-[9px] font-bold text-slate-500">{newUserInput.name}</p>
+                               <p className="text-[10px] font-black text-lime-700 uppercase tracking-tight">¡Usuario Encontrado!</p>
+                               <p className="text-[10px] font-bold text-slate-600">{newUserInput.name}</p>
                             </div>
-                            <CheckCircle2 size={16} className="ml-auto text-lime-600" />
+                            <div className="ml-auto bg-lime-100 rounded-full p-1">
+                                <CheckCircle2 size={16} className="text-lime-600" />
+                            </div>
                          </div>
                       )}
 
-                      <Button onClick={() => { if(newUserInput.email && newUserInput.phone) { setInvitedUsers([...invitedUsers, {id: Math.random().toString(), name: newUserInput.name || 'Invitado', email: newUserInput.email, phone: newUserInput.phone, type: 'new'}]); setNewUserInput({name: '', email: '', phone: ''}); setFoundExistingUser(false); } }} variant={foundExistingUser ? 'secondary' : 'outline'} className={`h-10 rounded-xl font-black text-[9px] uppercase tracking-widest ${foundExistingUser ? '' : 'border-lime-400 text-lime-700 hover:bg-lime-50'}`}>{foundExistingUser ? 'AGREGAR (EXISTENTE)' : 'AGREGAR'} <Plus size={14} className="ml-2"/></Button>
+                      <Button 
+                        onClick={handleAddUser} 
+                        variant={foundExistingUser ? 'secondary' : 'outline'} 
+                        className={`h-10 rounded-xl font-black text-[9px] uppercase tracking-widest mt-2 ${foundExistingUser ? 'shadow-lg shadow-lime-500/20' : 'border-slate-300 text-slate-500 hover:text-lime-700 hover:border-lime-400'}`}
+                        disabled={!!inputErrors.email || !!inputErrors.phone || !newUserInput.email || !newUserInput.phone}
+                      >
+                        {foundExistingUser ? 'AGREGAR USUARIO' : 'AGREGAR INVITADO'} <Plus size={14} className="ml-2"/>
+                      </Button>
                    </div>
                 </Card>
-                <div className="space-y-2"><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
-                   <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto scrollbar-hide">
+                <div className="space-y-2 flex-1 overflow-hidden flex flex-col">
+                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
+                   <div className="grid grid-cols-1 gap-2 overflow-y-auto scrollbar-hide pb-2">
                       {invitedUsers.map(user => (
-                        <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14}/>}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14}/></button></div>
+                        <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14}/>}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} • {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14}/></button></div>
                       ))}
                    </div>
                 </div>
