@@ -32,7 +32,10 @@ import {
   ArrowDown,
   Medal,
   BarChart3,
-  Target
+  Target,
+  X,
+  ChevronRight,
+  GripVertical
 } from 'lucide-react';
 
 interface PredictionsProps {
@@ -88,6 +91,8 @@ interface MatchPrediction {
   awayTeam: string;
   homeFlag: string;
   awayFlag: string;
+  homeIso: string; // ISO code for flag image
+  awayIso: string; // ISO code for flag image
   date: string; // ISO Date for sorting
   displayDate: string; 
   time: string;
@@ -96,6 +101,7 @@ interface MatchPrediction {
   venue: string;
   city: string;
   phase: Phase;
+  phaseName?: string; // e.g. "Primera Fase"
   group?: string;
   round?: Round;
   prediction: { home: string; away: string };
@@ -118,6 +124,7 @@ interface GroupTeam {
     id: string;
     name: string;
     flag: string;
+    iso?: string;
 }
 
 interface GroupData {
@@ -143,10 +150,10 @@ const PUBLIC_LEAGUES: PublicLeague[] = [
 
 const MOCK_MATCHES: MatchPrediction[] = [
   {
-    id: 'm1', homeTeam: 'México', awayTeam: 'Sudáfrica', homeFlag: '🇲🇽', awayFlag: '🇿🇦',
-    date: '2026-06-11T14:00:00', displayDate: 'Jueves 11 Junio', time: '14:00', closeTime: '2 horas y 30 minutos',
+    id: 'm1', homeTeam: 'México', awayTeam: 'Sudáfrica', homeFlag: '🇲🇽', awayFlag: '🇿🇦', homeIso: 'mx', awayIso: 'za',
+    date: '2026-06-11T14:00:00', displayDate: 'Jueves 11 Junio', time: '14:00', closeTime: '2h 30m',
     status: 'open', venue: 'Estadio Azteca', city: 'Ciudad de México',
-    phase: 'group', group: 'A', round: 'group',
+    phase: 'group', phaseName: 'Primera Fase', group: 'A', round: 'group',
     prediction: { home: '', away: '' },
     analysis: {
         winProb: { home: 60, draw: 25, away: 15 },
@@ -162,10 +169,10 @@ const MOCK_MATCHES: MatchPrediction[] = [
     }
   },
   {
-    id: 'm2', homeTeam: 'Corea del Sur', awayTeam: 'Dinamarca', homeFlag: '🇰🇷', awayFlag: '🇩🇰',
-    date: '2026-06-11T21:00:00', displayDate: 'Jueves 11 Junio', time: '21:00', closeTime: '9 horas',
+    id: 'm2', homeTeam: 'Corea del Sur', awayTeam: 'Dinamarca', homeFlag: '🇰🇷', awayFlag: '🇩🇰', homeIso: 'kr', awayIso: 'dk',
+    date: '2026-06-11T21:00:00', displayDate: 'Jueves 11 Junio', time: '21:00', closeTime: '9h',
     status: 'open', venue: 'Estadio Akron', city: 'Guadalajara',
-    phase: 'group', group: 'A', round: 'group',
+    phase: 'group', phaseName: 'Primera Fase', group: 'A', round: 'group',
     prediction: { home: '', away: '' },
     analysis: {
         winProb: { home: 30, draw: 30, away: 40 },
@@ -181,10 +188,10 @@ const MOCK_MATCHES: MatchPrediction[] = [
     }
   },
   {
-    id: 'm3', homeTeam: 'Canadá', awayTeam: 'Francia', homeFlag: '🇨🇦', awayFlag: '🇫🇷',
-    date: '2026-06-12T16:00:00', displayDate: 'Viernes 12 Junio', time: '16:00', closeTime: '1 día',
+    id: 'm3', homeTeam: 'Canadá', awayTeam: 'Francia', homeFlag: '🇨🇦', awayFlag: '🇫🇷', homeIso: 'ca', awayIso: 'fr',
+    date: '2026-06-12T16:00:00', displayDate: 'Viernes 12 Junio', time: '16:00', closeTime: '1d',
     status: 'open', venue: 'BMO Field', city: 'Toronto',
-    phase: 'group', group: 'B', round: 'group',
+    phase: 'group', phaseName: 'Primera Fase', group: 'B', round: 'group',
     prediction: { home: '', away: '' },
     analysis: {
         winProb: { home: 10, draw: 20, away: 70 },
@@ -203,10 +210,17 @@ const MOCK_MATCHES: MatchPrediction[] = [
 
 // Mock Group Data for Simulator
 const INITIAL_GROUPS: GroupData[] = [
-    { name: 'Grupo A', teams: [{ id: 'mx', name: 'México', flag: '🇲🇽' }, { id: 'za', name: 'Sudáfrica', flag: '🇿🇦' }, { id: 'kr', name: 'Corea Sur', flag: '🇰🇷' }, { id: 'dk', name: 'Dinamarca', flag: '🇩🇰' }] },
-    { name: 'Grupo B', teams: [{ id: 'fr', name: 'Francia', flag: '🇫🇷' }, { id: 'ca', name: 'Canadá', flag: '🇨🇦' }, { id: 'ng', name: 'Nigeria', flag: '🇳🇬' }, { id: 'jp', name: 'Japón', flag: '🇯🇵' }] },
-    { name: 'Grupo C', teams: [{ id: 'us', name: 'USA', flag: '🇺🇸' }, { id: 'gb', name: 'Inglaterra', flag: '🇬🇧' }, { id: 'ir', name: 'Irán', flag: '🇮🇷' }, { id: 'cl', name: 'Chile', flag: '🇨🇱' }] },
-    { name: 'Grupo D', teams: [{ id: 'br', name: 'Brasil', flag: '🇧🇷' }, { id: 'co', name: 'Colombia', flag: '🇨🇴' }, { id: 'pl', name: 'Polonia', flag: '🇵🇱' }, { id: 'sa', name: 'Arabia S.', flag: '🇸🇦' }] },
+    { name: 'Grupo A', teams: [{ id: 'mx', name: 'México', flag: '🇲🇽', iso: 'mx' }, { id: 'za', name: 'Sudáfrica', flag: '🇿🇦', iso: 'za' }, { id: 'kr', name: 'Corea Sur', flag: '🇰🇷', iso: 'kr' }, { id: 'dk', name: 'Dinamarca', flag: '🇩🇰', iso: 'dk' }] },
+    { name: 'Grupo B', teams: [{ id: 'fr', name: 'Francia', flag: '🇫🇷', iso: 'fr' }, { id: 'ca', name: 'Canadá', flag: '🇨🇦', iso: 'ca' }, { id: 'ng', name: 'Nigeria', flag: '🇳🇬', iso: 'ng' }, { id: 'jp', name: 'Japón', flag: '🇯🇵', iso: 'jp' }] },
+    { name: 'Grupo C', teams: [{ id: 'us', name: 'USA', flag: '🇺🇸', iso: 'us' }, { id: 'gb-eng', name: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', iso: 'gb-eng' }, { id: 'ir', name: 'Irán', flag: '🇮🇷', iso: 'ir' }, { id: 'cl', name: 'Chile', flag: '🇨🇱', iso: 'cl' }] },
+    { name: 'Grupo D', teams: [{ id: 'br', name: 'Brasil', flag: '🇧🇷', iso: 'br' }, { id: 'co', name: 'Colombia', flag: '🇨🇴', iso: 'co' }, { id: 'pl', name: 'Polonia', flag: '🇵🇱', iso: 'pl' }, { id: 'sa', name: 'Arabia S.', flag: '🇸🇦', iso: 'sa' }] },
+];
+
+const MOCK_STANDINGS = [
+    { pos: 1, team: 'México', iso: 'mx', pj: 2, g: 2, e: 0, p: 0, dg: 4, pts: 6 },
+    { pos: 2, team: 'Dinamarca', iso: 'dk', pj: 2, g: 1, e: 1, p: 0, dg: 2, pts: 4 },
+    { pos: 3, team: 'Corea del Sur', iso: 'kr', pj: 2, g: 0, e: 1, p: 1, dg: -2, pts: 1 },
+    { pos: 4, team: 'Sudáfrica', iso: 'za', pj: 2, g: 0, e: 0, p: 2, dg: -4, pts: 0 },
 ];
 
 const FormBadge: React.FC<{ result: string }> = ({ result }) => {
@@ -245,11 +259,11 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
   const [viewState, setViewState] = useState<'list' | 'detail'>('list');
   const [selectedLeague, setSelectedLeague] = useState<LeagueSummary | null>(null);
   
-  // NEW: Prediction Mode State
   const [predictionMode, setPredictionMode] = useState<'matches' | 'simulator'>('matches');
   const [simulatorTab, setSimulatorTab] = useState<'groups' | 'bracket'>('groups');
   const [groups, setGroups] = useState<GroupData[]>(INITIAL_GROUPS);
-  const [bracketWinners, setBracketWinners] = useState<Record<string, GroupTeam | null>>({});
+  
+  const [activeGroupModal, setActiveGroupModal] = useState<string | null>(null);
 
   // Filters
   const [activePhase, setActivePhase] = useState<Phase>('group');
@@ -308,20 +322,19 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
       handleScoreChange(matchId, 'away', score.away.toString());
   };
 
-  const moveTeam = (groupIndex: number, fromIndex: number, direction: 'up' | 'down') => {
-      const newGroups = [...groups];
-      const team = newGroups[groupIndex].teams[fromIndex];
-      const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
-
-      if (toIndex >= 0 && toIndex < newGroups[groupIndex].teams.length) {
-          newGroups[groupIndex].teams.splice(fromIndex, 1);
-          newGroups[groupIndex].teams.splice(toIndex, 0, team);
-          setGroups(newGroups);
-      }
-  };
-
-  const handleBracketPick = (matchId: string, team: GroupTeam) => {
-      setBracketWinners(prev => ({ ...prev, [matchId]: team }));
+  const handleTeamMove = (groupIndex: number, teamIndex: number, direction: 'up' | 'down') => {
+      setGroups(prevGroups => {
+          const newGroups = JSON.parse(JSON.stringify(prevGroups)); // Deep copy
+          const group = newGroups[groupIndex];
+          
+          if (direction === 'up' && teamIndex > 0) {
+              [group.teams[teamIndex], group.teams[teamIndex - 1]] = [group.teams[teamIndex - 1], group.teams[teamIndex]];
+          } else if (direction === 'down' && teamIndex < group.teams.length - 1) {
+              [group.teams[teamIndex], group.teams[teamIndex + 1]] = [group.teams[teamIndex + 1], group.teams[teamIndex]];
+          }
+          
+          return newGroups;
+      });
   };
 
   const filteredMatches = useMemo(() => {
@@ -356,8 +369,46 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
       return openMatches.length > 0 ? openMatches[0].id : null;
   }, [matches]);
 
+  const qualifiedTeams = useMemo(() => {
+      const teams: Record<string, GroupTeam> = {};
+      groups.forEach((group, gIdx) => {
+          const groupLetter = String.fromCharCode(65 + gIdx);
+          teams[`1${groupLetter}`] = group.teams[0];
+          teams[`2${groupLetter}`] = group.teams[1];
+      });
+      return teams;
+  }, [groups]);
+
+  const roundOf16Matchups = [
+      { id: 'R16-1', team1: '1A', team2: '2B' }, { id: 'R16-2', team1: '1C', team2: '2D' },
+      { id: 'R16-3', team1: '1B', team2: '2A' }, { id: 'R16-4', team1: '1D', team2: '2C' },
+  ];
+
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+    <div className="space-y-6 pb-24 animate-in fade-in duration-500 relative">
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .custom-scrollbar-thin::-webkit-scrollbar {
+            height: 3px;
+            width: 3px;
+        }
+        .custom-scrollbar-thin::-webkit-scrollbar-thumb {
+            background-color: #a1a1aa;
+            border-radius: 20px;
+        }
+        .custom-scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background-color: #71717a;
+        }
+        .custom-scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+        }
+      `}</style>
       
       {/* VIEW: LEAGUE LIST */}
       {viewState === 'list' && (
@@ -606,7 +657,7 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
 
                   {/* Sub-Filters (Groups) */}
                   {predictionMode === 'matches' && activePhase === 'group' && (
-                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+                      <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar-thin -mx-4 px-4 md:mx-0 md:px-0">
                           <button 
                              onClick={() => setActiveGroup('ALL')}
                              className={`min-w-[60px] h-8 rounded-xl text-[10px] font-black border transition-all ${activeGroup === 'ALL' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}
@@ -631,17 +682,32 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
             
             {/* 1. MATCHES LIST */}
             {predictionMode === 'matches' && (
-                <div className="space-y-6">
-                   {Object.keys(groupedMatches).length > 0 ? Object.entries(groupedMatches).map(([date, dayMatches]) => (
+                <div className="space-y-4">
+                   {Object.keys(groupedMatches).length > 0 ? Object.entries(groupedMatches).map(([date, dayMatches]) => {
+                      const matchesList = dayMatches as MatchPrediction[];
+                      // Find first group in this date to show the "Ver Grupo" button context
+                      const firstGroup = matchesList.find(m => m.group)?.group;
+
+                      return (
                       <div key={date} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
                           {/* Date Header */}
-                          <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex items-center gap-3">
-                              <Calendar size={14} className="text-slate-400" />
-                              <span className="text-xs font-black uppercase text-slate-700 tracking-widest">{date}</span>
+                          <div className="bg-slate-50 px-4 sm:px-6 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Calendar size={14} className="text-slate-400" />
+                                <span className="text-xs font-black uppercase text-slate-700 tracking-widest">{date}</span>
+                              </div>
+                              {firstGroup && activePhase === 'group' && (
+                                <button 
+                                    onClick={() => setActiveGroupModal(firstGroup)}
+                                    className="text-[9px] font-black uppercase tracking-widest text-lime-600 hover:text-lime-700 hover:bg-lime-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
+                                >
+                                    VER GRUPO {firstGroup} <ChevronRight size={12} />
+                                </button>
+                              )}
                           </div>
 
                           <div className="divide-y divide-slate-100">
-                          {(dayMatches as MatchPrediction[]).map(match => {
+                          {matchesList.map(match => {
                               const isNext = match.id === nextMatchId;
                               const isAnalysisOpen = expandedAnalysis === match.id;
                               const isSaved = match.saved;
@@ -650,92 +716,98 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                  <div 
                                     key={match.id} 
                                     ref={isNext ? nextMatchRef : null}
-                                    className={`transition-colors ${isNext ? 'bg-lime-50/20' : 'hover:bg-slate-50'} relative`}
+                                    className={`transition-colors border-l-[6px] ${isNext ? 'border-l-lime-400 bg-lime-50/20' : 'border-l-transparent hover:bg-slate-50'} relative`}
                                  >
-                                    {isNext && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-lime-400"></div>}
                                     
                                     {/* Main Row */}
-                                    <div className="p-4 flex flex-col md:flex-row items-center gap-4">
+                                    <div className="p-2 sm:p-3 flex flex-col gap-2">
                                        
-                                       {/* Status & Time */}
-                                       <div className="flex items-center justify-between w-full md:w-auto md:flex-col md:items-start gap-1 min-w-[90px]">
-                                          <span className="text-xs font-black text-slate-900">{match.time}</span>
-                                          <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase">
-                                             <Clock size={10} className="text-amber-500" />
-                                             <span className="truncate max-w-[100px]" title={match.closeTime}>Cierre: {match.closeTime}</span>
-                                          </div>
-                                          <span className="text-[8px] font-black text-slate-300 uppercase hidden md:block truncate max-w-[90px]">{match.city}</span>
+                                       <div className="flex items-center gap-2 sm:gap-4">
+                                            {/* Status & Time */}
+                                            <div className="flex flex-col items-center justify-center w-12 shrink-0">
+                                                <span className="text-xs font-black text-slate-900">{match.time}</span>
+                                                <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-0.5">
+                                                    <Clock size={8} className="text-amber-500" />
+                                                    <span title={match.closeTime}>{match.closeTime}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Matchup Center (Compact) */}
+                                            <div className="flex-1 flex items-center justify-center gap-2 w-full">
+                                                {/* HOME TEAM */}
+                                                <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
+                                                    <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight hidden sm:block truncate">{match.homeTeam}</span>
+                                                    <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight sm:hidden">{match.homeTeam.substring(0,3)}</span>
+                                                    <div className="w-8 h-6 rounded-md bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center shrink-0 relative overflow-hidden">
+                                                        <img src={`https://flagcdn.com/w160/${match.homeIso}.png`} className="w-full h-full object-cover" alt={match.homeTeam} />
+                                                    </div>
+                                                </div>
+
+                                                {/* SCORE INPUTS */}
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    <input 
+                                                        type="text" 
+                                                        inputMode="numeric" 
+                                                        pattern="[0-9]*" 
+                                                        placeholder="-" 
+                                                        value={match.prediction.home} 
+                                                        onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)} 
+                                                        className="w-8 h-8 text-center text-lg font-black bg-slate-100 border-2 border-slate-200 rounded-lg focus:border-lime-500 focus:bg-white outline-none text-slate-900 disabled:opacity-50 transition-all placeholder:text-slate-300 shadow-inner p-0"
+                                                        disabled={match.saved}
+                                                    />
+                                                    <span className="text-slate-300 font-black text-xs">:</span>
+                                                    <input 
+                                                        type="text" 
+                                                        inputMode="numeric" 
+                                                        pattern="[0-9]*" 
+                                                        placeholder="-" 
+                                                        value={match.prediction.away} 
+                                                        onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)} 
+                                                        className="w-8 h-8 text-center text-lg font-black bg-slate-100 border-2 border-slate-200 rounded-lg focus:border-lime-500 focus:bg-white outline-none text-slate-900 disabled:opacity-50 transition-all placeholder:text-slate-300 shadow-inner p-0"
+                                                        disabled={match.saved}
+                                                    />
+                                                </div>
+
+                                                {/* AWAY TEAM */}
+                                                <div className="flex items-center justify-start gap-2 flex-1 min-w-0">
+                                                    <div className="w-8 h-6 rounded-md bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center shrink-0 relative overflow-hidden">
+                                                        <img src={`https://flagcdn.com/w160/${match.awayIso}.png`} className="w-full h-full object-cover" alt={match.awayTeam} />
+                                                    </div>
+                                                    <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight hidden sm:block truncate">{match.awayTeam}</span>
+                                                    <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight sm:hidden">{match.awayTeam.substring(0,3)}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions Right */}
+                                            <div className="flex items-center gap-1.5 w-auto justify-end">
+                                                <button 
+                                                    onClick={() => setExpandedAnalysis(isAnalysisOpen ? null : match.id)}
+                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isAnalysisOpen ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-200' : 'bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50'}`}
+                                                    disabled={match.saved}
+                                                >
+                                                    <Brain size={16} />
+                                                </button>
+
+                                                <Button 
+                                                    size="sm" 
+                                                    variant={isSaved ? "outline" : "secondary"} 
+                                                    onClick={() => isSaved ? setMatches(prev => prev.map(m => m.id === match.id ? { ...m, saved: false } : m)) : handleSavePrediction(match.id)}
+                                                    disabled={!match.prediction.home || !match.prediction.away || isSaving === match.id}
+                                                    isLoading={isSaving === match.id}
+                                                    className={`w-8 h-8 p-0 flex items-center justify-center rounded-lg transition-all ${isSaved ? 'bg-white border-lime-500 text-lime-600 hover:bg-lime-50' : 'shadow-md shadow-lime-400/20'}`}
+                                                >
+                                                    {isSaved ? <CheckCircle2 size={16} /> : <Save size={16} />}
+                                                </Button>
+                                            </div>
                                        </div>
 
-                                       {/* Matchup Center */}
-                                       <div className="flex-1 flex items-center justify-between gap-4 w-full">
-                                           <div className="flex items-center gap-3 flex-1 justify-end">
-                                              {/* Fixed Visibility: Force black text */}
-                                              <span className="text-xs md:text-sm font-black uppercase text-slate-900 text-right leading-tight hidden sm:block">{match.homeTeam}</span>
-                                              <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight sm:hidden">{match.homeTeam.substring(0,3)}</span>
-                                              {/* UPDATED: Larger Flag & Alignment */}
-                                              <span className="text-4xl md:text-5xl transition-all drop-shadow-sm">{match.homeFlag}</span>
-                                           </div>
-
-                                           {/* Score Inputs (Numeric 0-9) */}
-                                           <div className="flex items-center gap-2">
-                                              <input 
-                                                type="text" 
-                                                inputMode="numeric" 
-                                                pattern="[0-9]*" 
-                                                placeholder="-" 
-                                                value={match.prediction.home} 
-                                                onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)} 
-                                                className="w-10 h-10 text-center text-xl font-black bg-slate-50 border border-slate-200 rounded-xl focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none text-slate-900 disabled:bg-slate-100 disabled:text-slate-400 transition-all placeholder:text-slate-300"
-                                                disabled={match.saved}
-                                              />
-                                              <span className="text-slate-300 font-bold text-xs">-</span>
-                                              <input 
-                                                type="text" 
-                                                inputMode="numeric" 
-                                                pattern="[0-9]*" 
-                                                placeholder="-" 
-                                                value={match.prediction.away} 
-                                                onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)} 
-                                                className="w-10 h-10 text-center text-xl font-black bg-slate-50 border border-slate-200 rounded-xl focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none text-slate-900 disabled:bg-slate-100 disabled:text-slate-400 transition-all placeholder:text-slate-300"
-                                                disabled={match.saved}
-                                              />
-                                           </div>
-
-                                           <div className="flex items-center gap-3 flex-1 justify-start">
-                                              {/* UPDATED: Larger Flag & Alignment */}
-                                              <span className="text-4xl md:text-5xl transition-all drop-shadow-sm">{match.awayFlag}</span>
-                                              {/* Fixed Visibility: Force black text */}
-                                              <span className="text-xs md:text-sm font-black uppercase text-slate-900 text-left leading-tight hidden sm:block">{match.awayTeam}</span>
-                                              <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight sm:hidden">{match.awayTeam.substring(0,3)}</span>
-                                           </div>
+                                       {/* Metadata Footer (Reduced Vertical Spacing) */}
+                                       <div className="flex justify-center mt-1">
+                                            <p className="text-[9px] font-medium text-slate-400 truncate max-w-full px-2">
+                                                {match.phaseName || 'Fase de Grupos'} <span className="mx-1">•</span> Grupo {match.group} <span className="mx-1">•</span> {match.venue} ({match.city})
+                                            </p>
                                        </div>
 
-                                       {/* Actions Right */}
-                                       <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                                          {/* Premium AI Analysis Button */}
-                                          <button 
-                                            onClick={() => setExpandedAnalysis(isAnalysisOpen ? null : match.id)}
-                                            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isAnalysisOpen ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-200' : 'bg-slate-50 text-slate-400 hover:text-purple-600 hover:bg-purple-50'}`}
-                                            title="Smart Insights & Sugerencias"
-                                            disabled={match.saved}
-                                          >
-                                             <Brain size={18} />
-                                          </button>
-
-                                          {/* Save Button (Toggle State) */}
-                                          <Button 
-                                            size="sm" 
-                                            variant={isSaved ? "outline" : "secondary"} 
-                                            onClick={() => isSaved ? setMatches(prev => prev.map(m => m.id === match.id ? { ...m, saved: false } : m)) : handleSavePrediction(match.id)}
-                                            disabled={!match.prediction.home || !match.prediction.away || isSaving === match.id}
-                                            isLoading={isSaving === match.id}
-                                            className={`h-10 w-10 p-0 flex items-center justify-center rounded-xl transition-all ${isSaved ? 'bg-white border-lime-500 text-lime-600 hover:bg-lime-50' : 'shadow-md shadow-lime-400/20'}`}
-                                            title={isSaved ? "Modificar" : "Guardar"}
-                                          >
-                                            {isSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
-                                          </Button>
-                                       </div>
                                     </div>
 
                                     {/* PREMIUM ANALYSIS DRAWER */}
@@ -863,7 +935,7 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                           })}
                           </div>
                       </div>
-                   )) : (
+                   )}) : (
                       <div className="text-center py-16 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
                          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
                             <Trophy size={24} className="text-slate-300" />
@@ -872,6 +944,51 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                          <Button variant="ghost" size="sm" onClick={() => {setActiveGroup('ALL'); setSearchTeam('')}} className="mt-2 text-[10px] font-black">Limpiar Filtros</Button>
                       </div>
                    )}
+                </div>
+            )}
+
+            {/* GROUP STANDINGS MODAL */}
+            {activeGroupModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="text-sm font-black font-brand uppercase tracking-wider text-slate-900">
+                                Tabla de Posiciones - Grupo {activeGroupModal}
+                            </h3>
+                            <button onClick={() => setActiveGroupModal(null)} className="text-slate-400 hover:text-black">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
+                                        <th className="text-left pb-2 w-8">#</th>
+                                        <th className="text-left pb-2">Equipo</th>
+                                        <th className="text-center pb-2 w-8">PJ</th>
+                                        <th className="text-center pb-2 w-8">DG</th>
+                                        <th className="text-center pb-2 w-8 text-lime-600">PTS</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {MOCK_STANDINGS.map((row, i) => (
+                                        <tr key={i} className="group hover:bg-slate-50">
+                                            <td className="py-3 font-bold text-slate-500">{row.pos}</td>
+                                            <td className="py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <img src={`https://flagcdn.com/w40/${row.iso}.png`} className="w-5 h-3.5 rounded-sm object-cover" />
+                                                    <span className="font-bold text-slate-900">{row.team}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 text-center font-medium text-slate-500">{row.pj}</td>
+                                            <td className="py-3 text-center font-medium text-slate-500">{row.dg > 0 ? `+${row.dg}` : row.dg}</td>
+                                            <td className="py-3 text-center font-black text-slate-900 bg-slate-50 rounded-lg">{row.pts}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -894,15 +1011,24 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                 </div>
                                 <div>
                                     {group.teams.map((team, tIdx) => (
-                                        <div key={team.id} className={`flex items-center justify-between p-3 px-6 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors ${tIdx < 2 ? 'bg-green-50/30' : ''}`}>
+                                        <div 
+                                          key={team.id} 
+                                          className={`flex items-center justify-between p-3 px-4 border-b border-slate-50 last:border-0 transition-colors
+                                            ${tIdx < 2 ? 'bg-green-50/30' : ''}
+                                          `}
+                                        >
                                             <div className="flex items-center gap-4">
                                                 <span className={`w-6 h-6 flex items-center justify-center rounded-lg text-xs font-black ${tIdx < 2 ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500'}`}>{tIdx + 1}</span>
-                                                <span className="text-2xl">{team.flag}</span>
-                                                <span className={`text-xs font-bold uppercase ${tIdx < 2 ? 'text-slate-900' : 'text-slate-500'}`}>{team.name}</span>
+                                                <img src={`https://flagcdn.com/w40/${team.iso}.png`} alt={team.name} className="w-8 h-6 rounded-md object-cover shadow-sm"/>
+                                                <span className={`text-sm font-bold uppercase ${tIdx < 2 ? 'text-slate-900' : 'text-slate-500'}`}>{team.name}</span>
                                             </div>
-                                            <div className="flex flex-col gap-1">
-                                                {tIdx > 0 && <button onClick={() => moveTeam(gIdx, tIdx, 'up')} className="text-slate-400 hover:text-lime-600"><ArrowUp size={14} /></button>}
-                                                {tIdx < 3 && <button onClick={() => moveTeam(gIdx, tIdx, 'down')} className="text-slate-400 hover:text-rose-500"><ArrowDown size={14} /></button>}
+                                            <div className="flex flex-col gap-0.5">
+                                                <button onClick={() => handleTeamMove(gIdx, tIdx, 'up')} disabled={tIdx === 0} className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                                                    <ArrowUp size={16} />
+                                                </button>
+                                                <button onClick={() => handleTeamMove(gIdx, tIdx, 'down')} disabled={tIdx === group.teams.length - 1} className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                                                    <ArrowDown size={16} />
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
@@ -918,41 +1044,35 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                 <div className="space-y-6">
                     <div className="bg-slate-900 text-white p-6 rounded-[2rem] text-center space-y-2">
                         <Medal size={32} className="text-lime-400 mx-auto" />
-                        <h3 className="text-xl font-black font-brand uppercase tracking-widest">CAMINO A LA GLORIA</h3>
-                        <p className="text-xs text-slate-400">Selecciona el ganador de cada llave para avanzar.</p>
+                        <h3 className="text-xl font-black font-brand uppercase tracking-widest">CRUCES DE OCTAVOS</h3>
+                        <p className="text-xs text-slate-400">Así quedarían las llaves según tu predicción de grupos.</p>
                     </div>
                     
-                    <div className="space-y-8">
-                        {/* Round of 16 Demo */}
-                        <div className="relative">
-                            <h4 className="text-center text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-4">OCTAVOS DE FINAL</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {[1,2,3,4].map(i => (
-                                    <div key={i} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm relative">
-                                        <div className="space-y-2">
-                                            {[{id: 't1', name: 'Brasil', flag: '🇧🇷'}, {id: 't2', name: 'Portugal', flag: '🇵🇹'}].map(team => {
-                                                const isSelected = bracketWinners[`match-${i}`]?.id === team.id;
-                                                return (
-                                                    <button 
-                                                        key={team.id}
-                                                        onClick={() => handleBracketPick(`match-${i}`, team)}
-                                                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-all ${isSelected ? 'bg-lime-400 text-black shadow-md' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'}`}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-xl">{team.flag}</span>
-                                                            <span className="text-xs font-black uppercase">{team.name}</span>
-                                                        </div>
-                                                        {isSelected && <CheckCircle2 size={16} />}
-                                                    </button>
-                                                )
-                                            })}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {roundOf16Matchups.map(matchup => {
+                            const team1 = qualifiedTeams[matchup.team1];
+                            const team2 = qualifiedTeams[matchup.team2];
+                            return (
+                                <Card key={matchup.id} className="p-4 border-slate-200">
+                                    <p className="text-center text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Octavos de Final</p>
+                                    <div className="flex items-center justify-center gap-4">
+                                        <div className="flex flex-col items-center gap-1.5 flex-1">
+                                            {team1 && <>
+                                                <img src={`https://flagcdn.com/w80/${team1.iso}.png`} alt={team1.name} className="w-10 h-8 rounded-md object-cover shadow-md"/>
+                                                <span className="text-[10px] text-center font-black uppercase tracking-tight">{team1.name}</span>
+                                            </>}
                                         </div>
-                                        {/* Connector Line Visual Mock */}
-                                        <div className="absolute top-1/2 -right-4 w-4 h-0.5 bg-slate-300 hidden md:block"></div>
+                                        <span className="text-xs font-black text-slate-300">VS</span>
+                                        <div className="flex flex-col items-center gap-1.5 flex-1">
+                                            {team2 && <>
+                                                <img src={`https://flagcdn.com/w80/${team2.iso}.png`} alt={team2.name} className="w-10 h-8 rounded-md object-cover shadow-md"/>
+                                                <span className="text-[10px] text-center font-black uppercase tracking-tight">{team2.name}</span>
+                                            </>}
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
+                                </Card>
+                            )
+                        })}
                     </div>
                 </div>
             )}
