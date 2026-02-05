@@ -421,7 +421,7 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                             </div>
                             
                             <div className="space-y-1 mb-6 relative z-10">
-                               <h3 className="text-xl font-black font-brand uppercase leading-tight group-hover:text-lime-600 transition-colors truncate">{league.name}</h3>
+                               <h3 className="text-xl font-black font-brand uppercase leading-tight text-slate-900 group-hover:text-lime-600 transition-colors truncate">{league.name}</h3>
                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{league.totalPlayers} Participantes</p>
                             </div>
                         </div>
