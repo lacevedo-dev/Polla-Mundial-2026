@@ -601,7 +601,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
               "¿TIENES LO QUE SE NECESITA?",
               "LA GLORIA TE ESPERA",
               "DEMUESTRA TU PASIÓN",
-              "TU MOMENTO HA LLEGADO"
+              "TU MOMENTO HA LLEGADO",
+              "EL MUNDIAL TE LLAMA"
           ];
           const randomHeadline = headlines[Math.floor(Math.random() * headlines.length)];
           setCardHeadline(randomHeadline);
@@ -807,6 +808,382 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
               >
                   Volver a Admin
               </button>
+          </div>
+      )}
+
+      {/* --- MODAL: INVITAR AMIGOS (UPDATED) --- */}
+      {showInviteModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+             <Card className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                 {/* Header */}
+                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/20">
+                            <UserPlus size={24} />
+                        </div>
+                        <div>
+                           <h3 className="text-xl font-black font-brand uppercase tracking-tighter text-slate-900 leading-none">
+                              {showShareCard ? 'PROMO LIGA' : inviteStep === 1 ? 'AGREGAR AMIGOS' : 'PERSONALIZAR'}
+                           </h3>
+                           {!showShareCard && <p className="text-xs text-slate-500 font-bold mt-1">{recipients.length} Invitados</p>}
+                        </div>
+                     </div>
+                     <button 
+                        onClick={() => {
+                            if (showShareCard) { setShowShareCard(false); }
+                            else if (inviteStep === 2) { setInviteStep(1); }
+                            else { setShowInviteModal(false); }
+                        }}
+                        className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-900 flex items-center justify-center transition-colors"
+                     >
+                         {showShareCard || inviteStep === 2 ? <ArrowLeft size={20} /> : <X size={20} />}
+                     </button>
+                 </div>
+
+                 {/* Step 1: Add Users */}
+                 {inviteStep === 1 && !showShareCard && (
+                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+                         
+                         {/* Quick Access Card */}
+                         <div className="bg-slate-900 rounded-3xl p-6 relative overflow-hidden text-white shadow-xl group">
+                             <div className="absolute top-0 right-0 w-32 h-32 bg-lime-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                             
+                             <div className="flex items-center justify-between relative z-10">
+                                 <div>
+                                     <p className="text-[10px] font-black text-lime-400 uppercase tracking-widest mb-1">ACCESO RÁPIDO</p>
+                                     <div 
+                                        className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                        onClick={() => copyToClipboard(activeLeague.code || 'CODE-123')}
+                                     >
+                                         <h2 className="text-3xl font-black font-brand tracking-widest text-white">
+                                            {activeLeague.code || 'CRACKS-2026'}
+                                         </h2>
+                                         <Copy size={18} className="text-slate-400" />
+                                     </div>
+                                 </div>
+                                 
+                                 <div className="flex items-center gap-2">
+                                     <button className="w-10 h-10 bg-[#25D366] text-white rounded-xl flex items-center justify-center shadow-lg hover:scale-105 transition-transform" title="WhatsApp Directo" onClick={() => window.open('https://wa.me/?text=Unete a mi liga', '_blank')}>
+                                         <MessageCircle size={20} />
+                                     </button>
+                                     <button 
+                                        className="w-10 h-10 bg-lime-400 text-black rounded-xl flex items-center justify-center shadow-lg hover:bg-lime-500 transition-colors" 
+                                        title="Crear Tarjeta Visual" 
+                                        onClick={() => setShowShareCard(true)}
+                                     >
+                                         <ImageIcon size={20} />
+                                     </button>
+                                 </div>
+                             </div>
+                         </div>
+
+                         {/* Add Form */}
+                         <div className="space-y-4">
+                             <div className="flex justify-between items-end">
+                                 <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">AGREGAR MANUALMENTE</h4>
+                                 <div className="flex bg-slate-100 p-1 rounded-xl">
+                                     <button 
+                                        onClick={() => setInviteMode('single')}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all ${inviteMode === 'single' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                     >
+                                         <UserPlus size={12} /> Uno a Uno
+                                     </button>
+                                     <button 
+                                        onClick={() => setInviteMode('bulk')}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all ${inviteMode === 'bulk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                     >
+                                         <List size={12} /> Lista Rápida
+                                     </button>
+                                 </div>
+                             </div>
+
+                             {inviteMode === 'single' ? (
+                                 <div className="space-y-3" onKeyDown={handleInputKeyDown}>
+                                     <Input 
+                                        placeholder="Nombre del Amigo *" 
+                                        value={newRecipient.name}
+                                        onChange={(e) => setNewRecipient({...newRecipient, name: e.target.value})}
+                                        leftIcon={<User size={18} />}
+                                        className="h-12 bg-slate-50 border-slate-200"
+                                     />
+                                     <div className="grid grid-cols-2 gap-3">
+                                        <Input 
+                                            placeholder="Celular" 
+                                            value={newRecipient.phone}
+                                            onChange={(e) => setNewRecipient({...newRecipient, phone: e.target.value})}
+                                            leftIcon={<Smartphone size={18} />}
+                                            className="h-12 bg-slate-50 border-slate-200"
+                                        />
+                                        <Input 
+                                            placeholder="Email" 
+                                            value={newRecipient.email}
+                                            onChange={(e) => setNewRecipient({...newRecipient, email: e.target.value})}
+                                            leftIcon={<Mail size={18} />}
+                                            className="h-12 bg-slate-50 border-slate-200"
+                                        />
+                                     </div>
+                                     <Button 
+                                        className="w-full h-12 bg-lime-400 text-black hover:bg-lime-500 font-black uppercase text-xs tracking-widest shadow-lg shadow-lime-400/20"
+                                        onClick={addRecipient}
+                                        disabled={!newRecipient.name || (!newRecipient.phone && !newRecipient.email)}
+                                     >
+                                         <Plus size={16} className="mr-2" /> AGREGAR A LA LISTA
+                                     </Button>
+                                 </div>
+                             ) : (
+                                 <div className="space-y-3">
+                                     <div className="relative">
+                                        <textarea
+                                            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium resize-none focus:outline-none focus:ring-2 focus:ring-lime-400 placeholder:text-slate-400 text-slate-900"
+                                            placeholder="Ejemplo: Juan Perez <juan@mail.com>; Maria 3001234567"
+                                            value={bulkText}
+                                            onChange={(e) => setBulkText(e.target.value)}
+                                        ></textarea>
+                                        <div className="absolute bottom-3 right-3 text-[9px] font-bold text-slate-400 bg-white px-2 py-1 rounded-lg border border-slate-100 shadow-sm">
+                                            Soporta Outlook CSV y Texto
+                                        </div>
+                                     </div>
+                                     <Button 
+                                        className="w-full h-12 bg-lime-400 text-black hover:bg-lime-500 font-black uppercase text-xs tracking-widest shadow-lg shadow-lime-400/20"
+                                        onClick={handleBulkProcess}
+                                        disabled={!bulkText}
+                                        isLoading={isProcessingBulk}
+                                     >
+                                         <ListChecks size={16} className="mr-2" /> PROCESAR LISTA
+                                     </Button>
+                                 </div>
+                             )}
+                         </div>
+
+                         {/* Recipients List Preview */}
+                         {recipients.length > 0 && (
+                             <div className="space-y-2">
+                                 <div className="flex justify-between items-center px-1">
+                                     <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">LISTA DE ENVÍO ({recipients.length})</span>
+                                     <button onClick={() => setRecipients([])} className="text-[9px] font-bold text-rose-500 hover:underline">BORRAR TODO</button>
+                                 </div>
+                                 <div className="bg-slate-50 rounded-2xl border border-slate-200 p-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                     {recipients.map((r, i) => (
+                                         <div key={i} className="flex items-center justify-between p-2 hover:bg-white rounded-xl transition-colors group">
+                                             <div className="flex items-center gap-3">
+                                                 <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                                                     {r.name.charAt(0)}
+                                                 </div>
+                                                 <div>
+                                                     <p className="text-xs font-bold text-slate-900">{r.name}</p>
+                                                     <p className="text-[10px] text-slate-400 flex gap-2">
+                                                        {r.phone && <span>{r.phone}</span>}
+                                                        {r.email && <span>{r.email}</span>}
+                                                     </p>
+                                                 </div>
+                                             </div>
+                                             <div className="flex items-center gap-1">
+                                                 {/* Channel Toggles per User */}
+                                                 {r.phone && (
+                                                     <>
+                                                        <button onClick={() => toggleRecipientChannel(r.id, 'whatsapp')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('whatsapp') ? 'text-green-600 bg-green-100' : 'text-slate-300'}`}><MessageCircle size={12}/></button>
+                                                        <button onClick={() => toggleRecipientChannel(r.id, 'sms')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('sms') ? 'text-amber-600 bg-amber-100' : 'text-slate-300'}`}><MessageSquare size={12}/></button>
+                                                     </>
+                                                 )}
+                                                 {r.email && (
+                                                     <button onClick={() => toggleRecipientChannel(r.id, 'email')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('email') ? 'text-blue-600 bg-blue-100' : 'text-slate-300'}`}><Mail size={12}/></button>
+                                                 )}
+                                                 <button onClick={() => toggleRecipientChannel(r.id, 'push')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('push') ? 'text-purple-600 bg-purple-100' : 'text-slate-300'}`}><Bell size={12}/></button>
+                                                 
+                                                 <div className="w-px h-4 bg-slate-200 mx-1"></div>
+                                                 <button onClick={() => setRecipients(prev => prev.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-rose-500 ml-1">
+                                                     <X size={14} />
+                                                 </button>
+                                             </div>
+                                         </div>
+                                     ))}
+                                 </div>
+                             </div>
+                         )}
+                     </div>
+                 )}
+
+                 {/* Step 2: Message & Send */}
+                 {inviteStep === 2 && !showShareCard && (
+                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                         {/* Channel Tabs */}
+                         <div className="flex p-1 bg-slate-100 rounded-xl">
+                             {getActiveChannels().map(ch => (
+                                 <button 
+                                    key={ch}
+                                    onClick={() => setActiveTab(ch)}
+                                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all ${activeTab === ch ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                 >
+                                     {ch === 'whatsapp' && <MessageCircle size={14} />}
+                                     {ch === 'email' && <Mail size={14} />}
+                                     {ch === 'sms' && <MessageSquare size={14} />}
+                                     {ch === 'push' && <Bell size={14} />}
+                                     {CHANNEL_CONFIG[ch].label}
+                                 </button>
+                             ))}
+                         </div>
+
+                         {/* Template Selector */}
+                         <div className="space-y-2">
+                             <div className="flex justify-between items-center">
+                                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plantilla</label>
+                                 <button 
+                                    onClick={generateAIMessage}
+                                    className="flex items-center gap-1 text-[10px] font-black text-purple-600 bg-purple-50 px-2 py-1 rounded-lg hover:bg-purple-100 transition-colors"
+                                    disabled={isGeneratingAI}
+                                 >
+                                     {isGeneratingAI ? 'Redactando...' : 'Mejorar con IA'} <Sparkles size={12} />
+                                 </button>
+                             </div>
+                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                 {(['friendly', 'challenger', 'formal'] as const).map(t => (
+                                     <button 
+                                        key={t}
+                                        onClick={() => applyTemplate(t)}
+                                        className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all whitespace-nowrap ${selectedTemplate[activeTab] === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                                     >
+                                         {INVITE_TEMPLATES[t].label}
+                                     </button>
+                                 ))}
+                             </div>
+                         </div>
+
+                         {/* Editor */}
+                         <div className="relative">
+                             <textarea 
+                                className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400 text-slate-900"
+                                value={messageDrafts[activeTab]}
+                                onChange={(e) => {
+                                    setMessageDrafts({...messageDrafts, [activeTab]: e.target.value});
+                                    setSelectedTemplate(prev => ({...prev, [activeTab]: 'custom'}));
+                                }}
+                             />
+                             <div className="absolute bottom-3 left-3 flex gap-2">
+                                 {['{nombre}', '{liga}', '{link}'].map(v => (
+                                     <button key={v} onClick={() => insertVariable(v.replace(/[{}]/g, ''))} className="text-[9px] font-bold bg-white border border-slate-200 px-2 py-1 rounded-lg text-slate-500 hover:text-slate-900 shadow-sm transition-colors">
+                                         {v}
+                                     </button>
+                                 ))}
+                             </div>
+                         </div>
+                     </div>
+                 )}
+
+                 {/* Share Card View (Visual Editor) */}
+                 {showShareCard && (
+                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                         <div className="flex justify-center">
+                             {/* The Card Preview */}
+                             <div className={`w-full max-w-sm aspect-[4/5] rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 flex flex-col ${
+                                 cardStyle === 'neon' ? 'bg-slate-900 text-white' : 
+                                 cardStyle === 'pro' ? 'bg-white text-slate-900 border-4 border-slate-900' : 
+                                 cardStyle === 'stadium' ? 'bg-blue-900 text-white' :
+                                 'bg-gradient-to-br from-indigo-600 via-purple-600 to-rose-500 text-white'
+                             }`}>
+                                 {/* Background Effects */}
+                                 {cardStyle === 'neon' && <div className="absolute top-0 right-0 w-64 h-64 bg-lime-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>}
+                                 {cardStyle === 'stadium' && <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522770179533-24471fcdba45')] bg-cover bg-center opacity-40 mix-blend-overlay"></div>}
+                                 
+                                 <div className="relative z-10 flex flex-col h-full p-8">
+                                     <div className="flex justify-center mb-6">
+                                         <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg ${cardStyle === 'pro' ? 'bg-black text-white' : 'bg-white text-black'}`}>
+                                             <Trophy size={32} />
+                                         </div>
+                                     </div>
+                                     
+                                     <div className="text-center space-y-2 mb-8">
+                                         <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${cardStyle === 'neon' ? 'text-lime-400' : cardStyle === 'ai-generated' ? 'text-white/80' : 'text-blue-500'}`}>MUNDIAL 2026</p>
+                                         <h3 className="text-3xl font-black font-brand uppercase leading-none tracking-tight">
+                                             {activeLeague.name}
+                                         </h3>
+                                         <p className="text-xs font-bold opacity-80 mt-2">{cardHeadline}</p>
+                                     </div>
+
+                                     <div className="flex-1 flex flex-col justify-center space-y-4">
+                                         <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 flex justify-between items-center">
+                                             <span className="text-[10px] font-black uppercase tracking-widest opacity-70">ENTRADA</span>
+                                             <span className="text-sm font-black">
+                                                {activeLeague.includeBaseFee 
+                                                    ? `$${parseInt(activeLeague.baseFeeAmount).toLocaleString()}` 
+                                                    : activeLeague.includeStageFees 
+                                                        ? 'Variable' 
+                                                        : 'GRATIS'}
+                                             </span>
+                                         </div>
+                                         <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 flex justify-between items-center">
+                                             <span className="text-[10px] font-black uppercase tracking-widest opacity-70">JUGADORES</span>
+                                             <span className="text-sm font-black">{participants.length} / {activeLeague.participants.max}</span>
+                                         </div>
+                                         <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
+                                             <span className="text-[10px] font-black uppercase tracking-widest opacity-70 block mb-1">PREMIOS</span>
+                                             <div className="text-xs font-bold leading-tight">
+                                                 1º $648k • 2º $324k • 3º $108k
+                                             </div>
+                                         </div>
+                                     </div>
+
+                                     <div className="mt-6 text-center">
+                                         <div className="inline-block p-2 bg-white rounded-xl">
+                                             <QrCode size={48} className="text-black" />
+                                         </div>
+                                         <p className="text-[8px] font-black uppercase tracking-widest mt-2 opacity-60">{activeLeague.code || 'CODE-123'}</p>
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+
+                         {/* Editor Controls */}
+                         <div className="space-y-4">
+                             <div className="flex justify-between items-center">
+                                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">ESTILO VISUAL</span>
+                                 <button onClick={handleGenerateAICard} disabled={isGeneratingCardAI} className="text-[10px] font-bold text-purple-600 flex items-center gap-1 hover:underline disabled:opacity-50">
+                                     {isGeneratingCardAI ? 'Diseñando...' : 'Diseñar con IA'} <Wand2 size={12} />
+                                 </button>
+                             </div>
+                             <div className="flex gap-2">
+                                 {(['neon', 'pro', 'stadium'] as CardStyle[]).map(s => (
+                                     <button 
+                                        key={s}
+                                        onClick={() => setCardStyle(s)}
+                                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${cardStyle === s ? 'border-black bg-black text-white' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                     >
+                                         {s}
+                                     </button>
+                                 ))}
+                             </div>
+                         </div>
+                     </div>
+                 )}
+
+                 {/* Footer Actions */}
+                 <div className="p-6 pt-0 bg-white">
+                     {!showShareCard ? (
+                         <div className="flex gap-3">
+                             {inviteStep === 2 && (
+                                 <Button variant="outline" className="w-14 rounded-2xl border-slate-200" onClick={() => setInviteStep(1)}>
+                                     <ArrowLeft size={18} />
+                                 </Button>
+                             )}
+                             <Button 
+                                className="flex-1 h-14 bg-lime-400 text-black hover:bg-lime-500 font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-lime-400/20"
+                                onClick={() => inviteStep === 1 ? setInviteStep(2) : handleSendInvites()}
+                                disabled={recipients.length === 0}
+                             >
+                                 {inviteStep === 1 ? 'PERSONALIZAR MENSAJE' : 'ENVIAR INVITACIONES'} <Send size={16} className="ml-2" />
+                             </Button>
+                         </div>
+                     ) : (
+                         <div className="flex gap-3">
+                             <Button variant="outline" className="flex-1 h-12 rounded-2xl border-slate-200 font-bold text-xs uppercase" onClick={() => alert('Descargando imagen...')}>
+                                 Descargar <Download size={16} className="ml-2" />
+                             </Button>
+                             <Button className="flex-1 h-12 bg-black text-white rounded-2xl font-bold text-xs uppercase shadow-lg" onClick={() => alert('Compartiendo en redes...')}>
+                                 Compartir <Share2 size={16} className="ml-2" />
+                             </Button>
+                         </div>
+                     )}
+                 </div>
+             </Card>
           </div>
       )}
 
@@ -1122,41 +1499,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                     >
                         {configTab === 'details' ? 'Guardar Cambios' : configTab === 'prizes' ? (isValidTotal ? 'Confirmar Premios' : 'Corregir Totales') : 'Cerrar'}
                     </Button>
-                 </div>
-             </Card>
-          </div>
-      )}
-
-      {/* --- MODAL: INVITAR AVANZADO --- */}
-      {/* ... (Keep invite modal unchanged for brevity, as it's separate feature) ... */}
-      {showInviteModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-             <Card className="w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center"><UserPlus size={20} /></div>
-                        <div>
-                           <h3 className="text-lg font-black font-brand uppercase tracking-tight text-slate-900">
-                              {showShareCard ? 'Promocionar Liga' : inviteStep === 1 ? 'Agregar Amigos' : 'Personalizar Invitación'}
-                           </h3>
-                           {!showShareCard && <p className="text-xs text-slate-500 font-bold">{recipients.length} Invitados</p>}
-                        </div>
-                     </div>
-                     <button onClick={() => {
-                         if (showShareCard) {
-                             setShowShareCard(false);
-                         } else {
-                             setShowInviteModal(false); 
-                             setInviteStep(1); 
-                             setRecipients([]);
-                         }
-                     }}>
-                         {showShareCard ? <ArrowLeft size={20} className="text-slate-400 hover:text-black"/> : <X size={20} className="text-slate-400 hover:text-black"/>}
-                     </button>
-                 </div>
-                 {/* Simplified Placeholder for Invite Modal Body to focus on Spectator Change */}
-                 <div className="flex-1 p-6 text-center text-slate-400 font-bold text-xs uppercase">
-                     (Contenido del Modal de Invitación - Sin Cambios)
                  </div>
              </Card>
           </div>
