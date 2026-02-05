@@ -30,7 +30,9 @@ import {
   GitMerge,
   ArrowUp,
   ArrowDown,
-  Medal
+  Medal,
+  BarChart3,
+  Target
 } from 'lucide-react';
 
 interface PredictionsProps {
@@ -105,6 +107,8 @@ interface MatchPrediction {
     winProb: { home: number, draw: number, away: number };
     insight: string;
     recentForm: { home: string[], away: string[] };
+    formConclusion: string; // New field for form analysis text
+    formBet: string; // New field for specific bet based on form
     suggestions: AISuggestion[];
   };
 }
@@ -148,6 +152,8 @@ const MOCK_MATCHES: MatchPrediction[] = [
         winProb: { home: 60, draw: 25, away: 15 },
         insight: "México es fuerte en el Azteca. Sudáfrica sufre en altura.",
         recentForm: { home: ['W','W','D','L','W'], away: ['L','D','L','W','L'] },
+        formConclusion: "México domina en casa (3 de 5 ganados). Sudáfrica muestra debilidad defensiva como visitante.",
+        formBet: "Local anota +1.5 Goles",
         suggestions: [
             { label: 'Segura', type: 'safe', score: { home: 2, away: 0 }, probability: '65%' },
             { label: 'IA Model', type: 'ai', score: { home: 3, away: 1 }, probability: '45%' },
@@ -165,6 +171,8 @@ const MOCK_MATCHES: MatchPrediction[] = [
         winProb: { home: 30, draw: 30, away: 40 },
         insight: "Partido muy cerrado táctica y físicamente.",
         recentForm: { home: ['W','L','D','W','D'], away: ['W','W','W','L','D'] },
+        formConclusion: "Ambos equipos vienen irregulares. Dinamarca tiende a empatar en climas cálidos.",
+        formBet: "Empate o Baja 2.5",
         suggestions: [
             { label: 'Lógica', type: 'safe', score: { home: 0, away: 1 }, probability: '55%' },
             { label: 'IA Model', type: 'ai', score: { home: 1, away: 1 }, probability: '35%' },
@@ -182,6 +190,8 @@ const MOCK_MATCHES: MatchPrediction[] = [
         winProb: { home: 10, draw: 20, away: 70 },
         insight: "Francia es clara favorita, pero cuidado con el frío.",
         recentForm: { home: ['L','L','W','D','L'], away: ['W','W','W','W','W'] },
+        formConclusion: "Francia viene imparable (5/5 victorias). Canadá sufre contra equipos top europeos.",
+        formBet: "Visitante gana a cero",
         suggestions: [
             { label: 'Segura', type: 'safe', score: { home: 0, away: 3 }, probability: '80%' },
             { label: 'IA Model', type: 'ai', score: { home: 1, away: 3 }, probability: '60%' },
@@ -201,15 +211,34 @@ const INITIAL_GROUPS: GroupData[] = [
 
 const FormBadge: React.FC<{ result: string }> = ({ result }) => {
     const colors = {
-        'W': 'bg-green-500 text-white',
-        'L': 'bg-rose-500 text-white',
-        'D': 'bg-slate-400 text-white'
+        'W': 'bg-green-500 text-white border-green-600',
+        'L': 'bg-rose-500 text-white border-rose-600',
+        'D': 'bg-slate-400 text-white border-slate-500'
     };
     return (
-        <span className={`w-5 h-5 rounded-md text-[9px] font-black flex items-center justify-center shadow-sm ${colors[result as keyof typeof colors] || 'bg-slate-200'}`}>
+        <span 
+            title={result === 'W' ? 'Ganado' : result === 'L' ? 'Perdido' : 'Empate'}
+            className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center shadow-sm border-b-2 ${colors[result as keyof typeof colors] || 'bg-slate-200'}`}
+        >
             {result}
         </span>
     );
+};
+
+// Trend Indicator with Arrow
+const TrendArrow: React.FC<{ efficiency: number }> = ({ efficiency }) => {
+    return efficiency >= 50 
+        ? <div className="flex flex-col items-center justify-center text-lime-500"><ArrowUp size={24} strokeWidth={3} /><span className="text-[7px] font-black uppercase tracking-wider">Sube</span></div>
+        : <div className="flex flex-col items-center justify-center text-rose-500"><ArrowDown size={24} strokeWidth={3} /><span className="text-[7px] font-black uppercase tracking-wider">Baja</span></div>;
+};
+
+const calculatePerformance = (form: string[]) => {
+    let points = 0;
+    form.forEach(r => {
+        if(r === 'W') points += 3;
+        if(r === 'D') points += 1;
+    });
+    return Math.round((points / (form.length * 3)) * 100);
 };
 
 const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
@@ -220,7 +249,6 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
   const [predictionMode, setPredictionMode] = useState<'matches' | 'simulator'>('matches');
   const [simulatorTab, setSimulatorTab] = useState<'groups' | 'bracket'>('groups');
   const [groups, setGroups] = useState<GroupData[]>(INITIAL_GROUPS);
-  // Mock Bracket State (Round of 16)
   const [bracketWinners, setBracketWinners] = useState<Record<string, GroupTeam | null>>({});
 
   // Filters
@@ -235,7 +263,6 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
 
   const nextMatchRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to next open match on load
   useEffect(() => {
     if (viewState === 'detail' && nextMatchRef.current) {
         setTimeout(() => {
@@ -258,20 +285,18 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
   };
 
   const handleScoreChange = (id: string, team: 'home' | 'away', value: string) => {
-    // Numeric validation: Allow empty or 0-9 only
     if (value !== '' && !/^[0-9]+$/.test(value)) return;
     if (value.length > 2) return;
 
     setMatches(prev => prev.map(m => m.id === id ? {
       ...m,
-      saved: false, // Reset saved status on edit
+      saved: false,
       prediction: { ...m.prediction, [team]: value }
     } : m));
   };
 
   const handleSavePrediction = (id: string) => {
     setIsSaving(id);
-    // Simulate API Call
     setTimeout(() => {
         setMatches(prev => prev.map(m => m.id === id ? { ...m, saved: true } : m));
         setIsSaving(null);
@@ -283,7 +308,6 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
       handleScoreChange(matchId, 'away', score.away.toString());
   };
 
-  // --- SIMULATOR LOGIC ---
   const moveTeam = (groupIndex: number, fromIndex: number, direction: 'up' | 'down') => {
       const newGroups = [...groups];
       const team = newGroups[groupIndex].teams[fromIndex];
@@ -300,10 +324,8 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
       setBracketWinners(prev => ({ ...prev, [matchId]: team }));
   };
 
-  // Logic: 1. Search Text -> 2. Phase -> 3. Group/Round -> 4. Sort Date
   const filteredMatches = useMemo(() => {
     let result = matches;
-
     if (searchTeam) {
         const lowerSearch = searchTeam.toLowerCase();
         result = result.filter(m => 
@@ -311,14 +333,10 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
             m.awayTeam.toLowerCase().includes(lowerSearch)
         );
     }
-
     result = result.filter(m => m.phase === activePhase);
-
     if (activePhase === 'group' && activeGroup !== 'ALL') {
         result = result.filter(m => m.group === activeGroup);
     }
-
-    // Sort by Date (Earliest first)
     return result.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [matches, activePhase, activeGroup, searchTeam]);
 
@@ -652,10 +670,11 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                        {/* Matchup Center */}
                                        <div className="flex-1 flex items-center justify-between gap-4 w-full">
                                            <div className="flex items-center gap-3 flex-1 justify-end">
-                                              <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight hidden sm:block">{match.homeTeam}</span>
+                                              {/* Fixed Visibility: Force black text */}
+                                              <span className="text-xs md:text-sm font-black uppercase text-slate-900 text-right leading-tight hidden sm:block">{match.homeTeam}</span>
                                               <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight sm:hidden">{match.homeTeam.substring(0,3)}</span>
-                                              {/* UPDATED: Larger Flag */}
-                                              <span className="text-2xl md:text-4xl transition-all">{match.homeFlag}</span>
+                                              {/* UPDATED: Larger Flag & Alignment */}
+                                              <span className="text-4xl md:text-5xl transition-all drop-shadow-sm">{match.homeFlag}</span>
                                            </div>
 
                                            {/* Score Inputs (Numeric 0-9) */}
@@ -684,9 +703,10 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                            </div>
 
                                            <div className="flex items-center gap-3 flex-1 justify-start">
-                                              {/* UPDATED: Larger Flag */}
-                                              <span className="text-2xl md:text-4xl transition-all">{match.awayFlag}</span>
-                                              <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight hidden sm:block">{match.awayTeam}</span>
+                                              {/* UPDATED: Larger Flag & Alignment */}
+                                              <span className="text-4xl md:text-5xl transition-all drop-shadow-sm">{match.awayFlag}</span>
+                                              {/* Fixed Visibility: Force black text */}
+                                              <span className="text-xs md:text-sm font-black uppercase text-slate-900 text-left leading-tight hidden sm:block">{match.awayTeam}</span>
                                               <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight sm:hidden">{match.awayTeam.substring(0,3)}</span>
                                            </div>
                                        </div>
@@ -771,25 +791,60 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                                         </div>
                                                     </div>
 
-                                                    {/* NEW SECTION: Recent Form (Last 5) */}
-                                                    <div className="bg-white p-3 rounded-xl border border-slate-200">
-                                                        <div className="flex justify-between items-center mb-2">
-                                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Racha Reciente (Últimos 5)</span>
-                                                            <span className="text-[8px] font-bold text-slate-300 uppercase">Tendencia</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center gap-4">
+                                                    {/* NEW SECTION: Advanced Form Analysis (REDESIGNED) */}
+                                                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-xs font-black uppercase text-slate-700 hidden sm:block">{match.homeTeam}</span>
-                                                                <div className="flex gap-1">
-                                                                    {match.analysis.recentForm.home.map((r, idx) => <FormBadge key={idx} result={r} />)}
+                                                               <BarChart3 size={16} className="text-slate-400"/>
+                                                               <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">ANÁLISIS DE RACHA (ÚLTIMOS 5)</span>
+                                                            </div>
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">Tendencia</span>
+                                                        </div>
+                                                        
+                                                        <div className="p-4 flex flex-col md:flex-row items-center gap-4 md:gap-8">
+                                                            {/* Home Form (Left on Desktop, Top on Mobile) */}
+                                                            <div className="flex flex-row md:flex-col items-center justify-between md:justify-center gap-3 w-full md:w-auto">
+                                                                <div className="flex flex-col items-start md:items-center gap-1">
+                                                                    <span className="text-xs font-black uppercase text-slate-900">{match.homeTeam}</span>
+                                                                    <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 rounded">{calculatePerformance(match.analysis.recentForm.home)}% Eficacia</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="flex gap-1">
+                                                                        {match.analysis.recentForm.home.map((r, idx) => <FormBadge key={idx} result={r} />)}
+                                                                    </div>
+                                                                    <TrendArrow efficiency={calculatePerformance(match.analysis.recentForm.home)} />
                                                                 </div>
                                                             </div>
-                                                            <div className="h-px bg-slate-100 flex-1"></div>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="flex gap-1">
-                                                                    {match.analysis.recentForm.away.map((r, idx) => <FormBadge key={idx} result={r} />)}
+                                                            
+                                                            {/* Insight Box (Center on Desktop, Bottom on Mobile) */}
+                                                            <div className="w-full md:flex-1 order-last md:order-none bg-blue-50 border border-blue-100 rounded-xl p-3 relative overflow-hidden flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 relative z-10">
+                                                                    <Target size={18} />
                                                                 </div>
-                                                                <span className="text-xs font-black uppercase text-slate-700 hidden sm:block">{match.awayTeam}</span>
+                                                                <div className="space-y-1 relative z-10">
+                                                                    <p className="text-[10px] font-bold text-blue-800 leading-tight">
+                                                                        "{match.analysis.formConclusion}"
+                                                                    </p>
+                                                                    <p className="text-xs font-black text-blue-900 uppercase">
+                                                                        OPCIÓN INTELIGENTE: {match.analysis.formBet}
+                                                                    </p>
+                                                                </div>
+                                                                {/* Decoration */}
+                                                                <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-blue-200/50 rounded-full blur-xl"></div>
+                                                            </div>
+
+                                                            {/* Away Form (Right on Desktop, Middle on Mobile) */}
+                                                            <div className="flex flex-row md:flex-col items-center justify-between md:justify-center gap-3 w-full md:w-auto text-right">
+                                                                <div className="flex items-center gap-2 order-2 md:order-2">
+                                                                    <TrendArrow efficiency={calculatePerformance(match.analysis.recentForm.away)} />
+                                                                    <div className="flex gap-1">
+                                                                        {match.analysis.recentForm.away.map((r, idx) => <FormBadge key={idx} result={r} />)}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col items-end md:items-center gap-1 order-1 md:order-1">
+                                                                    <span className="text-xs font-black uppercase text-slate-900">{match.awayTeam}</span>
+                                                                    <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 rounded">{calculatePerformance(match.analysis.recentForm.away)}% Eficacia</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
