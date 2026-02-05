@@ -206,7 +206,7 @@ const FormBadge: React.FC<{ result: string }> = ({ result }) => {
         'D': 'bg-slate-400 text-white'
     };
     return (
-        <span className={`w-4 h-4 rounded text-[8px] font-bold flex items-center justify-center ${colors[result as keyof typeof colors] || 'bg-slate-200'}`}>
+        <span className={`w-5 h-5 rounded-md text-[9px] font-black flex items-center justify-center shadow-sm ${colors[result as keyof typeof colors] || 'bg-slate-200'}`}>
             {result}
         </span>
     );
@@ -344,7 +344,7 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
       {/* VIEW: LEAGUE LIST */}
       {viewState === 'list' && (
         <div className="space-y-10">
-           
+           {/* ... (Existing code for list view remains unchanged) ... */}
            <div className="flex justify-between items-end">
               <div>
                  <h1 className="text-3xl font-black font-brand uppercase tracking-tighter text-slate-900">MIS POLLAS</h1>
@@ -654,7 +654,8 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                            <div className="flex items-center gap-3 flex-1 justify-end">
                                               <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight hidden sm:block">{match.homeTeam}</span>
                                               <span className="text-xs font-black uppercase text-slate-900 text-right leading-tight sm:hidden">{match.homeTeam.substring(0,3)}</span>
-                                              <span className="text-2xl">{match.homeFlag}</span>
+                                              {/* UPDATED: Larger Flag */}
+                                              <span className="text-2xl md:text-4xl transition-all">{match.homeFlag}</span>
                                            </div>
 
                                            {/* Score Inputs (Numeric 0-9) */}
@@ -683,7 +684,8 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                            </div>
 
                                            <div className="flex items-center gap-3 flex-1 justify-start">
-                                              <span className="text-2xl">{match.awayFlag}</span>
+                                              {/* UPDATED: Larger Flag */}
+                                              <span className="text-2xl md:text-4xl transition-all">{match.awayFlag}</span>
                                               <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight hidden sm:block">{match.awayTeam}</span>
                                               <span className="text-xs font-black uppercase text-slate-900 text-left leading-tight sm:hidden">{match.awayTeam.substring(0,3)}</span>
                                            </div>
@@ -726,44 +728,69 @@ const Predictions: React.FC<PredictionsProps> = ({ onViewChange }) => {
                                             </div>
                                             
                                             {selectedLeague.plan !== 'free' ? (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                    {/* Win Probability Bar */}
-                                                    <div className="space-y-3">
-                                                        <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                                                            <span>{match.homeTeam}</span>
-                                                            <span>Empate</span>
-                                                            <span>{match.awayTeam}</span>
+                                                <div className="space-y-6">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                        {/* Win Probability Bar */}
+                                                        <div className="space-y-3">
+                                                            <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                                                                <span>{match.homeTeam}</span>
+                                                                <span>Empate</span>
+                                                                <span>{match.awayTeam}</span>
+                                                            </div>
+                                                            <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex">
+                                                                <div className="bg-slate-900 h-full" style={{width: `${match.analysis.winProb.home}%`}}></div>
+                                                                <div className="bg-slate-400 h-full" style={{width: `${match.analysis.winProb.draw}%`}}></div>
+                                                                <div className="bg-lime-400 h-full" style={{width: `${match.analysis.winProb.away}%`}}></div>
+                                                            </div>
+                                                            <p className="text-[10px] font-medium text-slate-500 bg-white p-2 rounded-lg border border-slate-200 leading-tight">
+                                                                <Zap size={12} className="inline mr-1 text-amber-500"/>
+                                                                "{match.analysis.insight}"
+                                                            </p>
                                                         </div>
-                                                        <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex">
-                                                            <div className="bg-slate-900 h-full" style={{width: `${match.analysis.winProb.home}%`}}></div>
-                                                            <div className="bg-slate-400 h-full" style={{width: `${match.analysis.winProb.draw}%`}}></div>
-                                                            <div className="bg-lime-400 h-full" style={{width: `${match.analysis.winProb.away}%`}}></div>
+
+                                                        {/* 3 AI SUGGESTIONS (One-Click Apply) */}
+                                                        <div className="space-y-2">
+                                                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Sugerencias Automáticas</p>
+                                                            <div className="flex gap-2">
+                                                                {match.analysis.suggestions.map((sug, i) => (
+                                                                    <button
+                                                                        key={i}
+                                                                        onClick={() => applySuggestion(match.id, sug.score)}
+                                                                        className={`flex-1 p-2 rounded-xl border flex flex-col items-center gap-1 transition-all hover:shadow-md active:scale-95 ${
+                                                                            sug.type === 'safe' ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
+                                                                            sug.type === 'ai' ? 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' :
+                                                                            'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                                                                        }`}
+                                                                    >
+                                                                        <span className="text-[9px] font-black uppercase tracking-wider">{sug.label}</span>
+                                                                        <span className="text-lg font-black">{sug.score.home}-{sug.score.away}</span>
+                                                                        <span className="text-[9px] font-bold opacity-70">{sug.probability} Prob.</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                        <p className="text-[10px] font-medium text-slate-500 bg-white p-2 rounded-lg border border-slate-200 leading-tight">
-                                                            <Zap size={12} className="inline mr-1 text-amber-500"/>
-                                                            "{match.analysis.insight}"
-                                                        </p>
                                                     </div>
 
-                                                    {/* 3 AI SUGGESTIONS (One-Click Apply) */}
-                                                    <div className="space-y-2">
-                                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Sugerencias Automáticas</p>
-                                                        <div className="flex gap-2">
-                                                            {match.analysis.suggestions.map((sug, i) => (
-                                                                <button
-                                                                    key={i}
-                                                                    onClick={() => applySuggestion(match.id, sug.score)}
-                                                                    className={`flex-1 p-2 rounded-xl border flex flex-col items-center gap-1 transition-all hover:shadow-md active:scale-95 ${
-                                                                        sug.type === 'safe' ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
-                                                                        sug.type === 'ai' ? 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' :
-                                                                        'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-                                                                    }`}
-                                                                >
-                                                                    <span className="text-[9px] font-black uppercase tracking-wider">{sug.label}</span>
-                                                                    <span className="text-lg font-black">{sug.score.home}-{sug.score.away}</span>
-                                                                    <span className="text-[9px] font-bold opacity-70">{sug.probability} Prob.</span>
-                                                                </button>
-                                                            ))}
+                                                    {/* NEW SECTION: Recent Form (Last 5) */}
+                                                    <div className="bg-white p-3 rounded-xl border border-slate-200">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Racha Reciente (Últimos 5)</span>
+                                                            <span className="text-[8px] font-bold text-slate-300 uppercase">Tendencia</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center gap-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs font-black uppercase text-slate-700 hidden sm:block">{match.homeTeam}</span>
+                                                                <div className="flex gap-1">
+                                                                    {match.analysis.recentForm.home.map((r, idx) => <FormBadge key={idx} result={r} />)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="h-px bg-slate-100 flex-1"></div>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex gap-1">
+                                                                    {match.analysis.recentForm.away.map((r, idx) => <FormBadge key={idx} result={r} />)}
+                                                                </div>
+                                                                <span className="text-xs font-black uppercase text-slate-700 hidden sm:block">{match.awayTeam}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
