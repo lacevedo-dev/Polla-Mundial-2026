@@ -53,7 +53,6 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/packages ./packages
 
 # Copiar los artefactos de la API (incluyendo dependencias especificas si las hay, prisma y dist)
-COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
