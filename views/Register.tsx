@@ -1,12 +1,12 @@
 
 import React from 'react';
 import { Button, Input, EmailAutocompleteInput, AutocompleteInput, Badge, Checkbox } from '../components/UI';
-import { AppView } from '../types';
-import { 
-  CheckCircle2, 
-  CheckCircle, 
-  User, 
-  Lock, 
+import { useNavigate } from 'react-router-dom';
+import {
+  CheckCircle2,
+  CheckCircle,
+  User,
+  Lock,
   ArrowLeft,
   UploadCloud,
   XCircle,
@@ -22,10 +22,7 @@ import {
   Check
 } from 'lucide-react';
 
-interface RegisterProps {
-  onViewChange: (view: AppView) => void;
-  onRegisterSuccess: (email: string) => void;
-}
+// Props eliminadas — navegación via useNavigate
 
 type RegisterStep = 1 | 2 | 3;
 
@@ -57,25 +54,26 @@ const EXISTING_USERS = [
   { email: 'carlos@outlook.com', phone: '5512345678', name: 'Carlos Ruiz', avatar: 'https://picsum.photos/seed/carlos/40/40' }
 ];
 
-const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) => {
+const Register: React.FC = () => {
+  const navigate = useNavigate();
   const [step, setStep] = React.useState<RegisterStep>(1);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isNavigating, setIsNavigating] = React.useState(false);
-  
+
   // Validation states
   const [nombreStatus, setNombreStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
   const [emailStatus, setEmailStatus] = React.useState<'idle' | 'valid' | 'invalid' | 'taken'>('idle');
   const [usernameStatus, setUsernameStatus] = React.useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
   const [phoneStatus, setPhoneStatus] = React.useState<'idle' | 'valid' | 'invalid' | 'taken'>('idle');
   const [birthDateStatus, setBirthDateStatus] = React.useState<'idle' | 'valid' | 'underage' | 'invalid'>('idle');
-  
+
   // Existing user detected state
-  const [existingUser, setExistingUser] = React.useState<{name: string, avatar: string} | null>(null);
+  const [existingUser, setExistingUser] = React.useState<{ name: string, avatar: string } | null>(null);
 
   // File upload state
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = React.useState(false);
-  
+
   // Phone selection state
   const [selectedCountry, setSelectedCountry] = React.useState<Country>(COUNTRY_CODES[0]);
   const [isCountrySelectorOpen, setIsCountrySelectorOpen] = React.useState(false);
@@ -159,7 +157,7 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
       if (emailStatus !== 'taken') setExistingUser(null);
       return;
     }
-    
+
     const timer = setTimeout(() => {
       let isValidLength = false;
       if (selectedCountry.regex) {
@@ -219,19 +217,19 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    
+
     // Check for country code paste (e.g. +57300...)
     const matchedCountry = COUNTRY_CODES.find(c => val.startsWith(c.code));
     if (matchedCountry) {
-        setSelectedCountry(matchedCountry);
-        const stripped = val.replace(matchedCountry.code, '').trim().replace(/\D/g, '');
-        // Only update if detecting a paste to avoid overriding user typing
-        handleInputChange('celular', stripped);
+      setSelectedCountry(matchedCountry);
+      const stripped = val.replace(matchedCountry.code, '').trim().replace(/\D/g, '');
+      // Only update if detecting a paste to avoid overriding user typing
+      handleInputChange('celular', stripped);
     } else {
-        const cleanVal = val.replace(/\D/g, '');
-        if (cleanVal.length <= selectedCountry.length) { 
-            handleInputChange('celular', cleanVal); 
-        }
+      const cleanVal = val.replace(/\D/g, '');
+      if (cleanVal.length <= selectedCountry.length) {
+        handleInputChange('celular', cleanVal);
+      }
     }
   };
 
@@ -254,7 +252,7 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
     }
 
     setIsProcessingFile(true);
-    
+
     const reader = new FileReader();
     reader.onloadend = () => {
       setTimeout(() => {
@@ -264,10 +262,10 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
           return;
         }
 
-        setFormData(prev => ({ 
-          ...prev, 
-          foto: file, 
-          fotoPreview: reader.result as string 
+        setFormData(prev => ({
+          ...prev,
+          foto: file,
+          fotoPreview: reader.result as string
         }));
         setIsProcessingFile(false);
       }, 800);
@@ -302,10 +300,9 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
       return;
     }
     setIsLoading(true);
-    setTimeout(() => { 
-      setIsLoading(false); 
-      onRegisterSuccess(formData.email); 
-      onViewChange('create-league'); 
+    setTimeout(() => {
+      setIsLoading(false);
+      navigate('/create-league');
     }, 2000);
   };
 
@@ -333,8 +330,8 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
   };
   const quality = getImageQuality();
 
-  const filteredCountries = COUNTRY_CODES.filter(c => 
-    c.name.toLowerCase().includes(countrySearch.toLowerCase()) || 
+  const filteredCountries = COUNTRY_CODES.filter(c =>
+    c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
     c.code.includes(countrySearch)
   );
 
@@ -371,8 +368,8 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
         }
       `}</style>
       <div className="max-w-5xl w-full mb-6">
-        <button 
-          onClick={() => onViewChange('landing')} 
+        <button
+          onClick={() => navigate('/')}
           className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors"
         >
           <ArrowLeft size={16} /> Volver a Inicio
@@ -380,7 +377,7 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
       </div>
 
       <div className={`max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl min-h-[650px] transition-all duration-700 ${isLoading ? 'scale-[0.98] blur-sm opacity-50' : 'scale-100'}`}>
-        
+
         {/* Lado Izquierdo Branding */}
         <div className="hidden md:flex flex-col justify-between bg-black p-12 text-white relative overflow-hidden md:rounded-l-[2.5rem]">
           <div className="relative z-10">
@@ -411,22 +408,22 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
           </div>
 
           <form className={`flex-1 flex flex-col transition-all duration-300 ${isNavigating ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0'}`} onSubmit={handleSubmit}>
-            
+
             {step === 1 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nombre Completo *</label>
-                  <Input 
-                    placeholder="Ej. Juan Pérez" 
-                    required 
-                    disabled={isLoading} 
-                    value={formData.nombre} 
-                    onChange={e => handleInputChange('nombre', e.target.value)} 
+                  <Input
+                    placeholder="Ej. Juan Pérez"
+                    required
+                    disabled={isLoading}
+                    value={formData.nombre}
+                    onChange={e => handleInputChange('nombre', e.target.value)}
                     className={nombreStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
                     rightIcon={nombreStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <div className="flex justify-between items-center ml-1">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fecha de Nacimiento *</label>
@@ -440,97 +437,97 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
                 </div>
 
                 <div className={`space-y-2 relative ${isCountrySelectorOpen ? 'z-50' : 'z-0'}`} ref={selectorRef}>
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Celular *</label>
-                   <div className="flex gap-2">
-                      <button 
-                        type="button"
-                        className="flex items-center gap-2 px-3 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors min-w-[100px]"
-                        onClick={() => setIsCountrySelectorOpen(!isCountrySelectorOpen)}
-                      >
-                         <img 
-                           src={`https://flagcdn.com/w40/${selectedCountry.iso}.png`}
-                           srcSet={`https://flagcdn.com/w80/${selectedCountry.iso}.png 2x`}
-                           width="24"
-                           alt={selectedCountry.name}
-                           className="rounded-sm object-cover"
-                         />
-                         <span className="text-xs font-bold text-slate-700">{selectedCountry.code}</span>
-                         <ChevronDown size={14} className="text-slate-400 ml-auto" />
-                      </button>
-                      <Input 
-                        placeholder={selectedCountry.placeholder}
-                        value={formData.celular}
-                        onChange={handlePhoneChange}
-                        className={phoneStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : phoneStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
-                        rightIcon={phoneStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Celular *</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 px-3 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors min-w-[100px]"
+                      onClick={() => setIsCountrySelectorOpen(!isCountrySelectorOpen)}
+                    >
+                      <img
+                        src={`https://flagcdn.com/w40/${selectedCountry.iso}.png`}
+                        srcSet={`https://flagcdn.com/w80/${selectedCountry.iso}.png 2x`}
+                        width="24"
+                        alt={selectedCountry.name}
+                        className="rounded-sm object-cover"
                       />
-                   </div>
-                   
-                   {isCountrySelectorOpen && (
-                      <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl w-72 p-2 animate-in fade-in slide-in-from-top-2">
-                         <div className="relative mb-2">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input 
-                              className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-lime-100" 
-                              placeholder="Buscar país..." 
-                              value={countrySearch}
-                              onChange={(e) => setCountrySearch(e.target.value)}
+                      <span className="text-xs font-bold text-slate-700">{selectedCountry.code}</span>
+                      <ChevronDown size={14} className="text-slate-400 ml-auto" />
+                    </button>
+                    <Input
+                      placeholder={selectedCountry.placeholder}
+                      value={formData.celular}
+                      onChange={handlePhoneChange}
+                      className={phoneStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : phoneStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
+                      rightIcon={phoneStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
+                    />
+                  </div>
+
+                  {isCountrySelectorOpen && (
+                    <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl w-72 p-2 animate-in fade-in slide-in-from-top-2">
+                      <div className="relative mb-2">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-lime-100"
+                          placeholder="Buscar país..."
+                          value={countrySearch}
+                          onChange={(e) => setCountrySearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="max-h-60 overflow-y-auto space-y-1 scrollbar-custom">
+                        {filteredCountries.map(c => (
+                          <button
+                            key={c.name}
+                            type="button"
+                            className="w-full flex items-center gap-3 p-2 hover:bg-lime-50 rounded-xl transition-colors text-left group"
+                            onClick={() => { setSelectedCountry(c); setIsCountrySelectorOpen(false); setCountrySearch(''); }}
+                          >
+                            <img
+                              src={`https://flagcdn.com/w40/${c.iso}.png`}
+                              srcSet={`https://flagcdn.com/w80/${c.iso}.png 2x`}
+                              width="24"
+                              alt={c.name}
+                              className="rounded-sm shadow-sm group-hover:scale-110 transition-transform"
                             />
-                         </div>
-                         <div className="max-h-60 overflow-y-auto space-y-1 scrollbar-custom">
-                            {filteredCountries.map(c => (
-                               <button 
-                                 key={c.name}
-                                 type="button"
-                                 className="w-full flex items-center gap-3 p-2 hover:bg-lime-50 rounded-xl transition-colors text-left group"
-                                 onClick={() => { setSelectedCountry(c); setIsCountrySelectorOpen(false); setCountrySearch(''); }}
-                               >
-                                  <img 
-                                    src={`https://flagcdn.com/w40/${c.iso}.png`}
-                                    srcSet={`https://flagcdn.com/w80/${c.iso}.png 2x`}
-                                    width="24"
-                                    alt={c.name}
-                                    className="rounded-sm shadow-sm group-hover:scale-110 transition-transform"
-                                  />
-                                  <div className="flex-1">
-                                     <p className="text-xs font-bold text-slate-900">{c.name}</p>
-                                     <p className="text-[10px] font-medium text-slate-500">{c.code}</p>
-                                  </div>
-                                  {selectedCountry.code === c.code && <Check size={14} className="text-lime-600" />}
-                               </button>
-                            ))}
-                         </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-slate-900">{c.name}</p>
+                              <p className="text-[10px] font-medium text-slate-500">{c.code}</p>
+                            </div>
+                            {selectedCountry.code === c.code && <Check size={14} className="text-lime-600" />}
+                          </button>
+                        ))}
                       </div>
-                   )}
-                   {phoneStatus === 'taken' && existingUser && (
-                      <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
-                         <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
-                         <div>
-                            <p className="text-[10px] font-bold text-rose-700">Este número ya está registrado.</p>
-                            <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
-                         </div>
+                    </div>
+                  )}
+                  {phoneStatus === 'taken' && existingUser && (
+                    <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
+                      <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
+                      <div>
+                        <p className="text-[10px] font-bold text-rose-700">Este número ya está registrado.</p>
+                        <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
                       </div>
-                   )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Email *</label>
-                  <EmailAutocompleteInput 
-                    placeholder="tu@email.com" 
-                    value={formData.email} 
-                    onValueChange={(val) => handleInputChange('email', val)} 
+                  <EmailAutocompleteInput
+                    placeholder="tu@email.com"
+                    value={formData.email}
+                    onValueChange={(val) => handleInputChange('email', val)}
                     className={emailStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : emailStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
                     rightIcon={emailStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
                   />
                   {emailStatus === 'taken' && existingUser && (
-                      <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
-                         <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
-                         <div>
-                            <p className="text-[10px] font-bold text-rose-700">Este correo ya está registrado.</p>
-                            <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
-                         </div>
+                    <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
+                      <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
+                      <div>
+                        <p className="text-[10px] font-bold text-rose-700">Este correo ya está registrado.</p>
+                        <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
                       </div>
-                   )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -539,13 +536,13 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 <div className="space-y-2">
                   <div className="flex justify-between items-center ml-1">
-                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Usuario Único *</label>
-                     <span className={`text-[9px] font-bold uppercase ${usernameStatus === 'available' ? 'text-lime-600' : usernameStatus === 'taken' ? 'text-rose-500' : 'text-slate-400'}`}>
-                        {usernameStatus === 'checking' ? 'Verificando...' : usernameStatus === 'available' ? '¡Disponible!' : usernameStatus === 'taken' ? 'No disponible' : ''}
-                     </span>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Usuario Único *</label>
+                    <span className={`text-[9px] font-bold uppercase ${usernameStatus === 'available' ? 'text-lime-600' : usernameStatus === 'taken' ? 'text-rose-500' : 'text-slate-400'}`}>
+                      {usernameStatus === 'checking' ? 'Verificando...' : usernameStatus === 'available' ? '¡Disponible!' : usernameStatus === 'taken' ? 'No disponible' : ''}
+                    </span>
                   </div>
-                  <AutocompleteInput 
-                    placeholder="@usuario" 
+                  <AutocompleteInput
+                    placeholder="@usuario"
                     value={formData.usuario}
                     onValueChange={(val) => handleInputChange('usuario', val.replace(/\s/g, '').toLowerCase())}
                     suggestions={usernameSuggestions}
@@ -558,79 +555,79 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
                 </div>
 
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña *</label>
-                   <Input type="password" placeholder="••••••••" value={formData.password} onChange={e => handleInputChange('password', e.target.value)} leftIcon={<Lock size={16} />} />
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña *</label>
+                  <Input type="password" placeholder="••••••••" value={formData.password} onChange={e => handleInputChange('password', e.target.value)} leftIcon={<Lock size={16} />} />
                 </div>
 
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar Contraseña *</label>
-                   <Input type="password" placeholder="••••••••" value={formData.confirmPassword} onChange={e => handleInputChange('confirmPassword', e.target.value)} leftIcon={<Lock size={16} />} />
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar Contraseña *</label>
+                  <Input type="password" placeholder="••••••••" value={formData.confirmPassword} onChange={e => handleInputChange('confirmPassword', e.target.value)} leftIcon={<Lock size={16} />} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                   {requirements.map((req, i) => (
-                      <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${req.test(formData.password) ? 'bg-lime-50 border-lime-200 text-lime-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
-                         {req.test(formData.password) ? <CheckCircle2 size={12} /> : <div className="w-3 h-3 rounded-full border-2 border-slate-300" />}
-                         <span className="text-[9px] font-bold uppercase tracking-wide">{req.label}</span>
-                      </div>
-                   ))}
+                  {requirements.map((req, i) => (
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${req.test(formData.password) ? 'bg-lime-50 border-lime-200 text-lime-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                      {req.test(formData.password) ? <CheckCircle2 size={12} /> : <div className="w-3 h-3 rounded-full border-2 border-slate-300" />}
+                      <span className="text-[9px] font-bold uppercase tracking-wide">{req.label}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
             {step === 3 && (
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 h-full flex flex-col">
-                 <div className="flex-1 flex flex-col items-center justify-center space-y-6">
-                    <div 
-                      className={`relative w-48 h-48 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                      onClick={() => document.getElementById('file-upload')?.click()}
-                    >
-                       {formData.fotoPreview ? (
-                          <div className="relative w-full h-full">
-                             <img src={formData.fotoPreview} className="w-full h-full rounded-full object-cover" alt="Preview" />
-                             <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs uppercase tracking-widest backdrop-blur-sm">
-                                <RefreshCcw size={20} className="mb-1" /> Cambiar
-                             </div>
-                             {quality && (
-                                <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg border border-white/50 ${quality.color}`}>
-                                   <quality.icon size={10} />
-                                   <span className="text-[8px] font-black uppercase tracking-widest">{quality.label}</span>
-                                </div>
-                             )}
+                <div className="flex-1 flex flex-col items-center justify-center space-y-6">
+                  <div
+                    className={`relative w-48 h-48 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                  >
+                    {formData.fotoPreview ? (
+                      <div className="relative w-full h-full">
+                        <img src={formData.fotoPreview} className="w-full h-full rounded-full object-cover" alt="Preview" />
+                        <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs uppercase tracking-widest backdrop-blur-sm">
+                          <RefreshCcw size={20} className="mb-1" /> Cambiar
+                        </div>
+                        {quality && (
+                          <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg border border-white/50 ${quality.color}`}>
+                            <quality.icon size={10} />
+                            <span className="text-[8px] font-black uppercase tracking-widest">{quality.label}</span>
                           </div>
-                       ) : (
-                          <div className="text-center space-y-2 p-4">
-                             <div className="w-12 h-12 bg-slate-200 rounded-2xl flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform"><UploadCloud size={24} /></div>
-                             <p className="text-xs font-black text-slate-500 uppercase">Arrastra tu foto</p>
-                             <p className="text-[9px] text-slate-400">o haz clic para buscar</p>
-                          </div>
-                       )}
-                       <input id="file-upload" type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e.target.files?.[0] || null)} />
-                    </div>
-
-                    {uploadError && (
-                       <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-2">
-                          <FileWarning size={16} />
-                          <span className="text-xs font-bold">{uploadError}</span>
-                       </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center space-y-2 p-4">
+                        <div className="w-12 h-12 bg-slate-200 rounded-2xl flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform"><UploadCloud size={24} /></div>
+                        <p className="text-xs font-black text-slate-500 uppercase">Arrastra tu foto</p>
+                        <p className="text-[9px] text-slate-400">o haz clic para buscar</p>
+                      </div>
                     )}
+                    <input id="file-upload" type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e.target.files?.[0] || null)} />
+                  </div>
 
-                    <div className="text-center max-w-xs">
-                       <h4 className="text-lg font-black font-brand text-slate-900 uppercase">TU IDENTIDAD</h4>
-                       <p className="text-xs text-slate-500 mt-1">Esta imagen será visible en los rankings y tablas de posiciones.</p>
+                  {uploadError && (
+                    <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-2">
+                      <FileWarning size={16} />
+                      <span className="text-xs font-bold">{uploadError}</span>
                     </div>
-                 </div>
+                  )}
 
-                 <div className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-start gap-3">
-                    <Checkbox id="terms" label="" checked={formData.rememberMe} onChange={(c) => setFormData({...formData, rememberMe: c})} />
-                    <label htmlFor="terms" className="text-[10px] text-slate-500 font-medium leading-relaxed cursor-pointer">
-                       Acepto los <span className="font-bold text-slate-900 underline">Términos y Condiciones</span> y la <span className="font-bold text-slate-900 underline">Política de Privacidad</span>. Entiendo que los juegos de azar requieren mayoría de edad.
-                    </label>
-                 </div>
+                  <div className="text-center max-w-xs">
+                    <h4 className="text-lg font-black font-brand text-slate-900 uppercase">TU IDENTIDAD</h4>
+                    <p className="text-xs text-slate-500 mt-1">Esta imagen será visible en los rankings y tablas de posiciones.</p>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-start gap-3">
+                  <Checkbox id="terms" label="" checked={formData.rememberMe} onChange={(c) => setFormData({ ...formData, rememberMe: c })} />
+                  <label htmlFor="terms" className="text-[10px] text-slate-500 font-medium leading-relaxed cursor-pointer">
+                    Acepto los <span className="font-bold text-slate-900 underline">Términos y Condiciones</span> y la <span className="font-bold text-slate-900 underline">Política de Privacidad</span>. Entiendo que los juegos de azar requieren mayoría de edad.
+                  </label>
+                </div>
               </div>
             )}
           </form>
@@ -638,18 +635,18 @@ const Register: React.FC<RegisterProps> = ({ onViewChange, onRegisterSuccess }) 
           {/* Footer Actions */}
           <div className="mt-8 flex items-center gap-4 relative z-0">
             {step > 1 && (
-               <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep((step - 1) as RegisterStep)}>
-                  <ArrowLeft size={20} />
-               </Button>
+              <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep((step - 1) as RegisterStep)}>
+                <ArrowLeft size={20} />
+              </Button>
             )}
-            <Button 
-               onClick={handleSubmit} 
-               disabled={!isStepValid() || (step === 3 && !formData.rememberMe) || isLoading} 
-               isLoading={isLoading} 
-               className="flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl transition-all"
-               variant="secondary"
+            <Button
+              onClick={handleSubmit}
+              disabled={!isStepValid() || (step === 3 && !formData.rememberMe) || isLoading}
+              isLoading={isLoading}
+              className="flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl transition-all"
+              variant="secondary"
             >
-               {step === 3 ? 'FINALIZAR REGISTRO' : 'CONTINUAR'} <ArrowRight size={18} className="ml-2" />
+              {step === 3 ? 'FINALIZAR REGISTRO' : 'CONTINUAR'} <ArrowRight size={18} className="ml-2" />
             </Button>
           </div>
 

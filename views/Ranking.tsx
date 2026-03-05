@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Medal, Star, TrendingUp, TrendingDown, Minus, Search, Filter, ArrowUpRight, Crown } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -34,7 +35,8 @@ const mockRanking: RankingUser[] = [
     { id: '10', rank: 10, name: 'Camila Herrera', username: '@cami_fan', points: 340, avatar: 'https://picsum.photos/seed/user10/100/100', trend: 'up', matchesPredicted: 48, successRate: 64 },
 ];
 
-const Ranking: React.FC<{ onViewChange: (view: any) => void }> = ({ onViewChange }) => {
+const Ranking: React.FC = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'global' | 'friends' | 'league'>('global');
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -304,7 +306,7 @@ const Ranking: React.FC<{ onViewChange: (view: any) => void }> = ({ onViewChange
                             <p className="text-2xl font-black text-lime-400">215</p>
                         </div>
                         <button
-                            onClick={() => onViewChange('predictions')}
+                            onClick={() => navigate('/predictions')}
                             className="bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-colors"
                         >
                             <Medal className="w-5 h-5 text-lime-400" />

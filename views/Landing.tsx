@@ -1,14 +1,14 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { Button, Badge, Card } from '../components/UI';
-import { AppView } from '../types';
-import { 
-  Trophy, 
-  Target, 
-  ShieldCheck, 
-  ArrowRight, 
-  Zap, 
-  Globe, 
+import { useNavigate } from 'react-router-dom';
+import {
+  Trophy,
+  Target,
+  ShieldCheck,
+  ArrowRight,
+  Zap,
+  Globe,
   TrendingUp,
   Award,
   Smartphone,
@@ -26,11 +26,10 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
-interface LandingProps {
-  onViewChange: (view: AppView) => void;
-}
+// Props eliminadas — navegación via useNavigate
 
-const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
+const Landing: React.FC = () => {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string>('hero');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showDemoMenu, setShowDemoMenu] = useState(false);
@@ -100,7 +99,7 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
             <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center font-brand text-white text-2xl font-black shadow-lg">26</div>
             <span className="font-brand text-xl font-black tracking-tighter uppercase">POLLA<span className="text-lime-600">2026</span></span>
           </div>
-          
+
           <div className="hidden lg:flex items-center gap-8">
             {[
               { id: 'how-it-works', label: 'Cómo Funciona' },
@@ -111,9 +110,8 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
               <button
                 key={link.id}
                 onClick={() => scrollTo(link.id)}
-                className={`text-xs font-black uppercase tracking-widest transition-all relative py-1 ${
-                  activeSection === link.id ? 'text-lime-700' : 'text-slate-500 hover:text-black'
-                }`}
+                className={`text-xs font-black uppercase tracking-widest transition-all relative py-1 ${activeSection === link.id ? 'text-lime-700' : 'text-slate-500 hover:text-black'
+                  }`}
               >
                 {link.label}
                 {activeSection === link.id && (
@@ -124,8 +122,8 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button onClick={() => onViewChange('login')} className="text-xs font-black uppercase tracking-widest text-slate-900 hover:text-lime-700 transition-colors">Entrar</button>
-            <Button onClick={() => onViewChange('register')} variant="secondary" size="md" className="px-6 rounded-full font-black">¡JUGAR YA!</Button>
+            <button onClick={() => navigate('/login')} className="text-xs font-black uppercase tracking-widest text-slate-900 hover:text-lime-700 transition-colors">Entrar</button>
+            <Button onClick={() => navigate('/register')} variant="secondary" size="md" className="px-6 rounded-full font-black">¡JUGAR YA!</Button>
           </div>
         </div>
       </nav>
@@ -138,16 +136,16 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
             <div className="relative z-10 space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000">
               <Badge color="bg-lime-100 text-lime-800 border border-lime-200 px-4 py-2 uppercase tracking-widest">MUNDIAL 2026 • ACCESO ANTICIPADO</Badge>
               <h1 className="text-6xl lg:text-8xl font-black font-brand leading-[0.85] tracking-tighter uppercase text-slate-900">
-                PRONOSTICA <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-emerald-600">GANA & DOMINA.</span>
+                PRONOSTICA <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-emerald-600">GANA & DOMINA.</span>
               </h1>
               <p className="text-slate-500 text-xl max-w-xl leading-relaxed font-medium">
                 La plataforma más estética y potente para gestionar tu polla mundialista. Desde grupos de amigos hasta ligas corporativas masivas.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button onClick={() => onViewChange('register')} size="lg" className="px-10 py-7 text-lg rounded-full group shadow-2xl shadow-lime-500/20" variant="secondary">
+                <Button onClick={() => navigate('/register')} size="lg" className="px-10 py-7 text-lg rounded-full group shadow-2xl shadow-lime-500/20" variant="secondary">
                   REGISTRARME <ArrowRight className="ml-2 group-hover:translate-x-2 transition-transform" />
                 </Button>
-                <Button variant="ghost" size="lg" className="rounded-full px-10 py-7 text-lg border-2 border-slate-100 text-slate-500 hover:text-lime-700 hover:border-lime-200 font-black gap-2 transition-all" onClick={() => onViewChange('dashboard')}>
+                <Button variant="ghost" size="lg" className="rounded-full px-10 py-7 text-lg border-2 border-slate-100 text-slate-500 hover:text-lime-700 hover:border-lime-200 font-black gap-2 transition-all" onClick={() => navigate('/dashboard')}>
                   <PlayCircle size={22} className="text-lime-600" /> VER DEMO
                 </Button>
                 <Button variant="outline" size="lg" className="rounded-full px-10 py-7 text-lg border-slate-200" onClick={() => scrollTo('how-it-works')}>
@@ -160,8 +158,8 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
                 <img src="https://picsum.photos/seed/polla-ui-v2/1200/800" className="rounded-[2.5rem] opacity-90 w-full h-auto" alt="App Preview" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none"></div>
                 <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-3xl shadow-2xl border border-slate-50 flex items-center gap-4 animate-bounce">
-                   <div className="w-12 h-12 bg-lime-400 rounded-2xl flex items-center justify-center text-black shadow-lg"><TrendingUp /></div>
-                   <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Liderando</p><p className="text-lg font-black uppercase">Juan (+15pts)</p></div>
+                  <div className="w-12 h-12 bg-lime-400 rounded-2xl flex items-center justify-center text-black shadow-lg"><TrendingUp /></div>
+                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Liderando</p><p className="text-lg font-black uppercase">Juan (+15pts)</p></div>
                 </div>
               </div>
             </div>
@@ -208,7 +206,7 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
                 <Trophy size={400} className="absolute -bottom-20 -right-20 opacity-10" />
                 <div className="relative z-10 space-y-4">
                   <Badge color="bg-white/20 text-white backdrop-blur-md uppercase">Primer Puesto Global</Badge>
-                  <h2 className="text-5xl lg:text-7xl font-black font-brand uppercase leading-[0.9] tracking-tighter">VIAJE A LA <br/>GRAN FINAL</h2>
+                  <h2 className="text-5xl lg:text-7xl font-black font-brand uppercase leading-[0.9] tracking-tighter">VIAJE A LA <br />GRAN FINAL</h2>
                   <Button variant="secondary" className="bg-white text-purple-600 font-black px-12 py-4 rounded-full mt-6 shadow-xl">DETALLES</Button>
                 </div>
               </div>
@@ -230,98 +228,98 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
 
         {/* Community Section */}
         <section id="community" className="py-32 bg-black text-white px-6 relative overflow-hidden">
-            {/* Background decoration */}
-            <div className="absolute top-0 left-0 w-full h-full opacity-10" style={{backgroundImage: 'radial-gradient(circle at 50% 50%, #3EE93E 0%, transparent 50%)'}}></div>
-            <div className="max-w-7xl mx-auto relative z-10 space-y-20">
-                <div className="flex flex-col md:flex-row justify-between items-end gap-8 border-b border-white/10 pb-12">
-                     <div className="space-y-4">
-                        <Badge color="bg-lime-400 text-black">GLOBAL & SOCIAL</Badge>
-                        <h3 className="text-5xl lg:text-7xl font-black font-brand uppercase tracking-tighter leading-none">LA HINCHADA <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-400">DIGITAL.</span></h3>
-                     </div>
-                     <p className="text-slate-400 text-xl font-medium max-w-md text-right">
-                        Más de 50,000 fanáticos ya están creando sus ligas. Únete al movimiento más grande de predicciones deportivas.
-                     </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                   {[
-                     { quote: "La mejor interfaz que he visto para una polla. Mis amigos quedaron locos con el diseño.", user: "Carlos R.", role: "Admin de Liga" },
-                     { quote: "Gestionar los pagos era un dolor de cabeza, aquí es automático y transparente.", user: "Ana M.", role: "Tesorera" },
-                     { quote: "Los premios reales motivan a todos a participar hasta el final del mundial.", user: "David S.", role: "Fanático" }
-                   ].map((t, i) => (
-                      <div key={i} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/10 transition-colors">
-                          <div className="flex gap-1 text-lime-400 mb-4">
-                             {[1,2,3,4,5].map(s => <Sparkles key={s} size={14} fill="currentColor" />)}
-                          </div>
-                          <p className="text-lg font-medium text-slate-200 mb-6">"{t.quote}"</p>
-                          <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 bg-gradient-to-br from-lime-400 to-emerald-600 rounded-full"></div>
-                             <div>
-                                <p className="font-bold text-white">{t.user}</p>
-                                <p className="text-xs text-slate-500 uppercase font-black tracking-widest">{t.role}</p>
-                             </div>
-                          </div>
-                      </div>
-                   ))}
-                </div>
+          {/* Background decoration */}
+          <div className="absolute top-0 left-0 w-full h-full opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #3EE93E 0%, transparent 50%)' }}></div>
+          <div className="max-w-7xl mx-auto relative z-10 space-y-20">
+            <div className="flex flex-col md:flex-row justify-between items-end gap-8 border-b border-white/10 pb-12">
+              <div className="space-y-4">
+                <Badge color="bg-lime-400 text-black">GLOBAL & SOCIAL</Badge>
+                <h3 className="text-5xl lg:text-7xl font-black font-brand uppercase tracking-tighter leading-none">LA HINCHADA <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-400">DIGITAL.</span></h3>
+              </div>
+              <p className="text-slate-400 text-xl font-medium max-w-md text-right">
+                Más de 50,000 fanáticos ya están creando sus ligas. Únete al movimiento más grande de predicciones deportivas.
+              </p>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[
+                { quote: "La mejor interfaz que he visto para una polla. Mis amigos quedaron locos con el diseño.", user: "Carlos R.", role: "Admin de Liga" },
+                { quote: "Gestionar los pagos era un dolor de cabeza, aquí es automático y transparente.", user: "Ana M.", role: "Tesorera" },
+                { quote: "Los premios reales motivan a todos a participar hasta el final del mundial.", user: "David S.", role: "Fanático" }
+              ].map((t, i) => (
+                <div key={i} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/10 transition-colors">
+                  <div className="flex gap-1 text-lime-400 mb-4">
+                    {[1, 2, 3, 4, 5].map(s => <Sparkles key={s} size={14} fill="currentColor" />)}
+                  </div>
+                  <p className="text-lg font-medium text-slate-200 mb-6">"{t.quote}"</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-lime-400 to-emerald-600 rounded-full"></div>
+                    <div>
+                      <p className="font-bold text-white">{t.user}</p>
+                      <p className="text-xs text-slate-500 uppercase font-black tracking-widest">{t.role}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
 
         {/* Pricing Section */}
         <section id="pricing" className="py-32 px-6 bg-slate-50">
-           <div className="max-w-7xl mx-auto space-y-16">
-              <div className="text-center space-y-4 max-w-3xl mx-auto">
-                 <Badge color="bg-slate-900 text-white">PLANES 2026</Badge>
-                 <h3 className="text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter text-slate-900">ELIGE TU <span className="text-lime-600">NIVEL.</span></h3>
-                 <p className="text-slate-500 text-xl font-medium">Desde grupos de oficina hasta marcas globales. Tenemos un plan para tu liga.</p>
+          <div className="max-w-7xl mx-auto space-y-16">
+            <div className="text-center space-y-4 max-w-3xl mx-auto">
+              <Badge color="bg-slate-900 text-white">PLANES 2026</Badge>
+              <h3 className="text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter text-slate-900">ELIGE TU <span className="text-lime-600">NIVEL.</span></h3>
+              <p className="text-slate-500 text-xl font-medium">Desde grupos de oficina hasta marcas globales. Tenemos un plan para tu liga.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+              {/* FREE */}
+              <div className="p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-2xl font-black font-brand uppercase">GRATIS</h4>
+                  <p className="text-4xl font-black font-brand text-slate-900">$0 <span className="text-sm font-bold text-slate-400">/ SIEMPRE</span></p>
+                </div>
+                <ul className="space-y-3">
+                  {['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'].map(f => (
+                    <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-slate-300" /> {f}</li>
+                  ))}
+                </ul>
+                <Button variant="outline" className="w-full rounded-2xl font-black uppercase tracking-widest" onClick={() => navigate('/register')}>EMPEZAR</Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-                 {/* FREE */}
-                 <div className="p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6">
-                    <div className="space-y-2">
-                       <h4 className="text-2xl font-black font-brand uppercase">GRATIS</h4>
-                       <p className="text-4xl font-black font-brand text-slate-900">$0 <span className="text-sm font-bold text-slate-400">/ SIEMPRE</span></p>
-                    </div>
-                    <ul className="space-y-3">
-                       {['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'].map(f => (
-                          <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-slate-300"/> {f}</li>
-                       ))}
-                    </ul>
-                    <Button variant="outline" className="w-full rounded-2xl font-black uppercase tracking-widest" onClick={() => onViewChange('register')}>EMPEZAR</Button>
-                 </div>
-
-                 {/* GOLD (Highlight) */}
-                 <div className="p-10 rounded-[3rem] bg-slate-900 text-white shadow-2xl scale-105 relative overflow-hidden space-y-8">
-                    <div className="absolute top-0 right-0 p-4 bg-lime-400 text-black text-[10px] font-black uppercase tracking-widest rounded-bl-2xl">POPULAR</div>
-                    <div className="space-y-2">
-                       <h4 className="text-2xl font-black font-brand uppercase text-lime-400">GOLD</h4>
-                       <p className="text-5xl font-black font-brand text-white">$29k <span className="text-sm font-bold text-slate-500">/ ÚNICO</span></p>
-                       <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Pago único por administrador</p>
-                    </div>
-                    <ul className="space-y-4">
-                       {['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos'].map(f => (
-                          <li key={f} className="flex items-center gap-3 text-sm font-bold text-slate-300"><CheckCircle2 size={18} className="text-lime-400"/> {f}</li>
-                       ))}
-                    </ul>
-                    <Button variant="secondary" className="w-full h-14 rounded-2xl font-black uppercase tracking-widest text-xs" onClick={() => onViewChange('checkout')}>MEJORAR AHORA</Button>
-                 </div>
-
-                 {/* DIAMOND */}
-                 <div className="p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6">
-                    <div className="space-y-2">
-                       <h4 className="text-2xl font-black font-brand uppercase text-cyan-500">DIAMOND</h4>
-                       <p className="text-4xl font-black font-brand text-slate-900">$89k <span className="text-sm font-bold text-slate-400">/ ÚNICO</span></p>
-                    </div>
-                    <ul className="space-y-3">
-                       {['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'].map(f => (
-                          <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-cyan-500"/> {f}</li>
-                       ))}
-                    </ul>
-                    <Button variant="outline" className="w-full rounded-2xl font-black uppercase tracking-widest border-slate-200 hover:border-cyan-400 hover:text-cyan-600" onClick={() => onViewChange('checkout')}>CONTACTAR VENTAS</Button>
-                 </div>
+              {/* GOLD (Highlight) */}
+              <div className="p-10 rounded-[3rem] bg-slate-900 text-white shadow-2xl scale-105 relative overflow-hidden space-y-8">
+                <div className="absolute top-0 right-0 p-4 bg-lime-400 text-black text-[10px] font-black uppercase tracking-widest rounded-bl-2xl">POPULAR</div>
+                <div className="space-y-2">
+                  <h4 className="text-2xl font-black font-brand uppercase text-lime-400">GOLD</h4>
+                  <p className="text-5xl font-black font-brand text-white">$29k <span className="text-sm font-bold text-slate-500">/ ÚNICO</span></p>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Pago único por administrador</p>
+                </div>
+                <ul className="space-y-4">
+                  {['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos'].map(f => (
+                    <li key={f} className="flex items-center gap-3 text-sm font-bold text-slate-300"><CheckCircle2 size={18} className="text-lime-400" /> {f}</li>
+                  ))}
+                </ul>
+                <Button variant="secondary" className="w-full h-14 rounded-2xl font-black uppercase tracking-widest text-xs" onClick={() => navigate('/checkout')}>MEJORAR AHORA</Button>
               </div>
-           </div>
+
+              {/* DIAMOND */}
+              <div className="p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-2xl font-black font-brand uppercase text-cyan-500">DIAMOND</h4>
+                  <p className="text-4xl font-black font-brand text-slate-900">$89k <span className="text-sm font-bold text-slate-400">/ ÚNICO</span></p>
+                </div>
+                <ul className="space-y-3">
+                  {['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'].map(f => (
+                    <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-cyan-500" /> {f}</li>
+                  ))}
+                </ul>
+                <Button variant="outline" className="w-full rounded-2xl font-black uppercase tracking-widest border-slate-200 hover:border-cyan-400 hover:text-cyan-600" onClick={() => navigate('/checkout')}>CONTACTAR VENTAS</Button>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
 
@@ -357,7 +355,7 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
             <h5 className="font-black text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-6">Plataforma</h5>
             <ul className="space-y-4">
               {['Login', 'Registro', 'Ayuda'].map((label, i) => (
-                <li key={i}><button className="text-slate-800 font-bold uppercase text-xs tracking-widest hover:text-lime-700 transition-colors" onClick={() => onViewChange(label.toLowerCase() as any)}>{label}</button></li>
+                <li key={i}><button className="text-slate-800 font-bold uppercase text-xs tracking-widest hover:text-lime-700 transition-colors">{label}</button></li>
               ))}
             </ul>
           </div>
@@ -392,20 +390,20 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
                 </div>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap justify-center md:justify-end gap-4 sm:gap-6">
               <div className="flex items-center gap-3 px-4 py-2 bg-slate-50/80 rounded-2xl border border-slate-200/50">
                 <ShieldCheck size={18} className="text-lime-600" />
                 <div className="text-left">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">SECURITY</p>
-                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">PLATFORM CERTIFIED</p>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">SECURITY</p>
+                  <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">PLATFORM CERTIFIED</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 px-4 py-2 bg-slate-50/80 rounded-2xl border border-slate-200/50">
                 <Globe size={18} className="text-slate-400" />
                 <div className="text-left">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">ACCESS</p>
-                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">GLOBAL SERVICE</p>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">ACCESS</p>
+                  <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">GLOBAL SERVICE</p>
                 </div>
               </div>
             </div>
@@ -417,29 +415,29 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
       <div className="fixed bottom-8 left-8 z-[70] flex flex-col items-start gap-3">
         {showDemoMenu && (
           <div className="bg-white/90 backdrop-blur-xl border border-slate-200 p-5 rounded-[2rem] shadow-2xl space-y-4 animate-in slide-in-from-left-4 fade-in duration-300 w-64">
-             <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-lime-700">Acceso Rápido Demo</h4>
-                <button onClick={() => setShowDemoMenu(false)} className="text-slate-400 hover:text-black transition-colors"><X size={16}/></button>
-             </div>
-             <div className="grid grid-cols-1 gap-2">
-                <button onClick={() => onViewChange('login')} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-lime-50 rounded-2xl border border-slate-100 transition-all group">
-                   <LogIn size={16} className="text-slate-400 group-hover:text-lime-600"/>
-                   <span className="text-xs font-black uppercase tracking-widest">Probar Login</span>
-                </button>
-                <button onClick={() => onViewChange('register')} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-lime-50 rounded-2xl border border-slate-100 transition-all group">
-                   <UserPlus size={16} className="text-slate-400 group-hover:text-lime-600"/>
-                   <span className="text-xs font-black uppercase tracking-widest">Probar Registro</span>
-                </button>
-                <button onClick={() => onViewChange('create-league')} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-lime-50 rounded-2xl border border-slate-100 transition-all group">
-                   <Trophy size={16} className="text-slate-400 group-hover:text-lime-600"/>
-                   <span className="text-xs font-black uppercase tracking-widest">Crear Liga (Directo)</span>
-                </button>
-                <button onClick={() => onViewChange('dashboard')} className="flex items-center gap-3 p-3 bg-black text-white rounded-2xl transition-all group shadow-lg shadow-black/10">
-                   <Smartphone size={16} className="text-lime-400"/>
-                   <span className="text-xs font-black uppercase tracking-widest">Omitir e ir a App</span>
-                </button>
-             </div>
-             <p className="text-[9px] font-bold text-slate-400 uppercase text-center leading-tight">Usa estas opciones para validar las vistas rápidamente.</p>
+            <div className="flex items-center justify-between">
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-lime-700">Acceso Rápido Demo</h4>
+              <button onClick={() => setShowDemoMenu(false)} className="text-slate-400 hover:text-black transition-colors"><X size={16} /></button>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              <button onClick={() => navigate('/login')} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-lime-50 rounded-2xl border border-slate-100 transition-all group">
+                <LogIn size={16} className="text-slate-400 group-hover:text-lime-600" />
+                <span className="text-xs font-black uppercase tracking-widest">Probar Login</span>
+              </button>
+              <button onClick={() => navigate('/register')} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-lime-50 rounded-2xl border border-slate-100 transition-all group">
+                <UserPlus size={16} className="text-slate-400 group-hover:text-lime-600" />
+                <span className="text-xs font-black uppercase tracking-widest">Probar Registro</span>
+              </button>
+              <button onClick={() => navigate('/create-league')} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-lime-50 rounded-2xl border border-slate-100 transition-all group">
+                <Trophy size={16} className="text-slate-400 group-hover:text-lime-600" />
+                <span className="text-xs font-black uppercase tracking-widest">Crear Liga (Directo)</span>
+              </button>
+              <button onClick={() => navigate('/dashboard')} className="flex items-center gap-3 p-3 bg-black text-white rounded-2xl transition-all group shadow-lg shadow-black/10">
+                <Smartphone size={16} className="text-lime-400" />
+                <span className="text-xs font-black uppercase tracking-widest">Omitir e ir a App</span>
+              </button>
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 uppercase text-center leading-tight">Usa estas opciones para validar las vistas rápidamente.</p>
           </div>
         )}
         <button
@@ -453,9 +451,8 @@ const Landing: React.FC<LandingProps> = ({ onViewChange }) => {
       {/* Floating Back to Top Button */}
       <button
         onClick={scrollToTop}
-        className={`fixed bottom-28 right-8 w-14 h-14 bg-black text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-500 z-[60] hover:bg-slate-800 hover:-translate-y-2 active:scale-95 border-2 border-lime-400/30 ${
-          showScrollTop ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-20 opacity-0 scale-50 pointer-events-none'
-        }`}
+        className={`fixed bottom-28 right-8 w-14 h-14 bg-black text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-500 z-[60] hover:bg-slate-800 hover:-translate-y-2 active:scale-95 border-2 border-lime-400/30 ${showScrollTop ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-20 opacity-0 scale-50 pointer-events-none'
+          }`}
         aria-label="Volver arriba"
       >
         <ChevronUp size={28} strokeWidth={3} className="text-lime-400" />
