@@ -47,3 +47,6 @@ When shipping scoring or schema-sensitive changes, deploy in this order:
    - Revert to the last known good web image.
    - Fix `VITE_API_URL` in deploy/build config.
    - Redeploy and repeat post-deploy verification.
+7. **Process quality gate**
+   - If any checklist step is missed during a release incident, treat it as a process defect.
+   - Update this checklist before the next deployment window.

@@ -1,8 +1,7 @@
-const DEV_FALLBACK_API_URL = 'http://localhost:3004';
+export const DEV_FALLBACK_API_URL = 'http://localhost:3004';
 
-function resolveBaseUrl(): string {
-    const mode = import.meta.env.MODE;
-    const configuredBaseUrl = import.meta.env.VITE_API_URL?.trim();
+export function resolveBaseUrl(mode: string, rawBaseUrl?: string): string {
+    const configuredBaseUrl = rawBaseUrl?.trim();
 
     if (mode === 'development') {
         return (configuredBaseUrl || DEV_FALLBACK_API_URL).replace(/\/+$/, '');
@@ -26,7 +25,7 @@ function resolveBaseUrl(): string {
     return configuredBaseUrl.replace(/\/+$/, '');
 }
 
-const BASE_URL = resolveBaseUrl();
+const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');
