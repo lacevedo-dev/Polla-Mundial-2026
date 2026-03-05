@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
-import { createConnection } from 'mariadb';
+import { createPool } from 'mariadb';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -18,8 +18,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     async onModuleInit() {
         if (!PrismaService.adapter) {
-            const connection = await createConnection(process.env.DATABASE_URL);
-            PrismaService.adapter = new PrismaMariaDb(connection);
+            const pool = createPool(process.env.DATABASE_URL as string);
+            PrismaService.adapter = new PrismaMariaDb(pool as any);
 
             // Reiniciamos el cliente con el adaptador si es necesario, 
             // pero en NestJS usaremos una aproximación más limpia:
