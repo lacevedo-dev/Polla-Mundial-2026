@@ -18,3 +18,17 @@ View your app in AI Studio: https://ai.studio/apps/drive/1JHiwsecdCdd_YIUW0U4Kg4
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Backend + Frontend Rollout Checklist
+
+When shipping scoring or schema-sensitive changes, deploy in this order:
+
+1. **API first**
+   - Regenerate Prisma client after schema updates.
+   - Build and test API (`npm run api:build`, `npm run test --workspace=@polla-2026/api`).
+2. **Database alignment**
+   - Ensure the runtime schema matches `apps/api/prisma/schema.prisma`.
+   - Validate decimal-compatible `Prediction.points` before enabling leaderboard changes.
+3. **Web second**
+   - Build web app (`npm run web:build`).
+   - Validate login flow (submit, loading state, remember-me behavior) against deployed API.

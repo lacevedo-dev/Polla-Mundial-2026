@@ -1,9 +1,15 @@
 
 import React from 'react';
-import { Button, Input, EmailAutocompleteInput, Checkbox } from '../components/UI';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
+import { Label } from '../components/ui/label';
+import { EmailAutocompleteInput } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, ArrowRight, ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
+
+export const normalizeCheckboxState = (checked: boolean | 'indeterminate') => checked === true;
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -107,13 +113,17 @@ const Login: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between py-2">
-              <Checkbox
-                id="remember-me"
-                label="Mantenerme conectado"
-                checked={rememberMe}
-                onChange={setRememberMe}
-                disabled={isLoading}
-              />
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="remember-me"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(normalizeCheckboxState(checked))}
+                  disabled={isLoading}
+                />
+                <Label htmlFor="remember-me" className="cursor-pointer">
+                  Mantenerme conectado
+                </Label>
+              </div>
             </div>
 
             <Button className="w-full gap-2" size="lg" isLoading={isLoading} type="submit">

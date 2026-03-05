@@ -278,7 +278,7 @@ model Prediction {
   leagueId     String
   homeScore    Int
   awayScore    Int
-  points       Int?
+  points       Float?    // Puntos totales calculados
   pointDetail  Json?
   submittedAt  DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

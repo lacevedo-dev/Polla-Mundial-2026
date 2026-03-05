@@ -1,10 +1,44 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePredictionDto } from './dto/prediction.dto';
-import { MemberStatus } from '@prisma/client';
+import { MemberStatus, Phase, ScoringType } from '@prisma/client';
+
+type ScoringRuleLike = {
+    ruleType: ScoringType | string;
+    points: number;
+};
+
+type MatchScoreLike = {
+    homeScore: number;
+    awayScore: number;
+    phase: Phase;
+};
+
+type PredictionScoreLike = {
+    homeScore: number;
+    awayScore: number;
+};
+
+type PointType = 'EXACT_SCORE' | 'CORRECT_DIFF' | 'CORRECT_WINNER' | 'NONE';
+
+interface PredictionPointDetail {
+    type: PointType;
+    basePoints: number;
+    phase: Phase;
+    multiplier: number;
+}
 
 @Injectable()
 export class PredictionsService {
+    private static readonly DEFAULT_POINTS = {
+        EXACT_SCORE: 5,
+        CORRECT_DIFF: 3,
+        CORRECT_WINNER: 2,
+    } as const;
+
+    // Regla vigente: en eliminatorias se aplica un factor adicional al puntaje base.
+    private static readonly KNOCKOUT_PHASE_MULTIPLIER = 1.5;
+
     constructor(private readonly prisma: PrismaService) { }
 
     async upsertPrediction(userId: string, createPredictionDto: CreatePredictionDto) {
@@ -90,30 +124,45 @@ export class PredictionsService {
                 league: {
                     include: {
                         scoringRules: {
-                            where: { active: true }
-                        }
-                    }
-                }
-            }
+                            where: { active: true },
+                        },
+                    },
+                },
+            },
         });
 
         // 3. Procesar cada predicción
+        const matchForScoring: MatchScoreLike = {
+            homeScore: match.homeScore,
+            awayScore: match.awayScore,
+            phase: match.phase,
+        };
+
         for (const pred of predictions) {
-            const points = this.calculatePointsForOne(match, pred, pred.league.scoringRules);
+            const points = this.calculatePointsForOne(matchForScoring, pred, pred.league.scoringRules);
 
             await this.prisma.prediction.update({
                 where: { id: pred.id },
                 data: {
                     points: points.total,
+                    // Contrato pointDetail: { type, basePoints, phase, multiplier }
                     pointDetail: points.detail as any,
-                }
+                },
             });
         }
     }
 
-    private calculatePointsForOne(match: any, pred: any, rules: any[]) {
-        let total = 0;
-        const detail: any[] = [];
+    private getRulePoints(rules: ScoringRuleLike[], ruleType: ScoringType, fallback: number): number {
+        return rules.find((rule) => rule.ruleType === ruleType)?.points ?? fallback;
+    }
+
+    private calculatePointsForOne(
+        match: MatchScoreLike,
+        pred: PredictionScoreLike,
+        rules: ScoringRuleLike[],
+    ) {
+        let basePoints = 0;
+        let type: PointType = 'NONE';
 
         const actualHome = match.homeScore;
         const actualAway = match.awayScore;
@@ -123,50 +172,60 @@ export class PredictionsService {
         const actualWinner = actualHome > actualAway ? 'HOME' : actualHome < actualAway ? 'AWAY' : 'DRAW';
         const predWinner = predHome > predAway ? 'HOME' : predHome < predAway ? 'AWAY' : 'DRAW';
 
-        // Regla: Marcador Exacto
+        const ruleExact = this.getRulePoints(
+            rules,
+            ScoringType.EXACT_SCORE,
+            PredictionsService.DEFAULT_POINTS.EXACT_SCORE,
+        );
+        const ruleDiff = this.getRulePoints(
+            rules,
+            ScoringType.CORRECT_DIFF,
+            PredictionsService.DEFAULT_POINTS.CORRECT_DIFF,
+        );
+        const ruleWinner = this.getRulePoints(
+            rules,
+            ScoringType.CORRECT_WINNER,
+            PredictionsService.DEFAULT_POINTS.CORRECT_WINNER,
+        );
+
+        // 1. Determinar puntos base según jerarquía (sin acumulación doble)
         if (actualHome === predHome && actualAway === predAway) {
-            const rule = rules.find(r => r.ruleType === 'EXACT_SCORE');
-            if (rule) {
-                total += rule.points;
-                detail.push({ type: 'EXACT_SCORE', points: rule.points });
-            } else {
-                // Default if no rule defined
-                total += 5;
-                detail.push({ type: 'EXACT_SCORE (default)', points: 5 });
-            }
-            // Si es exacto, usualmente no se suman las otras (depende del diseño, aquí paramos o seguimos)
-            return { total, detail };
-        }
+            basePoints = ruleExact;
+            type = 'EXACT_SCORE';
+        } else {
+            const actualDiff = actualHome - actualAway;
+            const predDiff = predHome - predAway;
 
-        // Regla: Ganador Correcto
-        if (actualWinner === predWinner) {
-            const rule = rules.find(r => r.ruleType === 'CORRECT_WINNER');
-            if (rule) {
-                total += rule.points;
-                detail.push({ type: 'CORRECT_WINNER', points: rule.points });
-            } else {
-                total += 2;
-                detail.push({ type: 'CORRECT_WINNER (default)', points: 2 });
+            if (actualWinner === predWinner) {
+                if (actualDiff === predDiff && actualWinner !== 'DRAW') {
+                    basePoints = ruleDiff;
+                    type = 'CORRECT_DIFF';
+                } else {
+                    basePoints = ruleWinner;
+                    type = 'CORRECT_WINNER';
+                }
             }
         }
 
-        // Regla: Diferencia de Goles Correcta
-        const actualDiff = actualHome - actualAway;
-        const predDiff = predHome - predAway;
-        if (actualDiff === predDiff && actualWinner !== 'DRAW') {
-            const rule = rules.find(r => r.ruleType === 'CORRECT_DIFF');
-            if (rule) {
-                total += rule.points;
-                detail.push({ type: 'CORRECT_DIFF', points: rule.points });
-            }
-            // Nota: No sumamos diff en empates porque ya está cubierto por ganador si el empate es el mismo
+        // 2. Aplicar multiplicador de fase (grupos 1.0, eliminatorias > 1.0)
+        let phaseMultiplier = 1.0;
+        if (match.phase !== Phase.GROUP) {
+            phaseMultiplier = PredictionsService.KNOCKOUT_PHASE_MULTIPLIER;
         }
+
+        const total = basePoints * phaseMultiplier;
+        const detail: PredictionPointDetail = {
+            type,
+            basePoints,
+            phase: match.phase,
+            multiplier: phaseMultiplier,
+        };
 
         return { total, detail };
     }
 
     async getLeaderboard(leagueId: string) {
-        // Cálculo básico de ranking basado en la suma de puntos
+        // Ranking basado en la suma de puntos (incluye decimales para fases eliminatorias)
         const members = await this.prisma.leagueMember.findMany({
             where: { leagueId, status: MemberStatus.ACTIVE },
             include: {
@@ -189,13 +248,15 @@ export class PredictionsService {
             where: { leagueId },
         });
 
-        const leaderboard = members.map((member) => {
-            const predSum = predictions.find((p) => p.userId === member.userId);
-            return {
-                ...member.user,
-                points: predSum?._sum?.points || 0,
-            };
-        }).sort((a, b) => b.points - a.points);
+        const leaderboard = members
+            .map((member) => {
+                const predSum = predictions.find((prediction) => prediction.userId === member.userId);
+                return {
+                    ...member.user,
+                    points: predSum?._sum?.points || 0,
+                };
+            })
+            .sort((a, b) => b.points - a.points);
 
         return leaderboard;
     }

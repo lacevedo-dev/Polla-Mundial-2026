@@ -1,3 +1,11 @@
+/**
+ * Legacy UI bridge
+ * ---------------------------------
+ * Este archivo se mantiene temporalmente para pantallas aún no migradas
+ * al nuevo sistema de primitives en `components/ui/*`.
+ * Migraciones nuevas deben priorizar el set moderno y usar este archivo
+ * solo como compatibilidad incremental.
+ */
 import React from 'react';
 import { Loader2, ChevronRight, Check } from 'lucide-react';
 

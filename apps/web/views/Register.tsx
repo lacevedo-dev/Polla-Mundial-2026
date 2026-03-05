@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Button, Input, EmailAutocompleteInput, AutocompleteInput, Badge, Checkbox } from '../components/UI';
+import { Button, Input, EmailAutocompleteInput, AutocompleteInput, Checkbox } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -8,11 +8,17 @@ import {
   User,
   Lock,
   ArrowLeft,
+  ArrowRight,
   UploadCloud,
   XCircle,
-  LogIn,
   Check,
-  AlertCircle as AlertIcon
+  AlertCircle as AlertIcon,
+  Calendar,
+  ChevronDown,
+  Search,
+  RefreshCcw,
+  FileWarning,
+  Sparkles
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 
@@ -329,7 +335,7 @@ const Register: React.FC = () => {
   const getImageQuality = () => {
     if (!formData.foto) return null;
     const size = formData.foto.size / 1024;
-    if (size < 50) return { label: 'Baja Resolución', color: 'bg-amber-100 text-amber-700', icon: AlertCircle };
+    if (size < 50) return { label: 'Baja Resolución', color: 'bg-amber-100 text-amber-700', icon: AlertIcon };
     if (size < 500) return { label: 'Óptima', color: 'bg-lime-100 text-lime-700', icon: CheckCircle };
     return { label: 'Alta Definición', color: 'bg-cyan-100 text-cyan-700', icon: Sparkles };
   };

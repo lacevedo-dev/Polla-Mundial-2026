@@ -33,10 +33,14 @@ export const useAuthStore = create<AuthState>((set) => ({
                 method: 'POST',
                 body: JSON.stringify(credentials),
             });
-            localStorage.setItem('token', response.access_token);
+            const token = response.accessToken ?? response.access_token;
+            if (!token) {
+                throw new Error('La API no devolvió un token de acceso.');
+            }
+            localStorage.setItem('token', token);
             set({
                 user: response.user,
-                token: response.access_token,
+                token,
                 isLoading: false
             });
         } catch (error) {
@@ -52,10 +56,14 @@ export const useAuthStore = create<AuthState>((set) => ({
                 method: 'POST',
                 body: JSON.stringify(data),
             });
-            localStorage.setItem('token', response.access_token);
+            const token = response.accessToken ?? response.access_token;
+            if (!token) {
+                throw new Error('La API no devolvió un token de acceso.');
+            }
+            localStorage.setItem('token', token);
             set({
                 user: response.user,
-                token: response.access_token,
+                token,
                 isLoading: false
             });
         } catch (error) {

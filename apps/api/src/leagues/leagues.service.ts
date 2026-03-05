@@ -1,12 +1,18 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
-import { MemberRole, MemberStatus, LeagueStatus } from '@prisma/client';
+import { MemberRole, MemberStatus, LeagueStatus, ScoringType } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 @Injectable()
 export class LeaguesService {
     constructor(private readonly prisma: PrismaService) { }
+
+    private static readonly DEFAULT_SCORING_RULES = [
+        { ruleType: ScoringType.EXACT_SCORE, points: 5, description: 'Marcador exacto' },
+        { ruleType: ScoringType.CORRECT_DIFF, points: 3, description: 'Misma diferencia de goles' },
+        { ruleType: ScoringType.CORRECT_WINNER, points: 2, description: 'Solo ganador/empate' },
+    ] as const;
 
     private generateUniqueCode(): string {
         return randomBytes(3).toString('hex').toUpperCase(); // Ej: F4A13B
@@ -40,9 +46,16 @@ export class LeaguesService {
                             status: MemberStatus.ACTIVE,
                         },
                     },
+                    // Baseline de reglas por liga: requerido por spec para evitar ligas sin configuración de puntaje
+                    scoringRules: {
+                        createMany: {
+                            data: [...LeaguesService.DEFAULT_SCORING_RULES],
+                        },
+                    },
                 },
                 include: {
                     members: true,
+                    scoringRules: true,
                 },
             });
 
