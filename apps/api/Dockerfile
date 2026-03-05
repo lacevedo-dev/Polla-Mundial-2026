@@ -65,4 +65,4 @@ WORKDIR /app/apps/api
 EXPOSE 3000
 
 # Comando para ejecutar la aplicación
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
