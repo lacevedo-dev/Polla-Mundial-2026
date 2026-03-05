@@ -1,0 +1,9 @@
+{
+    "name": "@polla-2026/shared",
+    "version": "1.0.0",
+    "private": true,
+    "main": "./types/index.ts",
+    "devDependencies": {
+        "typescript": "^5.0.0"
+    }
+}

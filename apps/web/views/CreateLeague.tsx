@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
-import { AppView, PrizeWinner, StageType, LeagueData } from '../types';
+import { PrizeWinner, StageType, LeagueData } from '@polla-2026/shared';
+import { useLeagueStore } from '../stores/league.store';
 import {
   ArrowRight,
   ArrowLeft,
@@ -142,6 +143,7 @@ const STORAGE_KEY = 'polla_league_wizard_state';
 
 const CreateLeague: React.FC = () => {
   const navigate = useNavigate();
+  const createLeagueStore = useLeagueStore(state => state.createLeague);
   const getSavedState = () => {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -225,6 +227,7 @@ const CreateLeague: React.FC = () => {
   }, [step, leagueData.includeBaseFee, leagueData.includeStageFees, leagueData.stageFees]);
 
   const handleFinish = () => {
+    createLeagueStore(leagueData);
     sessionStorage.removeItem(STORAGE_KEY);
     navigate('/dashboard');
   };
@@ -1126,8 +1129,8 @@ const CreateLeague: React.FC = () => {
                 <Button
                   variant="secondary"
                   className={`flex-1 h-16 rounded-[1.8rem] font-black text-[12px] tracking-[0.2em] shadow-2xl transition-all ${step === 3 && isLimitExceeded && leagueData.plan === 'free'
-                      ? 'bg-slate-200 text-slate-400 hover:bg-slate-200 shadow-none'
-                      : 'bg-lime-400 text-slate-950 hover:bg-lime-500'
+                    ? 'bg-slate-200 text-slate-400 hover:bg-slate-200 shadow-none'
+                    : 'bg-lime-400 text-slate-950 hover:bg-lime-500'
                     } ${step === 3 && !isFinancialValid && !isLimitExceeded ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                   onClick={() => {
                     if (step === 3) {

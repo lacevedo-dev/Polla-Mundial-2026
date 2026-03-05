@@ -1,0 +1,368 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum Plan {
+  FREE
+  GOLD
+  DIAMOND
+}
+
+enum Privacy {
+  PUBLIC
+  PRIVATE
+}
+
+enum Currency {
+  COP
+  MXN
+  ARS
+  USD
+  CLP
+  PEN
+  BRL
+}
+
+enum Phase {
+  GROUP
+  ROUND_OF_32
+  ROUND_OF_16
+  QUARTER
+  SEMI
+  THIRD_PLACE
+  FINAL
+}
+
+enum MemberRole {
+  ADMIN
+  PLAYER
+}
+
+enum MemberStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  BANNED
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  NEQUI
+  DAVIPLATA
+  BANCOLOMBIA
+  GATEWAY
+}
+
+enum PaymentStatus {
+  PENDING
+  REVIEW
+  CONFIRMED
+  REJECTED
+}
+
+enum LeagueStatus {
+  SETUP
+  ACTIVE
+  PAUSED
+  FINISHED
+  CANCELLED
+}
+
+enum StageType {
+  MATCH
+  ROUND
+  PHASE
+}
+
+enum ScoringType {
+  EXACT_SCORE
+  CORRECT_DIFF
+  CORRECT_WINNER
+  UNIQUE_PREDICTION
+  TEAM_GOALS
+}
+
+enum DistributionCategory {
+  GENERAL
+  MATCH
+  ROUND
+  PHASE
+}
+
+enum InviteChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+  LINK
+}
+
+enum InviteStatus {
+  SENT
+  CLICKED
+  ACCEPTED
+  EXPIRED
+}
+
+enum NotificationType {
+  MATCH_REMINDER
+  PREDICTION_CLOSED
+  RESULT_PUBLISHED
+  RANKING_CHANGE
+  INVITE_RECEIVED
+  PAYMENT_CONFIRMED
+  LEAGUE_UPDATE
+}
+
+enum NotifChannel {
+  IN_APP
+  PUSH
+  EMAIL
+  SMS
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  username      String    @unique
+  phone         String?
+  countryCode   String    @default("+57")
+  avatar        String?
+  birthDate     DateTime?
+  passwordHash  String
+  plan          Plan      @default(FREE)
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  leagues       LeagueMember[]
+  predictions   Prediction[]
+  payments      Payment[]
+  invitations   Invitation[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  @@index([email])
+  @@index([username])
+}
+
+model League {
+  id               String    @id @default(cuid())
+  name             String
+  description      String?   @db.Text
+  code             String    @unique
+  privacy          Privacy   @default(PRIVATE)
+  logo             String?
+  maxParticipants  Int       @default(10)
+  includeBaseFee   Boolean   @default(true)
+  baseFee          Int?
+  includeStageFees Boolean   @default(false)
+  currency         Currency  @default(COP)
+  adminFeePercent  Int       @default(10)
+  plan             Plan      @default(FREE)
+  status           LeagueStatus @default(SETUP)
+  closePredictionMinutes Int @default(15)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  members          LeagueMember[]
+  distributions    PrizeDistribution[]
+  stageFees        StageFee[]
+  scoringRules     ScoringRule[]
+  invitations      Invitation[]
+  predictions      Prediction[]
+  payments         Payment[]
+  auditLogs        AuditLog[]
+  @@index([code])
+  @@index([status])
+}
+
+model LeagueMember {
+  id        String       @id @default(cuid())
+  userId    String
+  leagueId  String
+  role      MemberRole   @default(PLAYER)
+  status    MemberStatus @default(PENDING)
+  joinedAt  DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league    League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  @@unique([userId, leagueId])
+  @@index([leagueId])
+}
+
+model PrizeDistribution {
+  id            String  @id @default(cuid())
+  leagueId      String
+  category      DistributionCategory
+  position      Int
+  label         String
+  percentage    Float
+  active        Boolean @default(true)
+  league        League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  @@unique([leagueId, category, position])
+  @@index([leagueId])
+}
+
+model StageFee {
+  id       String    @id @default(cuid())
+  leagueId String
+  type     StageType
+  label    String
+  amount   Int
+  active   Boolean   @default(true)
+  dueDate  DateTime?
+  league   League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  @@unique([leagueId, type, label])
+  @@index([leagueId])
+}
+
+model ScoringRule {
+  id            String  @id @default(cuid())
+  leagueId      String
+  ruleType      ScoringType
+  points        Int
+  multiplier    Float   @default(1.0)
+  appliesToPhase Phase?
+  description   String?
+  active        Boolean @default(true)
+  league        League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  @@unique([leagueId, ruleType, appliesToPhase])
+}
+
+model Team {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String  @unique
+  group       String?
+  flagUrl     String?
+  homeMatches Match[] @relation("HomeTeam")
+  awayMatches Match[] @relation("AwayTeam")
+}
+
+model Match {
+  id          String      @id @default(cuid())
+  homeTeamId  String
+  awayTeamId  String
+  homeScore   Int?
+  awayScore   Int?
+  phase       Phase
+  group       String?
+  matchNumber Int?
+  venue       String?
+  matchDate   DateTime
+  status      MatchStatus @default(SCHEDULED)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  homeTeam    Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam    Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  predictions Prediction[]
+  @@index([matchDate])
+  @@index([status])
+  @@index([phase])
+}
+
+model Prediction {
+  id           String    @id @default(cuid())
+  userId       String
+  matchId      String
+  leagueId     String
+  homeScore    Int
+  awayScore    Int
+  points       Int?
+  pointDetail  Json?
+  submittedAt  DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id])
+  match        Match     @relation(fields: [matchId], references: [id])
+  league       League    @relation(fields: [leagueId], references: [id])
+  @@unique([userId, matchId, leagueId])
+  @@index([leagueId, matchId])
+  @@index([userId, leagueId])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  userId       String
+  leagueId     String
+  conceptId    String?
+  conceptType  String?
+  amount       Int
+  method       PaymentMethod
+  status       PaymentStatus @default(PENDING)
+  verifiedBy   String?
+  note         String?       @db.Text
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id])
+  league       League        @relation(fields: [leagueId], references: [id])
+  transactions Transaction[]
+  @@index([userId, leagueId])
+  @@index([status])
+}
+
+model Transaction {
+  id           String   @id @default(cuid())
+  paymentId    String
+  gatewayRef   String?
+  gatewayId    String?
+  amount       Int
+  currency     Currency @default(COP)
+  status       String
+  rawResponse  Json?
+  createdAt    DateTime @default(now())
+  payment      Payment  @relation(fields: [paymentId], references: [id])
+  @@index([gatewayRef])
+}
+
+model Invitation {
+  id         String          @id @default(cuid())
+  leagueId   String
+  invitedBy  String
+  channel    InviteChannel
+  recipient  String
+  status     InviteStatus    @default(SENT)
+  token      String?  @unique
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+  league     League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  inviter    User     @relation(fields: [invitedBy], references: [id])
+  @@index([leagueId])
+  @@index([token])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String           @db.Text
+  data      Json?
+  read      Boolean          @default(false)
+  channel   NotifChannel     @default(IN_APP)
+  sentAt    DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, read])
+  @@index([sentAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  leagueId  String
+  userId    String
+  action    String
+  detail    Json?
+  createdAt DateTime @default(now())
+  league    League   @relation(fields: [leagueId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([leagueId, createdAt])
+}

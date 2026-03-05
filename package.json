@@ -1,32 +1,15 @@
 {
-  "name": "polla-mundial-2026---unificación-visual",
+  "name": "polla-2026",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@google/genai": "^1.39.0",
-    "clsx": "^2.1.1",
-    "framer-motion": "^12.35.0",
-    "lucide-react": "^0.563.0",
-    "motion": "^12.35.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.1",
-    "tailwind-merge": "^3.5.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.1",
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.1",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "web:dev": "npm run dev --workspace=@polla-2026/web",
+    "web:build": "npm run build --workspace=@polla-2026/web",
+    "api:dev": "npm run start:dev --workspace=@polla-2026/api",
+    "api:build": "npm run build --workspace=@polla-2026/api"
   }
 }

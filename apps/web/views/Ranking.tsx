@@ -10,37 +10,15 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-interface RankingUser {
-    id: string;
-    rank: number;
-    name: string;
-    username: string;
-    points: number;
-    avatar: string;
-    trend: 'up' | 'down' | 'stable';
-    matchesPredicted: number;
-    successRate: number;
-}
-
-const mockRanking: RankingUser[] = [
-    { id: '1', rank: 1, name: 'Andrés Mendoza', username: '@amendoza_gol', points: 450, avatar: 'https://picsum.photos/seed/user1/100/100', trend: 'stable', matchesPredicted: 48, successRate: 85 },
-    { id: '2', rank: 2, name: 'Sofía Rodríguez', username: '@sofia_predice', points: 435, avatar: 'https://picsum.photos/seed/user2/100/100', trend: 'up', matchesPredicted: 48, successRate: 82 },
-    { id: '3', rank: 3, name: 'Carlos Ruiz', username: '@cruiz_crack', points: 420, avatar: 'https://picsum.photos/seed/user3/100/100', trend: 'down', matchesPredicted: 48, successRate: 79 },
-    { id: '4', rank: 4, name: 'Valentina López', username: '@val_futbol', points: 410, avatar: 'https://picsum.photos/seed/user4/100/100', trend: 'up', matchesPredicted: 48, successRate: 77 },
-    { id: '5', rank: 5, name: 'Diego Torres', username: '@dtorres_stats', points: 395, avatar: 'https://picsum.photos/seed/user5/100/100', trend: 'stable', matchesPredicted: 48, successRate: 75 },
-    { id: '6', rank: 6, name: 'Mariana Silva', username: '@mari_gol', points: 380, avatar: 'https://picsum.photos/seed/user6/100/100', trend: 'down', matchesPredicted: 48, successRate: 72 },
-    { id: '7', rank: 7, name: 'Javier Ortiz', username: '@javi_polla', points: 375, avatar: 'https://picsum.photos/seed/user7/100/100', trend: 'up', matchesPredicted: 48, successRate: 71 },
-    { id: '8', rank: 8, name: 'Lucía Gómez', username: '@lucia_pro', points: 360, avatar: 'https://picsum.photos/seed/user8/100/100', trend: 'stable', matchesPredicted: 48, successRate: 68 },
-    { id: '9', rank: 9, name: 'Fernando Paz', username: '@fer_mundial', points: 355, avatar: 'https://picsum.photos/seed/user9/100/100', trend: 'down', matchesPredicted: 48, successRate: 67 },
-    { id: '10', rank: 10, name: 'Camila Herrera', username: '@cami_fan', points: 340, avatar: 'https://picsum.photos/seed/user10/100/100', trend: 'up', matchesPredicted: 48, successRate: 64 },
-];
+import { useLeagueStore, RankingUser } from '../stores/league.store';
 
 const Ranking: React.FC = () => {
     const navigate = useNavigate();
+    const ranking = useLeagueStore(state => state.ranking);
     const [activeTab, setActiveTab] = useState<'global' | 'friends' | 'league'>('global');
     const [searchTerm, setSearchTerm] = useState('');
 
-    const filteredRanking = mockRanking.filter(user =>
+    const filteredRanking = ranking.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.username.toLowerCase().includes(searchTerm.toLowerCase())
     );

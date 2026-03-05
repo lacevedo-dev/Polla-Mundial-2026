@@ -21,6 +21,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@polla-2026/shared": [
+        "../../packages/shared/types"
       ]
     },
     "allowImportingTsExtensions": true,

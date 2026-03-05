@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Button, Card, Badge } from '../components/UI';
-import { AppView } from '../types';
+// import { AppView } from '@polla-2026/shared'; // AppView eliminado
 import { useNavigate } from 'react-router-dom';
 import { Mail, ArrowRight, RefreshCw, LogIn, CheckCircle2, Inbox, MousePointerClick } from 'lucide-react';
 

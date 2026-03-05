@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, Button, Badge, Input, Checkbox } from '../components/UI';
-import { AppView } from '../types';
 import { useNavigate } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -44,43 +43,8 @@ import {
 interface ManagePaymentsProps {
 }
 
-type PaymentStatus = 'paid' | 'pending' | 'review';
+import { usePaymentStore, PAYMENT_CONCEPTS, PaymentStatus, UserPaymentData, Transaction, PaymentConcept } from '../stores/payment.store';
 
-interface PaymentConcept {
-    id: string;
-    label: string;
-    type: 'general' | 'phase' | 'round' | 'match';
-    amount: number;
-    date: string;
-}
-
-interface UserPaymentData {
-    id: string;
-    name: string;
-    email: string;
-    phone?: string;
-    avatar: string;
-    paymentStatus: Record<string, PaymentStatus>;
-    lastUpdate: string;
-}
-
-interface Transaction {
-    id: string;
-    userId: string;
-    conceptIds: string[];
-    amount: number;
-    date: string;
-    method: string;
-    reference?: string;
-    note?: string;
-}
-
-const PAYMENT_CONCEPTS: PaymentConcept[] = [
-    { id: 'general', label: 'Cuota General', type: 'general', amount: 50000, date: 'Inicio' },
-    { id: 'phase-1', label: 'Fase de Grupos', type: 'phase', amount: 20000, date: '10 Jun' },
-    { id: 'match-col-bra', label: 'Partido: COL vs BRA', type: 'match', amount: 5000, date: 'Hoy' },
-    { id: 'round-16', label: 'Octavos de Final', type: 'round', amount: 10000, date: '25 Jun' },
-];
 
 const PAYMENT_METHODS = [
     { id: 'Efectivo', label: 'Efectivo', icon: Banknote, color: 'text-lime-600' },
@@ -89,38 +53,6 @@ const PAYMENT_METHODS = [
     { id: 'Bancolombia', label: 'Bancolombia', icon: Landmark, color: 'text-slate-900' },
 ];
 
-const MOCK_USERS_DATA: UserPaymentData[] = [
-    {
-        id: '1', name: 'Luis Morales', email: 'luis.m@gmail.com', phone: '3001234567', avatar: 'https://picsum.photos/seed/luis/40/40', lastUpdate: 'Hoy',
-        paymentStatus: { 'general': 'paid', 'phase-1': 'paid', 'match-col-bra': 'paid', 'round-16': 'paid' }
-    },
-    {
-        id: '2', name: 'Leo Castiblanco', email: 'leo.c@hotmail.com', phone: '3109876543', avatar: 'https://picsum.photos/seed/leo/40/40', lastUpdate: 'Ayer',
-        paymentStatus: { 'general': 'paid', 'phase-1': 'review', 'match-col-bra': 'pending', 'round-16': 'pending' }
-    },
-    {
-        id: '3', name: 'Nubia Sarmiento', email: 'nubia.s@outlook.com', phone: '3205551234', avatar: 'https://picsum.photos/seed/nubia/40/40', lastUpdate: 'Hace 2h',
-        paymentStatus: { 'general': 'pending', 'phase-1': 'pending', 'match-col-bra': 'pending', 'round-16': 'pending' }
-    },
-    {
-        id: '4', name: 'Carlos Ruiz', email: 'carlos.r@gmail.com', phone: '3001112233', avatar: 'https://picsum.photos/seed/carlos/40/40', lastUpdate: 'Hoy',
-        paymentStatus: { 'general': 'paid', 'phase-1': 'paid', 'match-col-bra': 'pending', 'round-16': 'pending' }
-    },
-    {
-        id: '5', name: 'Andres Cepeda', email: 'andres.c@music.com', phone: '3159998877', avatar: 'https://picsum.photos/seed/andres/40/40', lastUpdate: '-',
-        paymentStatus: { 'general': 'paid', 'phase-1': 'pending', 'match-col-bra': 'pending', 'round-16': 'pending' }
-    },
-    {
-        id: '6', name: 'Maria Fernanda', email: 'mafe@gmail.com', phone: '3104445566', avatar: 'https://picsum.photos/seed/mafe/40/40', lastUpdate: 'Hoy',
-        paymentStatus: { 'general': 'review', 'phase-1': 'pending', 'match-col-bra': 'pending', 'round-16': 'pending' }
-    },
-];
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-    { id: 't1', userId: '1', conceptIds: ['general', 'phase-1', 'match-col-bra', 'round-16'], amount: 85000, date: '2026-06-01', method: 'Nequi', reference: 'M12345' },
-    { id: 't2', userId: '2', conceptIds: ['general'], amount: 50000, date: '2026-06-02', method: 'Efectivo', note: 'Pago en oficina' },
-    { id: 't3', userId: '4', conceptIds: ['general', 'phase-1'], amount: 70000, date: '2026-06-03', method: 'Bancolombia' },
-];
 
 const LEAGUE_INFO = {
     name: 'LOS CRACKS DEL BARRIO',
@@ -167,8 +99,7 @@ const ManagePayments: React.FC<ManagePaymentsProps> = () => {
     const navigate = useNavigate();
     const [selectedConceptIds, setSelectedConceptIds] = React.useState<string[]>(PAYMENT_CONCEPTS.map(c => c.id));
     const [isConceptMenuOpen, setIsConceptMenuOpen] = React.useState(false);
-    const [users, setUsers] = React.useState<UserPaymentData[]>(MOCK_USERS_DATA);
-    const [transactions, setTransactions] = React.useState<Transaction[]>(MOCK_TRANSACTIONS);
+    const { users, setUsers, transactions, setTransactions } = usePaymentStore();
     const [filter, setFilter] = React.useState<'all' | 'debtors' | 'solvents' | 'review'>('all');
     const [search, setSearch] = React.useState('');
 

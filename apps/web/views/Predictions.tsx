@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Card, Button, Badge, Input } from '../components/UI';
-import { AppView } from '../types';
+// import { AppView } from '@polla-2026/shared'; // El tipo AppView fue removido por ser innecesario con react-router
+import { CategoryDistribution, PrizeWinner } from '@polla-2026/shared';
 import {
     ArrowLeft,
     Trophy,
@@ -38,6 +39,8 @@ import {
     GripVertical
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useLeagueStore } from '../stores/league.store';
+import { usePredictionStore } from '../stores/prediction.store';
 
 // Props eliminadas — navegación via useNavigate
 
@@ -256,12 +259,16 @@ const calculatePerformance = (form: string[]) => {
 
 const Predictions: React.FC = () => {
     const navigate = useNavigate();
+
+    // Zustand Stores
+    const { myLeaguesSummary: MY_LEAGUES, publicLeagues: PUBLIC_LEAGUES, pendingInvites: PENDING_INVITES } = useLeagueStore();
+    const { matches, groups, setGroups, standings: MOCK_STANDINGS, setMatches } = usePredictionStore();
+
     const [viewState, setViewState] = useState<'list' | 'detail'>('list');
     const [selectedLeague, setSelectedLeague] = useState<LeagueSummary | null>(null);
 
     const [predictionMode, setPredictionMode] = useState<'matches' | 'simulator'>('matches');
     const [simulatorTab, setSimulatorTab] = useState<'groups' | 'bracket'>('groups');
-    const [groups, setGroups] = useState<GroupData[]>(INITIAL_GROUPS);
 
     const [activeGroupModal, setActiveGroupModal] = useState<string | null>(null);
 
@@ -271,7 +278,6 @@ const Predictions: React.FC = () => {
     const [searchTeam, setSearchTeam] = useState('');
 
     // State
-    const [matches, setMatches] = useState<MatchPrediction[]>(MOCK_MATCHES);
     const [expandedAnalysis, setExpandedAnalysis] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState<string | null>(null);
 
@@ -849,8 +855,8 @@ const Predictions: React.FC = () => {
                                                                                             key={i}
                                                                                             onClick={() => applySuggestion(match.id, sug.score)}
                                                                                             className={`flex-1 p-2 rounded-xl border flex flex-col items-center gap-1 transition-all hover:shadow-md active:scale-95 ${sug.type === 'safe' ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
-                                                                                                    sug.type === 'ai' ? 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' :
-                                                                                                        'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                                                                                                sug.type === 'ai' ? 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' :
+                                                                                                    'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
                                                                                                 }`}
                                                                                         >
                                                                                             <span className="text-[9px] font-black uppercase tracking-wider">{sug.label}</span>

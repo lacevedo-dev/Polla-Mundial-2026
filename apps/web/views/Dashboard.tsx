@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
-import { Match, AppView, PrizeWinner, CategoryDistribution, StageType } from '../types';
+import { Match, PrizeWinner, CategoryDistribution, StageType, LeagueData } from '@polla-2026/shared';
 import {
     Trophy,
     Target,
@@ -40,7 +39,7 @@ import {
     Bell,
     Eye,
     Download,
-    Image as ImageIcon,
+    ImageIcon,
     Palette,
     Wand2,
     LayoutTemplate,
@@ -57,168 +56,12 @@ import {
     Calculator
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useLeagueStore, LeagueContext } from '../stores/league.store';
+
 
 // Props eliminadas — navegación via useNavigate
 
 // Mock Data Structure for Multiple Leagues
-interface LeagueContext {
-    id: string;
-    name: string;
-    description?: string;
-    role: 'admin' | 'user';
-    plan: 'free' | 'gold' | 'diamond';
-    participants: { current: number; max: number };
-    privacy: 'public' | 'private';
-    includeBaseFee: boolean;
-    baseFeeAmount: string;
-    includeStageFees: boolean;
-    stageFees: {
-        match: { active: boolean; amount: string };
-        round: { active: boolean; amount: string };
-        phase: { active: boolean; amount: string };
-    };
-    adminFeePercent: number;
-    distributions: {
-        general: CategoryDistribution;
-        match: CategoryDistribution;
-        round: CategoryDistribution;
-        phase: CategoryDistribution;
-    };
-    stats: {
-        rank?: number;
-        points?: number;
-        collected?: string;
-        totalPrize?: string;
-    };
-    code?: string;
-}
-
-// Extended Match interface for Dashboard state
-interface DashboardMatch extends Match {
-    status: 'active' | 'saved';
-    userPrediction: {
-        home: string;
-        away: string;
-    };
-}
-
-// Invite System Types
-type InviteChannel = 'whatsapp' | 'email' | 'sms' | 'copy' | 'push';
-type InviteTemplate = 'friendly' | 'challenger' | 'formal' | 'ai' | 'custom';
-type CardStyle = 'neon' | 'pro' | 'stadium' | 'ai-generated';
-
-interface Recipient {
-    id: string;
-    name: string;
-    email?: string; // Changed: Specific field
-    phone?: string; // Changed: Specific field
-    selectedChannels: InviteChannel[];
-}
-
-// Helper for distribution logic (Shared with CreateLeague logic)
-const getInitialDistribution = (winnersCount: number, adminFee: number): PrizeWinner[] => {
-    const prizes: PrizeWinner[] = Array.from({ length: 10 }, (_, i) => ({
-        position: i + 1,
-        label: `${i + 1}º PUESTO`,
-        percentage: 0,
-        active: false
-    }));
-    const netPool = 100 - adminFee;
-    const templates: Record<number, number[]> = {
-        1: [100], 2: [60, 40], 3: [50, 30, 20], 4: [40, 30, 20, 10], 5: [35, 25, 20, 10, 10],
-        6: [30, 20, 15, 15, 10, 10], 7: [25, 20, 15, 10, 10, 10, 10], 8: [20, 15, 15, 10, 10, 10, 10, 10],
-        9: [20, 15, 10, 10, 10, 10, 10, 10, 5], 10: [15, 15, 10, 10, 10, 10, 10, 10, 5, 5]
-    };
-    const weights = templates[winnersCount] || Array(winnersCount).fill(100 / winnersCount);
-    let currentSum = 0;
-    for (let i = 0; i < winnersCount; i++) {
-        prizes[i].active = true;
-        let val = Math.round((netPool * (weights[i] / 100)) / 5) * 5;
-        if (i === winnersCount - 1) val = netPool - currentSum;
-        prizes[i].percentage = val;
-        currentSum += val;
-    }
-    return prizes;
-};
-
-const MY_LEAGUES: LeagueContext[] = [
-    {
-        id: 'league-1',
-        name: 'LOS CRACKS DEL BARRIO',
-        description: 'La liga oficial del barrio para el mundial.',
-        role: 'admin',
-        plan: 'gold',
-        privacy: 'private',
-        participants: { current: 24, max: 50 },
-        includeBaseFee: true,
-        baseFeeAmount: '50000',
-        includeStageFees: true,
-        stageFees: {
-            match: { active: true, amount: '2000' },
-            round: { active: true, amount: '5000' },
-            phase: { active: false, amount: '10000' }
-        },
-        adminFeePercent: 10,
-        distributions: {
-            general: { winnersCount: 3, distribution: getInitialDistribution(3, 10) },
-            match: { winnersCount: 1, distribution: getInitialDistribution(1, 10) },
-            round: { winnersCount: 1, distribution: getInitialDistribution(1, 10) },
-            phase: { winnersCount: 1, distribution: getInitialDistribution(1, 10) }
-        },
-        stats: { collected: '$1.200k', totalPrize: '$1.080k' },
-        code: 'CRACKS-2026'
-    },
-    {
-        id: 'league-2',
-        name: 'OFICINA 2026',
-        description: 'Solo personal de contabilidad y ventas.',
-        role: 'user',
-        plan: 'diamond',
-        privacy: 'private',
-        participants: { current: 156, max: 200 },
-        includeBaseFee: true,
-        baseFeeAmount: '100000',
-        includeStageFees: false,
-        stageFees: {
-            match: { active: false, amount: '0' },
-            round: { active: false, amount: '0' },
-            phase: { active: false, amount: '0' }
-        },
-        adminFeePercent: 5,
-        distributions: {
-            general: { winnersCount: 5, distribution: getInitialDistribution(5, 5) },
-            match: { winnersCount: 1, distribution: getInitialDistribution(1, 5) },
-            round: { winnersCount: 1, distribution: getInitialDistribution(1, 5) },
-            phase: { winnersCount: 1, distribution: getInitialDistribution(1, 5) }
-        },
-        stats: { rank: 12, points: 45, totalPrize: '$5.000k' }
-    },
-    {
-        id: 'league-3',
-        name: 'FAMILIA PEREZ',
-        role: 'user',
-        plan: 'free',
-        privacy: 'public',
-        participants: { current: 8, max: 10 },
-        includeBaseFee: false,
-        baseFeeAmount: '0',
-        includeStageFees: false,
-        stageFees: {
-            match: { active: false, amount: '0' },
-            round: { active: false, amount: '0' },
-            phase: { active: false, amount: '0' }
-        },
-        adminFeePercent: 0,
-        distributions: {
-            general: { winnersCount: 1, distribution: getInitialDistribution(1, 0) },
-            match: { winnersCount: 1, distribution: getInitialDistribution(1, 0) },
-            round: { winnersCount: 1, distribution: getInitialDistribution(1, 0) },
-            phase: { winnersCount: 1, distribution: getInitialDistribution(1, 0) }
-        },
-        stats: { rank: 1, points: 12, totalPrize: '$0' }
-    }
-];
-
 const MOCK_PARTICIPANTS = [
     { id: '1', name: 'Luis Morales', role: 'admin', status: 'active', avatar: 'https://picsum.photos/seed/luis/40/40' },
     { id: '2', name: 'Leo Castiblanco', role: 'user', status: 'active', avatar: 'https://picsum.photos/seed/leo/40/40' },
@@ -270,7 +113,8 @@ const PLAN_LIMITS = {
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const [activeLeague, setActiveLeague] = React.useState<LeagueContext>(MY_LEAGUES[0]);
+    const { activeLeague, setActiveLeague, myLeaguesDetail } = useLeagueStore();
+    if (!activeLeague) return null;
     const [isLeagueMenuOpen, setIsLeagueMenuOpen] = React.useState(false);
 
     // Modal States
@@ -338,7 +182,7 @@ const Dashboard: React.FC = () => {
     ]);
 
     const handleLeagueSwitch = (league: LeagueContext) => {
-        setActiveLeague(league);
+        setActiveLeague(league.id);
         setIsLeagueMenuOpen(false);
     };
 
@@ -574,7 +418,7 @@ const Dashboard: React.FC = () => {
     };
 
     const insertVariable = (v: string) => {
-        setMessageDrafts(prev => ({ ...prev, [activeTab]: prev[activeTab] + ` {${v}}` }));
+        setMessageDrafts(prev => ({ ...prev, [activeTab]: prev[activeTab] + ` {${v} } ` }));
         setSelectedTemplate(prev => ({ ...prev, [activeTab]: 'custom' }));
     };
 
@@ -709,7 +553,7 @@ const Dashboard: React.FC = () => {
                         <span className="text-lime-600">{Math.round((participants.length / activeLeague.participants.max) * 100)}%</span>
                     </div>
                     <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-lime-400 rounded-full transition-all duration-1000" style={{ width: `${(participants.length / activeLeague.participants.max) * 100}%` }}></div>
+                        <div className="h-full bg-lime-400 rounded-full transition-all duration-1000" style={{ width: `${(participants.length / activeLeague.participants.max) * 100}% ` }}></div>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -788,11 +632,11 @@ const Dashboard: React.FC = () => {
     return (
         <div className="space-y-8 pb-24 animate-in fade-in duration-700 relative">
             <style>{`
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
-      `}</style>
+    .custom - scrollbar:: -webkit - scrollbar { height: 6px; width: 6px; }
+        .custom - scrollbar:: -webkit - scrollbar - track { background: transparent; }
+        .custom - scrollbar:: -webkit - scrollbar - thumb { background: #e2e8f0; border - radius: 10px; }
+        .custom - scrollbar:: -webkit - scrollbar - thumb:hover { background: #cbd5e1; }
+`}</style>
 
             {/* SPECTATOR MODE BANNER */}
             {activeLeague.id === 'league-1' && activeLeague.role === 'user' && (
@@ -884,13 +728,13 @@ const Dashboard: React.FC = () => {
                                         <div className="flex bg-slate-100 p-1 rounded-xl">
                                             <button
                                                 onClick={() => setInviteMode('single')}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all ${inviteMode === 'single' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                className={`px - 3 py - 1.5 rounded - lg text - [10px] font - black uppercase flex items - center gap - 2 transition - all ${inviteMode === 'single' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'} `}
                                             >
                                                 <UserPlus size={12} /> Uno a Uno
                                             </button>
                                             <button
                                                 onClick={() => setInviteMode('bulk')}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 transition-all ${inviteMode === 'bulk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                className={`px - 3 py - 1.5 rounded - lg text - [10px] font - black uppercase flex items - center gap - 2 transition - all ${inviteMode === 'bulk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'} `}
                                             >
                                                 <List size={12} /> Lista Rápida
                                             </button>
@@ -981,14 +825,14 @@ const Dashboard: React.FC = () => {
                                                         {/* Channel Toggles per User */}
                                                         {r.phone && (
                                                             <>
-                                                                <button onClick={() => toggleRecipientChannel(r.id, 'whatsapp')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('whatsapp') ? 'text-green-600 bg-green-100' : 'text-slate-300'}`}><MessageCircle size={12} /></button>
-                                                                <button onClick={() => toggleRecipientChannel(r.id, 'sms')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('sms') ? 'text-amber-600 bg-amber-100' : 'text-slate-300'}`}><MessageSquare size={12} /></button>
+                                                                <button onClick={() => toggleRecipientChannel(r.id, 'whatsapp')} className={`w - 6 h - 6 rounded flex items - center justify - center transition - all ${r.selectedChannels.includes('whatsapp') ? 'text-green-600 bg-green-100' : 'text-slate-300'} `}><MessageCircle size={12} /></button>
+                                                                <button onClick={() => toggleRecipientChannel(r.id, 'sms')} className={`w - 6 h - 6 rounded flex items - center justify - center transition - all ${r.selectedChannels.includes('sms') ? 'text-amber-600 bg-amber-100' : 'text-slate-300'} `}><MessageSquare size={12} /></button>
                                                             </>
                                                         )}
                                                         {r.email && (
-                                                            <button onClick={() => toggleRecipientChannel(r.id, 'email')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('email') ? 'text-blue-600 bg-blue-100' : 'text-slate-300'}`}><Mail size={12} /></button>
+                                                            <button onClick={() => toggleRecipientChannel(r.id, 'email')} className={`w - 6 h - 6 rounded flex items - center justify - center transition - all ${r.selectedChannels.includes('email') ? 'text-blue-600 bg-blue-100' : 'text-slate-300'} `}><Mail size={12} /></button>
                                                         )}
-                                                        <button onClick={() => toggleRecipientChannel(r.id, 'push')} className={`w-6 h-6 rounded flex items-center justify-center transition-all ${r.selectedChannels.includes('push') ? 'text-purple-600 bg-purple-100' : 'text-slate-300'}`}><Bell size={12} /></button>
+                                                        <button onClick={() => toggleRecipientChannel(r.id, 'push')} className={`w - 6 h - 6 rounded flex items - center justify - center transition - all ${r.selectedChannels.includes('push') ? 'text-purple-600 bg-purple-100' : 'text-slate-300'} `}><Bell size={12} /></button>
 
                                                         <div className="w-px h-4 bg-slate-200 mx-1"></div>
                                                         <button onClick={() => setRecipients(prev => prev.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-rose-500 ml-1">
@@ -1012,7 +856,7 @@ const Dashboard: React.FC = () => {
                                         <button
                                             key={ch}
                                             onClick={() => setActiveTab(ch)}
-                                            className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all ${activeTab === ch ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            className={`flex - 1 py - 2 rounded - lg text - [10px] font - black uppercase flex items - center justify - center gap - 2 transition - all ${activeTab === ch ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'} `}
                                         >
                                             {ch === 'whatsapp' && <MessageCircle size={14} />}
                                             {ch === 'email' && <Mail size={14} />}
@@ -1040,7 +884,7 @@ const Dashboard: React.FC = () => {
                                             <button
                                                 key={t}
                                                 onClick={() => applyTemplate(t)}
-                                                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all whitespace-nowrap ${selectedTemplate[activeTab] === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                                                className={`px - 3 py - 2 rounded - xl text - xs font - bold border transition - all whitespace - nowrap ${selectedTemplate[activeTab] === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'} `}
                                             >
                                                 {INVITE_TEMPLATES[t].label}
                                             </button>
@@ -1074,24 +918,24 @@ const Dashboard: React.FC = () => {
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
                                 <div className="flex justify-center">
                                     {/* The Card Preview */}
-                                    <div className={`w-full max-w-sm aspect-[4/5] rounded-[2rem] relative overflow-hidden shadow-2xl transition-all duration-500 flex flex-col ${cardStyle === 'neon' ? 'bg-slate-900 text-white' :
+                                    <div className={`w - full max - w - sm aspect - [4 / 5] rounded - [2rem] relative overflow - hidden shadow - 2xl transition - all duration - 500 flex flex - col ${cardStyle === 'neon' ? 'bg-slate-900 text-white' :
                                             cardStyle === 'pro' ? 'bg-white text-slate-900 border-4 border-slate-900' :
                                                 cardStyle === 'stadium' ? 'bg-blue-900 text-white' :
                                                     'bg-gradient-to-br from-indigo-600 via-purple-600 to-rose-500 text-white'
-                                        }`}>
+                                        } `}>
                                         {/* Background Effects */}
                                         {cardStyle === 'neon' && <div className="absolute top-0 right-0 w-64 h-64 bg-lime-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>}
                                         {cardStyle === 'stadium' && <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522770179533-24471fcdba45')] bg-cover bg-center opacity-40 mix-blend-overlay"></div>}
 
                                         <div className="relative z-10 flex flex-col h-full p-8">
                                             <div className="flex justify-center mb-6">
-                                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg ${cardStyle === 'pro' ? 'bg-black text-white' : 'bg-white text-black'}`}>
+                                                <div className={`w - 16 h - 16 rounded - 2xl flex items - center justify - center shadow - lg ${cardStyle === 'pro' ? 'bg-black text-white' : 'bg-white text-black'} `}>
                                                     <Trophy size={32} />
                                                 </div>
                                             </div>
 
                                             <div className="text-center space-y-2 mb-8">
-                                                <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${cardStyle === 'neon' ? 'text-lime-400' : cardStyle === 'ai-generated' ? 'text-white/80' : 'text-blue-500'}`}>MUNDIAL 2026</p>
+                                                <p className={`text - [10px] font - black uppercase tracking - [0.2em] ${cardStyle === 'neon' ? 'text-lime-400' : cardStyle === 'ai-generated' ? 'text-white/80' : 'text-blue-500'} `}>MUNDIAL 2026</p>
                                                 <h3 className="text-3xl font-black font-brand uppercase leading-none tracking-tight">
                                                     {activeLeague.name}
                                                 </h3>
@@ -1103,7 +947,7 @@ const Dashboard: React.FC = () => {
                                                     <span className="text-[10px] font-black uppercase tracking-widest opacity-70">ENTRADA</span>
                                                     <span className="text-sm font-black">
                                                         {activeLeague.includeBaseFee
-                                                            ? `$${parseInt(activeLeague.baseFeeAmount).toLocaleString()}`
+                                                            ? `$${parseInt(activeLeague.baseFeeAmount).toLocaleString()} `
                                                             : activeLeague.includeStageFees
                                                                 ? 'Variable'
                                                                 : 'GRATIS'}
@@ -1144,7 +988,7 @@ const Dashboard: React.FC = () => {
                                             <button
                                                 key={s}
                                                 onClick={() => setCardStyle(s)}
-                                                className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${cardStyle === s ? 'border-black bg-black text-white' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                                className={`flex - 1 py - 2 rounded - xl text - [10px] font - black uppercase border - 2 transition - all ${cardStyle === s ? 'border-black bg-black text-white' : 'border-slate-200 text-slate-500 hover:border-slate-300'} `}
                                             >
                                                 {s}
                                             </button>
@@ -1211,7 +1055,7 @@ const Dashboard: React.FC = () => {
                                 <button
                                     key={tab}
                                     onClick={() => setConfigTab(tab as any)}
-                                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${configTab === tab ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                                    className={`flex - 1 py - 2 rounded - lg text - [10px] font - black uppercase tracking - widest transition - all ${configTab === tab ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'} `}
                                 >
                                     {tab === 'details' ? 'Detalles' : tab === 'prizes' ? 'Premios' : 'Participantes'}
                                 </button>
@@ -1245,13 +1089,13 @@ const Dashboard: React.FC = () => {
                                         <div className="flex gap-3">
                                             <button
                                                 onClick={() => setActiveLeague({ ...activeLeague, privacy: 'private' })}
-                                                className={`flex-1 p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all ${activeLeague.privacy === 'private' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                                className={`flex - 1 p - 3 rounded - xl border flex items - center justify - center gap - 2 text - xs font - bold transition - all ${activeLeague.privacy === 'private' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'} `}
                                             >
                                                 <Lock size={14} /> Privada
                                             </button>
                                             <button
                                                 onClick={() => setActiveLeague({ ...activeLeague, privacy: 'public' })}
-                                                className={`flex-1 p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all ${activeLeague.privacy === 'public' ? 'bg-lime-400 text-black border-lime-400 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                                className={`flex - 1 p - 3 rounded - xl border flex items - center justify - center gap - 2 text - xs font - bold transition - all ${activeLeague.privacy === 'public' ? 'bg-lime-400 text-black border-lime-400 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'} `}
                                             >
                                                 <Globe size={14} /> Pública
                                             </button>
@@ -1275,7 +1119,7 @@ const Dashboard: React.FC = () => {
                                                     onChange={(v) => setActiveLeague({ ...activeLeague, includeBaseFee: v })}
                                                 />
                                             </div>
-                                            <div className={`relative ${!activeLeague.includeBaseFee ? 'opacity-50 pointer-events-none' : ''}`}>
+                                            <div className={`relative ${!activeLeague.includeBaseFee ? 'opacity-50 pointer-events-none' : ''} `}>
                                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">$</span>
                                                 <input
                                                     type="number"
@@ -1300,11 +1144,11 @@ const Dashboard: React.FC = () => {
                                                 />
                                             </div>
 
-                                            <div className={`space-y-2 ${!activeLeague.includeStageFees ? 'opacity-50 pointer-events-none' : ''}`}>
+                                            <div className={`space - y - 2 ${!activeLeague.includeStageFees ? 'opacity-50 pointer-events-none' : ''} `}>
                                                 {(['match', 'round', 'phase'] as const).map(key => (
                                                     <div key={key} className="flex items-center gap-2">
                                                         <Checkbox
-                                                            id={`conf-check-${key}`}
+                                                            id={`conf - check - ${key} `}
                                                             label=""
                                                             checked={activeLeague.stageFees[key].active}
                                                             onChange={(v) => handleStageFeeChange(key, 'active', v)}
@@ -1313,7 +1157,7 @@ const Dashboard: React.FC = () => {
                                                             <Zap size={12} />
                                                         </div>
                                                         <span className="text-[9px] font-bold uppercase text-slate-500 w-12">{key === 'match' ? 'Partido' : key === 'round' ? 'Ronda' : 'Fase'}</span>
-                                                        <div className={`relative flex-1 ${!activeLeague.stageFees[key].active ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                        <div className={`relative flex - 1 ${!activeLeague.stageFees[key].active ? 'opacity-50 pointer-events-none' : ''} `}>
                                                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold">$</span>
                                                             <input
                                                                 type="number"
@@ -1355,7 +1199,7 @@ const Dashboard: React.FC = () => {
                                             { id: 'round', label: 'RONDA', active: activeLeague.includeStageFees && activeLeague.stageFees.round.active },
                                             { id: 'phase', label: 'FASE', active: activeLeague.includeStageFees && activeLeague.stageFees.phase.active }
                                         ] as const).filter(t => t.active).map(cat => (
-                                            <button key={cat.id} onClick={() => setPrizeCategory(cat.id as StageType | 'general')} className={`flex-1 py-2.5 px-4 rounded-[1.8rem] font-black text-[9px] tracking-widest transition-all uppercase whitespace-nowrap ${prizeCategory === cat.id ? 'bg-white text-black shadow-md border border-slate-100' : 'text-slate-400 hover:bg-slate-50'}`}>{cat.label}</button>
+                                            <button key={cat.id} onClick={() => setPrizeCategory(cat.id as StageType | 'general')} className={`flex - 1 py - 2.5 px - 4 rounded - [1.8rem] font - black text - [9px] tracking - widest transition - all uppercase whitespace - nowrap ${prizeCategory === cat.id ? 'bg-white text-black shadow-md border border-slate-100' : 'text-slate-400 hover:bg-slate-50'} `}>{cat.label}</button>
                                         ))}
                                     </div>
 
@@ -1397,18 +1241,18 @@ const Dashboard: React.FC = () => {
                                         </div>
 
                                         {/* FOOTER TOTAL - DARK THEME WITH VALIDATION */}
-                                        <div className={`absolute bottom-0 left-0 right-0 px-6 py-5 flex justify-between items-center border-t z-20 rounded-b-[2.3rem] transition-colors ${isValidTotal ? 'bg-slate-900 border-white/10' : 'bg-rose-50 border-rose-200'}`}>
+                                        <div className={`absolute bottom - 0 left - 0 right - 0 px - 6 py - 5 flex justify - between items - center border - t z - 20 rounded - b - [2.3rem] transition - colors ${isValidTotal ? 'bg-slate-900 border-white/10' : 'bg-rose-50 border-rose-200'} `}>
                                             <div className="space-y-1">
-                                                <p className={`text-[7px] font-black uppercase tracking-widest ${isValidTotal ? 'text-lime-500' : 'text-rose-500'}`}>
+                                                <p className={`text - [7px] font - black uppercase tracking - widest ${isValidTotal ? 'text-lime-500' : 'text-rose-500'} `}>
                                                     {isValidTotal ? 'FONDO NETO GENERAL' : 'TOTAL INVÁLIDO'}
                                                 </p>
-                                                <p className={`text-2xl font-black font-brand leading-none ${isValidTotal ? 'text-white' : 'text-rose-600'}`}>
-                                                    {isValidTotal ? `$${Math.round(calculateNetForCategory(prizeCategory)).toLocaleString()}` : `${totalAllocated.toFixed(1)}%`}
+                                                <p className={`text - 2xl font - black font - brand leading - none ${isValidTotal ? 'text-white' : 'text-rose-600'} `}>
+                                                    {isValidTotal ? `$${Math.round(calculateNetForCategory(prizeCategory)).toLocaleString()} ` : `${totalAllocated.toFixed(1)}% `}
                                                 </p>
                                             </div>
                                             <div className="text-right space-y-1">
-                                                <p className={`text-[7px] font-black uppercase tracking-widest ${isValidTotal ? 'text-rose-400' : 'text-slate-400'}`}>ADMIN ({activeLeague.adminFeePercent}%)</p>
-                                                <p className={`text-lg font-black font-brand leading-none ${isValidTotal ? 'text-white/80' : 'text-slate-500'}`}>${Math.round(calculateTotalGrossForCategory(prizeCategory) * (activeLeague.adminFeePercent / 100)).toLocaleString()}</p>
+                                                <p className={`text - [7px] font - black uppercase tracking - widest ${isValidTotal ? 'text-rose-400' : 'text-slate-400'} `}>ADMIN ({activeLeague.adminFeePercent}%)</p>
+                                                <p className={`text - lg font - black font - brand leading - none ${isValidTotal ? 'text-white/80' : 'text-slate-500'} `}>${Math.round(calculateTotalGrossForCategory(prizeCategory) * (activeLeague.adminFeePercent / 100)).toLocaleString()}</p>
                                             </div>
                                         </div>
                                     </Card>
@@ -1432,7 +1276,7 @@ const Dashboard: React.FC = () => {
                                                 <span>Límite Plan: {PLAN_LIMITS[activeLeague.plan]}</span>
                                             </div>
                                             <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full transition-all duration-300 ${activeLeague.participants.max > PLAN_LIMITS[activeLeague.plan] ? 'bg-rose-500' : 'bg-lime-500'}`} style={{ width: `${(participants.length / activeLeague.participants.max) * 100}%` }}></div>
+                                                <div className={`h - full rounded - full transition - all duration - 300 ${activeLeague.participants.max > PLAN_LIMITS[activeLeague.plan] ? 'bg-rose-500' : 'bg-lime-500'} `} style={{ width: `${(participants.length / activeLeague.participants.max) * 100}% ` }}></div>
                                             </div>
                                         </div>
 
@@ -1470,7 +1314,7 @@ const Dashboard: React.FC = () => {
                                                             <p className="text-xs font-black text-slate-900 uppercase">{user.name}</p>
                                                             {user.role === 'admin' && <Crown size={10} className="text-amber-500 fill-amber-500" />}
                                                         </div>
-                                                        <p className={`text-[8px] font-black uppercase tracking-widest ${user.status === 'active' ? 'text-lime-600' : 'text-slate-400'}`}>
+                                                        <p className={`text - [8px] font - black uppercase tracking - widest ${user.status === 'active' ? 'text-lime-600' : 'text-slate-400'} `}>
                                                             {user.status === 'active' ? 'ACTIVO' : 'PENDIENTE'}
                                                         </p>
                                                     </div>
@@ -1514,10 +1358,10 @@ const Dashboard: React.FC = () => {
                             {activeLeague.id === 'league-1' && (
                                 <button
                                     onClick={toggleRole}
-                                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full border transition-all text-[9px] font-bold uppercase tracking-widest ${activeLeague.role === 'user'
+                                    className={`flex items - center gap - 1.5 px - 3 py - 1 rounded - full border transition - all text - [9px] font - bold uppercase tracking - widest ${activeLeague.role === 'user'
                                             ? 'bg-purple-100 border-purple-200 text-purple-700'
                                             : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200'
-                                        }`}
+                                        } `}
                                     title={activeLeague.role === 'admin' ? "Activar Modo Espectador" : "Volver a Administración"}
                                 >
                                     {activeLeague.role === 'admin' ? <Eye size={12} /> : <Shield size={12} />}
@@ -1553,7 +1397,7 @@ const Dashboard: React.FC = () => {
                                 className="flex items-center gap-3 text-3xl md:text-5xl font-black font-brand uppercase tracking-tighter leading-tight text-slate-900 hover:text-lime-600 transition-colors text-left"
                             >
                                 {activeLeague.name}
-                                <ChevronDown size={32} className={`transition-transform duration-300 text-slate-300 group-hover:text-lime-400 ${isLeagueMenuOpen ? 'rotate-180' : ''}`} />
+                                <ChevronDown size={32} className={`transition - transform duration - 300 text - slate - 300 group - hover: text - lime - 400 ${isLeagueMenuOpen ? 'rotate-180' : ''} `} />
                             </button>
 
                             {/* DROPDOWN MENU */}
@@ -1564,19 +1408,19 @@ const Dashboard: React.FC = () => {
                                         <span className="text-[10px] font-bold text-lime-600 bg-lime-50 px-2 py-1 rounded-lg cursor-pointer hover:bg-lime-100" onClick={() => navigate('/create-league')}>+ NUEVA</span>
                                     </div>
                                     <div className="max-h-[300px] overflow-y-auto">
-                                        {MY_LEAGUES.map(league => (
+                                        {myLeaguesDetail.map(league => (
                                             <button
                                                 key={league.id}
                                                 onClick={() => handleLeagueSwitch(league)}
-                                                className={`w-full text-left p-4 px-6 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 ${activeLeague.id === league.id ? 'bg-lime-50/50' : ''}`}
+                                                className={`w - full text - left p - 4 px - 6 flex items - center justify - between hover: bg - slate - 50 transition - colors border - b border - slate - 50 last: border - 0 ${activeLeague.id === league.id ? 'bg-lime-50/50' : ''} `}
                                             >
                                                 <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-md ${league.role === 'admin' ? 'bg-slate-900' : 'bg-blue-500'}`}>
+                                                    <div className={`w - 10 h - 10 rounded - xl flex items - center justify - center text - white font - bold shadow - md ${league.role === 'admin' ? 'bg-slate-900' : 'bg-blue-500'} `}>
                                                         {league.role === 'admin' ? <Shield size={16} /> : <User size={16} />}
                                                     </div>
                                                     <div>
-                                                        <p className={`text-sm font-black uppercase ${activeLeague.id === league.id ? 'text-lime-700' : 'text-slate-900'}`}>{league.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{league.role === 'admin' ? 'Administrando' : `Puesto #${league.stats.rank || '-'}`}</p>
+                                                        <p className={`text - sm font - black uppercase ${activeLeague.id === league.id ? 'text-lime-700' : 'text-slate-900'} `}>{league.name}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{league.role === 'admin' ? 'Administrando' : `Puesto #${league.stats.rank || '-'} `}</p>
                                                     </div>
                                                 </div>
                                                 {activeLeague.id === league.id && <CheckCircle2 size={18} className="text-lime-500" />}
@@ -1631,10 +1475,10 @@ const Dashboard: React.FC = () => {
                             ].map((rule, i) => (
                                 <div key={i} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-lime-400 transition-colors">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-slate-50 ${rule.color}`}><rule.icon size={16} /></div>
+                                        <div className={`w - 8 h - 8 rounded - lg flex items - center justify - center bg - slate - 50 ${rule.color} `}><rule.icon size={16} /></div>
                                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">{rule.label}</span>
                                     </div>
-                                    <span className={`text-sm font-black ${rule.color}`}>{rule.val}</span>
+                                    <span className={`text - sm font - black ${rule.color} `}>{rule.val}</span>
                                 </div>
                             ))}
                         </div>
@@ -1683,7 +1527,7 @@ const Dashboard: React.FC = () => {
                                 { pos: '3º', name: 'Nubia Sarmiento', pts: '72 pts', prize: '$108k', color: 'bg-orange-100 text-orange-600' },
                             ].map((win, i) => (
                                 <div key={i} className="flex items-center gap-4 group cursor-pointer hover:translate-x-1 transition-transform p-2 rounded-xl hover:bg-slate-50">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${win.color} text-black shadow-sm`}>
+                                    <div className={`w - 10 h - 10 rounded - xl flex items - center justify - center font - black text - xs ${win.color} text - black shadow - sm`}>
                                         {win.pos}
                                     </div>
                                     <div className="flex-1">
@@ -1707,7 +1551,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {matches.map((match) => (
-                            <Card key={match.id} className={`group hover:border-lime-400 transition-all duration-500 overflow-hidden relative border-slate-200 ${match.status === 'saved' ? 'border-lime-400 shadow-md' : ''}`}>
+                            <Card key={match.id} className={`group hover: border - lime - 400 transition - all duration - 500 overflow - hidden relative border - slate - 200 ${match.status === 'saved' ? 'border-lime-400 shadow-md' : ''} `}>
                                 <div className="flex justify-between items-center mb-6">
                                     <Badge color="bg-slate-100 text-slate-500 uppercase tracking-widest font-black text-[9px]">{match.date}</Badge>
                                     {match.status === 'saved' ? (
@@ -1769,7 +1613,7 @@ const Dashboard: React.FC = () => {
                                         <button
                                             onClick={() => handleSavePrediction(match.id)}
                                             disabled={match.status === 'saved' && (match.userPrediction.home === '' || match.userPrediction.away === '')}
-                                            className={`flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-colors ${match.status === 'saved' ? 'text-lime-600 hover:text-lime-700' : 'text-slate-400 hover:text-lime-600'}`}
+                                            className={`flex items - center gap - 2 text - [9px] font - black uppercase tracking - widest transition - colors ${match.status === 'saved' ? 'text-lime-600 hover:text-lime-700' : 'text-slate-400 hover:text-lime-600'} `}
                                         >
                                             {match.status === 'saved' ? (
                                                 <>Modificar <Pencil size={12} /></>
