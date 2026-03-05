@@ -21,6 +21,11 @@ RUN npm ci
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
 
+# Configuración de variables públicas de Vite en build-time
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+RUN test -n "$VITE_API_URL" || (echo "ERROR: VITE_API_URL is required for frontend production build." && exit 1)
+
 # Construir el proyecto Vite para produccion
 # Como estamos usando workspaces podemos hacerlo desde root o app
 WORKDIR /app/apps/web
