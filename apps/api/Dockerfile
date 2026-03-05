@@ -27,6 +27,8 @@ COPY packages/shared ./packages/shared
 
 # Generar cliente Prisma
 WORKDIR /app/apps/api
+# Prevenir fallo del COPY en runner creando anticipadamente la carpeta vacía si fue izada por npm
+RUN mkdir -p /app/apps/api/node_modules
 RUN npx prisma generate
 
 # Compilar NestJS (esto generará /dist)
