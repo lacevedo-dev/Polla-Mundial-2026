@@ -16,6 +16,7 @@ import JoinLeague from './views/JoinLeague';
 import Predictions from './views/Predictions';
 import { AppView } from './types';
 import { Trophy } from 'lucide-react';
+import Ranking from './views/Ranking';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = React.useState<AppView>('landing');
@@ -50,31 +51,7 @@ const App: React.FC = () => {
       case 'predictions':
         return <Predictions onViewChange={setCurrentView} />;
       case 'ranking':
-        return (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-black font-brand uppercase tracking-tighter">Líderes de la Semana</h1>
-             <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-100">
-                {[1,2,3,4,5].map((pos) => (
-                  <div key={pos} className="flex items-center gap-4 p-6 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors cursor-pointer">
-                    <span className={`w-12 h-12 flex items-center justify-center rounded-2xl font-black text-lg ${
-                      pos === 1 ? 'bg-yellow-100 text-yellow-600' : 
-                      pos === 2 ? 'bg-slate-100 text-slate-400' :
-                      pos === 3 ? 'bg-orange-100 text-orange-600' : 'text-slate-300'
-                    }`}>#{pos}</span>
-                    <img src={`https://picsum.photos/seed/user${pos}/60/60`} className="w-12 h-12 rounded-full ring-2 ring-white shadow-sm" alt="Usuario" />
-                    <div className="flex-1">
-                      <p className="font-black text-slate-900">Usuario Ganador {pos}</p>
-                      <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">@liga_pro_crack</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-black text-lime-600">{150 - pos * 5} pts</p>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Subiendo</p>
-                    </div>
-                  </div>
-                ))}
-             </div>
-          </div>
-        );
+        return <Ranking onViewChange={setCurrentView} />;
       default:
         return <Dashboard onViewChange={setCurrentView} />;
     }
