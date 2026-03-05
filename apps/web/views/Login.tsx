@@ -2,21 +2,26 @@
 import React from 'react';
 import { Button, Input, EmailAutocompleteInput, Checkbox } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, ArrowRight, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { LogIn, ArrowRight, ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
+import { useAuthStore } from '../stores/auth.store';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = React.useState(false);
+  const { login, isLoading } = useAuthStore();
   const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
   const [rememberMe, setRememberMe] = React.useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+    try {
+      await login({ identifier: email, password });
       navigate('/dashboard');
-    }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'Error al iniciar sesión. Revisa tus credenciales.');
+    }
   };
 
   return (
@@ -67,6 +72,12 @@ const Login: React.FC = () => {
           <div className="mb-10 text-center md:text-left">
             <h3 className="text-3xl font-black font-brand mb-2">INICIAR SESIÓN</h3>
             <p className="text-slate-500">¿No tienes cuenta? <button onClick={() => navigate('/register')} className="text-lime-600 font-bold hover:underline" disabled={isLoading}>Regístrate gratis</button></p>
+
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm flex items-center gap-2 rounded-r-xl animate-in fade-in slide-in-from-left-2">
+                <AlertCircle size={18} /> {error}
+              </div>
+            )}
           </div>
 
           <form className="space-y-6" onSubmit={handleSubmit}>
@@ -85,7 +96,14 @@ const Login: React.FC = () => {
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Contraseña</label>
                 <button type="button" className="text-[10px] font-bold text-slate-400 hover:text-black transition-colors uppercase tracking-wider" disabled={isLoading}>¿Olvidaste tu contraseña?</button>
               </div>
-              <Input type="password" placeholder="••••••••" required disabled={isLoading} />
+              <Input
+                type="password"
+                placeholder="••••••••"
+                required
+                disabled={isLoading}
+                value={password}
+                onChange={(e: any) => setPassword(e.target.value)}
+              />
             </div>
 
             <div className="flex items-center justify-between py-2">

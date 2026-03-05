@@ -5,26 +5,21 @@ import { createPool } from 'mariadb';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-    private static adapter: PrismaMariaDb;
-
     constructor() {
-        // Definimos el adaptador antes de llamar a super() si es posible,
-        // pero PrismaClient espera el adaptador en el objeto de configuración.
+        const dbUrl = process.env.DATABASE_URL;
+        if (!dbUrl) {
+            throw new Error('DATABASE_URL is not defined in environment variables');
+        }
+
+        const pool = createPool(dbUrl);
+        const adapter = new PrismaMariaDb(pool as any);
+
         super({
-            // @ts-ignore - Prisma 7 adapter support
-            adapter: PrismaService.adapter,
+            adapter: adapter as any,
         });
     }
 
     async onModuleInit() {
-        if (!PrismaService.adapter) {
-            const pool = createPool(process.env.DATABASE_URL as string);
-            PrismaService.adapter = new PrismaMariaDb(pool as any);
-
-            // Reiniciamos el cliente con el adaptador si es necesario, 
-            // pero en NestJS usaremos una aproximación más limpia:
-            // Instanciaremos el cliente una vez que la conexión esté lista.
-        }
         await this.$connect();
     }
 

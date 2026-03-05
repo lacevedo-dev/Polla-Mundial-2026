@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut } from 'lucide-react';
+import { useAuthStore } from '../stores/auth.store';
 
 const navItems = [
     { to: '/dashboard', label: 'Inicio', icon: Home },
@@ -14,8 +15,17 @@ const navItems = [
 const AppLayout: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const navigate = useNavigate();
+    const { user, logout, isAuthenticated } = useAuthStore();
+
+    React.useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            navigate('/login');
+        }
+    }, [navigate]);
 
     const handleLogout = () => {
+        logout();
         navigate('/');
     };
 
@@ -49,10 +59,10 @@ const AppLayout: React.FC = () => {
                 <div className="mt-auto p-6 border-t border-slate-800">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <img src="https://picsum.photos/seed/user/40/40" className="rounded-full ring-2 ring-lime-400" alt="Avatar" />
+                            <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
                             <div>
-                                <p className="text-sm font-bold">Administrador</p>
-                                <p className="text-xs text-slate-500">Miembro Premium</p>
+                                <p className="text-sm font-bold truncate max-w-[120px]">{user?.name || 'Cargando...'}</p>
+                                <p className="text-xs text-slate-500 uppercase tracking-tighter">{user?.role === 'ADMIN' ? 'Administrador' : 'Participante'}</p>
                             </div>
                         </div>
                         <button onClick={handleLogout} className="text-slate-400 hover:text-rose-400 transition-colors">

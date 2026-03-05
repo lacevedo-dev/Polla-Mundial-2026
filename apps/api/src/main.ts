@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Cargado' : 'No cargado');
   const app = await NestFactory.create(AppModule);
 
   // Habilitar la validación global

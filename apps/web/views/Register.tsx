@@ -10,17 +10,11 @@ import {
   ArrowLeft,
   UploadCloud,
   XCircle,
-  AlertCircle,
-  Sparkles,
-  Calendar,
-  ArrowRight,
-  ChevronDown,
-  Search,
-  RefreshCcw,
-  FileWarning,
   LogIn,
-  Check
+  Check,
+  AlertCircle as AlertIcon
 } from 'lucide-react';
+import { useAuthStore } from '../stores/auth.store';
 
 // Props eliminadas — navegación via useNavigate
 
@@ -57,8 +51,9 @@ const EXISTING_USERS = [
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const [step, setStep] = React.useState<RegisterStep>(1);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const { register, isLoading } = useAuthStore();
   const [isNavigating, setIsNavigating] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   // Validation states
   const [nombreStatus, setNombreStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
@@ -290,7 +285,7 @@ const Register: React.FC = () => {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFileChange(e.dataTransfer.files[0]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (emailStatus === 'taken' || phoneStatus === 'taken') return;
 
@@ -299,11 +294,21 @@ const Register: React.FC = () => {
       setTimeout(() => { setStep((step + 1) as RegisterStep); setIsNavigating(false); }, 400);
       return;
     }
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      navigate('/create-league');
-    }, 2000);
+
+    setError(null);
+    try {
+      await register({
+        email: formData.email,
+        username: formData.usuario,
+        password: formData.password,
+        name: formData.nombre,
+        phone: formData.celular,
+        countryCode: selectedCountry.code
+      });
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Error al completar el registro.');
+    }
   };
 
   const requirements = [
@@ -405,6 +410,11 @@ const Register: React.FC = () => {
             <div className="flex gap-2 h-1.5 mb-8">
               {[1, 2, 3].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-400' : 'bg-slate-100'}`}></div>)}
             </div>
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm flex items-center gap-2 rounded-r-xl">
+                <AlertIcon size={18} /> {error}
+              </div>
+            )}
           </div>
 
           <form className={`flex-1 flex flex-col transition-all duration-300 ${isNavigating ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0'}`} onSubmit={handleSubmit}>
