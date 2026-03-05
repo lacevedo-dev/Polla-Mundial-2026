@@ -56,5 +56,3 @@ export interface LeagueData {
   currency: string;
   plan: 'free' | 'gold' | 'diamond';
 }
-
-export type AppView = 'landing' | 'dashboard' | 'predictions' | 'ranking' | 'design-system' | 'before-after' | 'login' | 'register' | 'help' | 'email-verification' | 'checkout' | 'create-league' | 'manage-payments' | 'join-league';
