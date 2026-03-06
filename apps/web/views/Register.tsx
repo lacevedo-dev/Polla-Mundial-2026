@@ -27,7 +27,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { LegalDialog } from '../components/legal/LegalDialog';
 import type { LegalDocumentKey } from '../components/legal/legal-documents';
 
-// Props eliminadas â€” navegaciÃ³n via useNavigate
+// Props eliminadas — navegación vía useNavigate
 
 type RegisterStep = 1 | 2 | 3;
 
@@ -42,13 +42,13 @@ interface Country {
 
 const COUNTRY_CODES: Country[] = [
   { code: '+57', name: 'Colombia', iso: 'co', length: 10, placeholder: '310 123 4567', regex: /^3\d{9}$/ },
-  { code: '+52', name: 'MÃ©xico', iso: 'mx', length: 10, placeholder: '55 1234 5678' },
-  { code: '+1', name: 'USA / CanadÃ¡', iso: 'us', length: 10, placeholder: '202 555 0123' },
-  { code: '+34', name: 'EspaÃ±a', iso: 'es', length: 9, placeholder: '612 345 678' },
+  { code: '+52', name: 'México', iso: 'mx', length: 10, placeholder: '55 1234 5678' },
+  { code: '+1', name: 'USA / Canadá', iso: 'us', length: 10, placeholder: '202 555 0123' },
+  { code: '+34', name: 'España', iso: 'es', length: 9, placeholder: '612 345 678' },
   { code: '+54', name: 'Argentina', iso: 'ar', length: 10, placeholder: '11 1234 5678' },
   { code: '+56', name: 'Chile', iso: 'cl', length: 9, placeholder: '9 1234 5678' },
   { code: '+58', name: 'Venezuela', iso: 've', length: 10, placeholder: '412 123 4567' },
-  { code: '+51', name: 'PerÃº', iso: 'pe', length: 9, placeholder: '912 345 678' },
+  { code: '+51', name: 'Perú', iso: 'pe', length: 9, placeholder: '912 345 678' },
   { code: '+55', name: 'Brasil', iso: 'br', length: 11, placeholder: '11 91234 5678' },
 ];
 
@@ -109,7 +109,11 @@ const Register: React.FC = () => {
 
   // Helper for Title Case formatting
   const formatToTitleCase = (str: string) => {
-    return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
+    return str
+      .toLocaleLowerCase('es-CO')
+      .replace(/(^|[\s'-])(\p{L})/gu, (_, separator: string, character: string) =>
+        `${separator}${character.toLocaleUpperCase('es-CO')}`,
+      );
   };
 
   React.useEffect(() => {
@@ -252,13 +256,13 @@ const Register: React.FC = () => {
     }
 
     if (!file.type.startsWith('image/')) {
-      setUploadError("El archivo no es una imagen vÃ¡lida. Usa JPG, PNG o WebP.");
+      setUploadError("El archivo no es una imagen válida. Usa JPG, PNG o WebP.");
       return;
     }
 
     const MAX_SIZE_MB = 2;
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      setUploadError(`La imagen es muy pesada. MÃ¡ximo ${MAX_SIZE_MB}MB.`);
+      setUploadError(`La imagen es muy pesada. Máximo ${MAX_SIZE_MB}MB.`);
       return;
     }
 
@@ -268,7 +272,7 @@ const Register: React.FC = () => {
     reader.onloadend = () => {
       setTimeout(() => {
         if (Math.random() < 0.1) {
-          setUploadError("Error de procesamiento. IntÃ©ntalo de nuevo.");
+          setUploadError("Error de procesamiento. Inténtalo de nuevo.");
           setIsProcessingFile(false);
           return;
         }
@@ -283,7 +287,7 @@ const Register: React.FC = () => {
     };
 
     reader.onerror = () => {
-      setUploadError("Error al leer el archivo. IntÃ©ntalo de nuevo.");
+      setUploadError("Error al leer el archivo. Inténtalo de nuevo.");
       setIsProcessingFile(false);
     };
 
@@ -347,8 +351,8 @@ const Register: React.FC = () => {
 
   const requirements = [
     { label: '8+ caracteres', test: (p: string) => p.length >= 8 },
-    { label: 'Una mayÃºscula', test: (p: string) => /[A-Z]/.test(p) },
-    { label: 'Un nÃºmero', test: (p: string) => /[0-9]/.test(p) },
+    { label: 'Una mayúscula', test: (p: string) => /[A-Z]/.test(p) },
+    { label: 'Un número', test: (p: string) => /[0-9]/.test(p) },
     { label: 'Coinciden', test: (p: string) => p === formData.confirmPassword && p !== '' },
   ];
   const metCount = requirements.filter(r => r.test(formData.password)).length;
@@ -363,9 +367,9 @@ const Register: React.FC = () => {
   const getImageQuality = () => {
     if (!formData.foto) return null;
     const size = formData.foto.size / 1024;
-    if (size < 50) return { label: 'Baja ResoluciÃ³n', color: 'bg-amber-100 text-amber-700', icon: AlertIcon };
-    if (size < 500) return { label: 'Ã“ptima', color: 'bg-lime-100 text-lime-700', icon: CheckCircle };
-    return { label: 'Alta DefiniciÃ³n', color: 'bg-cyan-100 text-cyan-700', icon: Sparkles };
+    if (size < 50) return { label: 'Baja resolución', color: 'bg-amber-100 text-amber-700', icon: AlertIcon };
+    if (size < 500) return { label: 'Óptima', color: 'bg-lime-100 text-lime-700', icon: CheckCircle };
+    return { label: 'Alta definición', color: 'bg-cyan-100 text-cyan-700', icon: Sparkles };
   };
   const quality = getImageQuality();
 
@@ -402,7 +406,7 @@ const Register: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 py-4 md:py-6">
       <style>{`
         .scrollbar-custom::-webkit-scrollbar {
             width: 4px;
@@ -418,7 +422,7 @@ const Register: React.FC = () => {
             background-color: #94a3b8;
         }
       `}</style>
-      <div className="max-w-5xl w-full mb-6">
+      <div className="max-w-5xl w-full mb-4 md:mb-6">
         <button
           onClick={() => navigate('/')}
           className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors"
@@ -427,7 +431,7 @@ const Register: React.FC = () => {
         </button>
       </div>
 
-      <div className={`max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl min-h-[650px] transition-all duration-700 ${isLoading ? 'scale-[0.98] blur-sm opacity-50' : 'scale-100'}`}>
+      <div className={`max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl md:min-h-[620px] transition-all duration-700 ${isLoading ? 'scale-[0.98] blur-sm opacity-50' : 'scale-100'}`}>
 
         {/* Lado Izquierdo Branding */}
         <div className="hidden md:flex flex-col justify-between bg-black p-12 text-white relative overflow-hidden md:rounded-l-[2.5rem]">
@@ -447,13 +451,13 @@ const Register: React.FC = () => {
         </div>
 
         {/* Lado Derecho Formulario */}
-        <div className="p-8 md:p-16 flex flex-col h-full relative rounded-[2.5rem] md:rounded-l-none md:rounded-r-[2.5rem]">
-          <div className="mb-8">
+        <div className="p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col h-full relative rounded-[2.5rem] md:rounded-l-none md:rounded-r-[2.5rem]">
+          <div className="mb-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-2xl font-black font-brand uppercase tracking-tight">Registro</h3>
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Paso {step} de 3</span>
             </div>
-            <div className="flex gap-2 h-1.5 mb-8">
+            <div className="flex gap-2 h-1.5 mb-6">
               {[1, 2, 3].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-400' : 'bg-slate-100'}`}></div>)}
             </div>
             {error && (
@@ -470,7 +474,7 @@ const Register: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nombre Completo *</label>
                   <Input
-                    placeholder="Ej. Juan PÃ©rez"
+                    placeholder="Ej. Juan Pérez"
                     required
                     disabled={isLoading}
                     value={formData.nombre}
@@ -483,13 +487,13 @@ const Register: React.FC = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center ml-1">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fecha de Nacimiento *</label>
-                    <span className="text-[9px] font-bold text-slate-400">18+ aÃ±os</span>
+                    <span className="text-[9px] font-bold text-slate-400">18+ años</span>
                   </div>
                   <Input type="date" value={formData.fechaNacimiento} onChange={e => handleInputChange('fechaNacimiento', e.target.value)} leftIcon={<Calendar size={16} />}
                     className={birthDateStatus === 'underage' || birthDateStatus === 'invalid' ? 'border-rose-400 bg-rose-50/20' : birthDateStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
                     rightIcon={birthDateStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
                   />
-                  {birthDateStatus === 'underage' && <p className="text-[9px] font-bold text-rose-500 ml-1">Debes ser mayor de 18 aÃ±os.</p>}
+                  {birthDateStatus === 'underage' && <p className="text-[9px] font-bold text-rose-500 ml-1">Debes ser mayor de 18 años.</p>}
                 </div>
 
                 <div className={`space-y-2 relative ${isCountrySelectorOpen ? 'z-50' : 'z-0'}`} ref={selectorRef}>
@@ -525,7 +529,7 @@ const Register: React.FC = () => {
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                           className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-lime-100"
-                          placeholder="Buscar paÃ­s..."
+                          placeholder="Buscar país..."
                           value={countrySearch}
                           onChange={(e) => setCountrySearch(e.target.value)}
                         />
@@ -559,7 +563,7 @@ const Register: React.FC = () => {
                     <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
                       <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
                       <div>
-                        <p className="text-[10px] font-bold text-rose-700">Este nÃºmero ya estÃ¡ registrado.</p>
+                        <p className="text-[10px] font-bold text-rose-700">Este número ya está registrado.</p>
                         <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
                       </div>
                     </div>
@@ -579,7 +583,7 @@ const Register: React.FC = () => {
                     <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
                       <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
                       <div>
-                        <p className="text-[10px] font-bold text-rose-700">Este correo ya estÃ¡ registrado.</p>
+                        <p className="text-[10px] font-bold text-rose-700">Este correo ya está registrado.</p>
                         <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
                       </div>
                     </div>
@@ -592,9 +596,9 @@ const Register: React.FC = () => {
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 <div className="space-y-2">
                   <div className="flex justify-between items-center ml-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Usuario Ãšnico *</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Usuario único *</label>
                     <span className={`text-[9px] font-bold uppercase ${usernameStatus === 'available' ? 'text-lime-600' : usernameStatus === 'taken' ? 'text-rose-500' : 'text-slate-400'}`}>
-                      {usernameStatus === 'checking' ? 'Verificando...' : usernameStatus === 'available' ? 'Â¡Disponible!' : usernameStatus === 'taken' ? 'No disponible' : ''}
+                      {usernameStatus === 'checking' ? 'Verificando...' : usernameStatus === 'available' ? '¡Disponible!' : usernameStatus === 'taken' ? 'No disponible' : ''}
                     </span>
                   </div>
                   <AutocompleteInput
@@ -607,11 +611,11 @@ const Register: React.FC = () => {
                     className={usernameStatus === 'available' ? 'border-lime-400 bg-lime-50/20' : usernameStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : ''}
                     rightIcon={usernameStatus === 'available' ? <CheckCircle size={16} className="text-lime-500" /> : usernameStatus === 'taken' ? <XCircle size={16} className="text-rose-500" /> : null}
                   />
-                  <p className="text-[9px] text-slate-400 pl-1">SerÃ¡ tu identidad en los rankings y grupos.</p>
+                  <p className="text-[9px] text-slate-400 pl-1">Será tu identidad en los rankings y grupos.</p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">ContraseÃ±a *</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña *</label>
                   <Input
                     type={showPassword ? 'text' : 'password'}
                     placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
@@ -623,7 +627,7 @@ const Register: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar ContraseÃ±a *</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar contraseña *</label>
                   <Input
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
@@ -646,10 +650,11 @@ const Register: React.FC = () => {
             )}
 
             {step === 3 && (
-              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 h-full flex flex-col">
-                <div className="flex-1 flex flex-col items-center justify-center space-y-6">
+              <div className="animate-in slide-in-from-right-4 duration-300 flex-1">
+                <div className="grid gap-5 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] md:items-center">
+                  <div className="flex flex-col items-center gap-4">
                   <div
-                    className={`relative w-48 h-48 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
+                    className={`relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
@@ -715,9 +720,9 @@ const Register: React.FC = () => {
                     </Button>
                   </div>
 
-                  <p className="text-[10px] text-slate-400 text-center max-w-sm leading-relaxed">
-                    En algunos celulares <span className="font-bold text-slate-600">Tomar foto</span> abrirÃ¡ la cÃ¡mara frontal; si no,
-                    tu navegador mostrarÃ¡ el selector de imÃ¡genes sin romper el flujo.
+                  <p className="text-[10px] text-slate-400 text-center max-w-xs leading-relaxed">
+                    En algunos celulares <span className="font-bold text-slate-600">Tomar foto</span> abrirá la cámara frontal; si no,
+                    tu navegador mostrará el selector de imágenes sin romper el flujo.
                   </p>
 
                   {uploadError && (
@@ -726,45 +731,50 @@ const Register: React.FC = () => {
                       <span className="text-xs font-bold">{uploadError}</span>
                     </div>
                   )}
-
-                  <div className="text-center max-w-xs">
-                    <h4 className="text-lg font-black font-brand text-slate-900 uppercase">TU IDENTIDAD</h4>
-                    <p className="text-xs text-slate-500 mt-1">Esta imagen serÃ¡ visible en los rankings y tablas de posiciones.</p>
                   </div>
-                </div>
 
-                <div className="w-full rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-5">
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      id="terms"
-                      label="Acepto los documentos legales"
-                      checked={formData.rememberMe}
-                      onChange={(c) => setFormData({ ...formData, rememberMe: c })}
-                    />
-                  </div>
-                  <div className="mt-3 space-y-3 pl-0 sm:pl-8">
-                    <p id="register-legal-description" className="text-[11px] leading-5 text-slate-500">
-                      Revisa estos documentos antes de finalizar tu cuenta. El registro solo continuará cuando aceptes las condiciones legales y confirmes que eres mayor de edad.
-                    </p>
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition-colors hover:border-slate-300 hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2"
-                        onClick={() => openLegalDocument('terms')}
-                      >
-                        Ver Términos y Condiciones
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition-colors hover:border-slate-300 hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2"
-                        onClick={() => openLegalDocument('privacy')}
-                      >
-                        Ver Política de Privacidad
-                      </button>
+                  <div className="space-y-4">
+                    <div className="text-center md:text-left">
+                      <h4 className="text-lg font-black font-brand text-slate-900 uppercase">Tu identidad</h4>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Esta imagen será visible en rankings y tablas de posiciones.
+                      </p>
                     </div>
-                    <p className="text-[10px] leading-5 text-slate-500">
-                      Entiendo que los juegos de azar requieren mayoría de edad y que mi avatar podrá verse en rankings y ligas privadas.
-                    </p>
+
+                    <div className="w-full rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id="terms"
+                          label="Acepto los documentos legales"
+                          checked={formData.rememberMe}
+                          onChange={(c) => setFormData({ ...formData, rememberMe: c })}
+                        />
+                      </div>
+                      <div className="mt-3 space-y-3 pl-0 sm:pl-8">
+                        <p id="register-legal-description" className="text-[11px] leading-5 text-slate-500">
+                          Debes aceptar estos documentos para crear tu cuenta. Puedes abrirlos y revisarlos antes de continuar.
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2"
+                            onClick={() => openLegalDocument('terms')}
+                          >
+                            Ver términos y condiciones
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2"
+                            onClick={() => openLegalDocument('privacy')}
+                          >
+                            Ver política de privacidad
+                          </button>
+                        </div>
+                        <p className="text-[10px] leading-5 text-slate-500">
+                          Confirmas que eres mayor de edad y aceptas el uso básico de tus datos para operar la plataforma.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -772,7 +782,7 @@ const Register: React.FC = () => {
           </form>
 
           {/* Footer Actions */}
-          <div className="mt-8 flex items-center gap-4 relative z-0">
+          <div className="mt-6 md:mt-4 flex items-center gap-4 relative z-0">
             {step > 1 && (
               <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep((step - 1) as RegisterStep)}>
                 <ArrowLeft size={20} />

@@ -137,6 +137,23 @@ const reachAvatarStep = async () => {
   return { view };
 };
 
+describe('Register copy and formatting', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    isLoadingState = false;
+    registerMock.mockResolvedValue(undefined);
+  });
+
+  it('preserves spanish accents and title-cases unicode characters in the full name field', () => {
+    render(<Register />);
+
+    const nameInput = screen.getByPlaceholderText(/juan pérez/i);
+    fireEvent.change(nameInput, { target: { value: 'óSCAR ñANDÚ péREZ' } });
+
+    expect(nameInput).toHaveValue('Óscar Ñandú Pérez');
+  });
+});
+
 describe('Register avatar capture', () => {
   beforeEach(() => {
     vi.clearAllMocks();
