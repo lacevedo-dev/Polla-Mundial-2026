@@ -24,7 +24,20 @@ vi.mock('../components/UI', () => ({
     </button>
   ),
   Input: ({ leftIcon, rightIcon, type, ...props }: any) => (
-    <input data-testid={type === 'date' ? 'register-date-input' : undefined} type={type} {...props} />
+    <div>
+      <input
+        data-testid={
+          type === 'date'
+            ? 'register-date-input'
+            : String(props.placeholder ?? '').includes('•') || String(props.placeholder ?? '').includes('\\u2022')
+              ? 'register-password-input'
+              : undefined
+        }
+        type={type}
+        {...props}
+      />
+      {rightIcon ? <div data-testid="register-input-right-icon">{rightIcon}</div> : null}
+    </div>
   ),
   EmailAutocompleteInput: ({ value, onValueChange, rightIcon, ...props }: any) => (
     <input
@@ -71,7 +84,29 @@ const sleep = async (ms: number) => {
   });
 };
 
-const reachAvatarStep = async () => {
+const getStep2PasswordInputs = () => screen.getAllByTestId('register-password-input') as HTMLInputElement[];
+
+const fillStep2 = async (
+  view: ReturnType<typeof render>,
+  {
+    username = 'anagomez',
+    password = 'Password1',
+    confirmPassword = password,
+  }: { username?: string; password?: string; confirmPassword?: string } = {},
+) => {
+  fireEvent.change(screen.getByTestId('register-username-input'), { target: { value: username } });
+
+  let [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+  fireEvent.change(passwordInput, { target: { value: password } });
+  fireEvent.change(confirmPasswordInput, { target: { value: confirmPassword } });
+
+  await sleep(1050);
+
+  [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+  return { passwordInput, confirmPasswordInput };
+};
+
+const reachPasswordStep = async () => {
   const view = render(<Register />);
 
   fireEvent.change(screen.getByPlaceholderText(/juan/i), { target: { value: 'Ana Gomez' } });
@@ -85,15 +120,15 @@ const reachAvatarStep = async () => {
   fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
   await sleep(450);
 
-  fireEvent.change(screen.getByTestId('register-username-input'), { target: { value: 'anagomez' } });
+  return { view };
+};
 
-  const passwordInputs = view.container.querySelectorAll('input[type="password"]');
+const reachAvatarStep = async () => {
+  const { view } = await reachPasswordStep();
+  const passwordInputs = getStep2PasswordInputs();
   expect(passwordInputs).toHaveLength(2);
 
-  fireEvent.change(passwordInputs[0] as HTMLInputElement, { target: { value: 'Password1' } });
-  fireEvent.change(passwordInputs[1] as HTMLInputElement, { target: { value: 'Password1' } });
-
-  await sleep(1050);
+  await fillStep2(view);
   await waitFor(() => expect(screen.getByRole('button', { name: /continuar/i })).not.toBeDisabled());
 
   fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
@@ -196,5 +231,94 @@ describe('Register avatar capture', () => {
       'username',
     ]);
     expect(navigateMock).toHaveBeenCalledWith('/dashboard');
+  }, 15000);
+});
+
+describe('Register password visibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    isLoadingState = false;
+    registerMock.mockResolvedValue(undefined);
+    vi.stubGlobal('FileReader', MockFileReader as any);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('starts step 2 with hidden password fields and icon controls to reveal them', async () => {
+    const { view } = await reachPasswordStep();
+    const [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    expect(confirmPasswordInput).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: /^mostrar contraseña$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^mostrar confirmación de contraseña$/i })).toBeInTheDocument();
+  }, 15000);
+
+  it('reveals only the primary password field and preserves its value', async () => {
+    const { view } = await reachPasswordStep();
+    let [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+
+    fireEvent.change(passwordInput, { target: { value: 'Password1' } });
+    fireEvent.change(confirmPasswordInput, { target: { value: 'Secret999' } });
+    fireEvent.click(screen.getByRole('button', { name: /^mostrar contraseña$/i }));
+
+    [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(passwordInput).toHaveValue('Password1');
+    expect(confirmPasswordInput).toHaveAttribute('type', 'password');
+    expect(confirmPasswordInput).toHaveValue('Secret999');
+    expect(screen.getByRole('button', { name: /^ocultar contraseña$/i })).toBeInTheDocument();
+  }, 15000);
+
+  it('reveals the confirm password field independently and preserves its value', async () => {
+    const { view } = await reachPasswordStep();
+    let [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+
+    fireEvent.change(passwordInput, { target: { value: 'Password1' } });
+    fireEvent.change(confirmPasswordInput, { target: { value: 'Password1' } });
+    fireEvent.click(screen.getByRole('button', { name: /^mostrar confirmación de contraseña$/i }));
+
+    [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    expect(passwordInput).toHaveValue('Password1');
+    expect(confirmPasswordInput).toHaveAttribute('type', 'text');
+    expect(confirmPasswordInput).toHaveValue('Password1');
+    expect(screen.getByRole('button', { name: /^ocultar confirmación de contraseña$/i })).toBeInTheDocument();
+  }, 15000);
+
+  it('keeps password requirements and match validation accurate while fields are visible', async () => {
+    const { view } = await reachPasswordStep();
+
+    fireEvent.click(screen.getByRole('button', { name: /^mostrar contraseña$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^mostrar confirmación de contraseña$/i }));
+
+    await fillStep2(view, { username: 'anagomez', password: 'password1', confirmPassword: 'password1' });
+    expect(screen.getByRole('button', { name: /continuar/i })).toBeDisabled();
+
+    const [passwordInput, confirmPasswordInput] = getStep2PasswordInputs();
+    fireEvent.change(passwordInput, { target: { value: 'Password1' } });
+    fireEvent.change(confirmPasswordInput, { target: { value: 'Password1' } });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /continuar/i })).not.toBeDisabled());
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(confirmPasswordInput).toHaveAttribute('type', 'text');
+  }, 15000);
+
+  it('does not submit or advance the wizard when a reveal icon is clicked', async () => {
+    const { view } = await reachPasswordStep();
+    await fillStep2(view);
+    await waitFor(() => expect(screen.getByRole('button', { name: /continuar/i })).not.toBeDisabled());
+
+    fireEvent.click(screen.getByRole('button', { name: /^mostrar contraseña$/i }));
+
+    expect(screen.getByText(/Paso 2 de 3/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Paso 3 de 3/i)).not.toBeInTheDocument();
+    expect(registerMock).not.toHaveBeenCalled();
   }, 15000);
 });

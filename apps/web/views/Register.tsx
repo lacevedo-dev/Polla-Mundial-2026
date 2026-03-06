@@ -7,6 +7,8 @@ import {
   CheckCircle,
   User,
   Lock,
+  Eye,
+  EyeOff,
   ArrowLeft,
   ArrowRight,
   UploadCloud,
@@ -68,6 +70,8 @@ const Register: React.FC = () => {
   const [usernameStatus, setUsernameStatus] = React.useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
   const [phoneStatus, setPhoneStatus] = React.useState<'idle' | 'valid' | 'invalid' | 'taken'>('idle');
   const [birthDateStatus, setBirthDateStatus] = React.useState<'idle' | 'valid' | 'underage' | 'invalid'>('idle');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
 
   // Existing user detected state
   const [existingUser, setExistingUser] = React.useState<{ name: string, avatar: string } | null>(null);
@@ -378,6 +382,18 @@ const Register: React.FC = () => {
     return Array.from(suggestions).filter(s => s !== formData.usuario).slice(0, 4);
   }, [formData.nombre, formData.usuario]);
 
+  const renderPasswordVisibilityToggle = (isVisible: boolean, onToggle: () => void, fieldLabel: string) => (
+    <button
+      type="button"
+      aria-label={`${isVisible ? 'Ocultar' : 'Mostrar'} ${fieldLabel}`}
+      aria-pressed={isVisible}
+      onClick={onToggle}
+      className="rounded-full p-1 -m-1 text-slate-400 transition-colors hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-1"
+    >
+      {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  );
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 py-12">
       <style>{`
@@ -589,12 +605,26 @@ const Register: React.FC = () => {
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña *</label>
-                  <Input type="password" placeholder="••••••••" value={formData.password} onChange={e => handleInputChange('password', e.target.value)} leftIcon={<Lock size={16} />} />
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                    value={formData.password}
+                    onChange={e => handleInputChange('password', e.target.value)}
+                    leftIcon={<Lock size={16} />}
+                    rightIcon={renderPasswordVisibilityToggle(showPassword, () => setShowPassword(prev => !prev), 'contrase\u00f1a')}
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar Contraseña *</label>
-                  <Input type="password" placeholder="••••••••" value={formData.confirmPassword} onChange={e => handleInputChange('confirmPassword', e.target.value)} leftIcon={<Lock size={16} />} />
+                  <Input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                    value={formData.confirmPassword}
+                    onChange={e => handleInputChange('confirmPassword', e.target.value)}
+                    leftIcon={<Lock size={16} />}
+                    rightIcon={renderPasswordVisibilityToggle(showConfirmPassword, () => setShowConfirmPassword(prev => !prev), 'confirmaci\u00f3n de contrase\u00f1a')}
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">

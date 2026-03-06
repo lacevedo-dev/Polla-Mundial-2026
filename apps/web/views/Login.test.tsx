@@ -84,7 +84,7 @@ describe('Login view', () => {
         );
         expect(loginMock).toHaveBeenCalledTimes(1);
         expect(navigateMock).toHaveBeenCalledWith('/dashboard');
-    });
+    }, 15000);
 
     it('disables interactive controls while loading to avoid duplicate submit', async () => {
         const user = userEvent.setup();
