@@ -22,8 +22,8 @@ COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
 
 # Configuración de variables públicas de Vite en build-time
-# Es obligatorio pasar --build-arg VITE_API_URL=... para builds de producción
-ARG VITE_API_URL
+# Se usa la URL de producción por defecto si no se pasa como --build-arg
+ARG VITE_API_URL=https://api-polla.agildesarrollo.com.co
 ENV VITE_API_URL=${VITE_API_URL}
 RUN test -n "$VITE_API_URL" || (echo "ERROR: VITE_API_URL is required for frontend production build." && exit 1)
 
