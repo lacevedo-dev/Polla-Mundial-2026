@@ -651,10 +651,10 @@ const Register: React.FC = () => {
 
             {step === 3 && (
               <div className="animate-in slide-in-from-right-4 duration-300 flex-1">
-                <div className="grid gap-5 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] md:items-center">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] md:items-center">
                   <div className="flex flex-col items-center gap-4">
                   <div
-                    className={`relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
+                    className={`relative w-32 h-32 sm:w-36 sm:h-36 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
@@ -675,10 +675,9 @@ const Register: React.FC = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="text-center space-y-2 p-4">
-                        <div className="w-12 h-12 bg-slate-200 rounded-2xl flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform"><UploadCloud size={24} /></div>
-                        <p className="text-xs font-black text-slate-500 uppercase">Arrastra tu foto</p>
-                        <p className="text-[9px] text-slate-400">o usa las opciones de abajo</p>
+                      <div className="text-center space-y-1.5 p-4">
+                        <div className="w-10 h-10 bg-slate-200 rounded-2xl flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform"><UploadCloud size={22} /></div>
+                        <p className="text-[11px] font-black text-slate-500 uppercase leading-tight">Sube tu foto</p>
                       </div>
                     )}
                   </div>
@@ -701,29 +700,24 @@ const Register: React.FC = () => {
                     onChange={handleAvatarInputChange}
                   />
 
-                  <div className="w-full max-w-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="w-full max-w-sm grid grid-cols-2 gap-2">
                     <Button
                       type="button"
                       variant="secondary"
-                      className="h-12 rounded-2xl font-black text-[10px] uppercase tracking-[0.18em]"
+                      className="h-10 rounded-xl px-3 font-black text-[10px] uppercase tracking-[0.12em]"
                       onClick={openCameraPicker}
                     >
-                      <Camera size={16} className="mr-2" /> Tomar foto
+                      <Camera size={15} className="mr-1.5" /> Tomar foto
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-12 rounded-2xl border-slate-200 font-black text-[10px] uppercase tracking-[0.18em]"
+                      className="h-10 rounded-xl border-slate-200 px-3 font-black text-[10px] uppercase tracking-[0.12em]"
                       onClick={openFilePicker}
                     >
-                      <UploadCloud size={16} className="mr-2" /> Elegir archivo
+                      <UploadCloud size={15} className="mr-1.5" /> Adjuntar
                     </Button>
                   </div>
-
-                  <p className="text-[10px] text-slate-400 text-center max-w-xs leading-relaxed">
-                    En algunos celulares <span className="font-bold text-slate-600">Tomar foto</span> abrirá la cámara frontal; si no,
-                    tu navegador mostrará el selector de imágenes sin romper el flujo.
-                  </p>
 
                   {uploadError && (
                     <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-2">
@@ -733,15 +727,12 @@ const Register: React.FC = () => {
                   )}
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="text-center md:text-left">
-                      <h4 className="text-lg font-black font-brand text-slate-900 uppercase">Tu identidad</h4>
-                      <p className="text-sm text-slate-500 mt-1">
-                        Esta imagen será visible en rankings y tablas de posiciones.
-                      </p>
-                    </div>
+                  <div className="space-y-2">
+                    <p className="text-center md:text-left text-[11px] text-slate-500 leading-4">
+                      Foto visible en rankings y posiciones.
+                    </p>
 
-                    <div className="w-full rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="w-full rounded-3xl border border-slate-100 bg-slate-50 p-3.5">
                       <div className="flex items-start gap-3">
                         <Checkbox
                           id="terms"
@@ -750,28 +741,24 @@ const Register: React.FC = () => {
                           onChange={(c) => setFormData({ ...formData, rememberMe: c })}
                         />
                       </div>
-                      <div className="mt-3 space-y-3 pl-0 sm:pl-8">
-                        <p id="register-legal-description" className="text-[11px] leading-5 text-slate-500">
-                          Debes aceptar estos documentos para crear tu cuenta. Puedes abrirlos y revisarlos antes de continuar.
-                        </p>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="mt-3 pl-0 sm:pl-8">
+                        <p id="register-legal-description" className="text-[10px] leading-4 text-slate-500">
+                          Confirmas mayoría de edad y aceptas el uso básico de tus datos. Consulta{' '}
                           <button
                             type="button"
-                            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2"
+                            className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
                             onClick={() => openLegalDocument('terms')}
                           >
-                            Ver términos y condiciones
-                          </button>
+                            Términos y Condiciones
+                          </button>{' '}
+                          y{' '}
                           <button
                             type="button"
-                            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2"
+                            className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
                             onClick={() => openLegalDocument('privacy')}
                           >
-                            Ver política de privacidad
-                          </button>
-                        </div>
-                        <p className="text-[10px] leading-5 text-slate-500">
-                          Confirmas que eres mayor de edad y aceptas el uso básico de tus datos para operar la plataforma.
+                            Política de Privacidad
+                          </button>.
                         </p>
                       </div>
                     </div>

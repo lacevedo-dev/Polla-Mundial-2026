@@ -172,7 +172,7 @@ describe('Register avatar capture', () => {
     await reachAvatarStep();
 
     expect(screen.getByRole('button', { name: /tomar foto/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /elegir archivo/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /adjuntar/i })).toBeInTheDocument();
   }, 15000);
 
   it('configures the hidden mobile camera input with image capture settings', async () => {
@@ -284,7 +284,7 @@ describe('Register avatar capture', () => {
     fireEvent.click(termsCheckbox);
     expect(termsCheckbox.checked).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /ver términos y condiciones/i }));
+    fireEvent.click(screen.getByRole('button', { name: /términos y condiciones/i }));
     expect(screen.getByRole('dialog', { name: /términos y condiciones/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /cerrar términos y condiciones/i }));
