@@ -161,6 +161,8 @@ const CreateLeague: React.FC = () => {
   const [searchQuery, setSearchQuery] = React.useState(saved?.searchQuery || '');
   const [leagueId] = React.useState<string>(saved?.leagueId || Math.random().toString(36).substr(2, 6).toUpperCase());
   const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(saved?.foundExistingUser || false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   // Phone selection state
   const [selectedCountry, setSelectedCountry] = React.useState<Country>(
@@ -226,10 +228,18 @@ const CreateLeague: React.FC = () => {
     }
   }, [step, leagueData.includeBaseFee, leagueData.includeStageFees, leagueData.stageFees]);
 
-  const handleFinish = () => {
-    createLeagueStore(leagueData);
-    sessionStorage.removeItem(STORAGE_KEY);
-    navigate('/dashboard');
+  const handleFinish = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await createLeagueStore(leagueData);
+      sessionStorage.removeItem(STORAGE_KEY);
+      navigate('/dashboard');
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'No fue posible crear la liga.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const isCategoryEnabled = (cat: string) => cat === 'general' ? leagueData.includeBaseFee : leagueData.includeStageFees && leagueData.stageFees[cat as StageType]?.active;
@@ -1106,12 +1116,19 @@ const CreateLeague: React.FC = () => {
                   <Button
                     variant="secondary"
                     className="flex-1 h-16 rounded-[2rem] font-black text-[12px] tracking-[0.2em] shadow-2xl hover:bg-lime-500 hover:scale-[1.02] transition-all"
+                    disabled={isSubmitting}
                     onClick={handleFinish}
                   >
-                    FINALIZAR E IR AL TABLERO
+                    {isSubmitting ? 'CREANDO LIGA...' : 'FINALIZAR E IR AL TABLERO'}
                     <ArrowRight size={24} className="ml-2" />
                   </Button>
                 </div>
+
+                {submitError && (
+                  <div className="w-full rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">
+                    {submitError}
+                  </div>
+                )}
 
                 <div className="flex gap-6 text-[9px] font-black uppercase tracking-widest text-slate-300">
                   <span className="flex items-center gap-1"><ShieldCheck size={12} /> ENCRIPTADO</span>

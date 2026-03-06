@@ -1,51 +1,70 @@
 import { create } from 'zustand';
 import { request } from '../api';
+import {
+    mergeLeaguePredictions,
+    toLeaderboardRows,
+    type LeaderboardApiEntry,
+    type LeaderboardRow,
+    type LeaguePredictionResponse,
+    type MatchResponse,
+    type MatchViewModel,
+} from './prediction.adapters';
 
-export interface MatchPrediction {
-    id: string;
-    homeTeam: string;
-    awayTeam: string;
-    homeFlag: string;
-    awayFlag: string;
-    date: string;
-    status: string;
-    prediction: { home: string; away: string };
-    result?: { home: number; away: number };
-    pointsEarned?: number;
-    saved?: boolean;
-}
+export type { LeaderboardRow, MatchViewModel } from './prediction.adapters';
 
 interface PredictionState {
-    matches: MatchPrediction[];
+    matches: MatchViewModel[];
+    leaderboard: LeaderboardRow[];
     isLoading: boolean;
-    fetchMatches: (leagueId: string) => Promise<void>;
+    fetchLeagueMatches: (leagueId: string) => Promise<MatchViewModel[]>;
+    fetchLeaderboard: (leagueId: string) => Promise<LeaderboardRow[]>;
     savePrediction: (leagueId: string, matchId: string, home: number, away: number) => Promise<void>;
+    resetLeagueData: () => void;
+}
+
+function sortMatchesByDate(matches: MatchViewModel[]): MatchViewModel[] {
+    return [...matches].sort((left, right) => left.date.localeCompare(right.date));
 }
 
 export const usePredictionStore = create<PredictionState>((set) => ({
     matches: [],
+    leaderboard: [],
     isLoading: false,
 
-    fetchMatches: async (leagueId) => {
+    fetchLeagueMatches: async (leagueId) => {
         set({ isLoading: true });
         try {
-            const data: any = await request(`/matches?leagueId=${leagueId}`);
-            // Mapear datos del backend al formato del frontend
-            const mapped = data.map((m: any) => ({
-                id: m.id,
-                homeTeam: m.homeTeam.name,
-                awayTeam: m.awayTeam.name,
-                homeFlag: m.homeTeam.flag || '🏳️',
-                awayFlag: m.awayTeam.flag || '🏳️',
-                date: m.date,
-                status: m.status,
-                prediction: {
-                    home: m.predictions?.[0]?.homeScore?.toString() || '',
-                    away: m.predictions?.[0]?.awayScore?.toString() || '',
-                },
-                saved: m.predictions?.length > 0
-            }));
-            set({ matches: mapped, isLoading: false });
+            const [matches, predictions] = await Promise.all([
+                request<MatchResponse[]>('/matches'),
+                request<LeaguePredictionResponse[]>(`/predictions/league/${leagueId}`),
+            ]);
+
+            const mergedMatches = sortMatchesByDate(mergeLeaguePredictions(matches, predictions));
+            set({
+                matches: mergedMatches,
+                isLoading: false,
+            });
+
+            return mergedMatches;
+        } catch (error) {
+            set({ isLoading: false });
+            throw error;
+        }
+    },
+
+    fetchLeaderboard: async (leagueId) => {
+        set({ isLoading: true });
+        try {
+            const leaderboard = toLeaderboardRows(
+                await request<LeaderboardApiEntry[]>(`/predictions/leaderboard/${leagueId}`),
+            );
+
+            set({
+                leaderboard,
+                isLoading: false,
+            });
+
+            return leaderboard;
         } catch (error) {
             set({ isLoading: false });
             throw error;
@@ -53,23 +72,35 @@ export const usePredictionStore = create<PredictionState>((set) => ({
     },
 
     savePrediction: async (leagueId, matchId, home, away) => {
-        try {
-            await request('/predictions', {
-                method: 'POST',
-                body: JSON.stringify({
-                    leagueId,
-                    matchId,
-                    homeScore: home,
-                    awayScore: away
-                })
-            });
-            set(state => ({
-                matches: state.matches.map(m =>
-                    m.id === matchId ? { ...m, prediction: { home: home.toString(), away: away.toString() }, saved: true } : m
-                )
-            }));
-        } catch (error) {
-            throw error;
-        }
-    }
+        await request('/predictions', {
+            method: 'POST',
+            body: JSON.stringify({
+                leagueId,
+                matchId,
+                homeScore: home,
+                awayScore: away,
+            }),
+        });
+
+        set((state) => ({
+            matches: state.matches.map((match) =>
+                match.id === matchId
+                    ? {
+                          ...match,
+                          prediction: {
+                              home: String(home),
+                              away: String(away),
+                          },
+                          saved: true,
+                      }
+                    : match,
+            ),
+        }));
+    },
+
+    resetLeagueData: () =>
+        set({
+            matches: [],
+            leaderboard: [],
+        }),
 }));

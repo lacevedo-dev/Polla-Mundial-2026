@@ -1,33 +1,58 @@
+import type { LeagueData } from '@polla-2026/shared';
 import { create } from 'zustand';
 import { request } from '../api';
+import {
+    toCreateLeagueRequest,
+    toLeagueContextDetail,
+    toLeagueContextListItem,
+    type CreateLeagueRequest,
+    type LeagueApiResponse,
+    type LeagueContext,
+} from './league.adapters';
 
-export interface LeagueContext {
-    id: string;
-    name: string;
-    description?: string;
-    role: 'ADMIN' | 'MEMBER';
-    status: string;
-    settings: any;
-    stats: {
-        rank?: number;
-        points?: number;
-        collected?: string;
-        totalPrize?: string;
-        memberCount?: number;
-    };
-    code?: string;
-}
+export type { LeagueContext } from './league.adapters';
+
+type CreateLeagueInput = LeagueData | CreateLeagueRequest;
 
 interface LeagueState {
     activeLeague: LeagueContext | null;
     myLeagues: LeagueContext[];
     isLoading: boolean;
 
-    fetchMyLeagues: () => Promise<void>;
-    fetchLeagueDetails: (id: string) => Promise<void>;
-    setActiveLeague: (league: LeagueContext) => void;
-    createLeague: (data: any) => Promise<LeagueContext>;
+    fetchMyLeagues: () => Promise<LeagueContext[]>;
+    fetchLeagueDetails: (id: string) => Promise<LeagueContext>;
+    setActiveLeague: (league: LeagueContext | string | null) => void;
+    createLeague: (data: CreateLeagueInput) => Promise<LeagueContext>;
     joinLeague: (code: string) => Promise<void>;
+}
+
+function upsertLeague(leagues: LeagueContext[], nextLeague: LeagueContext): LeagueContext[] {
+    const existingIndex = leagues.findIndex((league) => league.id === nextLeague.id);
+    if (existingIndex === -1) {
+        return [nextLeague, ...leagues];
+    }
+
+    const nextLeagues = [...leagues];
+    nextLeagues[existingIndex] = {
+        ...nextLeagues[existingIndex],
+        ...nextLeague,
+    };
+    return nextLeagues;
+}
+
+function resolveActiveLeague(
+    leagues: LeagueContext[],
+    currentActiveLeague: LeagueContext | null,
+): LeagueContext | null {
+    if (!leagues.length) {
+        return null;
+    }
+
+    if (!currentActiveLeague) {
+        return leagues[0];
+    }
+
+    return leagues.find((league) => league.id === currentActiveLeague.id) ?? leagues[0];
 }
 
 export const useLeagueStore = create<LeagueState>((set, get) => ({
@@ -38,42 +63,32 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     fetchMyLeagues: async () => {
         set({ isLoading: true });
         try {
-            const leagues: any = await request('/leagues');
-            set({ myLeagues: leagues, isLoading: false });
-            if (leagues.length > 0 && !get().activeLeague) {
-                set({ activeLeague: leagues[0] });
-            }
-        } catch (error) {
-            set({ isLoading: false });
-            throw error;
-        }
-    },
+            const leagues = await request<LeagueApiResponse[]>('/leagues');
+            const normalizedLeagues = leagues.map(toLeagueContextListItem);
 
-    fetchLeagueDetails: async (id: string) => {
-        set({ isLoading: true });
-        try {
-            const league: any = await request(`/leagues/${id}`);
-            set({ activeLeague: league, isLoading: false });
-        } catch (error) {
-            set({ isLoading: false });
-            throw error;
-        }
-    },
-
-    setActiveLeague: (league) => set({ activeLeague: league }),
-
-    createLeague: async (data) => {
-        set({ isLoading: true });
-        try {
-            const league: any = await request('/leagues', {
-                method: 'POST',
-                body: JSON.stringify(data),
-            });
-            set(state => ({
-                myLeagues: [league, ...state.myLeagues],
-                activeLeague: league,
-                isLoading: false
+            set((state) => ({
+                myLeagues: normalizedLeagues,
+                activeLeague: resolveActiveLeague(normalizedLeagues, state.activeLeague),
+                isLoading: false,
             }));
+
+            return normalizedLeagues;
+        } catch (error) {
+            set({ isLoading: false });
+            throw error;
+        }
+    },
+
+    fetchLeagueDetails: async (id) => {
+        set({ isLoading: true });
+        try {
+            const league = toLeagueContextDetail(await request<LeagueApiResponse>(`/leagues/${id}`));
+            set((state) => ({
+                myLeagues: upsertLeague(state.myLeagues, league),
+                activeLeague: league,
+                isLoading: false,
+            }));
+
             return league;
         } catch (error) {
             set({ isLoading: false });
@@ -81,15 +96,75 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
         }
     },
 
-    joinLeague: async (code) => {
+    setActiveLeague: (league) => {
+        if (!league) {
+            set({ activeLeague: null });
+            return;
+        }
+
+        if (typeof league === 'string') {
+            const nextLeague = get().myLeagues.find((candidate) => candidate.id === league);
+            if (nextLeague) {
+                set({ activeLeague: nextLeague });
+            }
+            return;
+        }
+
+        set({ activeLeague: league });
+    },
+
+    createLeague: async (data) => {
         set({ isLoading: true });
         try {
-            await request(`/leagues/join/${code}`, { method: 'POST' });
-            const leagues: any = await request('/leagues');
-            set({ myLeagues: leagues, isLoading: false });
+            const payload = toCreateLeagueRequest(data);
+            const createdLeague = toLeagueContextDetail(
+                await request<LeagueApiResponse>('/leagues', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                }),
+            );
+
+            set((state) => ({
+                myLeagues: upsertLeague(state.myLeagues, createdLeague),
+                activeLeague: createdLeague,
+                isLoading: false,
+            }));
+
+            return createdLeague;
         } catch (error) {
             set({ isLoading: false });
             throw error;
         }
-    }
+    },
+
+    joinLeague: async (code) => {
+        const previousState = {
+            activeLeague: get().activeLeague,
+            myLeagues: get().myLeagues,
+        };
+
+        set({ isLoading: true });
+        try {
+            await request('/leagues/join', {
+                method: 'POST',
+                body: JSON.stringify({ code }),
+            });
+
+            const refreshedLeagues = await request<LeagueApiResponse[]>('/leagues');
+            const normalizedLeagues = refreshedLeagues.map(toLeagueContextListItem);
+
+            set({
+                myLeagues: normalizedLeagues,
+                activeLeague: resolveActiveLeague(normalizedLeagues, previousState.activeLeague),
+                isLoading: false,
+            });
+        } catch (error) {
+            set({
+                myLeagues: previousState.myLeagues,
+                activeLeague: previousState.activeLeague,
+                isLoading: false,
+            });
+            throw error;
+        }
+    },
 }));

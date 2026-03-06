@@ -1,102 +1,105 @@
 import React from 'react';
-import { Card, Button, Badge } from '../components/UI';
-import { useNavigate } from 'react-router-dom';
-import {
-    Trophy,
-    Calendar,
-    Wallet,
-    Users,
-    ShieldCheck,
-    ArrowRight,
-    CheckCircle2,
-    Lock,
-    Globe
-} from 'lucide-react';
-
-// Props eliminadas — navegación via useNavigate
+import { useNavigate, useParams } from 'react-router-dom';
+import { AlertCircle, ArrowRight, LogIn, Ticket } from 'lucide-react';
+import { useLeagueStore } from '../stores/league.store';
 
 const JoinLeague: React.FC = () => {
     const navigate = useNavigate();
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-            <div className="max-w-md w-full space-y-6 animate-in fade-in zoom-in duration-500">
+    const { code: codeFromRoute } = useParams();
+    const joinLeague = useLeagueStore((state) => state.joinLeague);
+    const [code, setCode] = React.useState(codeFromRoute?.toUpperCase() ?? '');
+    const [error, setError] = React.useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-                {/* Header Branding */}
-                <div className="text-center space-y-2">
-                    <div className="inline-flex items-center gap-2 bg-black text-white px-4 py-1.5 rounded-full mb-2 shadow-xl shadow-lime-400/20">
-                        <Trophy size={14} className="text-lime-400" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Te han invitado a jugar</span>
+    const isAuthenticated = Boolean(localStorage.getItem('token'));
+
+    const handleJoin = async () => {
+        const normalizedCode = code.trim().toUpperCase();
+        if (!normalizedCode) {
+            setError('Ingresa un código válido para unirte a la liga.');
+            return;
+        }
+
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError(null);
+
+        try {
+            await joinLeague(normalizedCode);
+            navigate('/dashboard');
+        } catch (nextError) {
+            setError(nextError instanceof Error ? nextError.message : 'No fue posible unirte a la liga.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+            <div className="w-full max-w-xl rounded-[2.5rem] bg-white p-8 shadow-2xl">
+                <div className="flex items-center gap-3 text-lime-700">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-100">
+                        <Ticket className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.25em] text-lime-600">Unirse a una liga</p>
+                        <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">Ingresa tu código real</h1>
                     </div>
                 </div>
 
-                {/* Main Ticket Card */}
-                <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-2xl relative">
-                    {/* Top Section */}
-                    <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-lime-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                <p className="mt-6 text-sm text-slate-500">
+                    Esta pantalla ya usa el flujo real de <code>POST /leagues/join</code> con body <code>{'{ code }'}</code>.
+                    Si llegaste desde un enlace público, el código se precargó automáticamente.
+                </p>
 
-                        <div className="relative z-10 flex flex-col items-center text-center space-y-4">
-                            <img src="https://picsum.photos/seed/admin/60/60" className="w-16 h-16 rounded-2xl border-4 border-white shadow-lg" alt="Admin" />
-                            <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ADMINISTRADA POR</p>
-                                <p className="text-sm font-black uppercase">LUIS MORALES</p>
-                            </div>
-                            <div className="h-px w-12 bg-white/20 my-2"></div>
-                            <h2 className="text-3xl font-black font-brand uppercase tracking-tighter leading-none text-white">
-                                LOS CRACKS DEL BARRIO
-                            </h2>
-                            <Badge color="bg-lime-400 text-black border border-lime-300">
-                                <Lock size={10} className="mr-1" /> LIGA PRIVADA
-                            </Badge>
-                        </div>
+                <label className="mt-6 block">
+                    <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Código de acceso</span>
+                    <input
+                        aria-label="Código de liga"
+                        value={code}
+                        onChange={(event) => setCode(event.target.value.toUpperCase())}
+                        placeholder="ABC123"
+                        className="w-full rounded-2xl border border-slate-200 px-4 py-4 text-center text-2xl font-black uppercase tracking-[0.3em] text-slate-900 outline-none"
+                    />
+                </label>
+
+                {error ? (
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                        <span>{error}</span>
                     </div>
+                ) : null}
 
-                    {/* Divider */}
-                    <div className="relative flex items-center justify-center h-8 bg-slate-50">
-                        <div className="absolute left-0 w-6 h-6 bg-slate-50 rounded-full -translate-x-1/2 border border-slate-200"></div>
-                        <div className="w-full border-t-2 border-dashed border-slate-300 mx-8"></div>
-                        <div className="absolute right-0 w-6 h-6 bg-slate-50 rounded-full translate-x-1/2 border border-slate-200"></div>
-                    </div>
-
-                    {/* Info Body */}
-                    <div className="p-8 pt-2 space-y-6">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center gap-1 text-center">
-                                <Wallet size={18} className="text-lime-600 mb-1" />
-                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">ENTRADA</span>
-                                <span className="text-sm font-black text-slate-900">$50.000</span>
-                            </div>
-                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center gap-1 text-center">
-                                <Users size={18} className="text-purple-600 mb-1" />
-                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">JUGADORES</span>
-                                <span className="text-sm font-black text-slate-900">24 / 50</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">PREMIOS ACTIVOS</p>
-                            <div className="space-y-2">
-                                {['1er Puesto: $648.000', '2do Puesto: $324.000', '3er Puesto: $108.000'].map((prize, i) => (
-                                    <div key={i} className="flex items-center gap-3 text-xs font-bold text-slate-600 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-                                        <CheckCircle2 size={14} className="text-lime-500" />
-                                        {prize}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <Button
-                            className="w-full h-14 rounded-2xl font-black uppercase text-xs tracking-[0.15em] shadow-xl hover:scale-[1.02] transition-transform"
-                            variant="secondary"
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <button
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-lime-400 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isSubmitting}
+                        onClick={handleJoin}
+                    >
+                        {isAuthenticated ? (
+                            <>
+                                {isSubmitting ? 'Uniendo...' : 'Unirme ahora'}
+                                <ArrowRight className="h-4 w-4" />
+                            </>
+                        ) : (
+                            <>
+                                Iniciar sesión para unirme
+                                <LogIn className="h-4 w-4" />
+                            </>
+                        )}
+                    </button>
+                    {!isAuthenticated ? (
+                        <button
+                            className="rounded-2xl border border-slate-200 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-600"
                             onClick={() => navigate('/register')}
                         >
-                            ACEPTAR INVITACIÓN <ArrowRight size={16} className="ml-2" />
-                        </Button>
-
-                        <button onClick={() => navigate('/')} className="w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">
-                            No gracias, ir al inicio
+                            Crear cuenta
                         </button>
-                    </div>
+                    ) : null}
                 </div>
             </div>
         </div>
