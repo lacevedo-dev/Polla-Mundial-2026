@@ -15,5 +15,7 @@ export default defineConfig({
         globals: true,
         setupFiles: ['./test/setup.ts'],
         include: ['**/*.test.ts', '**/*.test.tsx'],
+        fileParallelism: false,
+        maxWorkers: 1,
     },
 });

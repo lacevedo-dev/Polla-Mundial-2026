@@ -4,7 +4,7 @@ export type StartupDiagnostics = {
     missingEnv: string[];
 };
 
-const REQUIRED_ENV_KEYS = ['DATABASE_URL'];
+const REQUIRED_ENV_KEYS = ['DATABASE_URL', 'JWT_SECRET'];
 
 export function resolveStartupDiagnostics(env: NodeJS.ProcessEnv = process.env): StartupDiagnostics {
     const rawPort = env.PORT?.trim();

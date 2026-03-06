@@ -8,8 +8,13 @@
   ],
   "scripts": {
     "web:dev": "npm run dev --workspace=@polla-2026/web",
+    "web:test": "npm run test --workspace=@polla-2026/web",
     "web:build": "npm run build --workspace=@polla-2026/web",
     "api:dev": "npm run start:dev --workspace=@polla-2026/api",
-    "api:build": "npm run build --workspace=@polla-2026/api"
+    "api:test": "npm run test --workspace=@polla-2026/api -- --runInBand",
+    "api:e2e": "npm run test:e2e --workspace=@polla-2026/api -- --runInBand",
+    "api:build": "npm run build --workspace=@polla-2026/api",
+    "baseline:check": "npm run web:test && npm run web:build && npm run api:test && npm run api:e2e && npm run api:build",
+    "smoke:release": "node scripts/release-smoke.mjs"
   }
 }

@@ -9,7 +9,7 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
   assertRequiredEnv(diagnostics);
 
   console.info(
-    `[bootstrap] Starting API (env=${diagnostics.nodeEnv}, port=${diagnostics.port}, databaseUrlConfigured=${diagnostics.missingEnv.includes('DATABASE_URL') ? 'no' : 'yes'})`,
+    `[bootstrap] Starting API (env=${diagnostics.nodeEnv}, port=${diagnostics.port}, databaseUrlConfigured=${diagnostics.missingEnv.includes('DATABASE_URL') ? 'no' : 'yes'}, jwtSecretConfigured=${diagnostics.missingEnv.includes('JWT_SECRET') ? 'no' : 'yes'})`,
   );
 
   const app = await NestFactory.create(AppModule);

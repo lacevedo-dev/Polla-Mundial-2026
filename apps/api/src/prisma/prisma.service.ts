@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { createPool } from 'mariadb';
 import { resolveDatabaseUrlForMariaDb } from './database-url.util';
+import { classifyDatabaseConnectivityError, type DatabaseConnectivityResult } from './database-error.util';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -40,8 +41,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         try {
             await this.$connect();
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Database connection failed during startup. Verify DATABASE_URL and network reachability. Details: ${message}`);
+            const diagnostic = classifyDatabaseConnectivityError(error);
+            throw new Error(
+                `Database connection failed during startup [${diagnostic.category}]. ${diagnostic.message}`,
+            );
         }
     }
 
@@ -49,12 +52,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         await this.$disconnect();
     }
 
-    async checkDatabaseConnectivity(): Promise<boolean> {
+    async checkDatabaseConnectivity(): Promise<DatabaseConnectivityResult> {
         try {
             await this.$queryRawUnsafe(PrismaService.DATABASE_PING_QUERY);
-            return true;
-        } catch {
-            return false;
+            return { ok: true };
+        } catch (error) {
+            return classifyDatabaseConnectivityError(error);
         }
     }
 }

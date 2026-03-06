@@ -11,19 +11,23 @@ export class HealthService {
     }
 
     async getReadiness(): Promise<HealthResponse> {
-        const databaseIsUp = await this.prismaService.checkDatabaseConnectivity();
+        const databaseConnectivity = await this.prismaService.checkDatabaseConnectivity();
 
-        if (databaseIsUp) {
+        if (databaseConnectivity.ok) {
             return this.buildHealthResponse('ok', 'up');
         }
 
         throw new ServiceUnavailableException({
-            ...this.buildHealthResponse('degraded', 'down'),
+            ...this.buildHealthResponse('degraded', 'down', databaseConnectivity.category),
             message: 'Database connectivity check failed.',
         });
     }
 
-    private buildHealthResponse(status: HealthStatus, databaseStatus: HealthResponse['checks']['database']): HealthResponse {
+    private buildHealthResponse(
+        status: HealthStatus,
+        databaseStatus: HealthResponse['checks']['database'],
+        databaseFailureCategory?: NonNullable<HealthResponse['diagnostics']>['databaseFailureCategory'],
+    ): HealthResponse {
         return {
             service: 'polla-api',
             status,
@@ -32,6 +36,9 @@ export class HealthService {
                 app: 'up',
                 database: databaseStatus,
             },
+            diagnostics: databaseFailureCategory ? {
+                databaseFailureCategory,
+            } : undefined,
         };
     }
 }

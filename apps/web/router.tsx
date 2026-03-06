@@ -1,5 +1,6 @@
 import React from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, type RouteObject } from 'react-router-dom';
+import { resolveDevelopmentSurfaceFlags, type DevelopmentSurfaceFlags } from './runtime-flags';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -23,32 +24,48 @@ import Help from './views/Help';
 import DesignSystem from './views/DesignSystem';
 import BeforeAfter from './views/BeforeAfter';
 
-export const router = createBrowserRouter([
-    // Rutas públicas (sin sidebar)
-    {
-        element: <PublicLayout />,
-        children: [
-            { path: '/', element: <Landing /> },
-            { path: '/login', element: <Login /> },
-            { path: '/register', element: <Register /> },
-            { path: '/verify-email', element: <EmailVerification /> },
-            { path: '/join/:code', element: <JoinLeague /> },
-            { path: '/join', element: <JoinLeague /> },
-            { path: '/checkout', element: <Checkout /> },
-        ],
-    },
-    // Rutas de la app (con sidebar)
-    {
-        element: <AppLayout />,
-        children: [
-            { path: '/dashboard', element: <Dashboard /> },
-            { path: '/predictions', element: <Predictions /> },
-            { path: '/ranking', element: <Ranking /> },
-            { path: '/create-league', element: <CreateLeague /> },
-            { path: '/manage-payments', element: <ManagePayments /> },
-            { path: '/help', element: <Help /> },
-            { path: '/design-system', element: <DesignSystem /> },
-            { path: '/before-after', element: <BeforeAfter /> },
-        ],
-    },
-]);
+const publicRoutes: RouteObject[] = [
+    { path: '/', element: <Landing /> },
+    { path: '/login', element: <Login /> },
+    { path: '/register', element: <Register /> },
+    { path: '/verify-email', element: <EmailVerification /> },
+    { path: '/join/:code', element: <JoinLeague /> },
+    { path: '/join', element: <JoinLeague /> },
+    { path: '/checkout', element: <Checkout /> },
+];
+
+const appRoutes: RouteObject[] = [
+    { path: '/dashboard', element: <Dashboard /> },
+    { path: '/predictions', element: <Predictions /> },
+    { path: '/ranking', element: <Ranking /> },
+    { path: '/create-league', element: <CreateLeague /> },
+    { path: '/manage-payments', element: <ManagePayments /> },
+    { path: '/help', element: <Help /> },
+];
+
+const developmentOnlyRoutes: RouteObject[] = [
+    { path: '/design-system', element: <DesignSystem /> },
+    { path: '/before-after', element: <BeforeAfter /> },
+];
+
+export { resolveDevelopmentSurfaceFlags } from './runtime-flags';
+
+export function buildRoutes({ includeDevRoutes }: DevelopmentSurfaceFlags): RouteObject[] {
+    return [
+        {
+            element: <PublicLayout />,
+            children: publicRoutes,
+        },
+        {
+            element: <AppLayout />,
+            children: includeDevRoutes ? [...appRoutes, ...developmentOnlyRoutes] : appRoutes,
+        },
+    ];
+}
+
+const routerFlags = resolveDevelopmentSurfaceFlags({
+    mode: import.meta.env.MODE,
+    enableDevRoutes: import.meta.env.VITE_ENABLE_DEV_ROUTES,
+});
+
+export const router = createBrowserRouter(buildRoutes(routerFlags));

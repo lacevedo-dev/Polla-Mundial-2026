@@ -20,7 +20,7 @@ describe('App + Health (e2e)', () => {
   };
 
   beforeEach(async () => {
-    prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue(true);
+    prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue({ ok: true });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AppController, HealthController],
@@ -66,7 +66,7 @@ describe('App + Health (e2e)', () => {
   });
 
   it('/health/ready (GET) returns 200 when db is reachable', async () => {
-    prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue(true);
+    prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue({ ok: true });
 
     const response = await request(app.getHttpServer())
       .get('/health/ready')
@@ -77,7 +77,11 @@ describe('App + Health (e2e)', () => {
   });
 
   it('/health/ready (GET) returns 503 when db is down', async () => {
-    prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue(false);
+    prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue({
+      ok: false,
+      category: 'quota',
+      message: 'Database user quota exceeded.',
+    });
 
     const response = await request(app.getHttpServer())
       .get('/health/ready')
@@ -85,5 +89,8 @@ describe('App + Health (e2e)', () => {
 
     expect(response.body.status).toBe('degraded');
     expect(response.body.checks.database).toBe('down');
+    expect(response.body.diagnostics).toEqual({
+      databaseFailureCategory: 'quota',
+    });
   });
 });

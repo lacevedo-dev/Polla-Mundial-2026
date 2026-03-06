@@ -2,15 +2,28 @@ import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
+import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
 
-const navItems = [
+const primaryNavItems = [
     { to: '/dashboard', label: 'Inicio', icon: Home },
     { to: '/predictions', label: 'Mis Pollas', icon: Trophy },
     { to: '/ranking', label: 'Ranking', icon: ListOrdered },
     { to: '/help', label: 'Ayuda', icon: HelpCircle },
+];
+
+const developmentNavItems = [
     { to: '/design-system', label: 'Sistema', icon: Palette },
     { to: '/before-after', label: 'Antes/Después', icon: ArrowLeftRight },
 ];
+
+const runtimeFlags = resolveDevelopmentSurfaceFlags({
+    mode: import.meta.env.MODE,
+    enableDevRoutes: import.meta.env.VITE_ENABLE_DEV_ROUTES,
+});
+
+const navItems = runtimeFlags.includeDevRoutes
+    ? [...primaryNavItems, ...developmentNavItems]
+    : primaryNavItems;
 
 const AppLayout: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);

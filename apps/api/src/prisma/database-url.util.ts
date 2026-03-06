@@ -5,6 +5,7 @@ export type DatabaseUrlResolution = {
 
 const MARIADB_SCHEME_PREFIX = 'mariadb://';
 const MYSQL_SCHEME_PREFIX = 'mysql://';
+export const DATABASE_URL_SCHEME_ERROR_MESSAGE = 'DATABASE_URL must use mariadb:// (preferred) or mysql:// scheme.';
 
 export function resolveDatabaseUrlForMariaDb(rawDatabaseUrl: string): DatabaseUrlResolution {
     const trimmed = rawDatabaseUrl.trim();
@@ -27,5 +28,5 @@ export function resolveDatabaseUrlForMariaDb(rawDatabaseUrl: string): DatabaseUr
         };
     }
 
-    throw new Error('DATABASE_URL must use mariadb:// (preferred) or mysql:// scheme.');
+    throw new Error(DATABASE_URL_SCHEME_ERROR_MESSAGE);
 }

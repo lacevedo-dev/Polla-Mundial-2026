@@ -31,17 +31,35 @@ describe('HealthService', () => {
     });
 
     it('returns readiness ok when database is reachable', async () => {
-        prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue(true);
+        prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue({ ok: true });
 
         const response = await healthService.getReadiness();
 
         expect(response.status).toBe('ok');
         expect(response.checks.database).toBe('up');
+        expect(response.diagnostics).toBeUndefined();
     });
 
-    it('throws 503 readiness response when database is down', async () => {
-        prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue(false);
+    it('throws 503 readiness response with diagnostic category when database is down by quota', async () => {
+        prismaServiceMock.checkDatabaseConnectivity.mockResolvedValue({
+            ok: false,
+            category: 'quota',
+            message: 'Database user quota exceeded.',
+        });
 
+        await expect(healthService.getReadiness()).rejects.toMatchObject({
+            response: expect.objectContaining({
+                status: 'degraded',
+                checks: {
+                    app: 'up',
+                    database: 'down',
+                },
+                diagnostics: {
+                    databaseFailureCategory: 'quota',
+                },
+                message: 'Database connectivity check failed.',
+            }),
+        });
         await expect(healthService.getReadiness()).rejects.toThrow(ServiceUnavailableException);
     });
 });

@@ -7,9 +7,13 @@ import { DEV_FALLBACK_API_URL, resolveBaseUrl } from './api';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const dockerfilePath = path.resolve(currentDir, 'Dockerfile');
 const readmePath = path.resolve(currentDir, '../../README.md');
+const rootPackageJsonPath = path.resolve(currentDir, '../../package.json');
 
 const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
 const readmeContent = fs.readFileSync(readmePath, 'utf8');
+const rootPackageJson = JSON.parse(fs.readFileSync(rootPackageJsonPath, 'utf8')) as {
+    scripts?: Record<string, string>;
+};
 
 describe('Spec scenarios: web/api-runtime-config', () => {
     it('Development fallback works for local iteration', () => {
@@ -40,6 +44,16 @@ describe('Spec scenarios: web/api-runtime-config', () => {
 });
 
 describe('Spec scenarios: operations/release-rollout', () => {
+    it('Root package exposes baseline commands from repo root', () => {
+        expect(rootPackageJson.scripts).toMatchObject({
+            'web:test': expect.any(String),
+            'api:test': expect.any(String),
+            'api:e2e': expect.any(String),
+            'baseline:check': expect.any(String),
+            'smoke:release': expect.any(String),
+        });
+    });
+
     it('Ahead local branch is synchronized before release', () => {
         expect(readmeContent).toContain('git fetch origin');
         expect(readmeContent).toContain('git status -sb');
@@ -70,5 +84,12 @@ describe('Spec scenarios: operations/release-rollout', () => {
     it('Missing checklist item is treated as process defect', () => {
         expect(readmeContent).toContain('treat it as a process defect');
         expect(readmeContent).toContain('Update this checklist before the next deployment window.');
+    });
+
+    it('README documents the root baseline and smoke commands plus readiness gate', () => {
+        expect(readmeContent).toContain('npm run baseline:check');
+        expect(readmeContent).toContain('npm run smoke:release -- --baseUrl=');
+        expect(readmeContent).toContain('MUST NOT be marked healthy');
+        expect(readmeContent).toContain('GET /health/ready` remains `503`');
     });
 });
