@@ -74,6 +74,27 @@ describe('classifyDatabaseConnectivityError', () => {
         });
     });
 
+    it('classifies nested ECONNREFUSED inside a pool timeout as network instead of quota', () => {
+        const error = Object.assign(
+            new Error(
+                'Raw query failed. Code: `45028`. Message: `pool timeout: failed to retrieve a connection from pool after 10012ms (pool connections: active=0 idle=0 limit=10)`',
+            ),
+            {
+                code: 'P2010',
+                cause: Object.assign(new Error('connect ECONNREFUSED ::1:3306'), {
+                    code: 'ECONNREFUSED',
+                }),
+            },
+        );
+
+        const result = classifyDatabaseConnectivityError(error);
+
+        expect(result).toMatchObject({
+            ok: false,
+            category: 'network',
+        });
+    });
+
     it('falls back to unknown for unclassified errors', () => {
         const result = classifyDatabaseConnectivityError(new Error('Unexpected DB issue'));
 

@@ -1,12 +1,14 @@
+﻿import React from 'react';
+import { ArrowLeft, ArrowRight, AlertCircle, LogIn, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-import React from 'react';
-import { Input } from '../components/ui/input';
+import { EmailAutocompleteInput } from '../components/UI';
+import { LegalDialog } from '../components/legal/LegalDialog';
+import type { LegalDocumentKey } from '../components/legal/legal-documents';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
+import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { EmailAutocompleteInput } from '../components/UI';
-import { useNavigate } from 'react-router-dom';
-import { LogIn, ArrowRight, ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 
 export const normalizeCheckboxState = (checked: boolean | 'indeterminate') => checked === true;
@@ -18,6 +20,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [rememberMe, setRememberMe] = React.useState(false);
+  const [activeLegalDocument, setActiveLegalDocument] = React.useState<LegalDocumentKey | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +31,10 @@ const Login: React.FC = () => {
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión. Revisa tus credenciales.');
     }
+  };
+
+  const openLegalDocument = (documentKey: LegalDocumentKey) => {
+    setActiveLegalDocument(documentKey);
   };
 
   return (
@@ -42,7 +49,6 @@ const Login: React.FC = () => {
       </div>
 
       <div className={`max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl overflow-hidden min-h-[600px] transition-all duration-500 ${isLoading ? 'scale-[0.99] opacity-95' : 'scale-100 opacity-100'}`}>
-        {/* Visual Brand Side */}
         <div className="hidden md:flex flex-col justify-between bg-black p-12 relative overflow-hidden">
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-12">
@@ -64,13 +70,11 @@ const Login: React.FC = () => {
             </div>
           </div>
 
-          {/* Decorative background pattern */}
           <div className="absolute top-1/2 -right-20 transform -translate-y-1/2 opacity-10 pointer-events-none">
             <div className="w-[500px] h-[500px] border-[40px] border-lime-400 rounded-full"></div>
           </div>
         </div>
 
-        {/* Form Side */}
         <div className="p-8 md:p-16 flex flex-col justify-center">
           <div className="md:hidden flex justify-center mb-8">
             <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center font-brand text-white text-3xl font-black">26</div>
@@ -80,7 +84,7 @@ const Login: React.FC = () => {
             <p className="text-slate-500">¿No tienes cuenta? <button onClick={() => navigate('/register')} className="text-lime-600 font-bold hover:underline" disabled={isLoading}>Regístrate gratis</button></p>
 
             {error && (
-              <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm flex items-center gap-2 rounded-r-xl animate-in fade-in slide-in-from-left-2">
+              <div role="alert" aria-live="polite" className="mt-4 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm flex items-center gap-2 rounded-r-xl animate-in fade-in slide-in-from-left-2">
                 <AlertCircle size={18} /> {error}
               </div>
             )}
@@ -145,11 +149,39 @@ const Login: React.FC = () => {
             </div>
           </form>
 
-          <p className="mt-12 text-[10px] text-center text-slate-400 uppercase tracking-widest font-medium">
-            Al ingresar, aceptas nuestros <span className="text-slate-600 cursor-pointer hover:underline">Términos de Servicio</span> y <span className="text-slate-600 cursor-pointer hover:underline">Privacidad</span>.
-          </p>
+          <div className="mt-12 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
+            <p className="leading-5">
+              Al ingresar, aceptas nuestros documentos legales y el tratamiento responsable de tus datos para operar la plataforma.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                className="font-bold text-slate-700 underline underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
+                onClick={() => openLegalDocument('terms')}
+              >
+                Ver Términos de Servicio
+              </button>
+              <button
+                type="button"
+                className="font-bold text-slate-700 underline underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
+                onClick={() => openLegalDocument('privacy')}
+              >
+                Ver Política de Privacidad
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
+      <LegalDialog
+        documentKey={activeLegalDocument}
+        open={activeLegalDocument !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveLegalDocument(null);
+          }
+        }}
+      />
     </div>
   );
 };

@@ -1,9 +1,10 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+﻿import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
+import { UsersService } from '../users/users.service';
+import { mapRegisterOperationalError } from './auth-error.util';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
@@ -13,7 +14,6 @@ export class AuthService {
     ) { }
 
     async validateUser(identifier: string, pass: string): Promise<any> {
-        // Buscar usuario por email o username
         let user = await this.usersService.findByEmail(identifier);
         if (!user) {
             user = await this.usersService.findByUsername(identifier);
@@ -41,46 +41,55 @@ export class AuthService {
                 email: user.email,
                 username: user.username,
                 avatar: user.avatar,
-                plan: user.plan
-            }
+                plan: user.plan,
+            },
         };
     }
 
     async register(registerDto: RegisterDto) {
-        // Verificar si el correo ya existe
-        const existingEmail = await this.usersService.findByEmail(registerDto.email);
+        const existingEmail = await this.wrapRegisterDatabaseOperation(() =>
+            this.usersService.findByEmail(registerDto.email),
+        );
         if (existingEmail) {
             throw new ConflictException('El correo electrónico ya está registrado');
         }
 
-        // Verificar si el usuario ya existe
-        const existingUsername = await this.usersService.findByUsername(registerDto.username);
+        const existingUsername = await this.wrapRegisterDatabaseOperation(() =>
+            this.usersService.findByUsername(registerDto.username),
+        );
         if (existingUsername) {
             throw new ConflictException('El nombre de usuario ya está en uso');
         }
 
-        // Hashear contraseña
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
 
-        // Crear usuario
-        const user = await this.usersService.create({
-            name: registerDto.name,
-            email: registerDto.email,
-            username: registerDto.username,
-            passwordHash: passwordHash,
-            phone: registerDto.phone,
-            countryCode: registerDto.countryCode
-        });
+        const user = await this.wrapRegisterDatabaseOperation(() =>
+            this.usersService.create({
+                name: registerDto.name,
+                email: registerDto.email,
+                username: registerDto.username,
+                passwordHash,
+                phone: registerDto.phone,
+                countryCode: registerDto.countryCode,
+            }),
+        );
 
         const { passwordHash: _, ...result } = user;
-
-        // Auto login después del registro
         const payload = { username: user.username, sub: user.id, email: user.email };
+
         return {
             message: 'Usuario registrado exitosamente',
             accessToken: this.jwtService.sign(payload),
-            user: result
+            user: result,
         };
+    }
+
+    private async wrapRegisterDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+        try {
+            return await operation();
+        } catch (error) {
+            throw mapRegisterOperationalError(error);
+        }
     }
 }

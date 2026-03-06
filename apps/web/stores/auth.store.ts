@@ -1,5 +1,6 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { request } from '../api';
+import { normalizeAuthError } from './auth.error';
 
 interface User {
     id: string;
@@ -41,11 +42,11 @@ export const useAuthStore = create<AuthState>((set) => ({
             set({
                 user: response.user,
                 token,
-                isLoading: false
+                isLoading: false,
             });
         } catch (error) {
             set({ isLoading: false });
-            throw error;
+            throw normalizeAuthError(error, 'login');
         }
     },
 
@@ -64,11 +65,11 @@ export const useAuthStore = create<AuthState>((set) => ({
             set({
                 user: response.user,
                 token,
-                isLoading: false
+                isLoading: false,
             });
         } catch (error) {
             set({ isLoading: false });
-            throw error;
+            throw normalizeAuthError(error, 'register');
         }
     },
 
@@ -83,9 +84,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         try {
             const user: any = await request('/auth/profile');
             set({ user, token });
-        } catch (e) {
+        } catch {
             localStorage.removeItem('token');
             set({ user: null, token: null });
         }
-    }
+    },
 }));

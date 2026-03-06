@@ -48,6 +48,14 @@ export function classifyDatabaseConnectivityError(error: unknown): Extract<Datab
         };
     }
 
+    if (matchesNetworkError(signals)) {
+        return {
+            ok: false,
+            category: 'network',
+            message: 'Database host is unreachable or timed out.',
+        };
+    }
+
     if (matchesQuotaError(signals)) {
         return {
             ok: false,
@@ -61,14 +69,6 @@ export function classifyDatabaseConnectivityError(error: unknown): Extract<Datab
             ok: false,
             category: 'credentials',
             message: 'Database credentials were rejected.',
-        };
-    }
-
-    if (matchesNetworkError(signals)) {
-        return {
-            ok: false,
-            category: 'network',
-            message: 'Database host is unreachable or timed out.',
         };
     }
 
@@ -98,10 +98,10 @@ function matchesNetworkError(signals: ErrorSignal[]): boolean {
 
         return (signal.code ? NETWORK_ERROR_CODES.has(signal.code) : false)
             || normalized.includes('econnrefused')
-            || normalized.includes('timed out')
-            || normalized.includes('timeout')
+            || normalized.includes('etimedout')
             || normalized.includes('enotfound')
             || normalized.includes('ehostunreach')
+            || normalized.includes('eai_again')
             || normalized.includes('econnreset');
     });
 }
@@ -151,6 +151,15 @@ function collectErrorSignals(error: unknown): ErrorSignal[] {
                 errno: getNumberErrno(current),
                 message: sanitizeDatabaseErrorMessage(current.message),
             });
+
+            const errorWithCause = current as Error & { cause?: unknown; errors?: unknown[] };
+            if (errorWithCause.cause) {
+                queue.push(errorWithCause.cause);
+            }
+
+            if (Array.isArray(errorWithCause.errors)) {
+                queue.push(...errorWithCause.errors);
+            }
         } else if (typeof current === 'object') {
             const record = current as Record<string, unknown>;
             signals.push({

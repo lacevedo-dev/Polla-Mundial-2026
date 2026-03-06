@@ -121,6 +121,20 @@ describe('Login view', () => {
         expect(screen.getByTestId('legacy-email-autocomplete')).toBeInTheDocument();
         expect(screen.getByTestId('new-password-input')).toBeInTheDocument();
     });
+
+    it('opens and closes the legal dialog from login without leaving the screen', async () => {
+        const user = userEvent.setup();
+        render(<Login />);
+
+        await user.click(screen.getByRole('button', { name: /ver términos de servicio/i }));
+        expect(screen.getByRole('dialog', { name: /términos y condiciones/i })).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /cerrar términos y condiciones/i }));
+        await waitFor(() =>
+            expect(screen.queryByRole('dialog', { name: /términos y condiciones/i })).not.toBeInTheDocument(),
+        );
+        expect(screen.getByRole('button', { name: /Entrar al Estadio/i })).toBeInTheDocument();
+    });
 });
 
 describe('normalizeCheckboxState', () => {

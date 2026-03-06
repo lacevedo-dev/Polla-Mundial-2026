@@ -7,6 +7,8 @@ describe('resolveDatabaseUrlForMariaDb', () => {
         expect(result).toEqual({
             connectionUrl: 'mariadb://user:pass@db:3306/app',
             normalizedFromMysqlScheme: false,
+            hostname: 'db',
+            usesLoopbackHost: false,
         });
     });
 
@@ -16,6 +18,8 @@ describe('resolveDatabaseUrlForMariaDb', () => {
         expect(result).toEqual({
             connectionUrl: 'mariadb://user:pass@db:3306/app',
             normalizedFromMysqlScheme: true,
+            hostname: 'db',
+            usesLoopbackHost: false,
         });
     });
 

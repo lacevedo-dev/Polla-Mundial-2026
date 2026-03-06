@@ -14,7 +14,7 @@ describe('startup diagnostics', () => {
 
     it('uses explicit port when PORT is valid', () => {
         const diagnostics = resolveStartupDiagnostics({
-            DATABASE_URL: 'mysql://user:pass@localhost:3306/db',
+            DATABASE_URL: 'mysql://user:pass@db.example.com:3306/db',
             JWT_SECRET: 'test-secret',
             NODE_ENV: 'production',
             PORT: '3004',
@@ -23,6 +23,19 @@ describe('startup diagnostics', () => {
         expect(diagnostics.port).toBe(3004);
         expect(diagnostics.nodeEnv).toBe('production');
         expect(diagnostics.missingEnv).toEqual([]);
+    });
+
+    it('fails when a non-development runtime points DATABASE_URL to loopback', () => {
+        const diagnostics = resolveStartupDiagnostics({
+            DATABASE_URL: 'mysql://user:pass@localhost:3306/db',
+            JWT_SECRET: 'test-secret',
+            NODE_ENV: 'production',
+            PORT: '3004',
+        });
+
+        expect(() => assertRequiredEnv(diagnostics)).toThrow(
+            'DATABASE_URL must not target localhost, 127.0.0.1, or ::1 outside development.',
+        );
     });
 
     it('reports missing required env keys', () => {

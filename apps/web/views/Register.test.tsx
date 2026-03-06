@@ -232,6 +232,53 @@ describe('Register avatar capture', () => {
     ]);
     expect(navigateMock).toHaveBeenCalledWith('/dashboard');
   }, 15000);
+
+  it('shows a friendly operational error on step 3 when registration is temporarily unavailable', async () => {
+    registerMock.mockRejectedValueOnce(
+      new Error('El registro está temporalmente no disponible. Intenta nuevamente en unos minutos.'),
+    );
+
+    const { view } = await reachAvatarStep();
+
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('El registro está temporalmente no disponible. Intenta nuevamente en unos minutos.'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Paso 3 de 3/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Internal server error$/i)).not.toBeInTheDocument();
+  }, 15000);
+
+  it('opens the legal dialog from register step 3 and preserves avatar plus checkbox state when closed', async () => {
+    const { view } = await reachAvatarStep();
+
+    const fileInput = view.container.querySelector('#avatar-file-input') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(['avatar'], 'profile-photo.webp', { type: 'image/webp' })],
+      },
+    });
+    await sleep(850);
+
+    const termsCheckbox = view.container.querySelector('#terms') as HTMLInputElement;
+    fireEvent.click(termsCheckbox);
+    expect(termsCheckbox.checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /ver términos y condiciones/i }));
+    expect(screen.getByRole('dialog', { name: /términos y condiciones/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /cerrar términos y condiciones/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /términos y condiciones/i })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByAltText('Preview')).toHaveAttribute('src', expect.stringContaining('profile-photo.webp'));
+    expect((view.container.querySelector('#terms') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/Paso 3 de 3/i)).toBeInTheDocument();
+  }, 15000);
 });
 
 describe('Register password visibility', () => {
