@@ -22,9 +22,14 @@ COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
 
 # Configuración de variables públicas de Vite en build-time
+# Si no se pasa como --build-arg, Vite usará los valores de .env.production
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
-RUN test -n "$VITE_API_URL" || (echo "ERROR: VITE_API_URL is required for frontend production build." && exit 1)
+RUN if [ -z "$VITE_API_URL" ]; then \
+    echo "WARNING: VITE_API_URL not provided as build-arg. Using defaults from .env files."; \
+    else \
+    echo "Building with VITE_API_URL=$VITE_API_URL"; \
+    fi
 
 # Construir el proyecto Vite para produccion
 # Como estamos usando workspaces podemos hacerlo desde root o app
