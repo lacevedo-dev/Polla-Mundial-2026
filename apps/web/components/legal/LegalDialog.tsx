@@ -25,17 +25,14 @@ export function LegalDialog({ documentKey, open, onOpenChange }: LegalDialogProp
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                className="w-full px-5 pb-5 pt-4 sm:max-w-2xl sm:px-8 sm:pb-8 sm:pt-6"
-                aria-describedby={`${documentKey}-legal-description`}
-            >
+            <DialogContent className="w-full px-5 pb-5 pt-4 sm:max-w-2xl sm:px-8 sm:pb-8 sm:pt-6">
                 <div className="flex items-start justify-between gap-4">
                     <DialogHeader className="min-w-0 flex-1">
                         <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-100 text-lime-700">
                             <ScrollText className="h-5 w-5" />
                         </div>
                         <DialogTitle>{document.title}</DialogTitle>
-                        <DialogDescription id={`${documentKey}-legal-description`}>
+                        <DialogDescription>
                             {document.summary}
                         </DialogDescription>
                     </DialogHeader>
