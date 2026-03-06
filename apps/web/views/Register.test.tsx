@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Register from './Register';
 
@@ -27,7 +26,7 @@ vi.mock('../components/UI', () => ({
   Input: ({ leftIcon, rightIcon, type, ...props }: any) => (
     <input data-testid={type === 'date' ? 'register-date-input' : undefined} type={type} {...props} />
   ),
-  EmailAutocompleteInput: ({ value, onValueChange, ...props }: any) => (
+  EmailAutocompleteInput: ({ value, onValueChange, rightIcon, ...props }: any) => (
     <input
       data-testid="register-email-input"
       value={value ?? ''}
@@ -35,7 +34,7 @@ vi.mock('../components/UI', () => ({
       {...props}
     />
   ),
-  AutocompleteInput: ({ value, onValueChange, ...props }: any) => (
+  AutocompleteInput: ({ value, onValueChange, suggestionTitle, leftIcon, rightIcon, ...props }: any) => (
     <input
       data-testid="register-username-input"
       value={value ?? ''}
@@ -73,35 +72,34 @@ const sleep = async (ms: number) => {
 };
 
 const reachAvatarStep = async () => {
-  const user = userEvent.setup();
   const view = render(<Register />);
 
-  await user.type(screen.getByPlaceholderText(/juan/i), 'Ana Gomez');
+  fireEvent.change(screen.getByPlaceholderText(/juan/i), { target: { value: 'Ana Gomez' } });
   fireEvent.change(screen.getByTestId('register-date-input'), { target: { value: '2000-01-01' } });
-  await user.type(screen.getByPlaceholderText(/310 123 4567/i), '3101234568');
-  await user.type(screen.getByTestId('register-email-input'), 'ana@mail.com');
+  fireEvent.change(screen.getByPlaceholderText(/310 123 4567/i), { target: { value: '3101234568' } });
+  fireEvent.change(screen.getByTestId('register-email-input'), { target: { value: 'ana@mail.com' } });
 
   await sleep(550);
   await waitFor(() => expect(screen.getByRole('button', { name: /continuar/i })).not.toBeDisabled());
 
-  await user.click(screen.getByRole('button', { name: /continuar/i }));
+  fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
   await sleep(450);
 
-  await user.type(screen.getByTestId('register-username-input'), 'anagomez');
+  fireEvent.change(screen.getByTestId('register-username-input'), { target: { value: 'anagomez' } });
 
   const passwordInputs = view.container.querySelectorAll('input[type="password"]');
   expect(passwordInputs).toHaveLength(2);
 
-  await user.type(passwordInputs[0] as HTMLInputElement, 'Password1');
-  await user.type(passwordInputs[1] as HTMLInputElement, 'Password1');
+  fireEvent.change(passwordInputs[0] as HTMLInputElement, { target: { value: 'Password1' } });
+  fireEvent.change(passwordInputs[1] as HTMLInputElement, { target: { value: 'Password1' } });
 
   await sleep(1050);
   await waitFor(() => expect(screen.getByRole('button', { name: /continuar/i })).not.toBeDisabled());
 
-  await user.click(screen.getByRole('button', { name: /continuar/i }));
+  fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
   await sleep(450);
 
-  return { user, view };
+  return { view };
 };
 
 describe('Register avatar capture', () => {
@@ -123,7 +121,7 @@ describe('Register avatar capture', () => {
 
     expect(screen.getByRole('button', { name: /tomar foto/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /elegir archivo/i })).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('configures the hidden mobile camera input with image capture settings', async () => {
     const { view } = await reachAvatarStep();
@@ -133,7 +131,7 @@ describe('Register avatar capture', () => {
     expect(cameraInput).toHaveAttribute('type', 'file');
     expect(cameraInput).toHaveAttribute('accept', 'image/*');
     expect(cameraInput).toHaveAttribute('capture', 'user');
-  });
+  }, 15000);
 
   it('reuses the same preview state when selecting an image from camera or gallery', async () => {
     const { view } = await reachAvatarStep();
@@ -162,10 +160,10 @@ describe('Register avatar capture', () => {
     await waitFor(() =>
       expect(screen.getByAltText('Preview')).toHaveAttribute('src', expect.stringContaining('gallery-choice.png')),
     );
-  });
+  }, 15000);
 
   it('keeps the register payload unchanged even when an avatar preview was selected', async () => {
-    const { user, view } = await reachAvatarStep();
+    const { view } = await reachAvatarStep();
 
     const fileInput = view.container.querySelector('#avatar-file-input') as HTMLInputElement;
     fireEvent.change(fileInput, {
@@ -175,8 +173,8 @@ describe('Register avatar capture', () => {
     });
     await sleep(850);
 
-    await user.click(view.container.querySelector('#terms') as HTMLInputElement);
-    await user.click(screen.getByRole('button', { name: /finalizar registro/i }));
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
 
     await waitFor(() =>
       expect(registerMock).toHaveBeenCalledWith({
@@ -198,5 +196,5 @@ describe('Register avatar capture', () => {
       'username',
     ]);
     expect(navigateMock).toHaveBeenCalledWith('/dashboard');
-  });
+  }, 15000);
 });

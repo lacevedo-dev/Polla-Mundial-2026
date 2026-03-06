@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Search,
   RefreshCcw,
+  Camera,
   FileWarning,
   Sparkles
 } from 'lucide-react';
@@ -80,6 +81,8 @@ const Register: React.FC = () => {
   const [isCountrySelectorOpen, setIsCountrySelectorOpen] = React.useState(false);
   const [countrySearch, setCountrySearch] = React.useState('');
   const selectorRef = React.useRef<HTMLDivElement>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Form State
   const [formData, setFormData] = React.useState({
@@ -278,6 +281,20 @@ const Register: React.FC = () => {
     };
 
     reader.readAsDataURL(file);
+  };
+
+  const handleAvatarInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    handleFileChange(file);
+    event.target.value = '';
+  };
+
+  const openCameraPicker = () => {
+    cameraInputRef.current?.click();
+  };
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -600,7 +617,7 @@ const Register: React.FC = () => {
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
                     onDrop={handleDrop}
-                    onClick={() => document.getElementById('file-upload')?.click()}
+                    onClick={openFilePicker}
                   >
                     {formData.fotoPreview ? (
                       <div className="relative w-full h-full">
@@ -619,11 +636,52 @@ const Register: React.FC = () => {
                       <div className="text-center space-y-2 p-4">
                         <div className="w-12 h-12 bg-slate-200 rounded-2xl flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform"><UploadCloud size={24} /></div>
                         <p className="text-xs font-black text-slate-500 uppercase">Arrastra tu foto</p>
-                        <p className="text-[9px] text-slate-400">o haz clic para buscar</p>
+                        <p className="text-[9px] text-slate-400">o usa las opciones de abajo</p>
                       </div>
                     )}
-                    <input id="file-upload" type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e.target.files?.[0] || null)} />
                   </div>
+
+                  <input
+                    ref={cameraInputRef}
+                    id="avatar-camera-input"
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    capture="user"
+                    onChange={handleAvatarInputChange}
+                  />
+                  <input
+                    ref={fileInputRef}
+                    id="avatar-file-input"
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleAvatarInputChange}
+                  />
+
+                  <div className="w-full max-w-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-12 rounded-2xl font-black text-[10px] uppercase tracking-[0.18em]"
+                      onClick={openCameraPicker}
+                    >
+                      <Camera size={16} className="mr-2" /> Tomar foto
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 rounded-2xl border-slate-200 font-black text-[10px] uppercase tracking-[0.18em]"
+                      onClick={openFilePicker}
+                    >
+                      <UploadCloud size={16} className="mr-2" /> Elegir archivo
+                    </Button>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 text-center max-w-sm leading-relaxed">
+                    En algunos celulares <span className="font-bold text-slate-600">Tomar foto</span> abrirá la cámara frontal; si no,
+                    tu navegador mostrará el selector de imágenes sin romper el flujo.
+                  </p>
 
                   {uploadError && (
                     <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-2">
