@@ -10,9 +10,10 @@ import { PaymentsModule } from './payments/payments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, LeaguesModule, PredictionsModule, MatchesModule, PaymentsModule, NotificationsModule, PrismaModule, CommonModule],
+  imports: [AuthModule, UsersModule, LeaguesModule, PredictionsModule, MatchesModule, PaymentsModule, NotificationsModule, PrismaModule, CommonModule, HealthModule],
   controllers: [AppController],
   providers: [AppService],
 })

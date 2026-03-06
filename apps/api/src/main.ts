@@ -1,24 +1,37 @@
 import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { assertRequiredEnv, resolveStartupDiagnostics } from './config/startup.config';
 
-async function bootstrap() {
-  console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Cargado' : 'No cargado');
+export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const diagnostics = resolveStartupDiagnostics(env);
+  assertRequiredEnv(diagnostics);
+
+  console.info(
+    `[bootstrap] Starting API (env=${diagnostics.nodeEnv}, port=${diagnostics.port}, databaseUrlConfigured=${diagnostics.missingEnv.includes('DATABASE_URL') ? 'no' : 'yes'})`,
+  );
+
   const app = await NestFactory.create(AppModule);
 
-  // Habilitar la validación global
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true, // remueve propiedades que no tengan decoradores en el DTO
-    forbidNonWhitelisted: true, // lanza error si existen propiedades no permitidas
-    transform: true, // transforma los payloads a instancias de las clases DTO
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
-  // Habilitar CORS
   app.enableCors();
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`Aplicación ejecutándose en el puerto: ${port}`);
+  await app.listen(diagnostics.port);
+  console.info(`[bootstrap] API listening on port ${diagnostics.port}`);
 }
-bootstrap();
+
+if (require.main === module) {
+  bootstrap().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[bootstrap] Startup failed: ${message}`);
+    process.exit(1);
+  });
+}

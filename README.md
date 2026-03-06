@@ -50,3 +50,39 @@ When shipping scoring or schema-sensitive changes, deploy in this order:
 7. **Process quality gate**
    - If any checklist step is missed during a release incident, treat it as a process defect.
    - Update this checklist before the next deployment window.
+
+## API 502 Incident Response (Runbook)
+
+When production API endpoints return `502`, execute this triage checklist before closing the incident:
+
+1. **Runtime logs**
+   - Capture startup/runtime errors from API container/process.
+   - Confirm whether failure is application bootstrap, database connectivity, or upstream proxy.
+2. **Environment validation**
+   - Verify required env vars are present and valid (`DATABASE_URL`, `PORT`, `JWT_SECRET` as applicable).
+   - Confirm no secret values are malformed or empty.
+3. **Listener and routing checks**
+   - Validate API process is listening on expected port.
+   - Validate reverse proxy/upstream target points to the active API instance.
+4. **Database connectivity**
+   - Validate network reachability and credentials for DB host.
+   - Confirm readiness check reflects DB state (`/health/ready`).
+
+### Post-fix Smoke Procedure
+
+After every fix attempt, run smoke checks and record HTTP status + timestamp:
+
+- `GET /`
+- `GET /health/live`
+- `GET /health/ready`
+- `POST /auth/login`
+- `GET /leagues`
+
+Expected healthy state:
+- Health endpoints respond deterministically (`/health/live` 200; `/health/ready` 200 when DB is ready).
+- Business endpoints stop returning `502`.
+
+### Release Gate
+
+A release **MUST NOT** be marked healthy while critical smoke checks fail.
+If operations must continue with residual risk, owners must explicitly document risk acceptance and mitigation window.

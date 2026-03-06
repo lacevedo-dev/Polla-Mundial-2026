@@ -15,7 +15,7 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
+    it('should keep returning "Hello World!" for legacy root compatibility', () => {
       expect(appController.getHello()).toBe('Hello World!');
     });
   });
