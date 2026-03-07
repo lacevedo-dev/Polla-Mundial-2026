@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Login, { normalizeCheckboxState } from './Login';
 
-const navigateMock = vi.fn();
-const loginMock = vi.fn();
+const { navigateMock, loginMock } = vi.hoisted(() => ({
+    navigateMock: vi.fn(),
+    loginMock: vi.fn(),
+}));
 let isLoadingState = false;
 let userState = { emailVerified: true } as any;
 
@@ -12,19 +14,19 @@ vi.mock('react-router-dom', () => ({
     useNavigate: () => navigateMock,
 }));
 
-const mockAuthStore = {
-    useAuthStore: vi.fn(() => ({
+vi.mock('../stores/auth.store', () => {
+    const useAuthStore = vi.fn(() => ({
         login: loginMock,
         isLoading: isLoadingState,
-    })),
-};
+    }));
 
-mockAuthStore.useAuthStore.getState = vi.fn(() => ({
-    user: userState,
-    isLoading: isLoadingState,
-}));
+    useAuthStore.getState = vi.fn(() => ({
+        user: userState,
+        isLoading: isLoadingState,
+    }));
 
-vi.mock('../stores/auth.store', () => mockAuthStore);
+    return { useAuthStore };
+});
 
 vi.mock('../components/ui/input', () => ({
     Input: (props: any) => {

@@ -2,13 +2,19 @@ import { CreatePaymentDto } from './dto/payment.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentStatus } from '@prisma/client';
 import { BoldService } from './bold.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { StripeService } from './stripe.service';
+import { OrdersService } from '../orders/orders.service';
 
 @Injectable()
 export class PaymentsService {
+    private readonly logger = new Logger(PaymentsService.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly boldService: BoldService,
+        private readonly stripeService: StripeService,
+        private readonly ordersService: OrdersService,
     ) { }
 
     async createPaymentSession(userId: string, createPaymentDto: CreatePaymentDto) {
@@ -94,5 +100,75 @@ export class PaymentsService {
             },
             orderBy: { createdAt: 'desc' }
         });
+    }
+
+    async createStripeCheckoutSession(
+        userId: string,
+        items: Array<{ type: string; id: string; quantity: number; price: number; name: string }>,
+        currency: string = 'USD',
+        successUrl: string,
+        cancelUrl: string,
+    ) {
+        try {
+            // Calculate total amount
+            const totalAmount = items.reduce(
+                (sum, item) => sum + item.price * item.quantity,
+                0,
+            );
+
+            // Create order in database
+            const order = await this.ordersService.createOrder(
+                userId,
+                totalAmount,
+                currency,
+                items.map(item => ({
+                    type: item.type,
+                    id: item.id,
+                    quantity: item.quantity,
+                })),
+            );
+
+            // Create Stripe checkout session
+            const stripeItems = items.map(item => ({
+                name: item.name,
+                amount: item.price,
+                quantity: item.quantity,
+                currency,
+            }));
+
+            const session = await this.stripeService.createCheckoutSession(
+                stripeItems,
+                successUrl,
+                cancelUrl,
+                {
+                    orderId: order.id,
+                    userId,
+                },
+            );
+
+            // Update order with Stripe session ID
+            await this.ordersService.updateOrderWithStripeSession(
+                order.id,
+                session.sessionId,
+            );
+
+            this.logger.log(
+                `Stripe checkout session created for user ${userId}, order: ${order.id}`,
+            );
+
+            return {
+                orderId: order.id,
+                sessionId: session.sessionId,
+                redirectUrl: session.redirectUrl,
+                amount: totalAmount,
+                currency,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Failed to create Stripe checkout session for user ${userId}:`,
+                error,
+            );
+            throw error;
+        }
     }
 }

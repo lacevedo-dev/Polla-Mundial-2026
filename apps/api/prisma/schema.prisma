@@ -116,6 +116,13 @@ enum InviteStatus {
   EXPIRED
 }
 
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
 enum NotificationType {
   MATCH_REMINDER
   PREDICTION_CLOSED
@@ -150,6 +157,7 @@ model User {
   leagues              LeagueMember[]
   predictions          Prediction[]
   payments             Payment[]
+  orders               Order[]
   invitations          Invitation[]
   notifications        Notification[]
   auditLogs            AuditLog[]
@@ -366,6 +374,22 @@ model Notification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, read])
   @@index([sentAt])
+}
+
+model Order {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount                Decimal     @db.Decimal(10, 2)
+  currency              String      @default("USD")
+  status                OrderStatus @default(PENDING)
+  stripeSessionId       String?     @unique
+  stripePaymentIntentId String?     @unique
+  items                 Json
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  @@index([userId])
+  @@index([status])
 }
 
 model AuditLog {

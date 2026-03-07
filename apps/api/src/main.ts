@@ -12,7 +12,9 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
     `[bootstrap] Starting API (env=${diagnostics.nodeEnv}, port=${diagnostics.port}, databaseUrlConfigured=${diagnostics.missingEnv.includes('DATABASE_URL') ? 'no' : 'yes'}, jwtSecretConfigured=${diagnostics.missingEnv.includes('JWT_SECRET') ? 'no' : 'yes'})`,
   );
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

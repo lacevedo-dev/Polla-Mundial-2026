@@ -214,13 +214,14 @@ describe('Register avatar capture', () => {
     );
   }, 15000);
 
-  it('keeps the register payload unchanged even when an avatar preview was selected', async () => {
+  it('forwards the selected avatar file to the register boundary while preserving the verification success flow', async () => {
     const { view } = await reachAvatarStep();
 
+    const avatarFile = new File(['avatar'], 'profile-photo.webp', { type: 'image/webp' });
     const fileInput = view.container.querySelector('#avatar-file-input') as HTMLInputElement;
     fireEvent.change(fileInput, {
       target: {
-        files: [new File(['avatar'], 'profile-photo.webp', { type: 'image/webp' })],
+        files: [avatarFile],
       },
     });
     await sleep(850);
@@ -236,10 +237,12 @@ describe('Register avatar capture', () => {
         name: 'Ana Gomez',
         phone: '3101234568',
         countryCode: '+57',
+        avatarFile,
       }),
     );
 
     expect(Object.keys(registerMock.mock.calls[0][0]).sort()).toEqual([
+      'avatarFile',
       'countryCode',
       'email',
       'name',
@@ -247,7 +250,11 @@ describe('Register avatar capture', () => {
       'phone',
       'username',
     ]);
-    expect(navigateMock).toHaveBeenCalledWith('/dashboard');
+    expect((registerMock.mock.calls[0][0] as { avatarFile: File }).avatarFile).toBe(avatarFile);
+    expect(navigateMock).not.toHaveBeenCalledWith('/dashboard');
+    await waitFor(() => {
+      expect(screen.getByText(/verifica tu email/i)).toBeInTheDocument();
+    });
   }, 15000);
 
   it('shows a friendly operational error on step 3 when registration is temporarily unavailable', async () => {

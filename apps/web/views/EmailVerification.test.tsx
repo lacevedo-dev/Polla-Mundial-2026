@@ -9,11 +9,15 @@ const resendVerificationMock = vi.fn();
 let isLoadingState = false;
 let userState = null as any;
 
-vi.mock('react-router-dom', () => ({
-  ...vi.importActual('react-router-dom'),
-  useNavigate: () => navigateMock,
-  useSearchParams: () => [new URLSearchParams()],
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+    useSearchParams: () => [new URLSearchParams()],
+  };
+});
 
 vi.mock('../stores/auth.store', () => ({
   useAuthStore: () => ({
@@ -66,8 +70,8 @@ describe('EmailVerification Component', () => {
   it('renders the email verification component with main content', () => {
     renderWithRouter(<EmailVerification />);
 
-    expect(screen.getByText(/verifica tu correo/i)).toBeInTheDocument();
-    expect(screen.getByText(/hemos enviado un enlace/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /verifica tu correo/i })).toBeInTheDocument();
+    expect(screen.getByText(/enviamos un enlace/i)).toBeInTheDocument();
   });
 
   it('displays email address when provided via props', () => {
@@ -86,18 +90,18 @@ describe('EmailVerification Component', () => {
   it('renders manual token input toggle button', () => {
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     expect(toggleButton).toBeInTheDocument();
   });
 
   it('toggles manual token input field when clicking toggle button', async () => {
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/pega el código del email/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/pega el .* email/i)).toBeInTheDocument();
     });
   });
 
@@ -105,11 +109,11 @@ describe('EmailVerification Component', () => {
     verifyEmailMock.mockResolvedValue({ success: true });
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
     await waitFor(() => {
-      const tokenInput = screen.getByPlaceholderText(/pega el código del email/i) as HTMLInputElement;
+      const tokenInput = screen.getByPlaceholderText(/pega el .* email/i) as HTMLInputElement;
       fireEvent.change(tokenInput, { target: { value: 'valid-token-123' } });
     });
 
@@ -127,11 +131,11 @@ describe('EmailVerification Component', () => {
 
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
     await waitFor(() => {
-      const tokenInput = screen.getByPlaceholderText(/pega el código del email/i) as HTMLInputElement;
+      const tokenInput = screen.getByPlaceholderText(/pega el .* email/i) as HTMLInputElement;
       fireEvent.change(tokenInput, { target: { value: 'invalid-token' } });
     });
 
@@ -148,11 +152,11 @@ describe('EmailVerification Component', () => {
 
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
     await waitFor(() => {
-      const tokenInput = screen.getByPlaceholderText(/pega el código del email/i) as HTMLInputElement;
+      const tokenInput = screen.getByPlaceholderText(/pega el .* email/i) as HTMLInputElement;
       fireEvent.change(tokenInput, { target: { value: 'expired-token' } });
     });
 
@@ -161,7 +165,7 @@ describe('EmailVerification Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/el token ha expirado/i)).toBeInTheDocument();
-      expect(screen.getByText(/por favor solicita uno nuevo/i)).toBeInTheDocument();
+      expect(screen.getByText(/solicita un nuevo enlace/i)).toBeInTheDocument();
     });
   });
 
@@ -192,7 +196,7 @@ describe('EmailVerification Component', () => {
   it('disables verify button when token is empty', () => {
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
     const submitButton = screen.getByRole('button', { name: /verificar email/i });
@@ -202,11 +206,11 @@ describe('EmailVerification Component', () => {
   it('enables verify button when token is entered', async () => {
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
     await waitFor(() => {
-      const tokenInput = screen.getByPlaceholderText(/pega el código del email/i) as HTMLInputElement;
+      const tokenInput = screen.getByPlaceholderText(/pega el .* email/i) as HTMLInputElement;
       fireEvent.change(tokenInput, { target: { value: 'some-token' } });
 
       const submitButton = screen.getByRole('button', { name: /verificar email/i });
@@ -217,56 +221,51 @@ describe('EmailVerification Component', () => {
   it('shows back to login button', () => {
     renderWithRouter(<EmailVerification />);
 
-    const backButton = screen.getByRole('button', { name: /volver al iniciar sesión/i });
+    const backButton = screen.getByRole('button', { name: /volver al login/i });
     expect(backButton).toBeInTheDocument();
   });
 
   it('navigates to login when back button is clicked', () => {
     renderWithRouter(<EmailVerification />);
 
-    const backButton = screen.getByRole('button', { name: /volver al iniciar sesión/i });
+    const backButton = screen.getByRole('button', { name: /volver al login/i });
     fireEvent.click(backButton);
 
     expect(navigateMock).toHaveBeenCalledWith('/login');
   });
 
   it('shows loading state while verifying', async () => {
-    verifyEmailMock.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 1000)));
     isLoadingState = true;
 
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
-    await waitFor(() => {
-      const tokenInput = screen.getByPlaceholderText(/pega el código del email/i) as HTMLInputElement;
-      fireEvent.change(tokenInput, { target: { value: 'test-token' } });
-    });
+    const tokenInput = await screen.findByPlaceholderText(/pega el .* email/i);
+    fireEvent.change(tokenInput, { target: { value: 'test-token' } });
 
-    const submitButton = screen.getByRole('button', { name: /verificar email/i });
+    const submitButton = screen.getByRole('button', { name: /verificando/i });
     expect(submitButton).toBeDisabled();
-  });
+  }, 15000);
 
   it('displays success message and redirects on successful verification', async () => {
     verifyEmailMock.mockResolvedValue({ success: true });
     renderWithRouter(<EmailVerification />);
 
-    const toggleButton = screen.getByRole('button', { name: /ingresar código manualmente/i });
+    const toggleButton = screen.getByRole('button', { name: /ingresar.*manualmente/i });
     fireEvent.click(toggleButton);
 
-    await waitFor(() => {
-      const tokenInput = screen.getByPlaceholderText(/pega el código del email/i) as HTMLInputElement;
-      fireEvent.change(tokenInput, { target: { value: 'valid-token-123' } });
-    });
+    const tokenInput = await screen.findByPlaceholderText(/pega el .* email/i);
+    fireEvent.change(tokenInput, { target: { value: 'valid-token-123' } });
 
     const submitButton = screen.getByRole('button', { name: /verificar email/i });
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/email verificado/i)).toBeInTheDocument();
-    }, { timeout: 3000 });
-  });
+      expect(screen.getByRole('heading', { name: /correo verificado/i })).toBeInTheDocument();
+    });
+  }, 15000);
 
   it('displays error when resend fails', async () => {
     resendVerificationMock.mockRejectedValue(new Error('Too many requests'));

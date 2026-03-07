@@ -82,7 +82,7 @@ describe('prediction.adapters', () => {
     it('maps and ranks leaderboard rows from the backend response', () => {
         const rows = toLeaderboardRows([
             { id: 'user-2', username: 'maria', name: 'María', points: 8 },
-            { id: 'user-1', username: 'juan', name: 'Juan', points: 15, avatar: 'https://example.com/juan.png' },
+            { id: 'user-1', username: 'juan', name: 'Juan', points: 15, avatar: '/uploads/avatars/juan.png' },
         ]);
 
         expect(rows).toEqual([
@@ -91,7 +91,7 @@ describe('prediction.adapters', () => {
                 rank: 1,
                 username: 'juan',
                 name: 'Juan',
-                avatar: 'https://example.com/juan.png',
+                avatar: '/uploads/avatars/juan.png',
                 points: 15,
                 trend: 'same',
             },

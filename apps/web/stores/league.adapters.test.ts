@@ -88,7 +88,7 @@ describe('league.adapters', () => {
                     user: {
                         id: 'user-1',
                         name: 'Luisa',
-                        avatar: 'https://example.com/avatar.png',
+                        avatar: '/uploads/avatars/luisa.png',
                     },
                 },
                 {
@@ -97,6 +97,7 @@ describe('league.adapters', () => {
                     user: {
                         id: 'user-2',
                         username: 'carlos10',
+                        avatar: null,
                     },
                 },
             ],
@@ -110,7 +111,7 @@ describe('league.adapters', () => {
                 name: 'Luisa',
                 role: 'ADMIN',
                 status: 'ACTIVE',
-                avatar: 'https://example.com/avatar.png',
+                avatar: 'http://localhost:3004/uploads/avatars/luisa.png',
             },
             {
                 id: 'user-2',

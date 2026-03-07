@@ -46,6 +46,11 @@ describe('AuthService.register', () => {
         $transaction: jest.fn(),
     };
 
+    const avatarStorageServiceMock = {
+        save: jest.fn().mockResolvedValue('/uploads/avatars/saved-avatar.png'),
+        remove: jest.fn().mockResolvedValue(undefined),
+    };
+
     let authService: AuthService;
 
     beforeEach(() => {
@@ -55,12 +60,14 @@ describe('AuthService.register', () => {
             jwtServiceMock as any,
             emailServiceMock as any,
             prismaServiceMock as any,
+            avatarStorageServiceMock as any,
         );
     });
 
     it('returns token and user when registration succeeds', async () => {
         usersServiceMock.findByEmail.mockResolvedValue(null);
         usersServiceMock.findByUsername.mockResolvedValue(null);
+        avatarStorageServiceMock.save.mockResolvedValueOnce('/uploads/avatars/profile-photo.webp');
         usersServiceMock.create.mockResolvedValue({
             id: 'user-1',
             name: 'Ana Gomez',
@@ -68,7 +75,14 @@ describe('AuthService.register', () => {
             username: 'anagomez',
             phone: '3101234568',
             countryCode: '+57',
+            avatar: '/uploads/avatars/profile-photo.webp',
         });
+
+        const avatarFile = {
+            originalname: 'profile-photo.webp',
+            mimetype: 'image/webp',
+            buffer: Buffer.from('avatar-binary'),
+        } as Express.Multer.File;
 
         await expect(authService.register({
             name: 'Ana Gomez',
@@ -77,14 +91,19 @@ describe('AuthService.register', () => {
             password: 'Password1',
             phone: '3101234568',
             countryCode: '+57',
-        })).resolves.toMatchObject({
+        }, avatarFile)).resolves.toMatchObject({
             accessToken: 'jwt-token',
             user: expect.objectContaining({
                 id: 'user-1',
                 email: 'ana@mail.com',
                 username: 'anagomez',
+                avatar: '/uploads/avatars/profile-photo.webp',
             }),
         });
+        expect(avatarStorageServiceMock.save).toHaveBeenCalledWith(avatarFile);
+        expect(usersServiceMock.create).toHaveBeenCalledWith(expect.objectContaining({
+            avatar: '/uploads/avatars/profile-photo.webp',
+        }));
     });
 
     it('preserves duplicate email conflicts', async () => {
@@ -96,6 +115,58 @@ describe('AuthService.register', () => {
             username: 'anagomez',
             password: 'Password1',
         } as any)).rejects.toThrow(ConflictException);
+    });
+
+    it('skips avatar storage when registration arrives without an avatar file', async () => {
+        usersServiceMock.findByEmail.mockResolvedValue(null);
+        usersServiceMock.findByUsername.mockResolvedValue(null);
+        usersServiceMock.create.mockResolvedValue({
+            id: 'user-1',
+            name: 'Ana Gomez',
+            email: 'ana@mail.com',
+            username: 'anagomez',
+            phone: '3101234568',
+            countryCode: '+57',
+            avatar: null,
+        });
+
+        await authService.register({
+            name: 'Ana Gomez',
+            email: 'ana@mail.com',
+            username: 'anagomez',
+            password: 'Password1',
+            phone: '3101234568',
+            countryCode: '+57',
+        });
+
+        expect(avatarStorageServiceMock.save).not.toHaveBeenCalled();
+        expect(usersServiceMock.create).toHaveBeenCalledWith(expect.objectContaining({
+            avatar: undefined,
+        }));
+    });
+
+    it('removes a saved avatar when user creation fails after storage succeeds', async () => {
+        usersServiceMock.findByEmail.mockResolvedValue(null);
+        usersServiceMock.findByUsername.mockResolvedValue(null);
+        avatarStorageServiceMock.save.mockResolvedValueOnce('/uploads/avatars/cleanup-avatar.png');
+        usersServiceMock.create.mockRejectedValueOnce(new Error('user create failed'));
+
+        const avatarFile = {
+            originalname: 'cleanup-avatar.png',
+            mimetype: 'image/png',
+            buffer: Buffer.from('avatar-binary'),
+        } as Express.Multer.File;
+
+        await expect(authService.register({
+            name: 'Ana Gomez',
+            email: 'ana@mail.com',
+            username: 'anagomez',
+            password: 'Password1',
+            phone: '3101234568',
+            countryCode: '+57',
+        }, avatarFile)).rejects.toThrow('user create failed');
+
+        expect(avatarStorageServiceMock.remove).toHaveBeenCalledWith('/uploads/avatars/cleanup-avatar.png');
     });
 
     it('translates database connectivity failures into a safe temporary-unavailable error', async () => {
