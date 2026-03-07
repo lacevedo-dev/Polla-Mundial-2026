@@ -64,5 +64,5 @@ WORKDIR /app/apps/api
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
 EXPOSE 3000
 
-# Comando para ejecutar la aplicación
-CMD ["node", "dist/src/main.js"]
+# Aplicar migraciones pendientes y arrancar la aplicación
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
