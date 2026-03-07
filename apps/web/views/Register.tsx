@@ -700,7 +700,7 @@ const Register: React.FC = () => {
                     onChange={handleAvatarInputChange}
                   />
 
-                  <div className="grid w-full max-w-sm grid-cols-2 gap-2">
+                  <div className="grid w-full max-w-sm xl:max-w-none grid-cols-2 xl:grid-cols-1 gap-2 xl:gap-4">
                     <Button
                       type="button"
                       variant="secondary"
