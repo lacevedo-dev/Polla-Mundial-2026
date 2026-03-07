@@ -38,8 +38,10 @@ const DialogContent = React.forwardRef<
             )}
             {...props}
         >
-            <div className="mx-auto mt-3 h-1.5 w-14 rounded-full bg-slate-200 sm:hidden" aria-hidden="true" />
-            {children}
+            <div className="flex flex-col overflow-hidden">
+                <div className="mx-auto mt-3 h-1.5 w-14 rounded-full bg-slate-200 sm:hidden" aria-hidden="true" />
+                {children}
+            </div>
         </DialogPrimitive.Content>
     </DialogPortal>
 ));
