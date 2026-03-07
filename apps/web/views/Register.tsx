@@ -651,7 +651,7 @@ const Register: React.FC = () => {
 
             {step === 3 && (
               <div className="animate-in slide-in-from-right-4 duration-300 flex-1">
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] xl:items-center xl:gap-6">
+                <div className="grid gap-4 xl:items-center xl:gap-6">
                   <div className="flex w-full flex-col items-center gap-4">
                   <div
                     className={`relative w-32 h-32 sm:w-36 sm:h-36 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 group ${formData.fotoPreview ? 'border-4 border-lime-400 shadow-2xl shadow-lime-400/20' : dragActive ? 'border-4 border-dashed border-lime-500 bg-lime-50 scale-105' : 'border-2 border-dashed border-slate-300 bg-slate-50 hover:border-lime-400 hover:bg-white'}`}
@@ -728,7 +728,7 @@ const Register: React.FC = () => {
                   </div>
 
                   <div className="w-full max-w-sm space-y-2 justify-self-center xl:max-w-none">
-                    <p className="text-center text-[11px] text-slate-500 leading-4 xl:text-left">
+                    <p className="text-center text-[11px] text-slate-500 leading-4">
                       Foto visible en rankings y posiciones.
                     </p>
 
