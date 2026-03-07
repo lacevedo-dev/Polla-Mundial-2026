@@ -27,7 +27,15 @@ const Login: React.FC = () => {
     setError(null);
     try {
       await login({ identifier: email, password });
-      navigate('/dashboard');
+      // Check if email is verified
+      const { user } = useAuthStore.getState();
+      if (user && user.emailVerified === false) {
+        // Store email in sessionStorage for display in EmailVerification view
+        sessionStorage.setItem('registrationEmail', email);
+        navigate('/verify-email');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión. Revisa tus credenciales.');
     }

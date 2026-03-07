@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__engram__mem_save",
+      "Bash(node:*)",
+      "Read(//c/Users/lacev/.claude/skills/**)",
+      "mcp__engram__mem_context",
+      "mcp__engram__mem_search",
+      "mcp__engram__mem_get_observation",
+      "Read(//c/Users/lacev/.claude/**)"
+    ]
+  }
+}

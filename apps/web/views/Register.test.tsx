@@ -298,6 +298,81 @@ describe('Register avatar capture', () => {
   }, 15000);
 });
 
+describe('Register Email Verification Flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    isLoadingState = false;
+    registerMock.mockResolvedValue({ user: { emailVerified: false } });
+    vi.stubGlobal('FileReader', MockFileReader as any);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  it('shows verification screen after successful registration', async () => {
+    const { view } = await reachAvatarStep();
+
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/¡verifica tu email!/i)).toBeInTheDocument();
+    });
+  }, 15000);
+
+  it('displays user email on verification screen', async () => {
+    const { view } = await reachAvatarStep();
+
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('ana@mail.com')).toBeInTheDocument();
+    });
+  }, 15000);
+
+  it('provides button to navigate to verification view', async () => {
+    const { view } = await reachAvatarStep();
+
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /ir a verificar email/i })).toBeInTheDocument();
+    });
+  }, 15000);
+
+  it('stores email in sessionStorage for verification view', async () => {
+    const { view } = await reachAvatarStep();
+
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
+
+    await waitFor(() => {
+      expect(sessionStorage.getItem('registrationEmail')).toBe('ana@mail.com');
+    });
+  }, 15000);
+
+  it('can go back to login from verification screen', async () => {
+    const { view } = await reachAvatarStep();
+
+    fireEvent.click(view.container.querySelector('#terms') as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /finalizar registro/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /volver a iniciar sesión/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /volver a iniciar sesión/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/login');
+  }, 15000);
+});
+
 describe('Register password visibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();

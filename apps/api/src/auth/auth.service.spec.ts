@@ -22,11 +22,40 @@ describe('AuthService.register', () => {
         sign: jest.fn().mockReturnValue('jwt-token'),
     };
 
+    const emailServiceMock = {
+        sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+        sendResendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const prismaServiceMock = {
+        verificationToken: {
+            create: jest.fn().mockResolvedValue({
+                id: 'token-1',
+                token: 'token-123',
+                userId: 'user-1',
+                expiresAt: new Date(),
+                usedAt: null,
+            }),
+            findUnique: jest.fn(),
+            deleteMany: jest.fn(),
+            update: jest.fn(),
+        },
+        user: {
+            update: jest.fn(),
+        },
+        $transaction: jest.fn(),
+    };
+
     let authService: AuthService;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        authService = new AuthService(usersServiceMock as any, jwtServiceMock as any);
+        authService = new AuthService(
+            usersServiceMock as any,
+            jwtServiceMock as any,
+            emailServiceMock as any,
+            prismaServiceMock as any,
+        );
     });
 
     it('returns token and user when registration succeeds', async () => {

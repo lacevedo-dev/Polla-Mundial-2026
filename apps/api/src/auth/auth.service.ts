@@ -1,16 +1,23 @@
-﻿import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+﻿import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { mapRegisterOperationalError } from './auth-error.util';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { EmailService } from '../email/email.service';
+import { generateVerificationToken, calculateTokenExpiration } from './verification-token.utils';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
+
     constructor(
         private usersService: UsersService,
         private jwtService: JwtService,
+        private emailService: EmailService,
+        private prisma: PrismaService,
     ) { }
 
     async validateUser(identifier: string, pass: string): Promise<any> {
@@ -32,7 +39,7 @@ export class AuthService {
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
-        const payload = { username: user.username, sub: user.id, email: user.email };
+        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified };
         return {
             accessToken: this.jwtService.sign(payload),
             user: {
@@ -42,6 +49,7 @@ export class AuthService {
                 username: user.username,
                 avatar: user.avatar,
                 plan: user.plan,
+                emailVerified: user.emailVerified,
             },
         };
     }
@@ -75,13 +83,149 @@ export class AuthService {
             }),
         );
 
+        // Generate verification token and send email
+        const verificationToken = generateVerificationToken();
+        const expiresAt = calculateTokenExpiration(72); // 72 hours
+
+        try {
+            await this.prisma.verificationToken.create({
+                data: {
+                    token: verificationToken,
+                    userId: user.id,
+                    expiresAt,
+                },
+            });
+
+            // Send verification email (non-blocking)
+            const appUrl = process.env.APP_URL || 'https://polla2026.com';
+            await this.emailService.sendVerificationEmail(
+                user.email,
+                verificationToken,
+                user.name.split(' ')[0], // First name
+                appUrl,
+            );
+        } catch (error) {
+            // Log error but don't fail registration
+            this.logger.error(
+                `Failed to generate/send verification token for user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
+                error instanceof Error ? error.stack : undefined,
+            );
+        }
+
         const { passwordHash: _, ...result } = user;
-        const payload = { username: user.username, sub: user.id, email: user.email };
+        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified };
 
         return {
-            message: 'Usuario registrado exitosamente',
+            message: 'Usuario registrado exitosamente. Por favor, verifica tu correo electrónico',
             accessToken: this.jwtService.sign(payload),
             user: result,
+        };
+    }
+
+    async verifyEmail(token: string) {
+        // Find the verification token
+        const verificationToken = await this.wrapRegisterDatabaseOperation(() =>
+            this.prisma.verificationToken.findUnique({
+                where: { token },
+                include: { user: true },
+            }),
+        );
+
+        if (!verificationToken) {
+            throw new UnauthorizedException('Token de verificación inválido o expirado');
+        }
+
+        // Check if token has expired
+        if (new Date() > verificationToken.expiresAt) {
+            throw new UnauthorizedException('El token de verificación ha expirado');
+        }
+
+        // Check if token has already been used
+        if (verificationToken.usedAt) {
+            throw new UnauthorizedException('El token de verificación ya ha sido utilizado');
+        }
+
+        // Mark user as verified and token as used
+        const user = await this.wrapRegisterDatabaseOperation(() =>
+            this.prisma.$transaction([
+                this.prisma.user.update({
+                    where: { id: verificationToken.userId },
+                    data: { emailVerified: true },
+                }),
+                this.prisma.verificationToken.update({
+                    where: { id: verificationToken.id },
+                    data: { usedAt: new Date() },
+                }),
+            ]).then(results => results[0]),
+        );
+
+        const { passwordHash: _, ...result } = user;
+        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified };
+
+        return {
+            message: 'Email verificado exitosamente',
+            accessToken: this.jwtService.sign(payload),
+            user: result,
+        };
+    }
+
+    async resendVerificationEmail(userId: string) {
+        // Get user
+        const user = await this.wrapRegisterDatabaseOperation(() =>
+            this.usersService.findById(userId),
+        );
+
+        if (!user) {
+            throw new UnauthorizedException('Usuario no encontrado');
+        }
+
+        // Check if already verified
+        if (user.emailVerified) {
+            return {
+                message: 'Tu email ya ha sido verificado',
+                emailVerified: true,
+            };
+        }
+
+        // Delete old tokens for this user
+        await this.wrapRegisterDatabaseOperation(() =>
+            this.prisma.verificationToken.deleteMany({
+                where: { userId },
+            }),
+        );
+
+        // Generate new token
+        const verificationToken = generateVerificationToken();
+        const expiresAt = calculateTokenExpiration(72); // 72 hours
+
+        try {
+            await this.prisma.verificationToken.create({
+                data: {
+                    token: verificationToken,
+                    userId,
+                    expiresAt,
+                },
+            });
+
+            // Send verification email
+            const appUrl = process.env.APP_URL || 'https://polla2026.com';
+            await this.emailService.sendResendVerificationEmail(
+                user.email,
+                verificationToken,
+                user.name.split(' ')[0], // First name
+                appUrl,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to resend verification email to ${user.email}: ${error instanceof Error ? error.message : String(error)}`,
+                error instanceof Error ? error.stack : undefined,
+            );
+            throw error;
+        }
+
+        return {
+            message: 'Nuevo código de verificación enviado a tu email',
+            emailVerified: false,
         };
     }
 

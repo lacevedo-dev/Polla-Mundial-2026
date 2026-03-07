@@ -6,17 +6,25 @@ import Login, { normalizeCheckboxState } from './Login';
 const navigateMock = vi.fn();
 const loginMock = vi.fn();
 let isLoadingState = false;
+let userState = { emailVerified: true } as any;
 
 vi.mock('react-router-dom', () => ({
     useNavigate: () => navigateMock,
 }));
 
-vi.mock('../stores/auth.store', () => ({
-    useAuthStore: () => ({
+const mockAuthStore = {
+    useAuthStore: vi.fn(() => ({
         login: loginMock,
         isLoading: isLoadingState,
-    }),
+    })),
+};
+
+mockAuthStore.useAuthStore.getState = vi.fn(() => ({
+    user: userState,
+    isLoading: isLoadingState,
 }));
+
+vi.mock('../stores/auth.store', () => mockAuthStore);
 
 vi.mock('../components/ui/input', () => ({
     Input: (props: any) => {
@@ -135,6 +143,63 @@ describe('Login view', () => {
         );
         expect(screen.getByRole('button', { name: /Entrar al Estadio/i })).toBeInTheDocument();
     });
+});
+
+describe('Login Email Verification Integration', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isLoadingState = false;
+        userState = { emailVerified: false };
+        sessionStorage.clear();
+    });
+
+    it('redirects unverified user to verify-email instead of dashboard', async () => {
+        const user = userEvent.setup();
+        loginMock.mockResolvedValue(undefined);
+
+        render(<Login />);
+
+        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'unverified@mail.com');
+        await user.type(screen.getByTestId('new-password-input'), '123456');
+        await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/verify-email');
+        });
+        expect(navigateMock).not.toHaveBeenCalledWith('/dashboard');
+    }, 15000);
+
+    it('redirects verified user to dashboard', async () => {
+        const user = userEvent.setup();
+        userState = { emailVerified: true };
+        loginMock.mockResolvedValue(undefined);
+
+        render(<Login />);
+
+        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'verified@mail.com');
+        await user.type(screen.getByTestId('new-password-input'), '123456');
+        await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/dashboard');
+        });
+    }, 15000);
+
+    it('stores email in sessionStorage when redirecting to verify-email', async () => {
+        const user = userEvent.setup();
+        userState = { emailVerified: false };
+        loginMock.mockResolvedValue(undefined);
+
+        render(<Login />);
+
+        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'unverified@mail.com');
+        await user.type(screen.getByTestId('new-password-input'), '123456');
+        await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
+
+        await waitFor(() => {
+            expect(sessionStorage.getItem('registrationEmail')).toBe('unverified@mail.com');
+        });
+    }, 15000);
 });
 
 describe('normalizeCheckboxState', () => {

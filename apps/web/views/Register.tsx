@@ -29,7 +29,7 @@ import type { LegalDocumentKey } from '../components/legal/legal-documents';
 
 // Props eliminadas — navegación vía useNavigate
 
-type RegisterStep = 1 | 2 | 3;
+type RegisterStep = 1 | 2 | 3 | 'verification';
 
 interface Country {
   code: string;
@@ -335,7 +335,7 @@ const Register: React.FC = () => {
 
     setError(null);
     try {
-      await register({
+      const response = await register({
         email: formData.email,
         username: formData.usuario,
         password: formData.password,
@@ -343,7 +343,10 @@ const Register: React.FC = () => {
         phone: formData.celular,
         countryCode: selectedCountry.code
       });
-      navigate('/dashboard');
+      // Store email in sessionStorage for EmailVerification view
+      sessionStorage.setItem('registrationEmail', formData.email);
+      // Show verification step instead of navigating directly
+      setStep('verification');
     } catch (err: any) {
       setError(err.message || 'Error al completar el registro.');
     }
@@ -468,6 +471,46 @@ const Register: React.FC = () => {
           </div>
 
           <form className={`flex-1 flex flex-col transition-all duration-300 ${isNavigating ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0'}`} onSubmit={handleSubmit}>
+
+            {step === 'verification' && (
+              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col justify-center">
+                <div className="text-center">
+                  <div className="flex justify-center mb-6">
+                    <div className="w-20 h-20 bg-lime-100 rounded-full flex items-center justify-center animate-in scale-in duration-500">
+                      <CheckCircle2 size={48} className="text-lime-600" />
+                    </div>
+                  </div>
+                  <h2 className="text-2xl font-black font-brand uppercase tracking-tight mb-2">
+                    ¡Verifica tu Email!
+                  </h2>
+                  <p className="text-slate-600 text-sm mb-4">
+                    Hemos enviado un enlace de verificación a:
+                  </p>
+                  <div className="inline-block bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 mb-6">
+                    <p className="text-sm font-bold text-slate-900">{formData.email}</p>
+                  </div>
+                  <p className="text-slate-600 text-sm leading-relaxed">
+                    Haz clic en el enlace para activar tu cuenta. Si no lo ves, revisa tu carpeta de <span className="font-bold">SPAM</span>.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={() => navigate('/verify-email')}
+                  variant="secondary"
+                  className="w-full h-12 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl transition-all"
+                >
+                  Ir a Verificar Email <ArrowRight size={18} className="ml-2" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full h-12 rounded-2xl font-black text-xs uppercase tracking-[0.15em]"
+                  onClick={() => navigate('/login')}
+                >
+                  Volver a Iniciar Sesión
+                </Button>
+              </div>
+            )}
 
             {step === 1 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -769,22 +812,24 @@ const Register: React.FC = () => {
           </form>
 
           {/* Footer Actions */}
-          <div className="mt-6 md:mt-4 flex items-center gap-4 relative z-0">
-            {step > 1 && (
-              <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep((step - 1) as RegisterStep)}>
-                <ArrowLeft size={20} />
+          {step !== 'verification' && (
+            <div className="mt-6 md:mt-4 flex items-center gap-4 relative z-0">
+              {step > 1 && (
+                <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep((step - 1) as RegisterStep)}>
+                  <ArrowLeft size={20} />
+                </Button>
+              )}
+              <Button
+                onClick={handleSubmit}
+                disabled={!isStepValid() || (step === 3 && !formData.rememberMe) || isLoading}
+                isLoading={isLoading}
+                className="flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl transition-all"
+                variant="secondary"
+              >
+                {step === 3 ? 'FINALIZAR REGISTRO' : 'CONTINUAR'} <ArrowRight size={18} className="ml-2" />
               </Button>
-            )}
-            <Button
-              onClick={handleSubmit}
-              disabled={!isStepValid() || (step === 3 && !formData.rememberMe) || isLoading}
-              isLoading={isLoading}
-              className="flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl transition-all"
-              variant="secondary"
-            >
-              {step === 3 ? 'FINALIZAR REGISTRO' : 'CONTINUAR'} <ArrowRight size={18} className="ml-2" />
-            </Button>
-          </div>
+            </div>
+          )}
 
         </div>
       </div>
