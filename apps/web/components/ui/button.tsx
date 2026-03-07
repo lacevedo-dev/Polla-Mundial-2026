@@ -46,26 +46,25 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         const Comp = asChild ? Slot : "button"
         return (
             <Comp
-                className={cn(buttonVariants({ variant, size, className }))}
+                className={cn(buttonVariants({ variant, size, className }), "relative")}
                 ref={ref}
                 disabled={isLoading || props.disabled}
                 {...props}
             >
                 <span className={cn(
-                    "flex items-center justify-center gap-2 transition-all duration-300",
+                    "inline-flex items-center justify-center gap-2 transition-all duration-300",
                     isLoading ? "opacity-0 scale-75 pointer-events-none" : "opacity-100 scale-100"
                 )}>
                     {children}
+                    {isLoading && (
+                        <span className="absolute inset-0 flex items-center justify-center animate-in fade-in zoom-in duration-500">
+                            <Loader2 className={cn(
+                                "h-5 w-5 animate-spin",
+                                variant === 'secondary' || variant === 'ghost' ? 'text-slate-900' : 'text-white'
+                            )} />
+                        </span>
+                    )}
                 </span>
-
-                {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center animate-in fade-in zoom-in duration-500">
-                        <Loader2 className={cn(
-                            "h-5 w-5 animate-spin",
-                            variant === 'secondary' || variant === 'ghost' ? 'text-slate-900' : 'text-white'
-                        )} />
-                    </div>
-                )}
             </Comp>
         )
     }
