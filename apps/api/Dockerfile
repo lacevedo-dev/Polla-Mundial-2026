@@ -9,7 +9,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Instalar openssl requerido por Prisma en Alpine, 
+# Instalar openssl requerido por Prisma en Alpine,
 # python3 y build-base requeridos por bcrypt (libreria nativa)
 RUN apk add --no-cache openssl build-base python3
 
@@ -64,5 +64,5 @@ WORKDIR /app/apps/api
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
 EXPOSE 3000
 
-# Aplicar migraciones pendientes y arrancar la aplicación
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+# Comando para ejecutar la aplicación
+CMD ["node", "dist/src/main.js"]
