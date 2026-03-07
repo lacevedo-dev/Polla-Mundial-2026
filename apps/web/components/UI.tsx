@@ -48,19 +48,19 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   return (
-    <button 
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`} 
+    <button
+      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={isLoading || disabled}
       {...props}
     >
-      <span className={`flex items-center justify-center gap-2 transition-all duration-300 ${isLoading ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'}`}>
+      <span className={`flex items-center justify-center gap-2 transition-all duration-300 absolute inset-0 ${isLoading ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'}`}>
         {children}
       </span>
-      
+
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center animate-in fade-in zoom-in duration-500">
+        <span className="absolute inset-0 flex items-center justify-center animate-in fade-in zoom-in duration-500">
           <Loader2 className={`h-5 w-5 animate-spin ${variant === 'secondary' || variant === 'ghost' ? 'text-slate-900' : 'text-white'}`} />
-        </div>
+        </span>
       )}
     </button>
   );
