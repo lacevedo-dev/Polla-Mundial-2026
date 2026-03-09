@@ -37,6 +37,12 @@ const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
   const [error, setError] = React.useState<string | null>(null);
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
   const [selectedPlan, setSelectedPlan] = React.useState<'gold' | 'diamond'>(initialPlan);
+  const [paymentData, setPaymentData] = React.useState({
+    holder: '',
+    cardNumber: '',
+    expiry: '',
+    cvc: ''
+  });
 
   React.useEffect(() => {
     if (!user) {

@@ -20,6 +20,7 @@ import Predictions from './views/Predictions';
 import Ranking from './views/Ranking';
 import CreateLeague from './views/CreateLeague';
 import ManagePayments from './views/ManagePayments';
+import OrderHistory from './views/OrderHistory';
 import Help from './views/Help';
 import DesignSystem from './views/DesignSystem';
 import BeforeAfter from './views/BeforeAfter';
@@ -40,6 +41,7 @@ const appRoutes: RouteObject[] = [
     { path: '/ranking', element: <Ranking /> },
     { path: '/create-league', element: <CreateLeague /> },
     { path: '/manage-payments', element: <ManagePayments /> },
+    { path: '/orders', element: <OrderHistory /> },
     { path: '/help', element: <Help /> },
 ];
 
