@@ -1,5 +1,8 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Get, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Request, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { AuthService } from './auth.service';
+import type { AvatarUploadFile } from './avatar-storage.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -20,8 +23,27 @@ export class AuthController {
     }
 
     @Post('register')
-    async register(@Body() registerDto: RegisterDto) {
-        return this.authService.register(registerDto);
+    @UseInterceptors(
+        FileInterceptor('avatar', {
+            storage: memoryStorage(),
+            fileFilter: (_request, file, callback) => {
+                if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+                    return callback(
+                        new BadRequestException('El avatar debe ser una imagen JPG, PNG o WebP.'),
+                        false,
+                    );
+                }
+
+                return callback(null, true);
+            },
+        }),
+    )
+    async register(
+        @Body() registerDto: RegisterDto,
+        @UploadedFile()
+        avatarFile?: AvatarUploadFile,
+    ) {
+        return this.authService.register(registerDto, avatarFile);
     }
 
     @HttpCode(HttpStatus.OK)

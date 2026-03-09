@@ -2,6 +2,8 @@
 import React from 'react';
 import { Button, Card, Badge, Input } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/auth.store';
+import { request } from '../api';
 import {
   ArrowLeft,
   CreditCard,
@@ -15,32 +17,39 @@ import {
   ArrowRight,
   Shield,
   User,
-  Calendar
+  Calendar,
+  AlertCircle
 } from 'lucide-react';
 
 interface CheckoutProps {
   initialPlan?: 'gold' | 'diamond';
 }
 
+interface CheckoutResponse {
+  sessionId: string;
+  url: string;
+}
+
 const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
   const [selectedPlan, setSelectedPlan] = React.useState<'gold' | 'diamond'>(initialPlan);
 
-  // DEMO DATA
-  const [paymentData, setPaymentData] = React.useState({
-    holder: 'JUAN MUNDIALISTA',
-    cardNumber: '4242 4242 4242 4242',
-    expiry: '12/26',
-    cvc: '123'
-  });
+  React.useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
 
   const plans = {
     gold: {
       id: 'gold',
       name: 'PREMIUM GOLD',
       price: '29.900',
+      priceInCents: 2990000,
       icon: <Sparkles size={20} className="text-amber-400" />,
       theme: 'amber',
       badge: 'bg-amber-400 text-slate-950',
@@ -51,6 +60,7 @@ const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
       id: 'diamond',
       name: 'EMPRESA DIAMOND',
       price: '89.900',
+      priceInCents: 8990000,
       icon: <Diamond size={20} className="text-cyan-400" />,
       theme: 'cyan',
       badge: 'bg-cyan-400 text-slate-950',
@@ -59,25 +69,70 @@ const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
     }
   };
 
-  const handlePayment = (e: React.FormEvent) => {
+  const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const currentPlan = plans[selectedPlan];
+      const response = await request<CheckoutResponse>('/payments/checkout-session', {
+        method: 'POST',
+        body: JSON.stringify({
+          items: [
+            {
+              name: currentPlan.name,
+              amount: currentPlan.priceInCents,
+              currency: 'COP',
+              description: currentPlan.description,
+            },
+          ],
+          currency: 'COP',
+          successUrl: `${window.location.origin}/checkout?success=true`,
+          cancelUrl: `${window.location.origin}/checkout`,
+        }),
+      });
+
+      if (response.url) {
+        window.location.href = response.url;
+      } else {
+        setError('Error al procesar el pago. Por favor intenta de nuevo.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido al procesar el pago';
+      setError(message);
       setIsLoading(false);
-      setStep(3);
-    }, 2000);
+    }
   };
 
   const currentPlan = plans[selectedPlan];
+
+  const isSuccess = new URLSearchParams(window.location.search).get('success') === 'true';
+
+  React.useEffect(() => {
+    if (isSuccess) {
+      setStep(3);
+    }
+  }, [isSuccess]);
 
   return (
     <div className="min-h-screen bg-slate-50 py-4 px-4 flex flex-col items-center justify-center overflow-hidden">
       <div className="max-w-4xl w-full space-y-3">
 
         <div className="flex justify-between items-center px-2">
-          <button onClick={() => step === 1 ? navigate('/create-league') : setStep(1)} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400"><ArrowLeft size={12} /> {step === 1 ? 'VOLVER' : 'REGRESAR'}</button>
+          <button onClick={() => step === 1 ? navigate('/dashboard') : setStep(1)} className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400"><ArrowLeft size={12} /> {step === 1 ? 'VOLVER' : 'REGRESAR'}</button>
           <div className="flex gap-1">{[1, 2, 3].map(s => <div key={s} className={`w-5 h-1 rounded-full ${step >= s ? 'bg-lime-500' : 'bg-slate-200'}`}></div>)}</div>
         </div>
+
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-gap-3 gap-3">
+            <AlertCircle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[9px] font-black uppercase text-rose-900">Error</p>
+              <p className="text-xs text-rose-700">{error}</p>
+            </div>
+          </div>
+        )}
 
         {step === 1 && (
           <div className="space-y-3 animate-in fade-in duration-500">
@@ -146,6 +201,7 @@ const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
               <h2 className="text-2xl font-black font-brand uppercase tracking-tighter">¡ÉXITO TOTAL!</h2>
               <div className="bg-slate-50 p-5 rounded-[2rem] text-left space-y-3 border border-slate-100">
                 <div className="flex justify-between font-black text-[9px] uppercase text-slate-600"><span>PLAN ACTIVADO</span><span className="text-slate-900">{currentPlan.name}</span></div>
+                <div className="flex justify-between font-black text-[9px] uppercase text-slate-600"><span>USUARIO</span><span className="text-slate-900">{user?.name || 'Usuario'}</span></div>
                 <div className="flex justify-between font-black text-[9px] uppercase text-slate-600 border-t border-slate-200 pt-2"><span>VALOR</span><span className="text-lime-600">${currentPlan.price} COP</span></div>
               </div>
               <Button onClick={() => navigate('/dashboard')} className="w-full h-14 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em]">IR AL TABLERO</Button>

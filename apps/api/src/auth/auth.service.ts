@@ -8,6 +8,7 @@ import { RegisterDto } from './dto/register.dto';
 import { EmailService } from '../email/email.service';
 import { generateVerificationToken, calculateTokenExpiration } from './verification-token.utils';
 import { PrismaService } from '../prisma/prisma.service';
+import { AvatarStorageService, type AvatarUploadFile } from './avatar-storage.service';
 
 @Injectable()
 export class AuthService {
@@ -18,6 +19,7 @@ export class AuthService {
         private jwtService: JwtService,
         private emailService: EmailService,
         private prisma: PrismaService,
+        private avatarStorageService: AvatarStorageService,
     ) { }
 
     async validateUser(identifier: string, pass: string): Promise<any> {
@@ -54,7 +56,7 @@ export class AuthService {
         };
     }
 
-    async register(registerDto: RegisterDto) {
+    async register(registerDto: RegisterDto, avatarFile?: AvatarUploadFile) {
         const existingEmail = await this.wrapRegisterDatabaseOperation(() =>
             this.usersService.findByEmail(registerDto.email),
         );
@@ -72,16 +74,29 @@ export class AuthService {
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
 
-        const user = await this.wrapRegisterDatabaseOperation(() =>
-            this.usersService.create({
-                name: registerDto.name,
-                email: registerDto.email,
-                username: registerDto.username,
-                passwordHash,
-                phone: registerDto.phone,
-                countryCode: registerDto.countryCode,
-            }),
-        );
+        const avatar = avatarFile
+            ? await this.avatarStorageService.save(avatarFile)
+            : undefined;
+
+        let user: Awaited<ReturnType<UsersService['create']>>;
+        try {
+            user = await this.wrapRegisterDatabaseOperation(() =>
+                this.usersService.create({
+                    name: registerDto.name,
+                    email: registerDto.email,
+                    username: registerDto.username,
+                    passwordHash,
+                    phone: registerDto.phone,
+                    countryCode: registerDto.countryCode,
+                    avatar,
+                }),
+            );
+        } catch (error) {
+            if (avatar) {
+                await this.avatarStorageService.remove(avatar);
+            }
+            throw error;
+        }
 
         // Generate verification token and send email
         const verificationToken = generateVerificationToken();

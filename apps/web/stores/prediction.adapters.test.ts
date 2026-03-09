@@ -91,7 +91,7 @@ describe('prediction.adapters', () => {
                 rank: 1,
                 username: 'juan',
                 name: 'Juan',
-                avatar: '/uploads/avatars/juan.png',
+                avatar: 'http://localhost:3004/uploads/avatars/juan.png',
                 points: 15,
                 trend: 'same',
             },

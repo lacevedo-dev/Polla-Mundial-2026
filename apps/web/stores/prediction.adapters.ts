@@ -1,3 +1,5 @@
+import { resolveApiAssetUrl } from '../api';
+
 export interface MatchResponse {
     id: string;
     matchDate: string;
@@ -159,7 +161,7 @@ export function toLeaderboardRows(entries: LeaderboardApiEntry[]): LeaderboardRo
             rank: index + 1,
             username: entry.username,
             name: entry.name,
-            avatar: entry.avatar ?? toAvatar(entry.name),
+            avatar: resolveApiAssetUrl(entry.avatar) ?? toAvatar(entry.name),
             points: entry.points,
             trend: 'same',
         }));

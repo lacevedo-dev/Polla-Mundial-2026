@@ -18,12 +18,13 @@ export class OrdersController {
     // Validate status if provided
     let orderStatus: OrderStatus | undefined;
     if (status) {
-      if (!Object.values(OrderStatus).includes(status.toUpperCase())) {
+      const normalizedStatus = status.toUpperCase() as OrderStatus;
+      if (!Object.values(OrderStatus).includes(normalizedStatus)) {
         throw new BadRequestException(
           `Invalid status. Must be one of: ${Object.values(OrderStatus).join(', ')}`,
         );
       }
-      orderStatus = status.toUpperCase() as OrderStatus;
+      orderStatus = normalizedStatus;
     }
 
     const orders = await this.ordersService.getOrders(userId, orderStatus);

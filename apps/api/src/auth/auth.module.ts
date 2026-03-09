@@ -5,6 +5,7 @@ import { UsersModule } from '../users/users.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AvatarStorageService } from './avatar-storage.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EmailService } from '../email/email.service';
 
@@ -18,7 +19,7 @@ import { EmailService } from '../email/email.service';
             signOptions: { expiresIn: '7d' },
         }),
     ],
-    providers: [AuthService, JwtStrategy, EmailService],
+    providers: [AuthService, AvatarStorageService, JwtStrategy, EmailService],
     controllers: [AuthController],
     exports: [AuthService],
 })

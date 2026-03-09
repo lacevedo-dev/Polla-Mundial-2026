@@ -341,7 +341,8 @@ const Register: React.FC = () => {
         password: formData.password,
         name: formData.nombre,
         phone: formData.celular,
-        countryCode: selectedCountry.code
+        countryCode: selectedCountry.code,
+        ...(formData.foto ? { avatarFile: formData.foto } : {})
       });
       // Store email in sessionStorage for EmailVerification view
       sessionStorage.setItem('registrationEmail', formData.email);

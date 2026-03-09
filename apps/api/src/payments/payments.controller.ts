@@ -60,9 +60,9 @@ export class PaymentsController {
         }
 
         try {
-            const payload = req.rawBody || Buffer.from(JSON.stringify(req.body));
+            const payload = req.rawBody?.toString('utf8') ?? JSON.stringify(req.body);
             const event = this.stripeService.verifyWebhookSignature(
-                payload instanceof Buffer ? payload.toString('utf8') : payload,
+                payload,
                 signature,
                 webhookSecret,
             );

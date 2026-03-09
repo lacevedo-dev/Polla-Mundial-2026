@@ -1,5 +1,5 @@
 ﻿import { create } from 'zustand';
-import { request } from '../api';
+import { request, resolveApiAssetUrl } from '../api';
 import { normalizeAuthError } from './auth.error';
 
 interface User {
@@ -27,6 +27,40 @@ interface AuthState {
     isEmailVerified: () => boolean;
 }
 
+function normalizeUser(user: User | null | undefined): User | null {
+    if (!user) {
+        return null;
+    }
+
+    return {
+        ...user,
+        avatar: resolveApiAssetUrl(user.avatar),
+    };
+}
+
+function toRegisterRequestBody(data: Record<string, unknown>) {
+    const { avatarFile, ...payload } = data;
+    const hasAvatarFile = typeof File !== 'undefined' && avatarFile instanceof File;
+
+    if (!hasAvatarFile) {
+        return JSON.stringify(payload);
+    }
+
+    const formData = new FormData();
+
+    Object.entries(payload).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+            return;
+        }
+
+        formData.append(key, String(value));
+    });
+
+    formData.append('avatar', avatarFile);
+
+    return formData;
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     token: localStorage.getItem('token'),
@@ -47,7 +81,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             localStorage.setItem('token', token);
             const emailVerified = response.user?.emailVerified ?? false;
             set({
-                user: response.user,
+                user: normalizeUser(response.user),
                 token,
                 emailVerified,
                 isLoading: false,
@@ -63,7 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
             const response: any = await request('/auth/register', {
                 method: 'POST',
-                body: JSON.stringify(data),
+                body: toRegisterRequestBody(data),
             });
             const token = response.accessToken ?? response.access_token;
             if (!token) {
@@ -72,12 +106,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             localStorage.setItem('token', token);
             const emailVerified = response.user?.emailVerified ?? false;
             set({
-                user: response.user,
+                user: normalizeUser(response.user),
                 token,
                 emailVerified,
                 isLoading: false,
             });
-            return response;
+            return {
+                ...response,
+                user: normalizeUser(response.user),
+            };
         } catch (error) {
             set({ isLoading: false });
             throw normalizeAuthError(error, 'register');
@@ -95,7 +132,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
             const user: any = await request('/auth/profile');
             const emailVerified = user?.emailVerified ?? false;
-            set({ user, token, emailVerified });
+            set({ user: normalizeUser(user), token, emailVerified });
         } catch {
             localStorage.removeItem('token');
             set({ user: null, token: null, emailVerified: false });
@@ -109,7 +146,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 method: 'POST',
                 body: JSON.stringify({ token }),
             });
-            const user = response.user ?? get().user;
+            const user = normalizeUser(response.user) ?? get().user;
             const emailVerified = response.user?.emailVerified ?? true;
             set({
                 user: { ...user, emailVerified },

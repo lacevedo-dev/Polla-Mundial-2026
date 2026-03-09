@@ -25,7 +25,7 @@ export class ApiError extends Error {
 export function resolveBaseUrl(mode: string, rawBaseUrl?: string): string {
     const configuredBaseUrl = rawBaseUrl?.trim();
 
-    if (mode === 'development') {
+    if (mode === 'development' || mode === 'test') {
         return (configuredBaseUrl || DEV_FALLBACK_API_URL).replace(/\/+$/, '');
     }
 
@@ -48,6 +48,28 @@ export function resolveBaseUrl(mode: string, rawBaseUrl?: string): string {
 }
 
 const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
+
+export function resolveApiAssetUrl(rawPath?: string | null): string | undefined {
+    const normalizedPath = rawPath?.trim();
+    if (!normalizedPath) {
+        return undefined;
+    }
+
+    if (
+        normalizedPath.startsWith('http://') ||
+        normalizedPath.startsWith('https://') ||
+        normalizedPath.startsWith('data:') ||
+        normalizedPath.startsWith('blob:')
+    ) {
+        return normalizedPath;
+    }
+
+    if (normalizedPath.startsWith('/')) {
+        return `${BASE_URL}${normalizedPath}`;
+    }
+
+    return `${BASE_URL}/${normalizedPath.replace(/^\/+/, '')}`;
+}
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');

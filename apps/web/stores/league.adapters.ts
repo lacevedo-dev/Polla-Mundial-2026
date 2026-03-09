@@ -1,4 +1,5 @@
 import type { LeagueData } from '@polla-2026/shared';
+import { resolveApiAssetUrl } from '../api';
 
 export type BackendPrivacy = 'PUBLIC' | 'PRIVATE';
 export type BackendPlan = 'FREE' | 'GOLD' | 'DIAMOND';
@@ -220,7 +221,7 @@ export function toLeagueContextDetail(response: LeagueApiResponse): LeagueContex
             name: member.user?.name?.trim() || member.user?.username?.trim() || `Miembro ${index + 1}`,
             role: resolveRole(member.role),
             status: member.status,
-            avatar: member.user?.avatar ?? undefined,
+            avatar: resolveApiAssetUrl(member.user?.avatar) ?? undefined,
         })),
     };
 }

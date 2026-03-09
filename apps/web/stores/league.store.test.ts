@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { request } from '../api';
 import { useLeagueStore } from './league.store';
 
-vi.mock('../api', () => ({
-    request: vi.fn(),
-}));
+vi.mock('../api', async () => {
+    const actual = await vi.importActual<typeof import('../api')>('../api');
+    return {
+        ...actual,
+        request: vi.fn(),
+    };
+});
 
 const requestMock = vi.mocked(request);
 

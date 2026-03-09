@@ -13,7 +13,6 @@ export class StripeService {
     }
 
     this.stripe = new Stripe(apiKey || 'sk_test_dummy_key', {
-      apiVersion: '2024-06-20',
     });
   }
 
