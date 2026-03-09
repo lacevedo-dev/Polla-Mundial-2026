@@ -30,7 +30,7 @@ export class OrdersController {
     const orders = await this.ordersService.getOrders(userId, orderStatus);
 
     return {
-      data: orders,
+      orders,
       total: orders.length,
     };
   }

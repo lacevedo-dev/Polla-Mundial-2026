@@ -87,10 +87,11 @@ const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
         body: JSON.stringify({
           items: [
             {
+              type: 'plan',
+              id: selectedPlan,
+              quantity: 1,
+              price: currentPlan.priceInCents,
               name: currentPlan.name,
-              amount: currentPlan.priceInCents,
-              currency: 'COP',
-              description: currentPlan.description,
             },
           ],
           currency: 'COP',
@@ -99,8 +100,8 @@ const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
         }),
       });
 
-      if (response.url) {
-        window.location.href = response.url;
+      if (response.redirectUrl || response.url) {
+        window.location.href = response.redirectUrl || response.url;
       } else {
         setError('Error al procesar el pago. Por favor intenta de nuevo.');
       }
