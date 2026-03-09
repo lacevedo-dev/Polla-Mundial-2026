@@ -11,6 +11,7 @@ import { MatchesModule } from './matches/matches.module';
 import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
@@ -29,6 +30,7 @@ import { HealthModule } from './health/health.module';
     PaymentsModule,
     OrdersModule,
     NotificationsModule,
+    DashboardModule,
     PrismaModule,
     CommonModule,
     HealthModule,
