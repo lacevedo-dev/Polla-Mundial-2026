@@ -847,7 +847,7 @@ const CreateLeague: React.FC = () => {
                       <Badge color={leagueData.privacy === 'private' ? 'bg-slate-800 text-slate-200 border border-slate-700 pl-2 pr-3' : 'bg-lime-400 text-black border border-lime-300 pl-2 pr-3'}>
                         <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
                           {leagueData.privacy === 'private' ? <Lock size={10} className="shrink-0" /> : <Globe size={10} className="shrink-0" />}
-                          <span className="text-[9px] leading-none">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÃšBLICA'}</span>
+                          <span className="text-[9px] leading-none">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</span>
                         </div>
                       </Badge>
                     </div>
@@ -877,7 +877,7 @@ const CreateLeague: React.FC = () => {
                       </div>
                       <div className="bg-slate-50 rounded-xl p-1 space-y-1">
                         {!leagueData.includeBaseFee && !leagueData.includeStageFees ? (
-                          <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCIÃ“N</div>
+                          <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCIÓN</div>
                         ) : (
                           <>
                             {leagueData.includeBaseFee && (
@@ -914,7 +914,7 @@ const CreateLeague: React.FC = () => {
                       <div className="relative z-10 space-y-3">
                         <div className="flex items-center gap-2 mb-2">
                           <Calculator size={14} className="text-lime-400" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCIÃ“N DE FONDOS</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCIÓN DE FONDOS</span>
                         </div>
 
                         <div className="flex justify-between items-center text-xs opacity-80">
@@ -936,7 +936,7 @@ const CreateLeague: React.FC = () => {
                     </div>
 
                     <button onClick={() => setStep(2)} className="w-full text-center text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 pt-2">
-                      <Eye size={12} /> REVISAR CONFIGURACIÃ“N
+                      <Eye size={12} /> REVISAR CONFIGURACIÓN
                     </button>
                   </div>
                 </div>
@@ -947,9 +947,9 @@ const CreateLeague: React.FC = () => {
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 flex flex-col items-center">
                 <div className="text-center space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
-                    Â¡LIGA <span className="text-lime-600">LISTA!</span>
+                    ¡LIGA <span className="text-lime-600">LISTA!</span>
                   </h4>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACIÃ“N.</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACIÓN.</p>
                 </div>
 
                 {/* Ticket Card - EXTENDED VERSION */}
@@ -970,7 +970,7 @@ const CreateLeague: React.FC = () => {
                       <h3 className="text-2xl font-black font-brand uppercase leading-tight tracking-tight text-white">
                         {leagueData.name || 'POLLA MUNDIALISTA'}
                       </h3>
-                      <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACIÃ“N EXCLUSIVA</p>
+                      <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACIÓN EXCLUSIVA</p>
                     </div>
 
                     {/* Grid Info High Level */}
@@ -997,7 +997,7 @@ const CreateLeague: React.FC = () => {
                       <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
                         {leagueData.privacy === 'private' ? <Lock size={14} className="text-slate-400 mb-1" /> : <Globe size={14} className="text-slate-400 mb-1" />}
                         <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TIPO</p>
-                        <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÃšBLICA'}</p>
+                        <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</p>
                       </div>
                     </div>
 
@@ -1044,7 +1044,7 @@ const CreateLeague: React.FC = () => {
                       <div className="bg-white/5 rounded-2xl p-4 border border-white/10 text-left">
                         <div className="flex items-center gap-2 mb-3">
                           <Calculator size={12} className="text-lime-400" />
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCIÃ“N ESTIMADA</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCIÓN ESTIMADA</span>
                         </div>
                         <div className="space-y-2">
                           <div className="flex justify-between text-[10px] font-bold">
