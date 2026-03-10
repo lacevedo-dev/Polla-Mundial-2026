@@ -24,7 +24,7 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props 
 }) => {
-  const baseStyles = "relative inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-300 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed overflow-hidden";
+  const baseStyles = "relative inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-300 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed";
   
   const variants = {
     primary: isLoading 
@@ -53,7 +53,11 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={isLoading || disabled}
       {...props}
     >
-      <span className={`flex items-center justify-center gap-2 transition-all duration-300 absolute inset-0 ${isLoading ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'}`}>
+      <span
+        className={`inline-flex w-full items-center justify-center gap-2 text-center leading-tight transition-all duration-300 ${
+          isLoading ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'
+        }`}
+      >
         {children}
       </span>
 
