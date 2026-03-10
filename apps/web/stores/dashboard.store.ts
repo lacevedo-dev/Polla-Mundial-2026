@@ -216,10 +216,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         ]);
 
       const newState = {
-        stats: statsResponse,
-        leagues: leaguesResponse.ligas,
-        performance: performanceResponse,
-        predictions: predictionsResponse.predicciones,
+        stats: isValidStats(statsResponse) ? statsResponse : null,
+        leagues: isValidLeagueArray(leaguesResponse?.ligas) ? leaguesResponse.ligas : null,
+        performance: isValidPerformanceArray(performanceResponse) ? performanceResponse : null,
+        predictions: isValidPredictionArray(predictionsResponse?.predicciones) ? predictionsResponse.predicciones : null,
         lastFetchTime: Date.now(),
         loading: false,
         error: null,
