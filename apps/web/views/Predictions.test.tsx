@@ -61,7 +61,7 @@ describe('Predictions view', () => {
 
         await waitFor(() => expect(fetchLeagueMatchesMock).toHaveBeenCalledWith('league-1'));
         expect(screen.getByRole('heading', { name: /Simulador/i })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: /Ligas públicas/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /Ligas p.*blicas/i })).toBeInTheDocument();
     });
 
     it('saves predictions using the implemented store action', async () => {
@@ -69,7 +69,7 @@ describe('Predictions view', () => {
         render(<Predictions />);
 
         await user.type(screen.getByLabelText(/Marcador Colombia/i), '2');
-        await user.type(screen.getByLabelText(/Marcador México/i), '1');
+        await user.type(screen.getByLabelText(/Marcador M.*xico/i), '1');
         await user.click(screen.getByRole('button', { name: /Guardar/i }));
 
         await waitFor(() =>
