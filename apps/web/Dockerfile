@@ -29,6 +29,8 @@ RUN test -n "$VITE_API_URL" || (echo "ERROR: VITE_API_URL is required for fronte
 
 # Construir el proyecto Vite para produccion
 # Como estamos usando workspaces podemos hacerlo desde root o app
+# ARG CACHEBUST invalida el cache de Docker para forzar un rebuild completo
+ARG CACHEBUST=1
 WORKDIR /app/apps/web
 RUN npm run build
 
