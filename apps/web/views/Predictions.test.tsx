@@ -59,8 +59,8 @@ describe('Predictions view', () => {
     it('loads real matches for the active league and shows disabled placeholder sections for deferred features', async () => {
         render(<Predictions />);
 
-        await waitFor(() => expect(fetchLeagueMatchesMock).toHaveBeenCalledWith('league-1'));
-        expect(screen.getByRole('heading', { name: /Simulador/i })).toBeInTheDocument();
+        await screen.findByRole('heading', { name: /Simulador/i });
+        expect(fetchLeagueMatchesMock).toHaveBeenCalledWith('league-1');
         expect(screen.getByRole('heading', { name: /Ligas p.*blicas/i })).toBeInTheDocument();
     });
 
