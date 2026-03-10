@@ -78,7 +78,7 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
   }
 
   return (
-    <div>
+    <div role="region" aria-label="Ligas del usuario">
       <h2 className="mb-4 text-xl font-black text-slate-900">
         Tus Ligas
       </h2>
@@ -89,7 +89,9 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
           return (
             <div
               key={liga.id}
-              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md"
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-lime-600"
+              role="article"
+              aria-label={`Liga ${liga.nombre}, posición ${liga.posicion}`}
             >
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex-1 font-black text-slate-900">
@@ -99,8 +101,9 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${getPositionColor(
                     liga.posicion
                   )}`}
+                  aria-label={`Posición ${liga.posicion} de ${liga.participantes}`}
                 >
-                  {getMedalEmoji(liga.posicion)}
+                  <span aria-hidden="true">{getMedalEmoji(liga.posicion)}</span>
                   {liga.posicion === 1
                     ? '1st'
                     : liga.posicion === 2
@@ -116,7 +119,7 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
                   Puntos
                 </p>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black text-lime-700">
+                  <span className="text-2xl font-black text-lime-700" aria-live="polite">
                     {liga.tusPuntos}
                   </span>
                   <span className="text-sm text-slate-500">
@@ -126,7 +129,14 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
               </div>
 
               <div className="mb-3 space-y-2">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-2 w-full overflow-hidden rounded-full bg-slate-200"
+                  role="progressbar"
+                  aria-valuenow={progressPercent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`Progreso: ${Math.round(progressPercent)}%`}
+                >
                   <div
                     className="h-full bg-gradient-to-r from-lime-500 to-lime-600 transition-all duration-500"
                     style={{ width: `${Math.min(progressPercent, 100)}%` }}

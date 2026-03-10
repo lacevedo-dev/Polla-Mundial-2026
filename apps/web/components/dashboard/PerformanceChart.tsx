@@ -81,7 +81,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   ].join(' ');
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" role="region" aria-label="Gráfico de desempeño semanal">
       <div>
         <h2 className="text-lg font-black text-slate-900">
           Desempeño por Semana
@@ -91,7 +91,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl bg-lime-50 p-6">
+      <div className="overflow-x-auto rounded-2xl bg-lime-50 p-6" role="img" aria-label={`Gráfico de línea mostrando desempeño sobre ${chartData.points.length} semanas`}>
         <svg
           width="100%"
           height={height}

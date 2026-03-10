@@ -77,7 +77,7 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
   const displayedPredictions = predictions.slice(0, 5);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" role="region" aria-label="Predicciones recientes">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-black text-slate-900">
           Predicciones Recientes
@@ -85,10 +85,10 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
         {predictions.length > 5 && (
           <Link
             to="/predictions"
-            className="inline-flex items-center gap-1 text-sm font-bold uppercase text-lime-700 transition-colors duration-200 hover:text-lime-800"
+            className="inline-flex items-center gap-1 text-sm font-bold uppercase text-lime-700 transition-colors duration-200 hover:text-lime-800 focus:ring-2 focus:ring-offset-2 focus:ring-lime-600 rounded focus:outline-none"
           >
             Ver todas
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         )}
       </div>
@@ -97,11 +97,13 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
         {displayedPredictions.map((prediction, index) => (
           <div
             key={prediction.id}
-            className={`flex items-center justify-between px-4 py-3 transition-colors duration-200 hover:bg-slate-50 ${
+            className={`flex items-center justify-between px-4 py-3 transition-colors duration-200 hover:bg-slate-50 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-lime-600 rounded ${
               index !== displayedPredictions.length - 1
                 ? 'border-b border-slate-100'
                 : ''
             }`}
+            role="article"
+            aria-label={`Predicción: ${prediction.match}, tu pronóstico ${prediction.tuPrediccion}, resultado ${prediction.resultado}, ${prediction.acierto ? 'acierto' : 'error'}`}
           >
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-slate-900 truncate">
@@ -132,15 +134,17 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-lime-100"
                   title="Acierto"
+                  aria-label="Predicción correcta"
                 >
-                  <Check className="h-5 w-5 text-lime-700" />
+                  <Check className="h-5 w-5 text-lime-700" aria-hidden="true" />
                 </div>
               ) : (
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100"
                   title="Error"
+                  aria-label="Predicción incorrecta"
                 >
-                  <X className="h-5 w-5 text-rose-700" />
+                  <X className="h-5 w-5 text-rose-700" aria-hidden="true" />
                 </div>
               )}
             </div>

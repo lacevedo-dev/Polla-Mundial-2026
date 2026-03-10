@@ -54,12 +54,15 @@ export const StatCard: React.FC<StatCardProps> = ({
           p-5 rounded-xl border ${colors.bg} ${colors.border}
           flex justify-between items-start gap-4
         `}
+        role="status"
+        aria-live="polite"
+        aria-label={`Cargando ${label}`}
       >
         <div className="flex-1">
           <div className="h-4 w-20 bg-slate-200 rounded animate-pulse mb-3" />
           <div className="h-8 w-32 bg-slate-200 rounded animate-pulse" />
         </div>
-        {icon && <div className="text-slate-300">{icon}</div>}
+        {icon && <div className="text-slate-300" aria-hidden="true">{icon}</div>}
       </div>
     );
   }
@@ -70,31 +73,37 @@ export const StatCard: React.FC<StatCardProps> = ({
         p-5 rounded-xl border ${colors.bg} ${colors.border}
         flex justify-between items-start gap-4
         transition-all duration-200 hover:shadow-md
+        focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-${color}-600
       `}
+      role="region"
+      aria-label={`${label}: ${value}`}
     >
       <div className="flex-1">
         <p className={`text-xs uppercase font-semibold ${colors.text} mb-2`}>
           {label}
         </p>
         <div className="flex items-baseline gap-2">
-          <div className={`text-3xl font-black ${colors.number}`}>
+          <div
+            className={`text-3xl font-black ${colors.number}`}
+            aria-live="polite"
+          >
             {value}
           </div>
           {trend !== undefined && (
             <div className={`flex items-center gap-1 ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {trend >= 0 ? (
-                <TrendingUp className="h-4 w-4" />
+                <TrendingUp className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <TrendingDown className="h-4 w-4" />
+                <TrendingDown className="h-4 w-4" aria-hidden="true" />
               )}
-              <span className="text-xs font-semibold">
+              <span className="text-xs font-semibold" aria-label={`Tendencia: ${trend >= 0 ? 'positiva' : 'negativa'} ${Math.abs(trend)}`}>
                 {trend >= 0 ? '+' : ''}{trend}
               </span>
             </div>
           )}
         </div>
       </div>
-      {icon && <div className={colors.text}>{icon}</div>}
+      {icon && <div className={colors.text} aria-hidden="true">{icon}</div>}
     </div>
   );
 };
