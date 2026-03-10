@@ -1115,12 +1115,12 @@ const CreateLeague: React.FC = () => {
                   </Button>
                   <Button
                     variant="secondary"
-                    className="flex-1 h-16 rounded-[2rem] font-black text-[12px] tracking-[0.2em] shadow-2xl hover:bg-lime-500 hover:scale-[1.02] transition-all"
+                    className="min-w-0 flex-1 h-16 rounded-[2rem] px-4 sm:px-6 font-black text-[11px] sm:text-[12px] tracking-[0.14em] sm:tracking-[0.18em] shadow-2xl hover:bg-lime-500 hover:-translate-y-0.5 hover:shadow-lime-400/30 transition-all"
                     disabled={isSubmitting}
                     onClick={handleFinish}
                   >
                     {isSubmitting ? 'CREANDO LIGA...' : 'FINALIZAR E IR AL TABLERO'}
-                    <ArrowRight size={24} className="ml-2" />
+                    <ArrowRight size={22} className="ml-2 shrink-0" />
                   </Button>
                 </div>
 
