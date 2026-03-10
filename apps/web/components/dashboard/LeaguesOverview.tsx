@@ -84,33 +84,38 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
       </h2>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {ligas.map((liga) => {
-          const progressPercent = (liga.tusPuntos / liga.maxPuntos) * 100;
+          const safeMaxPuntos = liga.maxPuntos > 0 ? liga.maxPuntos : 1;
+          const safeTusPuntos = typeof liga.tusPuntos === 'number' ? liga.tusPuntos : 0;
+          const safePosicion = typeof liga.posicion === 'number' ? liga.posicion : 0;
+          const safeParticipantes = typeof liga.participantes === 'number' ? liga.participantes : 0;
+          const safeNombre = typeof liga.nombre === 'string' ? liga.nombre : String(liga.nombre ?? '');
+          const progressPercent = Math.min((safeTusPuntos / safeMaxPuntos) * 100, 100);
 
           return (
             <div
               key={liga.id}
               className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-lime-600"
               role="article"
-              aria-label={`Liga ${liga.nombre}, posición ${liga.posicion}`}
+              aria-label={`Liga ${safeNombre}, posición ${safePosicion}`}
             >
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="flex-1 font-black text-slate-900">
-                  {liga.nombre}
+                  {safeNombre}
                 </h3>
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${getPositionColor(
-                    liga.posicion
+                    safePosicion
                   )}`}
-                  aria-label={`Posición ${liga.posicion} de ${liga.participantes}`}
+                  aria-label={`Posición ${safePosicion} de ${safeParticipantes}`}
                 >
-                  <span aria-hidden="true">{getMedalEmoji(liga.posicion)}</span>
-                  {liga.posicion === 1
+                  <span aria-hidden="true">{getMedalEmoji(safePosicion)}</span>
+                  {safePosicion === 1
                     ? '1st'
-                    : liga.posicion === 2
+                    : safePosicion === 2
                       ? '2nd'
-                      : liga.posicion === 3
+                      : safePosicion === 3
                         ? '3rd'
-                        : `${liga.posicion}th`}
+                        : `${safePosicion}th`}
                 </span>
               </div>
 
@@ -120,7 +125,7 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
                 </p>
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl font-black text-lime-700" aria-live="polite">
-                    {liga.tusPuntos}
+                    {safeTusPuntos}
                   </span>
                   <span className="text-sm text-slate-500">
                     / {liga.maxPuntos}
@@ -139,7 +144,7 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
                 >
                   <div
                     className="h-full bg-gradient-to-r from-lime-500 to-lime-600 transition-all duration-500"
-                    style={{ width: `${Math.min(progressPercent, 100)}%` }}
+                    style={{ width: `${progressPercent}%` }}
                   />
                 </div>
                 <p className="text-xs text-slate-500">
@@ -148,7 +153,7 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
               </div>
 
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {liga.participantes} participante{liga.participantes !== 1 ? 's' : ''}
+                {safeParticipantes} participante{safeParticipantes !== 1 ? 's' : ''}
               </p>
             </div>
           );

@@ -94,7 +94,15 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
       </div>
 
       <div className="space-y-1">
-        {displayedPredictions.map((prediction, index) => (
+        {displayedPredictions.map((prediction, index) => {
+          // Ensure all rendered values are primitives to prevent React #185
+          const matchLabel = typeof prediction.match === 'string' ? prediction.match : String(prediction.match ?? '');
+          const tuPrediccionLabel = typeof prediction.tuPrediccion === 'string' ? prediction.tuPrediccion : String(prediction.tuPrediccion ?? '');
+          const resultadoLabel = typeof prediction.resultado === 'string' ? prediction.resultado : String(prediction.resultado ?? '');
+          const fechaLabel = typeof prediction.fecha === 'string' ? prediction.fecha : String(prediction.fecha ?? '');
+          const aciertoFlag = Boolean(prediction.acierto);
+
+          return (
           <div
             key={prediction.id}
             className={`flex items-center justify-between px-4 py-3 transition-colors duration-200 hover:bg-slate-50 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-lime-600 rounded ${
@@ -103,34 +111,34 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
                 : ''
             }`}
             role="article"
-            aria-label={`Predicción: ${prediction.match}, tu pronóstico ${prediction.tuPrediccion}, resultado ${prediction.resultado}, ${prediction.acierto ? 'acierto' : 'error'}`}
+            aria-label={`Predicción: ${matchLabel}, tu pronóstico ${tuPrediccionLabel}, resultado ${resultadoLabel}, ${aciertoFlag ? 'acierto' : 'error'}`}
           >
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-slate-900 truncate">
-                {prediction.match}
+                {matchLabel}
               </h3>
               <div className="mt-1 text-xs text-slate-500">
                 <span className="inline-block">
                   Tu pronóstico:{' '}
                   <span className="font-bold text-slate-700">
-                    {prediction.tuPrediccion}
+                    {tuPrediccionLabel}
                   </span>
                 </span>
                 <span className="mx-2 text-slate-300">•</span>
                 <span className="inline-block">
                   Resultado:{' '}
                   <span className="font-bold text-slate-700">
-                    {prediction.resultado}
+                    {resultadoLabel}
                   </span>
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                {formatDate(prediction.fecha)}
+                {formatDate(fechaLabel)}
               </p>
             </div>
 
             <div className="ml-3 flex-shrink-0">
-              {prediction.acierto ? (
+              {aciertoFlag ? (
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-lime-100"
                   title="Acierto"
@@ -149,7 +157,8 @@ export const RecentPredictions: React.FC<RecentPredictionsProps> = ({
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {predictions.length > 0 && (

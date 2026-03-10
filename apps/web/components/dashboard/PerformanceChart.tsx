@@ -63,22 +63,24 @@ const PerformanceChartBase: React.FC<PerformanceChartProps> = ({
   const xStep = chartWidth / (chartData.points.length - 1 || 1);
 
   // Generate SVG path for the line
-  const pathPoints = chartData.points
-    .map((point, index) => {
-      const x = padding.left + index * xStep;
-      const normalizedY = (point.points - chartData.minPoints) / range;
-      const y = padding.top + (1 - normalizedY) * chartHeight;
-      return `${x},${y}`;
-    })
-    .join(' ');
+  const computedPoints = chartData.points.map((point, index) => {
+    const x = padding.left + index * xStep;
+    const normalizedY = (point.points - chartData.minPoints) / range;
+    const y = padding.top + (1 - normalizedY) * chartHeight;
+    return { x, y };
+  });
 
-  // Generate gradient area under the line
-  const fillPath = [
-    `M ${padding.left},${padding.top + chartHeight}`,
-    `L ${pathPoints.split(' ').map((p) => p.split(',')[0]).join(',')}`,
-    `L ${padding.left + chartWidth},${padding.top + chartHeight}`,
-    'Z',
-  ].join(' ');
+  const pathPoints = computedPoints.map((p) => `${p.x},${p.y}`).join(' ');
+
+  // Generate gradient area under the line (proper closed SVG path)
+  const fillPath = computedPoints.length > 0
+    ? [
+        `M ${computedPoints[0].x},${padding.top + chartHeight}`,
+        ...computedPoints.map((p) => `L ${p.x},${p.y}`),
+        `L ${computedPoints[computedPoints.length - 1].x},${padding.top + chartHeight}`,
+        'Z',
+      ].join(' ')
+    : '';
 
   return (
     <div className="space-y-4" role="region" aria-label="Gráfico de desempeño semanal">
@@ -155,18 +157,22 @@ const PerformanceChartBase: React.FC<PerformanceChartProps> = ({
           })}
 
           {/* X-axis labels (week numbers) */}
-          {chartData.points.map((point, index) => (
-            <text
-              key={`x-label-${index}`}
-              x={padding.left + index * xStep}
-              y={height - padding.bottom + 25}
-              textAnchor="middle"
-              fontSize="12"
-              fill="#94a3b8"
-            >
-              {point.week.split('-')[1] || `W${index + 1}`}
-            </text>
-          ))}
+          {chartData.points.map((point, index) => {
+            const weekStr = typeof point.week === 'string' ? point.week : String(point.week ?? '');
+            const label = weekStr.split('-')[1] || `W${index + 1}`;
+            return (
+              <text
+                key={`x-label-${index}`}
+                x={padding.left + index * xStep}
+                y={height - padding.bottom + 25}
+                textAnchor="middle"
+                fontSize="12"
+                fill="#94a3b8"
+              >
+                {label}
+              </text>
+            );
+          })}
 
           {/* Gradient definition */}
           <defs>
@@ -203,6 +209,8 @@ const PerformanceChartBase: React.FC<PerformanceChartProps> = ({
             const x = padding.left + index * xStep;
             const normalizedY = (point.points - chartData.minPoints) / range;
             const y = padding.top + (1 - normalizedY) * chartHeight;
+            const weekLabel = typeof point.week === 'string' ? point.week : String(point.week ?? '');
+            const pointsLabel = typeof point.points === 'number' ? point.points : Number(point.points ?? 0);
 
             return (
               <g key={`point-${index}`}>
@@ -216,7 +224,7 @@ const PerformanceChartBase: React.FC<PerformanceChartProps> = ({
                 />
                 {/* Tooltip on hover */}
                 <title>
-                  {point.week}: {point.points} pts
+                  {weekLabel}: {pointsLabel} pts
                 </title>
               </g>
             );

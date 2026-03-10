@@ -52,13 +52,71 @@ export interface DashboardState {
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const STORAGE_KEY = 'dashboard_cache';
+const CACHE_VERSION = 2; // Increment when data shape changes to bust stale caches
 
 interface CachedData {
+  version?: number;
   stats: DashboardStats | null;
   leagues: DashboardLeague[] | null;
   performance: PerformanceWeek[] | null;
   predictions: RecentPrediction[] | null;
   timestamp: number;
+}
+
+/**
+ * Validates that cached stats have the expected primitive types.
+ * Returns null if the shape is invalid to prevent React #185 (object-as-child).
+ */
+function isValidStats(stats: unknown): stats is DashboardStats {
+  if (!stats || typeof stats !== 'object') return false;
+  const s = stats as Record<string, unknown>;
+  return (
+    typeof s['aciertos'] === 'number' &&
+    typeof s['errores'] === 'number' &&
+    typeof s['racha'] === 'number' &&
+    typeof s['tasa'] === 'number'
+  );
+}
+
+function isValidLeagueArray(leagues: unknown): leagues is DashboardLeague[] {
+  if (!Array.isArray(leagues)) return false;
+  return leagues.every(
+    (l) =>
+      l &&
+      typeof l === 'object' &&
+      typeof (l as Record<string, unknown>)['id'] === 'string' &&
+      typeof (l as Record<string, unknown>)['nombre'] === 'string' &&
+      typeof (l as Record<string, unknown>)['posicion'] === 'number' &&
+      typeof (l as Record<string, unknown>)['tusPuntos'] === 'number' &&
+      typeof (l as Record<string, unknown>)['maxPuntos'] === 'number' &&
+      typeof (l as Record<string, unknown>)['participantes'] === 'number',
+  );
+}
+
+function isValidPerformanceArray(perf: unknown): perf is PerformanceWeek[] {
+  if (!Array.isArray(perf)) return false;
+  return perf.every(
+    (p) =>
+      p &&
+      typeof p === 'object' &&
+      typeof (p as Record<string, unknown>)['week'] === 'string' &&
+      typeof (p as Record<string, unknown>)['points'] === 'number',
+  );
+}
+
+function isValidPredictionArray(preds: unknown): preds is RecentPrediction[] {
+  if (!Array.isArray(preds)) return false;
+  return preds.every(
+    (p) =>
+      p &&
+      typeof p === 'object' &&
+      typeof (p as Record<string, unknown>)['id'] === 'string' &&
+      typeof (p as Record<string, unknown>)['match'] === 'string' &&
+      typeof (p as Record<string, unknown>)['tuPrediccion'] === 'string' &&
+      typeof (p as Record<string, unknown>)['resultado'] === 'string' &&
+      typeof (p as Record<string, unknown>)['acierto'] === 'boolean' &&
+      typeof (p as Record<string, unknown>)['fecha'] === 'string',
+  );
 }
 
 function getCachedData(): CachedData | null {
@@ -67,18 +125,37 @@ function getCachedData(): CachedData | null {
     if (!cached) return null;
 
     const data = JSON.parse(cached) as CachedData;
-    const isExpired = Date.now() - data.timestamp > CACHE_TTL;
 
-    return isExpired ? null : data;
+    // Bust stale caches from older app versions with different data shapes
+    if (!data.version || data.version < CACHE_VERSION) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
+    const isExpired = Date.now() - data.timestamp > CACHE_TTL;
+    if (isExpired) return null;
+
+    // Validate shapes to prevent React #185 from stale/corrupt cached data
+    const validatedData: CachedData = {
+      version: data.version,
+      timestamp: data.timestamp,
+      stats: isValidStats(data.stats) ? data.stats : null,
+      leagues: isValidLeagueArray(data.leagues) ? data.leagues : null,
+      performance: isValidPerformanceArray(data.performance) ? data.performance : null,
+      predictions: isValidPredictionArray(data.predictions) ? data.predictions : null,
+    };
+
+    return validatedData;
   } catch {
     return null;
   }
 }
 
-function setCachedData(data: Omit<CachedData, 'timestamp'>) {
+function setCachedData(data: Omit<CachedData, 'timestamp' | 'version'>) {
   try {
     const cacheData: CachedData = {
       ...data,
+      version: CACHE_VERSION,
       timestamp: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cacheData));
