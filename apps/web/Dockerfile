@@ -17,6 +17,11 @@ COPY packages/shared/package.json ./packages/shared/
 # Instalar dependencias
 RUN npm ci
 
+# ARG CACHEBUST debe ir ANTES del COPY de fuentes para que un valor dinámico
+# invalide el cache de Docker desde esta capa hacia adelante (COPY + build).
+# Pasa --build-arg CACHEBUST=$(date +%s) desde Dokploy para forzar rebuild.
+ARG CACHEBUST=1
+
 # Copiar el todo el código del frontend y el paquete compartido
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
@@ -28,10 +33,6 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN test -n "$VITE_API_URL" || (echo "ERROR: VITE_API_URL is required for frontend production build." && exit 1)
 
 # Construir el proyecto Vite para produccion
-# Como estamos usando workspaces podemos hacerlo desde root o app
-# ARG CACHEBUST invalida el cache de Docker para forzar un rebuild completo
-# Pasa --build-arg CACHEBUST=$(date +%s) desde Dokploy para forzar rebuild
-ARG CACHEBUST=1
 WORKDIR /app/apps/web
 RUN echo "Cache bust: $CACHEBUST" && npm run build
 
