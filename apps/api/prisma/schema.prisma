@@ -219,6 +219,7 @@ model LeagueMember {
   league    League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   @@unique([userId, leagueId])
   @@index([leagueId])
+  @@index([userId])
 }
 
 model PrizeDistribution {
@@ -309,6 +310,7 @@ model Prediction {
   @@unique([userId, matchId, leagueId])
   @@index([leagueId, matchId])
   @@index([userId, leagueId])
+  @@index([userId, submittedAt(sort: Desc)])
 }
 
 model Payment {

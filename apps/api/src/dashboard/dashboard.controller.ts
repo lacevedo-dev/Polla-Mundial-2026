@@ -1,7 +1,22 @@
 import { Controller, Get, UseGuards, Request, InternalServerErrorException } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import type { DashboardStatsDto } from './dto/dashboard-stats.dto';
+import type { DashboardLeaguesResponseDto } from './dto/dashboard-leagues.dto';
+import type { PerformanceWeekDto } from './dto/dashboard-performance.dto';
+import type { RecentPredictionsResponseDto } from './dto/dashboard-predictions.dto';
 
+/**
+ * Dashboard Controller
+ *
+ * Provides endpoints for the user dashboard including statistics,
+ * league standings, performance history, and recent predictions.
+ *
+ * All endpoints require JWT authentication via the Authorization header.
+ *
+ * @tags dashboard
+ * @security bearer
+ */
 @UseGuards(JwtAuthGuard)
 @Controller('dashboard')
 export class DashboardController {
@@ -9,10 +24,24 @@ export class DashboardController {
 
   /**
    * GET /dashboard/stats
-   * Get user statistics: correct/incorrect predictions, streak, success rate
+   *
+   * Returns the authenticated user's prediction statistics including
+   * correct/incorrect counts, current streak, and success rate percentage.
+   *
+   * @returns {DashboardStatsDto} User statistics object
+   * @throws {401} Unauthorized - Missing or invalid JWT token
+   * @throws {500} Internal Server Error - Failed to compute stats
+   *
+   * @example Response 200
+   * {
+   *   "aciertos": 45,
+   *   "errores": 10,
+   *   "racha": 3,
+   *   "tasa": 81.82
+   * }
    */
   @Get('stats')
-  async getStats(@Request() req) {
+  async getStats(@Request() req): Promise<DashboardStatsDto> {
     try {
       const userId = req.user.userId;
       return await this.dashboardService.getStats(userId);
@@ -23,10 +52,32 @@ export class DashboardController {
 
   /**
    * GET /dashboard/leagues
-   * Get user's leagues with position and points
+   *
+   * Returns all leagues the authenticated user participates in,
+   * including their position, points, and league metadata.
+   * Position is calculated by comparing the user's correct predictions
+   * against all other participants in each league.
+   *
+   * @returns {DashboardLeaguesResponseDto} Object containing array of league items
+   * @throws {401} Unauthorized - Missing or invalid JWT token
+   * @throws {500} Internal Server Error - Failed to fetch leagues
+   *
+   * @example Response 200
+   * {
+   *   "ligas": [
+   *     {
+   *       "id": "clxyz...",
+   *       "nombre": "Liga Premium",
+   *       "posicion": 1,
+   *       "tusPuntos": 45,
+   *       "maxPuntos": 50,
+   *       "participantes": 25
+   *     }
+   *   ]
+   * }
    */
   @Get('leagues')
-  async getLeagues(@Request() req) {
+  async getLeagues(@Request() req): Promise<DashboardLeaguesResponseDto> {
     try {
       const userId = req.user.userId;
       return await this.dashboardService.getLeagues(userId);
@@ -37,10 +88,23 @@ export class DashboardController {
 
   /**
    * GET /dashboard/performance
-   * Get performance data for last 12 weeks
+   *
+   * Returns the authenticated user's performance data for the last 12 weeks.
+   * Each entry contains an ISO week identifier and the number of correct
+   * predictions made during that week. Results are sorted by week descending.
+   *
+   * @returns {PerformanceWeekDto[]} Array of weekly performance entries
+   * @throws {401} Unauthorized - Missing or invalid JWT token
+   * @throws {500} Internal Server Error - Failed to fetch performance data
+   *
+   * @example Response 200
+   * [
+   *   { "week": "2026-W10", "points": 5 },
+   *   { "week": "2026-W09", "points": 3 }
+   * ]
    */
   @Get('performance')
-  async getPerformance(@Request() req) {
+  async getPerformance(@Request() req): Promise<PerformanceWeekDto[]> {
     try {
       const userId = req.user.userId;
       return await this.dashboardService.getPerformance(userId);
@@ -51,10 +115,32 @@ export class DashboardController {
 
   /**
    * GET /dashboard/predictions/recent
-   * Get user's last 5 predictions
+   *
+   * Returns the authenticated user's 5 most recent predictions,
+   * ordered by submission date descending. Each prediction includes
+   * match details, the user's predicted score, actual result, and
+   * whether the prediction was correct.
+   *
+   * @returns {RecentPredictionsResponseDto} Object containing array of recent predictions
+   * @throws {401} Unauthorized - Missing or invalid JWT token
+   * @throws {500} Internal Server Error - Failed to fetch predictions
+   *
+   * @example Response 200
+   * {
+   *   "predicciones": [
+   *     {
+   *       "id": "clxyz...",
+   *       "match": "Colombia vs Brazil",
+   *       "tuPrediccion": "2-1",
+   *       "resultado": "2-1",
+   *       "acierto": true,
+   *       "fecha": "15/3/2026"
+   *     }
+   *   ]
+   * }
    */
   @Get('predictions/recent')
-  async getRecentPredictions(@Request() req) {
+  async getRecentPredictions(@Request() req): Promise<RecentPredictionsResponseDto> {
     try {
       const userId = req.user.userId;
       return await this.dashboardService.getRecentPredictions(userId);
