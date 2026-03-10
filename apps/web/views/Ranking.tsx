@@ -4,22 +4,13 @@ import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore } from '../stores/prediction.store';
 
 const Ranking: React.FC = () => {
-    const {
-        activeLeague,
-        myLeagues,
-        fetchMyLeagues,
-        setActiveLeague,
-    } = useLeagueStore((state) => ({
-        activeLeague: state.activeLeague,
-        myLeagues: state.myLeagues,
-        fetchMyLeagues: state.fetchMyLeagues,
-        setActiveLeague: state.setActiveLeague,
-    }));
-    const { leaderboard, isLoading, fetchLeaderboard } = usePredictionStore((state) => ({
-        leaderboard: state.leaderboard,
-        isLoading: state.isLoading,
-        fetchLeaderboard: state.fetchLeaderboard,
-    }));
+    const activeLeague = useLeagueStore((state) => state.activeLeague);
+    const myLeagues = useLeagueStore((state) => state.myLeagues);
+    const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
+    const setActiveLeague = useLeagueStore((state) => state.setActiveLeague);
+    const leaderboard = usePredictionStore((state) => state.leaderboard);
+    const isLoading = usePredictionStore((state) => state.isLoading);
+    const fetchLeaderboard = usePredictionStore((state) => state.fetchLeaderboard);
     const [searchTerm, setSearchTerm] = React.useState('');
 
     React.useEffect(() => {

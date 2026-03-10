@@ -31,49 +31,25 @@ function formatCurrency(amount?: number | null, currency = 'COP'): string {
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuthStore((state) => ({
-        user: state.user,
-    }));
-    const {
-        activeLeague,
-        myLeagues,
-        isLoading: leagueLoading,
-        fetchMyLeagues,
-        fetchLeagueDetails,
-        setActiveLeague,
-    } = useLeagueStore((state) => ({
-        activeLeague: state.activeLeague,
-        myLeagues: state.myLeagues,
-        isLoading: state.isLoading,
-        fetchMyLeagues: state.fetchMyLeagues,
-        fetchLeagueDetails: state.fetchLeagueDetails,
-        setActiveLeague: state.setActiveLeague,
-    }));
-    const { matches, leaderboard, fetchLeagueMatches, fetchLeaderboard, resetLeagueData } =
-        usePredictionStore((state) => ({
-            matches: state.matches,
-            leaderboard: state.leaderboard,
-            fetchLeagueMatches: state.fetchLeagueMatches,
-            fetchLeaderboard: state.fetchLeaderboard,
-            resetLeagueData: state.resetLeagueData,
-        }));
-    const {
-        stats,
-        leagues,
-        performance,
-        predictions,
-        loading: dashboardLoading,
-        error: dashboardError,
-        fetchDashboardData,
-    } = useDashboardStore((state) => ({
-        stats: state.stats,
-        leagues: state.leagues,
-        performance: state.performance,
-        predictions: state.predictions,
-        loading: state.loading,
-        error: state.error,
-        fetchDashboardData: state.fetchDashboardData,
-    }));
+    const user = useAuthStore((state) => state.user);
+    const activeLeague = useLeagueStore((state) => state.activeLeague);
+    const myLeagues = useLeagueStore((state) => state.myLeagues);
+    const leagueLoading = useLeagueStore((state) => state.isLoading);
+    const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
+    const fetchLeagueDetails = useLeagueStore((state) => state.fetchLeagueDetails);
+    const setActiveLeague = useLeagueStore((state) => state.setActiveLeague);
+    const matches = usePredictionStore((state) => state.matches);
+    const leaderboard = usePredictionStore((state) => state.leaderboard);
+    const fetchLeagueMatches = usePredictionStore((state) => state.fetchLeagueMatches);
+    const fetchLeaderboard = usePredictionStore((state) => state.fetchLeaderboard);
+    const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
+    const stats = useDashboardStore((state) => state.stats);
+    const leagues = useDashboardStore((state) => state.leagues);
+    const performance = useDashboardStore((state) => state.performance);
+    const predictions = useDashboardStore((state) => state.predictions);
+    const dashboardLoading = useDashboardStore((state) => state.loading);
+    const dashboardError = useDashboardStore((state) => state.error);
+    const fetchDashboardData = useDashboardStore((state) => state.fetchDashboardData);
     const [error, setError] = React.useState<string | null>(null);
 
     /**

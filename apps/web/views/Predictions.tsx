@@ -18,25 +18,15 @@ function buildDrafts(matches: MatchViewModel[]): DraftMap {
 }
 
 const Predictions: React.FC = () => {
-    const {
-        activeLeague,
-        myLeagues,
-        fetchMyLeagues,
-        setActiveLeague,
-    } = useLeagueStore((state) => ({
-        activeLeague: state.activeLeague,
-        myLeagues: state.myLeagues,
-        fetchMyLeagues: state.fetchMyLeagues,
-        setActiveLeague: state.setActiveLeague,
-    }));
-    const { matches, isLoading, fetchLeagueMatches, savePrediction, resetLeagueData } =
-        usePredictionStore((state) => ({
-            matches: state.matches,
-            isLoading: state.isLoading,
-            fetchLeagueMatches: state.fetchLeagueMatches,
-            savePrediction: state.savePrediction,
-            resetLeagueData: state.resetLeagueData,
-        }));
+    const activeLeague = useLeagueStore((state) => state.activeLeague);
+    const myLeagues = useLeagueStore((state) => state.myLeagues);
+    const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
+    const setActiveLeague = useLeagueStore((state) => state.setActiveLeague);
+    const matches = usePredictionStore((state) => state.matches);
+    const isLoading = usePredictionStore((state) => state.isLoading);
+    const fetchLeagueMatches = usePredictionStore((state) => state.fetchLeagueMatches);
+    const savePrediction = usePredictionStore((state) => state.savePrediction);
+    const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
     const [drafts, setDrafts] = React.useState<DraftMap>({});
     const [searchTerm, setSearchTerm] = React.useState('');
     const [error, setError] = React.useState<string | null>(null);
