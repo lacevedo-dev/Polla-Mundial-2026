@@ -128,7 +128,7 @@ export const LeaguesOverview: React.FC<LeaguesOverviewProps> = ({
                     {safeTusPuntos}
                   </span>
                   <span className="text-sm text-slate-500">
-                    / {liga.maxPuntos}
+                    / {safeMaxPuntos}
                   </span>
                 </div>
               </div>
