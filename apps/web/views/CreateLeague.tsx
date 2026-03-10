@@ -1074,16 +1074,16 @@ const CreateLeague: React.FC = () => {
                   </div>
 
                   {/* Bottom Part */}
-                  <div className="p-8 pt-6 flex items-center justify-between bg-slate-900 relative">
-                    <div>
-                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">CÃ“DIGO DE ACCESO</p>
+                  <div className="p-8 pt-6 flex items-center justify-between gap-4 bg-slate-900 relative">
+                    <div className="min-w-0">
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">CÓDIGO DE ACCESO</p>
                       <p className="text-3xl font-black font-brand text-white tracking-widest">{leagueId}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white">A</div>
-                        <p className="text-[10px] font-bold text-slate-400">Admin: TÃº</p>
+                        <p className="text-[10px] font-bold text-slate-400">Admin: Tú</p>
                       </div>
                     </div>
-                    <div className="bg-white p-2 rounded-xl">
+                    <div className="shrink-0 bg-white p-2 rounded-xl">
                       <QrCode size={64} className="text-black" />
                     </div>
                   </div>
