@@ -26,6 +26,16 @@ ARG CACHEBUST=1
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
 
+# DEBUG: verifica que el código clonado tiene los fixes del error #185
+# (Esto se puede eliminar una vez confirmado el deploy correcto)
+RUN echo "=== DEBUG: CACHE_VERSION en dashboard.store ===" && \
+    grep "CACHE_VERSION" apps/web/stores/dashboard.store.ts || \
+    echo "WARN: archivo no encontrado o sin CACHE_VERSION"
+RUN echo "=== DEBUG: lineas de isValidStats en dashboard.store ===" && \
+    grep -c "isValidStats" apps/web/stores/dashboard.store.ts || echo "0"
+RUN echo "=== DEBUG: git commit del clone ===" && \
+    cat apps/web/stores/dashboard.store.ts | wc -l
+
 # Configuración de variables públicas de Vite en build-time
 # Se usa la URL de producción por defecto si no se pasa como --build-arg
 ARG VITE_API_URL=https://api-polla.agildesarrollo.com.co
