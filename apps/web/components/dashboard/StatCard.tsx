@@ -37,7 +37,7 @@ const colorClasses = {
   },
 };
 
-export const StatCard: React.FC<StatCardProps> = ({
+const StatCardBase: React.FC<StatCardProps> = ({
   label,
   value,
   icon,
@@ -107,3 +107,9 @@ export const StatCard: React.FC<StatCardProps> = ({
     </div>
   );
 };
+
+/**
+ * StatCard wrapped with React.memo to prevent unnecessary re-renders.
+ * Re-renders only when label, value, icon, trend, color, or loading props change.
+ */
+export const StatCard = React.memo(StatCardBase);

@@ -1,4 +1,5 @@
 import { Controller, Get, UseGuards, Request, InternalServerErrorException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { DashboardStatsDto } from './dto/dashboard-stats.dto';
@@ -13,10 +14,9 @@ import type { RecentPredictionsResponseDto } from './dto/dashboard-predictions.d
  * league standings, performance history, and recent predictions.
  *
  * All endpoints require JWT authentication via the Authorization header.
- *
- * @tags dashboard
- * @security bearer
  */
+@ApiTags('dashboard')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('dashboard')
 export class DashboardController {
@@ -41,6 +41,10 @@ export class DashboardController {
    * }
    */
   @Get('stats')
+  @ApiOperation({ summary: 'Get user dashboard statistics' })
+  @ApiResponse({ status: 200, description: 'Stats retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async getStats(@Request() req): Promise<DashboardStatsDto> {
     try {
       const userId = req.user.userId;
@@ -77,6 +81,10 @@ export class DashboardController {
    * }
    */
   @Get('leagues')
+  @ApiOperation({ summary: 'Get leagues the user participates in' })
+  @ApiResponse({ status: 200, description: 'Leagues retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async getLeagues(@Request() req): Promise<DashboardLeaguesResponseDto> {
     try {
       const userId = req.user.userId;
@@ -104,6 +112,10 @@ export class DashboardController {
    * ]
    */
   @Get('performance')
+  @ApiOperation({ summary: 'Get user weekly performance for last 12 weeks' })
+  @ApiResponse({ status: 200, description: 'Performance data retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async getPerformance(@Request() req): Promise<PerformanceWeekDto[]> {
     try {
       const userId = req.user.userId;
@@ -140,6 +152,10 @@ export class DashboardController {
    * }
    */
   @Get('predictions/recent')
+  @ApiOperation({ summary: 'Get the 5 most recent predictions for the user' })
+  @ApiResponse({ status: 200, description: 'Recent predictions retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async getRecentPredictions(@Request() req): Promise<RecentPredictionsResponseDto> {
     try {
       const userId = req.user.userId;

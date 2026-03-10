@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { assertRequiredEnv, resolveStartupDiagnostics } from './config/startup.config';
 
@@ -25,6 +26,16 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
   );
 
   app.enableCors();
+
+  // Swagger / OpenAPI documentation — available at /api-docs
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Polla 2026 API')
+    .setDescription('REST API for the Polla 2026 prediction platform')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api-docs', app, document);
 
   await app.listen(diagnostics.port);
   console.info(`[bootstrap] API listening on port ${diagnostics.port}`);

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowRight, ListOrdered, PlusCircle, Trophy, Users } from 'lucide-react';
 import { useLeagueStore } from '../stores/league.store';
@@ -76,6 +76,29 @@ const Dashboard: React.FC = () => {
     }));
     const [error, setError] = React.useState<string | null>(null);
 
+    /**
+     * Memoized stats computation — avoids rebuilding the derived values
+     * (upcomingMatches, topPlayers, isLoading) on every render unless the
+     * source arrays / flags actually change.
+     */
+    const derivedData = useMemo(
+        () => ({
+            upcomingMatches: matches.slice(0, 3),
+            topPlayers: leaderboard.slice(0, 5),
+            isLoading: leagueLoading || dashboardLoading,
+        }),
+        [matches, leaderboard, leagueLoading, dashboardLoading],
+    );
+
+    /**
+     * Memoized retry handler — stable reference so ErrorBanner does not
+     * receive a new function on every parent render (important if ErrorBanner
+     * is wrapped in React.memo in the future).
+     */
+    const handleDashboardRetry = useCallback(() => {
+        void fetchDashboardData(true);
+    }, [fetchDashboardData]);
+
     // Fetch dashboard data on component mount
     useEffect(() => {
         if (user) {
@@ -111,9 +134,7 @@ const Dashboard: React.FC = () => {
         });
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
 
-    const upcomingMatches = matches.slice(0, 3);
-    const topPlayers = leaderboard.slice(0, 5);
-    const isLoading = leagueLoading || dashboardLoading;
+    const { upcomingMatches, topPlayers, isLoading } = derivedData;
 
     if (!isLoading && myLeagues.length === 0 && !error) {
         return (
@@ -160,7 +181,7 @@ const Dashboard: React.FC = () => {
             {dashboardError && (
                 <ErrorBanner
                     message={dashboardError}
-                    onRetry={() => fetchDashboardData()}
+                    onRetry={handleDashboardRetry}
                     dismissable={true}
                 />
             )}

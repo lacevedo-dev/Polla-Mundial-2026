@@ -217,6 +217,7 @@ model LeagueMember {
   joinedAt  DateTime     @default(now())
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   league    League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  // LeagueParticipation lookup: unique constraint implicitly creates a composite index on (userId, leagueId)
   @@unique([userId, leagueId])
   @@index([leagueId])
   @@index([userId])
@@ -310,6 +311,7 @@ model Prediction {
   @@unique([userId, matchId, leagueId])
   @@index([leagueId, matchId])
   @@index([userId, leagueId])
+  // Dashboard performance query: user's predictions ordered by date (submittedAt is the date field in this model)
   @@index([userId, submittedAt(sort: Desc)])
 }
 

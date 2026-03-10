@@ -17,7 +17,7 @@ const Skeleton: React.FC = () => (
  * Simple SVG-based performance chart without recharts dependency
  * Renders a line chart with points for each week
  */
-export const PerformanceChart: React.FC<PerformanceChartProps> = ({
+const PerformanceChartBase: React.FC<PerformanceChartProps> = ({
   data,
   loading,
 }) => {
@@ -234,3 +234,10 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
     </div>
   );
 };
+
+/**
+ * PerformanceChart wrapped with React.memo.
+ * The internal useMemo for chartData prevents expensive recalculations,
+ * and React.memo prevents re-renders when parent re-renders with identical props.
+ */
+export const PerformanceChart = React.memo(PerformanceChartBase);
