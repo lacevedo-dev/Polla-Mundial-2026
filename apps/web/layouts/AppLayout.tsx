@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut } from 'lucide-react';
+import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut, Shield } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
 
@@ -28,7 +28,7 @@ const navItems = runtimeFlags.includeDevRoutes
 const AppLayout: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const navigate = useNavigate();
-    const { user, logout, isAuthenticated } = useAuthStore();
+    const { user, logout, isSuperAdmin } = useAuthStore();
 
     React.useEffect(() => {
         const token = localStorage.getItem('token');
@@ -70,12 +70,21 @@ const AppLayout: React.FC = () => {
                     </nav>
                 </div>
                 <div className="mt-auto p-6 border-t border-slate-800">
+                    {isSuperAdmin() && (
+                        <NavLink
+                            to="/admin"
+                            className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 transition-all text-sm font-bold"
+                        >
+                            <Shield size={16} />
+                            Panel Admin
+                        </NavLink>
+                    )}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
                             <div>
                                 <p className="text-sm font-bold truncate max-w-[120px]">{user?.name || 'Cargando...'}</p>
-                                <p className="text-xs text-slate-500 uppercase tracking-tighter">{user?.role === 'ADMIN' ? 'Administrador' : 'Participante'}</p>
+                                <p className="text-xs text-slate-500 uppercase tracking-tighter">{user?.systemRole === 'SUPERADMIN' ? 'Super Admin' : user?.role === 'ADMIN' ? 'Administrador' : 'Participante'}</p>
                             </div>
                         </div>
                         <button onClick={handleLogout} className="text-slate-400 hover:text-rose-400 transition-colors">

@@ -5,6 +5,18 @@ import { resolveDevelopmentSurfaceFlags, type DevelopmentSurfaceFlags } from './
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
 import AppLayout from './layouts/AppLayout';
+import AdminLayout from './layouts/AdminLayout';
+
+// Admin views - lazy loaded
+const AdminDashboard = React.lazy(() => import('./views/admin/AdminDashboard'));
+const AdminUsers = React.lazy(() => import('./views/admin/AdminUsers'));
+const AdminLeagues = React.lazy(() => import('./views/admin/AdminLeagues'));
+const AdminLeagueDetail = React.lazy(() => import('./views/admin/AdminLeagueDetail'));
+const AdminMatches = React.lazy(() => import('./views/admin/AdminMatches'));
+const AdminPlans = React.lazy(() => import('./views/admin/AdminPlans'));
+const AdminAffiliations = React.lazy(() => import('./views/admin/AdminAffiliations'));
+const AdminPredictions = React.lazy(() => import('./views/admin/AdminPredictions'));
+const AdminSettings = React.lazy(() => import('./views/admin/AdminSettings'));
 
 // Vistas públicas - static imports (critical path)
 import Landing from './views/Landing';
@@ -59,6 +71,18 @@ const developmentOnlyRoutes: RouteObject[] = [
     { path: '/before-after', element: <Suspense fallback={<LoadingFallback />}><BeforeAfter /></Suspense> },
 ];
 
+const adminRoutes: RouteObject[] = [
+    { path: '/admin', element: <Suspense fallback={<LoadingFallback />}><AdminDashboard /></Suspense> },
+    { path: '/admin/users', element: <Suspense fallback={<LoadingFallback />}><AdminUsers /></Suspense> },
+    { path: '/admin/leagues', element: <Suspense fallback={<LoadingFallback />}><AdminLeagues /></Suspense> },
+    { path: '/admin/leagues/:id', element: <Suspense fallback={<LoadingFallback />}><AdminLeagueDetail /></Suspense> },
+    { path: '/admin/matches', element: <Suspense fallback={<LoadingFallback />}><AdminMatches /></Suspense> },
+    { path: '/admin/plans', element: <Suspense fallback={<LoadingFallback />}><AdminPlans /></Suspense> },
+    { path: '/admin/affiliations', element: <Suspense fallback={<LoadingFallback />}><AdminAffiliations /></Suspense> },
+    { path: '/admin/predictions', element: <Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense> },
+    { path: '/admin/settings', element: <Suspense fallback={<LoadingFallback />}><AdminSettings /></Suspense> },
+];
+
 export { resolveDevelopmentSurfaceFlags } from './runtime-flags';
 
 export function buildRoutes({ includeDevRoutes }: DevelopmentSurfaceFlags): RouteObject[] {
@@ -70,6 +94,10 @@ export function buildRoutes({ includeDevRoutes }: DevelopmentSurfaceFlags): Rout
         {
             element: <AppLayout />,
             children: includeDevRoutes ? [...appRoutes, ...developmentOnlyRoutes] : appRoutes,
+        },
+        {
+            element: <AdminLayout />,
+            children: adminRoutes,
         },
     ];
 }

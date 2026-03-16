@@ -6,6 +6,12 @@ datasource db {
   provider = "mysql"
 }
 
+enum SystemRole {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
 enum Plan {
   FREE
   GOLD
@@ -141,17 +147,18 @@ enum NotifChannel {
 }
 
 model User {
-  id                   String    @id @default(cuid())
+  id                   String     @id @default(cuid())
   name                 String
-  email                String    @unique
-  username             String    @unique
+  email                String     @unique
+  username             String     @unique
   phone                String?
-  countryCode          String    @default("+57")
+  countryCode          String     @default("+57")
   avatar               String?
   birthDate            DateTime?
   passwordHash         String
-  plan                 Plan      @default(FREE)
-  emailVerified        Boolean   @default(false)
+  plan                 Plan       @default(FREE)
+  systemRole           SystemRole @default(USER)
+  emailVerified        Boolean    @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   leagues              LeagueMember[]
@@ -398,12 +405,18 @@ model Order {
 
 model AuditLog {
   id        String   @id @default(cuid())
-  leagueId  String
+  leagueId  String?
   userId    String
   action    String
   detail    Json?
   createdAt DateTime @default(now())
-  league    League   @relation(fields: [leagueId], references: [id])
+  league    League?  @relation(fields: [leagueId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
   @@index([leagueId, createdAt])
+}
+
+model SystemConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
 }

@@ -2,12 +2,13 @@
 import { request, resolveApiAssetUrl } from '../api';
 import { normalizeAuthError } from './auth.error';
 
-interface User {
+export interface User {
     id: string;
     name: string;
     email: string;
     username: string;
     role: string;
+    systemRole?: 'USER' | 'ADMIN' | 'SUPERADMIN';
     plan?: string;
     avatar?: string;
     emailVerified?: boolean;
@@ -25,6 +26,7 @@ interface AuthState {
     verifyEmail: (token: string) => Promise<void>;
     resendVerification: () => Promise<void>;
     isEmailVerified: () => boolean;
+    isSuperAdmin: () => boolean;
 }
 
 function normalizeUser(user: User | null | undefined): User | null {
@@ -175,5 +177,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     isEmailVerified: () => {
         const state = get();
         return state.user?.emailVerified ?? state.emailVerified;
+    },
+
+    isSuperAdmin: () => {
+        return get().user?.systemRole === 'SUPERADMIN';
     },
 }));

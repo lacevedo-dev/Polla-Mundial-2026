@@ -41,7 +41,7 @@ export class AuthService {
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
-        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified };
+        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified, systemRole: user.systemRole };
         return {
             accessToken: this.jwtService.sign(payload),
             user: {
@@ -51,6 +51,7 @@ export class AuthService {
                 username: user.username,
                 avatar: user.avatar,
                 plan: user.plan,
+                systemRole: user.systemRole,
                 emailVerified: user.emailVerified,
             },
         };
@@ -128,7 +129,7 @@ export class AuthService {
         }
 
         const { passwordHash: _, ...result } = user;
-        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified };
+        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified, systemRole: 'USER' };
 
         return {
             message: 'Usuario registrado exitosamente. Por favor, verifica tu correo electrónico',
@@ -175,7 +176,7 @@ export class AuthService {
         );
 
         const { passwordHash: _, ...result } = user;
-        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified };
+        const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified, systemRole: (user as any).systemRole ?? 'USER' };
 
         return {
             message: 'Email verificado exitosamente',
