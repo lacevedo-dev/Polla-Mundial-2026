@@ -1056,7 +1056,7 @@ const Predictions: React.FC = () => {
                                                                             }
                                                                         </span>
                                                                     </button>
-                                                                    {!insightsCollapsed[match.id] && <div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
+                                                                    {!insightsCollapsed[match.id] && <><div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
                                                                         <div className="px-4 pb-4 pt-3">
                                                                             <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
                                                                                 <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
@@ -1187,7 +1187,7 @@ const Predictions: React.FC = () => {
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                    </div>}
+                                                                    </div></>}
                                                                 </div>
                                                             );
                                                         })() : null}
