@@ -59,7 +59,7 @@ export class InsightsService {
               ? [value.apiKey]
               : [];
 
-        if (apiKeys.length === 0) return null;
+        if (apiKeys.length === 0) return null; // generateInsights will throw descriptive error
 
         const activeKeyIndex = typeof value.activeKeyIndex === 'number'
             ? Math.min(value.activeKeyIndex, apiKeys.length - 1)
@@ -72,7 +72,7 @@ export class InsightsService {
             apiKey: apiKeys[activeKeyIndex],
             apiKeys,
             activeKeyIndex,
-            model: (value.model as string) || (value.provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001'),
+            model: (value.model as string) || (value.provider === 'openai' ? 'gpt-4.1-mini' : 'claude-haiku-4-5-20251001'),
             systemPrompt: stored && stored.includes('personalInsight') ? stored : DEFAULT_SYSTEM_PROMPT,
         };
     }
@@ -86,7 +86,7 @@ export class InsightsService {
         const config = await this.getAiConfig();
 
         if (!config) {
-            throw new BadRequestException('Smart Insights IA no está configurado. Contacta al administrador.');
+            throw new BadRequestException('Smart Insights IA no está configurado o no tiene API keys. Ve a Admin → Configuración → Smart Insights para agregar una API key.');
         }
 
         const userMessage = `Analiza el partido: ${homeTeam} vs ${awayTeam}${phase ? `, fase: ${phase}` : ''}${group ? `, grupo: ${group}` : ''}.`;

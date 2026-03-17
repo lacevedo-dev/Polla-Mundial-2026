@@ -116,9 +116,18 @@ const AdminSettings: React.FC = () => {
         }
     };
 
+    const [aiSaveError, setAiSaveError] = React.useState<string | null>(null);
+
     const handleSaveAi = async () => {
+        if (aiConfig.apiKeys.length === 0) {
+            setAiSaveError('Agrega al menos una API key antes de guardar.');
+            setAiStatus('error');
+            setTimeout(() => { setAiStatus('idle'); setAiSaveError(null); }, 4000);
+            return;
+        }
         setAiSaving(true);
         setAiStatus('idle');
+        setAiSaveError(null);
         try {
             await request('/admin/settings/ai', {
                 method: 'PATCH',
@@ -133,9 +142,11 @@ const AdminSettings: React.FC = () => {
                 activeKeyIndex: refreshed.activeKeyIndex ?? prev.activeKeyIndex,
             }));
             setTimeout(() => setAiStatus('idle'), 3000);
-        } catch {
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al guardar la configuración';
+            setAiSaveError(msg);
             setAiStatus('error');
-            setTimeout(() => setAiStatus('idle'), 3000);
+            setTimeout(() => { setAiStatus('idle'); setAiSaveError(null); }, 5000);
         } finally {
             setAiSaving(false);
         }
@@ -288,7 +299,7 @@ const AdminSettings: React.FC = () => {
                     )}
                     {aiStatus === 'error' && (
                         <span className="flex items-center gap-1.5 text-xs font-black text-rose-600">
-                            <AlertCircle size={14} /> Error al guardar
+                            <AlertCircle size={14} /> {aiSaveError ?? 'Error al guardar'}
                         </span>
                     )}
                 </div>

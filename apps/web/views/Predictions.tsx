@@ -188,7 +188,7 @@ function clearSiCreditsIfReset(plan: string, resetAt: string | null): void {
 // Session-level cache for AI insights — avoids re-fetching and re-consuming credits
 // when the user closes and reopens the panel for the same match within the same tab.
 function getInsightsCacheKey(matchId: string): string {
-    return `polla_insights_v3_${matchId}`;
+    return `polla_insights_v4_${matchId}`;
 }
 
 function getCachedInsights(matchId: string): object | null {
@@ -304,6 +304,7 @@ const Predictions: React.FC = () => {
     const [insightsLocked, setInsightsLocked] = React.useState(false);
     const [insightsLoading, setInsightsLoading] = React.useState(false);
     const [insightsData, setInsightsData] = React.useState<Record<string, object>>({});
+    const [insightsError, setInsightsError] = React.useState<string | null>(null);
     // Plan for credits: user's own subscription plan takes priority over league plan
     const resolvedPlan = React.useMemo(() =>
         (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase(),
@@ -863,11 +864,16 @@ const Predictions: React.FC = () => {
                                                     <button
                                                         type="button"
                                                         onClick={async () => {
-                                                            if (isAnalysisOpen) {
+                                                            // Close panel — unless retrying after an error
+                                                            if (isAnalysisOpen && !(insightsError && analysisMatchId === match.id)) {
                                                                 setAnalysisMatchId(null);
                                                                 setInsightsLocked(false);
+                                                                setInsightsError(null);
                                                                 return;
                                                             }
+
+                                                            // Clear any previous error before (re)fetching
+                                                            setInsightsError(null);
 
                                                             const leaguePlan = resolvedPlan;
                                                             const cap = getRemoteSiCredits(leaguePlan);
@@ -887,7 +893,7 @@ const Predictions: React.FC = () => {
                                                                 return;
                                                             }
 
-                                                            // Consume credit and fetch from AI
+                                                            // Fetch from AI
                                                             setInsightsLocked(false);
                                                             setAnalysisMatchId(match.id);
                                                             setInsightsLoading(true);
@@ -908,12 +914,10 @@ const Predictions: React.FC = () => {
                                                                 setCachedInsights(match.id, result);
                                                                 setInsightsData((prev) => ({ ...prev, [match.id]: result }));
                                                                 setSiCredits(consumeSiCredit(leaguePlan, cap));
-                                                            } catch {
-                                                                // Fall back to deterministic generation
-                                                                const fallback = generateMatchInsights(match);
-                                                                setCachedInsights(match.id, fallback);
-                                                                setInsightsData((prev) => ({ ...prev, [match.id]: fallback }));
-                                                                setSiCredits(consumeSiCredit(leaguePlan, cap));
+                                                            } catch (err) {
+                                                                // Show the real error — do NOT fall back to fake data or consume credits
+                                                                const msg = err instanceof Error ? err.message : String(err);
+                                                                setInsightsError(msg);
                                                             } finally {
                                                                 setInsightsLoading(false);
                                                             }
@@ -1043,6 +1047,23 @@ const Predictions: React.FC = () => {
                                                             <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
                                                                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-400" />
                                                                 <p className="text-xs font-bold text-slate-500">Analizando partido con IA...</p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                // Error state — show actual error, allow retry via brain button
+                                                if (insightsError && !cachedData) {
+                                                    return (
+                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-rose-200 bg-white">
+                                                            <div className="flex items-center gap-2 border-b border-rose-100 px-4 py-2.5">
+                                                                <Sparkles className="h-3.5 w-3.5 text-rose-400" />
+                                                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
+                                                            </div>
+                                                            <div className="flex flex-col items-center gap-3 px-6 py-6 text-center">
+                                                                <p className="text-xs font-bold text-rose-600">Error al obtener el análisis</p>
+                                                                <p className="max-w-xs text-[10px] text-slate-500">{insightsError}</p>
+                                                                <p className="text-[9px] text-slate-400">Presiona el botón <span className="font-bold">IA</span> para reintentar · No se consumió crédito</p>
                                                             </div>
                                                         </div>
                                                     );

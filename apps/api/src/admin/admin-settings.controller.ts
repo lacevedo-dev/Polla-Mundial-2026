@@ -95,15 +95,19 @@ export class AdminSettingsController {
             })
             .filter(Boolean) as string[];
 
+        // Safety net: if resolution yielded no keys but there were keys before, keep existing.
+        // This prevents accidental config wipe when the frontend sends an empty or unresolvable array.
+        const finalKeys = resolvedKeys.length > 0 ? resolvedKeys : existingKeys;
+
         const config = {
             provider: dto.provider,
-            apiKeys: resolvedKeys,
-            activeKeyIndex: Math.min(dto.activeKeyIndex ?? 0, Math.max(0, resolvedKeys.length - 1)),
+            apiKeys: finalKeys,
+            activeKeyIndex: Math.min(dto.activeKeyIndex ?? 0, Math.max(0, finalKeys.length - 1)),
             model: dto.model,
             systemPrompt: dto.systemPrompt,
         };
 
         await this.adminService.setSystemConfig('ai_config', config);
-        return { ok: true };
+        return { ok: true, keysCount: finalKeys.length };
     }
 }
