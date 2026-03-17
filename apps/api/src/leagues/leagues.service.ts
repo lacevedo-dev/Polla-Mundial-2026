@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
-import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus } from '@prisma/client';
+import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Plan } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -32,11 +32,19 @@ export class LeaguesService {
             }
         }
 
+        // Inherit plan from creator if not explicitly provided
+        let leaguePlan = createLeagueDto.plan;
+        if (!leaguePlan) {
+            const creator = await this.prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+            leaguePlan = creator?.plan ?? Plan.FREE;
+        }
+
         try {
             // Usar transición para asegurar integridad de creación de Liga + Miembro Admin
             const league = await this.prisma.league.create({
                 data: {
                     ...createLeagueDto,
+                    plan: leaguePlan,
                     code,
                     status: LeagueStatus.SETUP,
                     members: {

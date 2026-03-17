@@ -9,7 +9,9 @@ import {
     Brain,
     Calendar,
     CheckCircle2,
+    ChevronDown,
     ChevronRight,
+    ChevronUp,
     GitMerge,
     LayoutGrid,
     Lock,
@@ -162,7 +164,11 @@ function consumeSiCredit(plan: string, cap: number): number {
     }
 }
 
-function clearSiCreditsIfReset(plan: string, resetAt: string | null): void {
+function clearSiCreditsIfReset(plan: string, globalResetAt: string | null, userResetAt?: string | null): void {
+    // Use the most recent of the two reset timestamps (global vs per-user)
+    const resetAt = globalResetAt && userResetAt
+        ? (userResetAt > globalResetAt ? userResetAt : globalResetAt)
+        : (userResetAt ?? globalResetAt);
     if (!resetAt) return;
     try {
         const stored = localStorage.getItem(getSiCreditKey(plan));
@@ -175,16 +181,27 @@ function clearSiCreditsIfReset(plan: string, resetAt: string | null): void {
     } catch { /* ignore */ }
 }
 
-// Session-level cache for AI insights — avoids re-fetching and re-consuming credits
-// when the user closes and reopens the panel for the same match within the same tab.
+// Persistent cache for AI insights — avoids re-fetching and re-consuming credits.
+// Stored in localStorage with a 24-hour TTL so users never pay credits for a match
+// they already analyzed, even across page reloads or tab closes.
+const INSIGHTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 function getInsightsCacheKey(matchId: string): string {
-    return `polla_insights_v4_${matchId}`;
+    return `polla_insights_v5_${matchId}`;
 }
 
 function getCachedInsights(matchId: string): object | null {
     try {
-        const raw = sessionStorage.getItem(getInsightsCacheKey(matchId));
-        return raw ? JSON.parse(raw) : null;
+        const raw = localStorage.getItem(getInsightsCacheKey(matchId));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { data: object; cachedAt: string };
+        if (!parsed?.data || !parsed?.cachedAt) return null;
+        const age = Date.now() - new Date(parsed.cachedAt).getTime();
+        if (age > INSIGHTS_CACHE_TTL_MS) {
+            localStorage.removeItem(getInsightsCacheKey(matchId));
+            return null;
+        }
+        return parsed.data;
     } catch {
         return null;
     }
@@ -192,7 +209,7 @@ function getCachedInsights(matchId: string): object | null {
 
 function setCachedInsights(matchId: string, data: object): void {
     try {
-        sessionStorage.setItem(getInsightsCacheKey(matchId), JSON.stringify(data));
+        localStorage.setItem(getInsightsCacheKey(matchId), JSON.stringify({ data, cachedAt: new Date().toISOString() }));
     } catch {}
 }
 
@@ -276,6 +293,7 @@ const Predictions: React.FC = () => {
     const [insightsLoading, setInsightsLoading] = React.useState(false);
     const [insightsData, setInsightsData] = React.useState<Record<string, object>>({});
     const [insightsError, setInsightsError] = React.useState<string | null>(null);
+    const [insightsCollapsed, setInsightsCollapsed] = React.useState<Record<string, boolean>>({});
     const [isSavingAll, setIsSavingAll] = React.useState(false);
 
     // Dirty detection: open matches whose draft differs from saved prediction
@@ -333,14 +351,14 @@ const Predictions: React.FC = () => {
         setDrafts(buildDrafts(matches));
     }, [matches]);
 
-    // Sync credits when user plan, active league, remote config, or global reset changes
+    // Sync credits when user plan, active league, remote config, or reset changes
     React.useEffect(() => {
-        clearSiCreditsIfReset(resolvedPlan, creditsResetAt);
+        clearSiCreditsIfReset(resolvedPlan, creditsResetAt, user?.creditResetAt);
         const cap = getRemoteSiCredits(resolvedPlan);
         setSiCredits(getSiCredits(resolvedPlan, cap));
         setAnalysisMatchId(null);
         setInsightsLocked(false);
-    }, [resolvedPlan, getRemoteSiCredits, creditsResetAt]);
+    }, [resolvedPlan, getRemoteSiCredits, creditsResetAt, user?.creditResetAt]);
 
     const filteredMatches = React.useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -987,6 +1005,9 @@ const Predictions: React.FC = () => {
                                                                                 <p className="mt-1 max-w-xs text-[10px] text-slate-400">
                                                                                     El motor de IA está ocupado en este momento. Inténtalo de nuevo en unos segundos.
                                                                                 </p>
+                                                                                {insightsError && (
+                                                                                    <p className="mt-2 max-w-xs break-words font-mono text-[9px] text-rose-400">{insightsError}</p>
+                                                                                )}
                                                                             </div>
                                                                             <p className="text-[9px] text-slate-400">Presiona el botón <span className="font-bold">IA</span> para reintentar · No se consumió crédito</p>
                                                                         </div>
@@ -1015,17 +1036,27 @@ const Predictions: React.FC = () => {
 
                                                             return (
                                                                 <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
-                                                                    <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setInsightsCollapsed((prev) => ({ ...prev, [match.id]: !prev[match.id] }))}
+                                                                        className="flex w-full items-center gap-2 border-b border-slate-100 px-4 py-2.5 hover:bg-slate-50 transition-colors"
+                                                                    >
                                                                         <Sparkles className="h-3.5 w-3.5 text-violet-500" />
                                                                         <span className="text-[9px] font-black uppercase tracking-[0.22em] text-violet-600">Smart Insights • IA Powered</span>
                                                                         {cachedData && (
                                                                             <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-600">IA</span>
                                                                         )}
-                                                                        <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${planBadgeColor}`}>
+                                                                        <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${planBadgeColor}`}>
                                                                             {siCredits}/{planCap} créditos
                                                                         </span>
-                                                                    </div>
-                                                                    <div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
+                                                                        <span className="ml-auto">
+                                                                            {insightsCollapsed[match.id]
+                                                                                ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                                                                                : <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                                                                            }
+                                                                        </span>
+                                                                    </button>
+                                                                    {!insightsCollapsed[match.id] && <div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
                                                                         <div className="px-4 pb-4 pt-3">
                                                                             <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
                                                                                 <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
@@ -1156,7 +1187,7 @@ const Predictions: React.FC = () => {
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                    </div>
+                                                                    </div>}
                                                                 </div>
                                                             );
                                                         })() : null}

@@ -8,12 +8,14 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UsersService } from '../users/users.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('auth')
 export class AuthController {
     constructor(
         private authService: AuthService,
-        private usersService: UsersService
+        private usersService: UsersService,
+        private prisma: PrismaService,
     ) { }
 
     @HttpCode(HttpStatus.OK)
@@ -69,6 +71,9 @@ export class AuthController {
             throw new Error('User not found');
         }
         const { passwordHash, ...result } = user;
-        return result;
+        // Attach per-user credit reset timestamp if present
+        const creditResetsRecord = await this.prisma.systemConfig.findUnique({ where: { key: 'user_credit_resets' } });
+        const creditResetAt = (creditResetsRecord?.value as Record<string, string> | null)?.[user.id] ?? null;
+        return { ...result, creditResetAt };
     }
 }

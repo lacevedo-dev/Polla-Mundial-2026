@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Edit3, Ban, CheckCircle, Trash2, ChevronDown } from 'lucide-react';
+import { Search, Edit3, Ban, CheckCircle, Trash2, ChevronDown, RefreshCw } from 'lucide-react';
 import { useAdminUsersStore } from '../../stores/admin.users.store';
 import StatusBadge from '../../components/admin/StatusBadge';
 import AdminPagination from '../../components/admin/AdminPagination';
@@ -82,10 +82,11 @@ const EditUserDialog: React.FC<{
 };
 
 const AdminUsers: React.FC = () => {
-    const { users, total, filters, isLoading, isSaving, fetchUsers, banUser, activateUser, deleteUser, setFilters } = useAdminUsersStore();
+    const { users, total, filters, isLoading, isSaving, fetchUsers, banUser, activateUser, deleteUser, resetUserCredits, setFilters } = useAdminUsersStore();
 
     const [editUser, setEditUser] = React.useState<any>(null);
     const [confirmAction, setConfirmAction] = React.useState<{ type: string; userId: string; name: string } | null>(null);
+    const [resetCreditsUserId, setResetCreditsUserId] = React.useState<string | null>(null);
     const [searchInput, setSearchInput] = React.useState('');
 
     React.useEffect(() => {
@@ -103,6 +104,12 @@ const AdminUsers: React.FC = () => {
         else if (confirmAction.type === 'activate') await activateUser(confirmAction.userId);
         else if (confirmAction.type === 'delete') await deleteUser(confirmAction.userId);
         setConfirmAction(null);
+    };
+
+    const handleResetCredits = async () => {
+        if (!resetCreditsUserId) return;
+        await resetUserCredits(resetCreditsUserId);
+        setResetCreditsUserId(null);
     };
 
     return (
@@ -196,6 +203,13 @@ const AdminUsers: React.FC = () => {
                                         <Edit3 size={14} />
                                     </button>
                                     <button
+                                        onClick={() => setResetCreditsUserId(user.id)}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-sky-50 text-slate-400 hover:text-sky-600 transition-all"
+                                        title="Resetear créditos IA"
+                                    >
+                                        <RefreshCw size={14} />
+                                    </button>
+                                    <button
                                         onClick={() => setConfirmAction({ type: 'ban', userId: user.id, name: user.name })}
                                         className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
                                         title="Banear"
@@ -256,6 +270,18 @@ const AdminUsers: React.FC = () => {
                 variant={confirmAction?.type === 'activate' ? 'warning' : 'danger'}
                 isLoading={isSaving}
                 onConfirm={handleConfirm}
+            />
+
+            {/* Reset credits dialog */}
+            <ConfirmDialog
+                open={!!resetCreditsUserId}
+                onOpenChange={(v) => { if (!v) setResetCreditsUserId(null); }}
+                title="Resetear créditos IA"
+                description="¿Resetear los créditos de Smart Insights para este usuario? Sus créditos se restaurarán al máximo de su plan."
+                confirmLabel="Resetear"
+                variant="warning"
+                isLoading={isSaving}
+                onConfirm={handleResetCredits}
             />
         </div>
     );

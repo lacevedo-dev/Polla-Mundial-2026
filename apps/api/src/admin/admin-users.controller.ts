@@ -11,6 +11,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminService } from './admin.service';
 
 export class UpdateUserAdminDto {
     @IsOptional()
@@ -36,6 +37,7 @@ export class AdminUsersController {
     constructor(
         private readonly usersService: UsersService,
         private readonly prisma: PrismaService,
+        private readonly adminService: AdminService,
     ) {}
 
     @Get()
@@ -111,5 +113,18 @@ export class AdminUsersController {
         if (!user) throw new NotFoundException('Usuario no encontrado');
         await this.prisma.user.delete({ where: { id } });
         return { message: 'Usuario eliminado exitosamente' };
+    }
+
+    @Post(':id/credits/reset')
+    @ApiOperation({ summary: 'Reset Smart Insights credits for a specific user' })
+    async resetUserCredits(@Param('id') id: string) {
+        const user = await this.usersService.findById(id);
+        if (!user) throw new NotFoundException('Usuario no encontrado');
+        const resetAt = new Date().toISOString();
+        const existing = await this.adminService.getSystemConfig('user_credit_resets');
+        const map = ((existing?.value ?? {}) as Record<string, string>);
+        map[id] = resetAt;
+        await this.adminService.setSystemConfig('user_credit_resets', map);
+        return { ok: true, userId: id, resetAt };
     }
 }

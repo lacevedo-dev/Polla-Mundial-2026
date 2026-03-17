@@ -44,6 +44,7 @@ interface AdminUsersState {
     banUser: (id: string) => Promise<void>;
     activateUser: (id: string) => Promise<void>;
     deleteUser: (id: string) => Promise<void>;
+    resetUserCredits: (id: string) => Promise<void>;
     setFilters: (filters: Partial<AdminUsersFilters>) => void;
     setSelectedUser: (user: AdminUser | null) => void;
 }
@@ -140,6 +141,17 @@ export const useAdminUsersStore = create<AdminUsersState>((set, get) => ({
                 total: state.total - 1,
                 isSaving: false,
             }));
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    resetUserCredits: async (id) => {
+        set({ isSaving: true });
+        try {
+            await request(`/admin/users/${id}/credits/reset`, { method: 'POST' });
+            set({ isSaving: false });
         } catch (error) {
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;
