@@ -15,7 +15,9 @@ export interface MatchInsightsResult {
 
 interface AiConfig {
     provider: 'anthropic' | 'openai';
-    apiKey: string;
+    apiKey: string;        // currently active key
+    apiKeys: string[];     // all available keys for rotation
+    activeKeyIndex: number;
     model: string;
     systemPrompt: string;
 }
@@ -49,17 +51,29 @@ export class InsightsService {
         const record = await this.prisma.systemConfig.findUnique({ where: { key: 'ai_config' } });
         if (!record) return null;
         const value = record.value as Record<string, unknown>;
-        if (!value?.apiKey) return null;
+
+        // Support legacy single apiKey and new apiKeys array
+        const apiKeys: string[] = Array.isArray(value.apiKeys)
+            ? (value.apiKeys as string[]).filter(Boolean)
+            : typeof value.apiKey === 'string' && value.apiKey
+              ? [value.apiKey]
+              : [];
+
+        if (apiKeys.length === 0) return null;
+
+        const activeKeyIndex = typeof value.activeKeyIndex === 'number'
+            ? Math.min(value.activeKeyIndex, apiKeys.length - 1)
+            : 0;
+
+        const stored = value.systemPrompt as string | undefined;
+
         return {
             provider: (value.provider as AiConfig['provider']) ?? 'anthropic',
-            apiKey: value.apiKey as string,
+            apiKey: apiKeys[activeKeyIndex],
+            apiKeys,
+            activeKeyIndex,
             model: (value.model as string) || (value.provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001'),
-            // Use stored prompt only if it's the new format (contains personalInsight).
-            // Old stored prompts without personalInsight automatically fall back to the updated default.
-            systemPrompt: (() => {
-                const stored = value.systemPrompt as string | undefined;
-                return stored && stored.includes('personalInsight') ? stored : DEFAULT_SYSTEM_PROMPT;
-            })(),
+            systemPrompt: stored && stored.includes('personalInsight') ? stored : DEFAULT_SYSTEM_PROMPT,
         };
     }
 
@@ -77,15 +91,65 @@ export class InsightsService {
 
         const userMessage = `Analiza el partido: ${homeTeam} vs ${awayTeam}${phase ? `, fase: ${phase}` : ''}${group ? `, grupo: ${group}` : ''}.`;
 
-        let rawJson: string;
+        let lastError: unknown;
 
-        if (config.provider === 'openai') {
-            rawJson = await this.callOpenAI(config, userMessage);
-        } else {
-            rawJson = await this.callAnthropic(config, userMessage);
+        // Try each key in round-robin rotation starting from the active index
+        for (let attempt = 0; attempt < config.apiKeys.length; attempt++) {
+            const keyIdx = (config.activeKeyIndex + attempt) % config.apiKeys.length;
+            const attemptConfig = { ...config, apiKey: config.apiKeys[keyIdx] };
+
+            try {
+                let rawJson: string;
+                if (config.provider === 'openai') {
+                    rawJson = await this.callOpenAI(attemptConfig, userMessage);
+                } else {
+                    rawJson = await this.callAnthropic(attemptConfig, userMessage);
+                }
+
+                // Persist new active index if we rotated
+                if (attempt > 0) {
+                    void this.persistActiveKeyIndex(keyIdx);
+                }
+
+                return this.parseAndValidate(rawJson, homeTeam, awayTeam);
+            } catch (err) {
+                if (this.isRateLimitError(err)) {
+                    lastError = err;
+                    continue; // try next key
+                }
+                throw err;
+            }
         }
 
-        return this.parseAndValidate(rawJson, homeTeam, awayTeam);
+        throw new BadRequestException(
+            `Todos los API keys han agotado su cuota o límite de tasa. Agrega una key adicional en Admin → Configuración.`,
+        );
+    }
+
+    /** Returns true for rate-limit / quota errors that warrant trying the next key. */
+    private isRateLimitError(err: unknown): boolean {
+        const msg = err instanceof Error ? err.message : String(err);
+        return (
+            msg.includes('429') ||
+            msg.includes('402') ||
+            msg.toLowerCase().includes('rate_limit') ||
+            msg.toLowerCase().includes('rate limit') ||
+            msg.toLowerCase().includes('quota') ||
+            msg.toLowerCase().includes('insufficient_quota')
+        );
+    }
+
+    /** Non-blocking — updates the stored active key index after a rotation. */
+    private async persistActiveKeyIndex(newIndex: number): Promise<void> {
+        try {
+            const record = await this.prisma.systemConfig.findUnique({ where: { key: 'ai_config' } });
+            if (!record) return;
+            const value = record.value as Record<string, unknown>;
+            await this.prisma.systemConfig.update({
+                where: { key: 'ai_config' },
+                data: { value: { ...value, activeKeyIndex: newIndex } as object },
+            });
+        } catch { /* non-critical */ }
     }
 
     private async callAnthropic(config: AiConfig, userMessage: string): Promise<string> {
@@ -143,7 +207,6 @@ export class InsightsService {
     private parseAndValidate(rawJson: string, homeTeam: string, awayTeam: string): MatchInsightsResult {
         let parsed: any;
         try {
-            // Strip markdown code fences if present
             const clean = rawJson.replace(/```(?:json)?/gi, '').trim();
             parsed = JSON.parse(clean);
         } catch {

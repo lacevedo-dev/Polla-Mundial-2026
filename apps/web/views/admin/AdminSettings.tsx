@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, RefreshCw, Plus, X, RotateCcw } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth.store';
 import { request } from '../../api';
 
@@ -46,9 +46,24 @@ Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estruc
 Reglas: homeWin + draw + awayWin = 100. scores tiene 3 elementos [más_probable, equilibrado, sorpresa]. homeForm y awayForm basados en resultados reales recientes.
 Responde ÚNICAMENTE con el JSON.`;
 
+const MODEL_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
+    anthropic: [
+        { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — rápido · bajo costo' },
+        { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — balanceado' },
+        { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 — máxima calidad' },
+    ],
+    openai: [
+        { value: 'gpt-5.4', label: 'GPT-5.4 — más capaz · última generación' },
+        { value: 'gpt-5-mini', label: 'GPT-5 Mini — rápido · bajo costo' },
+        { value: 'gpt-4.1', label: 'GPT-4.1 — balanceado' },
+        { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini — económico' },
+    ],
+};
+
 interface AiConfigForm {
     provider: 'anthropic' | 'openai';
-    apiKey: string;
+    apiKeys: string[];
+    activeKeyIndex: number;
     model: string;
     systemPrompt: string;
 }
@@ -57,24 +72,30 @@ const AdminSettings: React.FC = () => {
     const { user } = useAuthStore();
     const [aiConfig, setAiConfig] = React.useState<AiConfigForm>({
         provider: 'anthropic',
-        apiKey: '',
+        apiKeys: [],
+        activeKeyIndex: 0,
         model: 'claude-haiku-4-5-20251001',
         systemPrompt: DEFAULT_PROMPT,
     });
     const [aiLoading, setAiLoading] = React.useState(false);
     const [aiSaving, setAiSaving] = React.useState(false);
     const [aiStatus, setAiStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
-    const [showApiKey, setShowApiKey] = React.useState(false);
+    const [showNewKey, setShowNewKey] = React.useState(false);
+    const [newKeyInput, setNewKeyInput] = React.useState('');
+    const [addingKey, setAddingKey] = React.useState(false);
     const [resetStatus, setResetStatus] = React.useState<'idle' | 'resetting' | 'done' | 'error'>('idle');
     const [lastReset, setLastReset] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         setAiLoading(true);
-        request<AiConfigForm>('/admin/settings/ai')
+        request<any>('/admin/settings/ai')
             .then((data) => {
                 setAiConfig((prev) => ({
                     ...prev,
-                    ...data,
+                    provider: data.provider ?? prev.provider,
+                    apiKeys: Array.isArray(data.apiKeys) ? data.apiKeys : prev.apiKeys,
+                    activeKeyIndex: data.activeKeyIndex ?? 0,
+                    model: data.model ?? prev.model,
                     systemPrompt: data.systemPrompt || DEFAULT_PROMPT,
                 }));
             })
@@ -104,8 +125,17 @@ const AdminSettings: React.FC = () => {
                 body: JSON.stringify(aiConfig),
             });
             setAiStatus('saved');
+            // Reload to get freshly masked keys from the server
+            const refreshed = await request<any>('/admin/settings/ai');
+            setAiConfig((prev) => ({
+                ...prev,
+                apiKeys: Array.isArray(refreshed.apiKeys) ? refreshed.apiKeys : prev.apiKeys,
+                activeKeyIndex: refreshed.activeKeyIndex ?? prev.activeKeyIndex,
+            }));
+            setTimeout(() => setAiStatus('idle'), 3000);
         } catch {
             setAiStatus('error');
+            setTimeout(() => setAiStatus('idle'), 3000);
         } finally {
             setAiSaving(false);
         }
@@ -280,7 +310,7 @@ const AdminSettings: React.FC = () => {
                                         setAiConfig((prev) => ({
                                             ...prev,
                                             provider: p,
-                                            model: p === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001',
+                                            model: MODEL_OPTIONS[p]?.[0]?.value ?? '',
                                         }));
                                     }}
                                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -293,39 +323,134 @@ const AdminSettings: React.FC = () => {
                                 <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                                     Modelo
                                 </label>
-                                <input
-                                    type="text"
+                                <select
                                     value={aiConfig.model}
                                     onChange={(e) => setAiConfig((prev) => ({ ...prev, model: e.target.value }))}
-                                    placeholder={aiConfig.provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001'}
                                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                />
+                                >
+                                    {(MODEL_OPTIONS[aiConfig.provider] ?? []).map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 
-                        {/* API Key */}
+                        {/* API Keys — rotation */}
                         <div>
-                            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                                API Key
-                            </label>
-                            <div className="relative">
-                                <input
-                                    type={showApiKey ? 'text' : 'password'}
-                                    value={aiConfig.apiKey}
-                                    onChange={(e) => setAiConfig((prev) => ({ ...prev, apiKey: e.target.value }))}
-                                    placeholder={aiConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
-                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-10 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                />
+                            <div className="mb-2 flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    API Keys — Rotación automática
+                                </label>
+                                <span className="flex items-center gap-1 text-[9px] text-slate-400">
+                                    <RotateCcw size={10} />
+                                    {aiConfig.apiKeys.length} key{aiConfig.apiKeys.length !== 1 ? 's' : ''} configurada{aiConfig.apiKeys.length !== 1 ? 's' : ''}
+                                </span>
+                            </div>
+
+                            {/* Keys list */}
+                            <div className="space-y-1.5">
+                                {aiConfig.apiKeys.length === 0 && !addingKey && (
+                                    <div className="rounded-xl border border-dashed border-slate-200 p-3 text-center text-xs text-slate-400">
+                                        Sin keys configuradas. Agrega al menos una.
+                                    </div>
+                                )}
+                                {aiConfig.apiKeys.map((key, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${
+                                            idx === aiConfig.activeKeyIndex
+                                                ? 'border-lime-200 bg-lime-50'
+                                                : 'border-slate-200 bg-slate-50'
+                                        }`}
+                                    >
+                                        <Key size={12} className="shrink-0 text-slate-400" />
+                                        <span className="flex-1 font-mono text-xs text-slate-600">{key}</span>
+                                        {idx === aiConfig.activeKeyIndex && (
+                                            <span className="rounded-full bg-lime-200 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-lime-800">
+                                                Activa
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            title="Eliminar key"
+                                            onClick={() => {
+                                                const next = aiConfig.apiKeys.filter((_, i) => i !== idx);
+                                                setAiConfig((prev) => ({
+                                                    ...prev,
+                                                    apiKeys: next,
+                                                    activeKeyIndex: Math.min(prev.activeKeyIndex, Math.max(0, next.length - 1)),
+                                                }));
+                                            }}
+                                            className="ml-1 rounded-lg p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Add new key */}
+                            {addingKey ? (
+                                <div className="mt-2 flex gap-2">
+                                    <div className="relative flex-1">
+                                        <input
+                                            type={showNewKey ? 'text' : 'password'}
+                                            value={newKeyInput}
+                                            onChange={(e) => setNewKeyInput(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && newKeyInput.trim()) {
+                                                    setAiConfig((prev) => ({ ...prev, apiKeys: [...prev.apiKeys, newKeyInput.trim()] }));
+                                                    setNewKeyInput('');
+                                                    setAddingKey(false);
+                                                }
+                                                if (e.key === 'Escape') { setAddingKey(false); setNewKeyInput(''); }
+                                            }}
+                                            placeholder={aiConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-9 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                            autoFocus
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowNewKey((v) => !v)}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            {showNewKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (newKeyInput.trim()) {
+                                                setAiConfig((prev) => ({ ...prev, apiKeys: [...prev.apiKeys, newKeyInput.trim()] }));
+                                                setNewKeyInput('');
+                                                setAddingKey(false);
+                                            }
+                                        }}
+                                        className="rounded-xl bg-lime-400 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-900 hover:bg-lime-300"
+                                    >
+                                        Añadir
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAddingKey(false); setNewKeyInput(''); }}
+                                        className="rounded-xl border border-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
                                 <button
                                     type="button"
-                                    onClick={() => setShowApiKey((v) => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    onClick={() => setAddingKey(true)}
+                                    className="mt-2 flex items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 transition-colors hover:border-slate-400 hover:bg-slate-50"
                                 >
-                                    {showApiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    <Plus size={12} /> Agregar API Key
                                 </button>
-                            </div>
-                            <p className="mt-1 text-[9px] text-slate-400">
-                                La key se almacena cifrada. Al editar, ingresa la nueva key completa.
+                            )}
+
+                            <p className="mt-1.5 text-[9px] text-slate-400">
+                                Si una key alcanza su límite de tasa o cuota, el sistema rota automáticamente a la siguiente.
+                                La key activa se actualiza en la BD tras cada rotación.
                             </p>
                         </div>
 

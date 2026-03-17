@@ -20,17 +20,35 @@ export class AdminSettingsController {
         if (!record) {
             return {
                 provider: 'anthropic',
-                apiKey: '',
+                apiKeys: [],
+                activeKeyIndex: 0,
                 model: 'claude-haiku-4-5-20251001',
                 systemPrompt: '',
             };
         }
         const value = record.value as Record<string, unknown>;
-        // Mask the API key — only return last 4 chars
-        const apiKey = typeof value.apiKey === 'string' && value.apiKey.length > 4
-            ? `${'*'.repeat(value.apiKey.length - 4)}${value.apiKey.slice(-4)}`
-            : '';
-        return { ...value, apiKey };
+
+        // Support legacy single apiKey and new apiKeys array
+        const rawKeys: string[] = Array.isArray(value.apiKeys)
+            ? (value.apiKeys as string[]).filter(Boolean)
+            : typeof value.apiKey === 'string' && value.apiKey
+              ? [value.apiKey]
+              : [];
+
+        // Mask all keys for the response
+        const apiKeys = rawKeys.map((k) =>
+            k.length > 4
+                ? `${'*'.repeat(Math.max(8, k.length - 4))}${k.slice(-4)}`
+                : '****',
+        );
+
+        return {
+            provider: value.provider ?? 'anthropic',
+            apiKeys,
+            activeKeyIndex: value.activeKeyIndex ?? 0,
+            model: value.model ?? 'claude-haiku-4-5-20251001',
+            systemPrompt: value.systemPrompt ?? '',
+        };
     }
 
     @Post('credits/reset')
@@ -45,21 +63,42 @@ export class AdminSettingsController {
     @ApiOperation({ summary: 'Save AI integration configuration' })
     async saveAiConfig(@Body() dto: {
         provider: string;
-        apiKey?: string;
+        apiKeys?: string[];
+        activeKeyIndex?: number;
         model: string;
         systemPrompt: string;
     }) {
-        // If apiKey contains only asterisks (masked), keep the existing one
         const existing = await this.adminService.getSystemConfig('ai_config');
         const existingValue = existing?.value as Record<string, unknown> | null;
 
-        const apiKey = dto.apiKey && !dto.apiKey.match(/^\*+/)
-            ? dto.apiKey
-            : (existingValue?.apiKey as string) ?? '';
+        // Load existing unmasked keys for resolution
+        const existingKeys: string[] = Array.isArray(existingValue?.apiKeys)
+            ? (existingValue.apiKeys as string[]).filter(Boolean)
+            : typeof existingValue?.apiKey === 'string' && existingValue.apiKey
+              ? [existingValue.apiKey]
+              : [];
+
+        // Resolve incoming keys:
+        //   - Masked (****xxxx) → find the original by matching the suffix
+        //   - Full key (sk-...) → keep as new
+        //   - Empty string → skip
+        const resolvedKeys = (dto.apiKeys ?? [])
+            .map((k: string) => {
+                const trimmed = k.trim();
+                if (!trimmed) return null;
+                if (/^\*{4,}/.test(trimmed)) {
+                    // Masked — recover original by suffix match
+                    const suffix = trimmed.replace(/^\*+/, '');
+                    return existingKeys.find((ek) => ek.endsWith(suffix)) ?? null;
+                }
+                return trimmed; // new full key
+            })
+            .filter(Boolean) as string[];
 
         const config = {
             provider: dto.provider,
-            apiKey,
+            apiKeys: resolvedKeys,
+            activeKeyIndex: Math.min(dto.activeKeyIndex ?? 0, Math.max(0, resolvedKeys.length - 1)),
             model: dto.model,
             systemPrompt: dto.systemPrompt,
         };
