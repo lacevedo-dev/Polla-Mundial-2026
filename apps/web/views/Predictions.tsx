@@ -188,7 +188,7 @@ function clearSiCreditsIfReset(plan: string, resetAt: string | null): void {
 // Session-level cache for AI insights — avoids re-fetching and re-consuming credits
 // when the user closes and reopens the panel for the same match within the same tab.
 function getInsightsCacheKey(matchId: string): string {
-    return `polla_insights_v2_${matchId}`;
+    return `polla_insights_v3_${matchId}`;
 }
 
 function getCachedInsights(matchId: string): object | null {
@@ -1071,8 +1071,8 @@ const Predictions: React.FC = () => {
                                                     <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                                         {/* Header */}
                                                         <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
-                                                            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
+                                                            <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-violet-600">Smart Insights • IA Powered</span>
                                                             {cachedData && (
                                                                 <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-600">IA</span>
                                                             )}
@@ -1082,7 +1082,7 @@ const Predictions: React.FC = () => {
                                                         </div>
 
                                                         {/* Desktop: [prob bar + insight] | [suggestion cards]; Mobile: stacked */}
-                                                        <div className="lg:grid lg:grid-cols-[1fr_210px] lg:divide-x lg:divide-slate-100">
+                                                        <div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
                                                             {/* Left: Probability bar + amber insight */}
                                                             <div className="px-4 pb-4 pt-3">
                                                                 <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
@@ -1111,7 +1111,7 @@ const Predictions: React.FC = () => {
                                                             {/* Right: Suggestion cards — vertical stack on desktop, 3-col grid on mobile */}
                                                             <div className="border-t border-slate-100 px-4 pb-4 pt-3 lg:border-t-0">
                                                                 <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Sugerencias automáticas</p>
-                                                                <div className="grid grid-cols-3 gap-2 lg:grid-cols-1 lg:gap-1.5">
+                                                                <div className="grid grid-cols-3 gap-2">
                                                                     {ins.scores.map((score, idx) => {
                                                                         const [h, a] = score.split('-');
                                                                         const probs = [ins.homeWin, ins.draw, ins.awayWin];
@@ -1123,11 +1123,11 @@ const Predictions: React.FC = () => {
                                                                                     handleDraftChange(match.id, 'home', h);
                                                                                     handleDraftChange(match.id, 'away', a);
                                                                                 }}
-                                                                                className={`flex flex-col items-center gap-0.5 rounded-xl py-3 transition-all hover:scale-105 active:scale-95 lg:flex-row lg:justify-between lg:px-3 lg:py-2 ${scoreStyles[idx]}`}
+                                                                                className={`flex flex-col items-center gap-1 rounded-xl py-3 transition-all hover:scale-105 active:scale-95 ${scoreStyles[idx]}`}
                                                                             >
                                                                                 <span className="text-[9px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
-                                                                                <span className="text-xl font-black leading-none lg:text-lg">{score}</span>
-                                                                                <span className="text-[9px] font-bold opacity-60">{probs[idx]}%</span>
+                                                                                <span className="text-2xl font-black leading-none">{score}</span>
+                                                                                <span className="text-[9px] font-bold opacity-70">{probs[idx]}% Prob.</span>
                                                                             </button>
                                                                         );
                                                                     })}

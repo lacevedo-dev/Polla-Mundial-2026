@@ -31,14 +31,14 @@ Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estruc
   "scores": ["2-1","1-1","0-2"],
   "smartPick": "<recomendación táctica concisa, ej: 'Local gana', 'Empate sin goles', 'Visitante anota', 'Local +1.5 goles'. Máximo 35 caracteres.>",
   "insight": "<análisis táctico general en español, máximo 100 caracteres, SIN mencionar nombres de equipos>",
-  "personalInsight": "<análisis personalizado específico en español: menciona los equipos por nombre, cita datos reales como su estado de forma actual, resultados recientes concretos, jugadores clave, fortalezas/debilidades específicas del equipo en este torneo. Máximo 220 caracteres. NO uses frases genéricas como 'es un partido emocionante' o 'ambos equipos buscarán la victoria'.>"
+  "personalInsight": "<análisis personalizado específico en español. EJEMPLOS del nivel requerido: 'México domina en casa (3 de 5 ganados). Sudáfrica muestra debilidad defensiva como visitante.' | 'Francia viene imparable (5/5 victorias). Canadá sufre contra equipos top europeos.' | 'Brasil lidera con Vinicius en forma (4 goles). Serbia cede espacios en transición.' Máximo 210 caracteres. OBLIGATORIO mencionar ambos equipos por nombre y citar datos de forma real.>"
 }
 Reglas:
 - homeWin + draw + awayWin debe ser exactamente 100.
 - scores: array de 3 strings con formato "goles_local-goles_visitante", ordenados [más_probable, equilibrado, sorpresa].
 - homeForm y awayForm: basados en resultados REALES y recientes de cada equipo (últimas 5 apariciones).
 - insight: frase táctica concisa y general (sin nombres de equipos).
-- personalInsight: análisis detallado que SÍ menciona los equipos por nombre, cita estadísticas reales, resultados previos entre ellos si existen, y el contexto específico del encuentro.
+- personalInsight: análisis OBLIGATORIAMENTE menciona ambos equipos por nombre, cita estadísticas concretas (ej: "3 de 5 ganados", "sin perder en 4"), jugadores clave si relevante, y el contexto específico del partido.
 - Responde ÚNICAMENTE con el JSON, sin texto adicional, sin markdown, sin comentarios.`;
 
 @Injectable()
@@ -54,7 +54,12 @@ export class InsightsService {
             provider: (value.provider as AiConfig['provider']) ?? 'anthropic',
             apiKey: value.apiKey as string,
             model: (value.model as string) || (value.provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001'),
-            systemPrompt: (value.systemPrompt as string) || DEFAULT_SYSTEM_PROMPT,
+            // Use stored prompt only if it's the new format (contains personalInsight).
+            // Old stored prompts without personalInsight automatically fall back to the updated default.
+            systemPrompt: (() => {
+                const stored = value.systemPrompt as string | undefined;
+                return stored && stored.includes('personalInsight') ? stored : DEFAULT_SYSTEM_PROMPT;
+            })(),
         };
     }
 
