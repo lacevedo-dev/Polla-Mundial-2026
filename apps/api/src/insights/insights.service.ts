@@ -29,7 +29,7 @@ Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estruc
   "homeForm": ["W","D","L","W","W"],
   "awayForm": ["L","W","D","W","L"],
   "scores": ["2-1","1-1","0-2"],
-  "smartPick": "<nombre del equipo local, visitante, o la palabra Empate>",
+  "smartPick": "<recomendación táctica concisa, ej: 'Local gana', 'Empate sin goles', 'Visitante anota', 'Local +1.5 goles'. Máximo 35 caracteres.>",
   "insight": "<análisis táctico general en español, máximo 100 caracteres, SIN mencionar nombres de equipos>",
   "personalInsight": "<análisis personalizado específico en español: menciona los equipos por nombre, cita datos reales como su estado de forma actual, resultados recientes concretos, jugadores clave, fortalezas/debilidades específicas del equipo en este torneo. Máximo 220 caracteres. NO uses frases genéricas como 'es un partido emocionante' o 'ambos equipos buscarán la victoria'.>"
 }

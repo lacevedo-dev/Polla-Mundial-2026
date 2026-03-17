@@ -1081,37 +1081,37 @@ const Predictions: React.FC = () => {
                                                             </span>
                                                         </div>
 
-                                                        {/* Probability bar */}
-                                                        <div className="px-4 pb-4 pt-3">
-                                                            <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
-                                                                <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
-                                                                <span className="text-slate-400">Empate</span>
-                                                                <span className="font-black text-slate-900">{match.awayTeam.split(' ')[0]}</span>
-                                                            </div>
-                                                            <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
-                                                                <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
-                                                                <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
-                                                                <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
-                                                            </div>
-                                                            <div className="mt-1 flex justify-between">
-                                                                <span className="text-[10px] font-black text-slate-900">{ins.homeWin}%</span>
-                                                                <span className="text-[10px] font-black text-slate-400">{ins.draw}%</span>
-                                                                <span className="text-[10px] font-black text-slate-900">{ins.awayWin}%</span>
-                                                            </div>
-                                                            {ins.insight && (
-                                                                <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
-                                                                    <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
-                                                                    <p className="text-[10px] leading-relaxed text-slate-700">"{ins.insight}"</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Desktop: suggestions + form side by side; mobile: stacked */}
-                                                        <div className="border-t border-slate-100 lg:grid lg:grid-cols-2 lg:divide-x lg:divide-slate-100">
-                                                            {/* Suggestion buttons */}
+                                                        {/* Desktop: [prob bar + insight] | [suggestion cards]; Mobile: stacked */}
+                                                        <div className="lg:grid lg:grid-cols-[1fr_210px] lg:divide-x lg:divide-slate-100">
+                                                            {/* Left: Probability bar + amber insight */}
                                                             <div className="px-4 pb-4 pt-3">
+                                                                <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
+                                                                    <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                                                    <span className="text-slate-400">Empate</span>
+                                                                    <span className="font-black text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                                                                </div>
+                                                                <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
+                                                                    <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
+                                                                    <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
+                                                                    <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
+                                                                </div>
+                                                                <div className="mt-1 flex justify-between">
+                                                                    <span className="text-[10px] font-black text-slate-900">{ins.homeWin}%</span>
+                                                                    <span className="text-[10px] font-black text-slate-400">{ins.draw}%</span>
+                                                                    <span className="text-[10px] font-black text-slate-900">{ins.awayWin}%</span>
+                                                                </div>
+                                                                {ins.insight && (
+                                                                    <div className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
+                                                                        <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+                                                                        <p className="text-[10px] font-medium leading-relaxed text-slate-700">"{ins.insight}"</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Right: Suggestion cards — vertical stack on desktop, 3-col grid on mobile */}
+                                                            <div className="border-t border-slate-100 px-4 pb-4 pt-3 lg:border-t-0">
                                                                 <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Sugerencias automáticas</p>
-                                                                <div className="grid grid-cols-3 gap-2">
+                                                                <div className="grid grid-cols-3 gap-2 lg:grid-cols-1 lg:gap-1.5">
                                                                     {ins.scores.map((score, idx) => {
                                                                         const [h, a] = score.split('-');
                                                                         const probs = [ins.homeWin, ins.draw, ins.awayWin];
@@ -1123,66 +1123,102 @@ const Predictions: React.FC = () => {
                                                                                     handleDraftChange(match.id, 'home', h);
                                                                                     handleDraftChange(match.id, 'away', a);
                                                                                 }}
-                                                                                className={`flex flex-col items-center gap-0.5 rounded-xl py-3 transition-all hover:scale-105 active:scale-95 ${scoreStyles[idx]}`}
+                                                                                className={`flex flex-col items-center gap-0.5 rounded-xl py-3 transition-all hover:scale-105 active:scale-95 lg:flex-row lg:justify-between lg:px-3 lg:py-2 ${scoreStyles[idx]}`}
                                                                             >
                                                                                 <span className="text-[9px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
-                                                                                <span className="text-xl font-black leading-none">{score}</span>
-                                                                                <span className="text-[9px] font-bold opacity-60">{probs[idx]}% Prob.</span>
+                                                                                <span className="text-xl font-black leading-none lg:text-lg">{score}</span>
+                                                                                <span className="text-[9px] font-bold opacity-60">{probs[idx]}%</span>
                                                                             </button>
                                                                         );
                                                                     })}
                                                                 </div>
                                                             </div>
+                                                        </div>
 
-                                                            {/* Form analysis */}
-                                                            <div className="border-t border-slate-100 px-4 pb-4 pt-3 lg:border-t-0">
-                                                                <div className="mb-3 flex items-center gap-2">
+                                                        {/* Form analysis — full width */}
+                                                        <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                                                            <div className="mb-3 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
                                                                     <BarChart3 className="h-3.5 w-3.5 text-slate-400" />
-                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Racha · Últimos 5</span>
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Análisis de Racha · Últimos 5</span>
                                                                 </div>
-                                                                <div className="flex items-start gap-2">
-                                                                    {/* Home team */}
-                                                                    <div className="flex min-w-0 flex-col items-start gap-1">
-                                                                        <span className="max-w-[70px] truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
-                                                                        <span className="text-[9px] text-slate-400">{homeEff}% efic.</span>
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tendencia</span>
+                                                            </div>
+
+                                                            {/* Mobile: two rows then insight box */}
+                                                            <div className="flex flex-col gap-2 lg:hidden">
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <div className="flex min-w-0 items-center gap-2">
+                                                                        <span className="w-14 shrink-0 truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
                                                                         <div className="flex gap-0.5">
                                                                             {ins.homeForm.map((r, i) => (
                                                                                 <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
                                                                             ))}
                                                                         </div>
-                                                                        <div className="flex items-center gap-0.5">
-                                                                            {homeTrend === 'up'
-                                                                                ? <ArrowUp className="h-3 w-3 text-lime-600" />
-                                                                                : <ArrowDown className="h-3 w-3 text-rose-500" />}
-                                                                            <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
-                                                                        </div>
                                                                     </div>
-
-                                                                    {/* Central personalized insight */}
-                                                                    <div className="flex min-h-[80px] flex-1 flex-col justify-between rounded-xl border border-indigo-100 bg-indigo-50 p-2.5">
-                                                                        <p className="text-[9px] font-semibold leading-relaxed text-indigo-800">
-                                                                            {ins.personalInsight || ins.insight || 'Análisis personalizado basado en la forma actual y el historial reciente de ambos equipos en competición.'}
-                                                                        </p>
-                                                                        <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
-                                                                            Opción IA: <span className="text-indigo-600">{ins.smartPick}</span>
-                                                                        </p>
+                                                                    <div className="flex shrink-0 items-center gap-0.5">
+                                                                        {homeTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                                                        <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
                                                                     </div>
-
-                                                                    {/* Away team */}
-                                                                    <div className="flex min-w-0 flex-col items-end gap-1">
-                                                                        <span className="max-w-[70px] truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
-                                                                        <span className="text-[9px] text-slate-400">{awayEff}% efic.</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <div className="flex min-w-0 items-center gap-2">
+                                                                        <span className="w-14 shrink-0 truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
                                                                         <div className="flex gap-0.5">
                                                                             {ins.awayForm.map((r, i) => (
                                                                                 <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
                                                                             ))}
                                                                         </div>
-                                                                        <div className="flex items-center justify-end gap-0.5">
-                                                                            {awayTrend === 'up'
-                                                                                ? <ArrowUp className="h-3 w-3 text-lime-600" />
-                                                                                : <ArrowDown className="h-3 w-3 text-rose-500" />}
-                                                                            <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
-                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex shrink-0 items-center gap-0.5">
+                                                                        {awayTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                                                        <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                                                                    <p className="text-[10px] font-semibold leading-relaxed text-indigo-800">
+                                                                        {ins.personalInsight || ins.insight || 'Análisis de forma actual e historial reciente de ambos equipos.'}
+                                                                    </p>
+                                                                    <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
+                                                                        Opción inteligente: <span className="text-indigo-600">{ins.smartPick}</span>
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Desktop: home | insight box | away */}
+                                                            <div className="hidden items-start gap-2 lg:flex">
+                                                                <div className="flex min-w-0 flex-col items-start gap-1">
+                                                                    <span className="max-w-[72px] truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                                                    <span className="text-[9px] text-slate-400">{homeEff}% efic.</span>
+                                                                    <div className="flex gap-0.5">
+                                                                        {ins.homeForm.map((r, i) => (
+                                                                            <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        {homeTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                                                        <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex min-h-[84px] flex-1 flex-col justify-between rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                                                                    <p className="text-[10px] font-semibold leading-relaxed text-indigo-800">
+                                                                        {ins.personalInsight || ins.insight || 'Análisis de forma actual e historial reciente de ambos equipos.'}
+                                                                    </p>
+                                                                    <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
+                                                                        Opción inteligente: <span className="text-indigo-600">{ins.smartPick}</span>
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex min-w-0 flex-col items-end gap-1">
+                                                                    <span className="max-w-[72px] truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                                                                    <span className="text-[9px] text-slate-400">{awayEff}% efic.</span>
+                                                                    <div className="flex gap-0.5">
+                                                                        {ins.awayForm.map((r, i) => (
+                                                                            <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="flex items-center justify-end gap-0.5">
+                                                                        {awayTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                                                        <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
