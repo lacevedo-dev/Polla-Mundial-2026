@@ -121,8 +121,9 @@ export class InsightsService {
             }
         }
 
+        const detail = lastError instanceof Error ? lastError.message : String(lastError ?? 'sin detalle');
         throw new BadRequestException(
-            `Todos los API keys han agotado su cuota o límite de tasa. Agrega una key adicional en Admin → Configuración.`,
+            `Todos los API keys fallaron. Detalle: ${detail}`,
         );
     }
 
@@ -169,8 +170,9 @@ export class InsightsService {
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new BadRequestException(`Error al llamar API Anthropic: ${response.status} — ${err}`);
+            const body = await response.json().catch(() => null) as any;
+            const msg = body?.error?.message ?? body?.message ?? `HTTP ${response.status}`;
+            throw new BadRequestException(`Anthropic ${response.status}: ${msg}`);
         }
 
         const data = await response.json() as any;
@@ -196,8 +198,9 @@ export class InsightsService {
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new BadRequestException(`Error al llamar API OpenAI: ${response.status} — ${err}`);
+            const body = await response.json().catch(() => null) as any;
+            const msg = body?.error?.message ?? body?.message ?? `HTTP ${response.status}`;
+            throw new BadRequestException(`OpenAI ${response.status}: ${msg}`);
         }
 
         const data = await response.json() as any;
