@@ -188,7 +188,7 @@ function clearSiCreditsIfReset(plan: string, resetAt: string | null): void {
 // Session-level cache for AI insights — avoids re-fetching and re-consuming credits
 // when the user closes and reopens the panel for the same match within the same tab.
 function getInsightsCacheKey(matchId: string): string {
-    return `polla_insights_${matchId}`;
+    return `polla_insights_v2_${matchId}`;
 }
 
 function getCachedInsights(matchId: string): object | null {
@@ -1052,9 +1052,9 @@ const Predictions: React.FC = () => {
                                                 const ins = (cachedData ?? generateMatchInsights(match)) as ReturnType<typeof generateMatchInsights> & { insight?: string; personalInsight?: string };
                                                 const scoreLabels = ['SEGURA', 'IA MODEL', 'ARRIESGADA'] as const;
                                                 const scoreStyles = [
-                                                    'bg-lime-400 text-slate-900',
-                                                    'bg-slate-900 text-white',
-                                                    'bg-amber-400 text-slate-900',
+                                                    'bg-lime-100 text-lime-700',
+                                                    'bg-violet-100 text-violet-700',
+                                                    'bg-amber-100 text-amber-700',
                                                 ] as const;
                                                 const planBadgeColor =
                                                     leaguePlan === 'DIAMOND' ? 'bg-cyan-100 text-cyan-700' :
