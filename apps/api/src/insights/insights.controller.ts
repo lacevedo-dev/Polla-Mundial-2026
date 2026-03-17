@@ -1,12 +1,22 @@
 import { Controller, Post, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { IsString, IsOptional } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InsightsService } from './insights.service';
 
 export class MatchInsightsDto {
+    @IsString()
     homeTeam: string;
+
+    @IsString()
     awayTeam: string;
+
+    @IsOptional()
+    @IsString()
     phase?: string;
+
+    @IsOptional()
+    @IsString()
     group?: string;
 }
 
