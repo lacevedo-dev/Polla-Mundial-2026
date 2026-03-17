@@ -23,6 +23,7 @@ import {
     Trophy,
     User,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useConfigStore } from '../stores/config.store';
@@ -144,6 +145,15 @@ function getSiCredits(plan: string, cap: number): number {
     try {
         const stored = localStorage.getItem(getSiCreditKey(plan));
         if (stored === null) return cap;
+        try {
+            const parsed = JSON.parse(stored) as { credits: number; cap: number };
+            if (parsed && typeof parsed === 'object' && 'cap' in parsed) {
+                // If admin changed the cap, reset credits to the new cap
+                if (parsed.cap !== cap) return cap;
+                return Number.isNaN(parsed.credits) ? cap : Math.max(0, parsed.credits);
+            }
+        } catch { /* fall through to legacy parse */ }
+        // Legacy: plain number stored
         const n = Number.parseInt(stored, 10);
         return Number.isNaN(n) ? cap : Math.max(0, n);
     } catch {
@@ -154,7 +164,7 @@ function getSiCredits(plan: string, cap: number): number {
 function consumeSiCredit(plan: string, cap: number): number {
     try {
         const next = Math.max(0, getSiCredits(plan, cap) - 1);
-        localStorage.setItem(getSiCreditKey(plan), String(next));
+        localStorage.setItem(getSiCreditKey(plan), JSON.stringify({ credits: next, cap }));
         return next;
     } catch {
         return 0;
@@ -257,6 +267,7 @@ function getStatusBadge(status: MatchViewModel['status']) {
 }
 
 const Predictions: React.FC = () => {
+    const navigate = useNavigate();
     const activeLeague = useLeagueStore((state) => state.activeLeague);
     const myLeagues = useLeagueStore((state) => state.myLeagues);
     const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
@@ -939,39 +950,42 @@ const Predictions: React.FC = () => {
                                                 const planCap = getRemoteSiCredits(leaguePlan);
                                                 const cachedData = insightsData[match.id] ?? getCachedInsights(match.id) ?? null;
 
-                                                // Lock screen — credits exhausted for this plan
+                                                // Lock screen — credits exhausted
                                                 if (insightsLocked) {
-                                                    const lockMessages: Record<string, { title: string; body: string; cta: string; sub: string }> = {
+                                                    const lockMessages: Record<string, { title: string; body: string; cta: string; ctaPlan: 'gold' | 'diamond' | null; sub: string }> = {
                                                         FREE: {
                                                             title: 'Has agotado tus créditos de prueba',
                                                             body: 'Mejora tu polla a plan GOLD o DIAMOND para más análisis IA.',
-                                                            cta: 'Mejorar a GOLD',
-                                                            sub: 'Plan GOLD · 30 análisis incluidos',
+                                                            cta: 'Ver planes disponibles',
+                                                            ctaPlan: 'gold',
+                                                            sub: 'Plan GOLD · 30 análisis · Plan DIAMOND · 100 análisis',
                                                         },
                                                         GOLD: {
                                                             title: `Usaste los ${planCap} análisis de tu plan`,
                                                             body: 'Actualiza a DIAMOND para triplicar tus análisis disponibles.',
-                                                            cta: 'Mejorar a DIAMOND',
+                                                            cta: 'Actualizar a DIAMOND',
+                                                            ctaPlan: 'diamond',
                                                             sub: 'Plan DIAMOND · 100 análisis incluidos',
                                                         },
                                                         DIAMOND: {
                                                             title: `Usaste los ${planCap} análisis disponibles`,
                                                             body: 'Has alcanzado el límite del período actual. Los créditos se recargarán próximamente.',
                                                             cta: 'Entendido',
+                                                            ctaPlan: null,
                                                             sub: 'Los créditos se recargan cada período',
                                                         },
                                                     };
                                                     const msg = lockMessages[leaguePlan] ?? lockMessages['FREE'];
                                                     return (
-                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
-                                                            <div className="flex items-center gap-2 bg-slate-900 px-4 py-3">
+                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                                                                 <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                                                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-400">Smart Insights • IA Powered</span>
-                                                                <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">
-                                                                    0 créditos
+                                                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
+                                                                <span className="ml-auto rounded-full bg-rose-100 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-600">
+                                                                    0/{planCap} créditos
                                                                 </span>
                                                             </div>
-                                                            <div className="flex flex-col items-center gap-4 bg-white px-6 py-8 text-center">
+                                                            <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
                                                                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
                                                                     <Lock className="h-6 w-6 text-slate-400" />
                                                                 </div>
@@ -980,9 +994,16 @@ const Predictions: React.FC = () => {
                                                                     <p className="mt-1 text-xs text-slate-500">{msg.body}</p>
                                                                 </div>
                                                                 <div className="flex flex-col items-center gap-2">
-                                                                    <span className="rounded-full bg-lime-400 px-5 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 cursor-pointer">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => msg.ctaPlan
+                                                                            ? navigate('/checkout', { state: { plan: msg.ctaPlan } })
+                                                                            : setInsightsLocked(false)
+                                                                        }
+                                                                        className="rounded-full bg-lime-400 px-5 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-lime-300"
+                                                                    >
                                                                         {msg.cta}
-                                                                    </span>
+                                                                    </button>
                                                                     <span className="text-[9px] text-slate-400">{msg.sub}</span>
                                                                 </div>
                                                             </div>
@@ -993,12 +1014,12 @@ const Predictions: React.FC = () => {
                                                 // Loading state
                                                 if (insightsLoading && analysisMatchId === match.id) {
                                                     return (
-                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
-                                                            <div className="flex items-center gap-2 bg-slate-900 px-4 py-3">
+                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                                                                 <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                                                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-400">Smart Insights • IA Powered</span>
+                                                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
                                                             </div>
-                                                            <div className="flex flex-col items-center gap-3 bg-white px-6 py-8 text-center">
+                                                            <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
                                                                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-400" />
                                                                 <p className="text-xs font-bold text-slate-500">Analizando partido con IA...</p>
                                                             </div>
@@ -1006,115 +1027,143 @@ const Predictions: React.FC = () => {
                                                     );
                                                 }
 
-                                                // Full panel — use AI data if available, else deterministic fallback
-                                                const ins = (cachedData ?? generateMatchInsights(match)) as ReturnType<typeof generateMatchInsights>;
+                                                // Full panel — AI data if available, else deterministic fallback
+                                                const ins = (cachedData ?? generateMatchInsights(match)) as ReturnType<typeof generateMatchInsights> & { insight?: string };
+                                                const scoreLabels = ['SEGURA', 'IA MODEL', 'ARRIESGADA'] as const;
                                                 const scoreStyles = [
                                                     'bg-lime-400 text-slate-900',
-                                                    'bg-slate-700 text-white hover:bg-slate-600',
-                                                    'bg-amber-400 text-slate-900 hover:bg-amber-300',
+                                                    'bg-slate-900 text-white',
+                                                    'bg-amber-400 text-slate-900',
                                                 ] as const;
-                                                const scoreLabels = ['Seguro', 'IA Pick', 'Riesgo'] as const;
                                                 const planBadgeColor =
-                                                    leaguePlan === 'DIAMOND' ? 'bg-cyan-400 text-slate-900' :
-                                                    leaguePlan === 'GOLD' ? 'bg-amber-400 text-slate-900' :
-                                                    'bg-slate-600 text-slate-300';
+                                                    leaguePlan === 'DIAMOND' ? 'bg-cyan-100 text-cyan-700' :
+                                                    leaguePlan === 'GOLD' ? 'bg-amber-100 text-amber-700' :
+                                                    'bg-slate-100 text-slate-500';
+                                                const homeEff = Math.round((ins.homeForm.filter((r) => r === 'W').length / 5) * 100);
+                                                const awayEff = Math.round((ins.awayForm.filter((r) => r === 'W').length / 5) * 100);
+                                                const calcTrend = (form: Array<'W' | 'D' | 'L'>) =>
+                                                    form.slice(3).filter((r) => r === 'W').length >= 1 ? 'up' : 'down';
+                                                const homeTrend = calcTrend(ins.homeForm);
+                                                const awayTrend = calcTrend(ins.awayForm);
 
                                                 return (
-                                                    <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
-                                                        {/* Header dark */}
-                                                        <div className="flex items-center gap-2 bg-slate-900 px-4 py-3">
+                                                    <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                        {/* Header */}
+                                                        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                                                             <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-400">Smart Insights • IA Powered</span>
+                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
                                                             {cachedData && (
-                                                                <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">
-                                                                    IA
-                                                                </span>
+                                                                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-600">IA</span>
                                                             )}
                                                             <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${planBadgeColor}`}>
                                                                 {siCredits}/{planCap} créditos
                                                             </span>
                                                         </div>
 
-                                                        {/* Probability section */}
-                                                        <div className="bg-slate-900 px-4 pb-4">
-                                                            <div className="mb-1 flex justify-between text-[10px] font-bold uppercase text-slate-400">
-                                                                <span>{match.homeTeam.split(' ')[0]}</span>
-                                                                <span>Empate</span>
-                                                                <span>{match.awayTeam.split(' ')[0]}</span>
+                                                        {/* Probability bar */}
+                                                        <div className="px-4 pb-4 pt-3">
+                                                            <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
+                                                                <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                                                <span className="text-slate-400">Empate</span>
+                                                                <span className="font-black text-slate-900">{match.awayTeam.split(' ')[0]}</span>
                                                             </div>
-                                                            <div className="flex h-3 overflow-hidden rounded-full bg-slate-700">
-                                                                <div className="bg-lime-400" style={{ width: `${ins.homeWin}%` }} />
-                                                                <div className="bg-slate-500" style={{ width: `${ins.draw}%` }} />
-                                                                <div className="bg-amber-400" style={{ width: `${ins.awayWin}%` }} />
+                                                            <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
+                                                                <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
+                                                                <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
+                                                                <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
                                                             </div>
                                                             <div className="mt-1 flex justify-between">
-                                                                <span className="text-[10px] font-black text-white">{ins.homeWin}%</span>
+                                                                <span className="text-[10px] font-black text-slate-900">{ins.homeWin}%</span>
                                                                 <span className="text-[10px] font-black text-slate-400">{ins.draw}%</span>
-                                                                <span className="text-[10px] font-black text-white">{ins.awayWin}%</span>
+                                                                <span className="text-[10px] font-black text-slate-900">{ins.awayWin}%</span>
                                                             </div>
+                                                            {ins.insight && (
+                                                                <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                                                                    <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+                                                                    <p className="text-[10px] leading-relaxed text-slate-700">"{ins.insight}"</p>
+                                                                </div>
+                                                            )}
                                                         </div>
 
                                                         {/* Suggestion buttons */}
-                                                        <div className="grid grid-cols-3 gap-2 bg-slate-900 px-4 pb-4">
-                                                            <p className="col-span-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Sugerencias automáticas</p>
-                                                            {ins.scores.map((score, idx) => {
-                                                                const [h, a] = score.split('-');
-                                                                const probs = [ins.homeWin, ins.draw, ins.awayWin];
-                                                                return (
-                                                                    <button
-                                                                        key={score + idx}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            handleDraftChange(match.id, 'home', h);
-                                                                            handleDraftChange(match.id, 'away', a);
-                                                                        }}
-                                                                        className={`flex flex-col items-center gap-0.5 rounded-xl py-2.5 transition-all hover:scale-105 active:scale-95 ${scoreStyles[idx]}`}
-                                                                    >
-                                                                        <span className="text-[9px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
-                                                                        <span className="text-lg font-black leading-none">{score}</span>
-                                                                        <span className="text-[9px] font-bold opacity-60">{probs[idx]}% Prob.</span>
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-
-                                                        {/* Form analysis */}
-                                                        <div className="border-t border-slate-100 bg-white p-4">
-                                                            <div className="mb-3 flex items-center gap-2">
-                                                                <BarChart3 className="h-4 w-4 text-slate-400" />
-                                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Análisis de Racha · Últimos 5</span>
-                                                            </div>
-                                                            <div className="space-y-2.5">
-                                                                {[
-                                                                    { name: match.homeTeam, form: ins.homeForm },
-                                                                    { name: match.awayTeam, form: ins.awayForm },
-                                                                ].map(({ name, form }) => {
-                                                                    const eff = Math.round((form.filter((r) => r === 'W').length / 5) * 100);
+                                                        <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                                                            <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Sugerencias automáticas</p>
+                                                            <div className="grid grid-cols-3 gap-2">
+                                                                {ins.scores.map((score, idx) => {
+                                                                    const [h, a] = score.split('-');
+                                                                    const probs = [ins.homeWin, ins.draw, ins.awayWin];
                                                                     return (
-                                                                        <div key={name} className="flex items-center justify-between gap-2">
-                                                                            <span className="w-16 shrink-0 truncate text-[11px] font-black uppercase text-slate-900">{name.split(' ')[0]}</span>
-                                                                            <div className="flex gap-1">
-                                                                                {form.map((r, i) => (
-                                                                                    <span
-                                                                                        key={i}
-                                                                                        className={`flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}
-                                                                                    >
-                                                                                        {r}
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">{eff}% Efic.</span>
-                                                                        </div>
+                                                                        <button
+                                                                            key={score + idx}
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                handleDraftChange(match.id, 'home', h);
+                                                                                handleDraftChange(match.id, 'away', a);
+                                                                            }}
+                                                                            className={`flex flex-col items-center gap-0.5 rounded-xl py-2.5 transition-all hover:scale-105 active:scale-95 ${scoreStyles[idx]}`}
+                                                                        >
+                                                                            <span className="text-[9px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
+                                                                            <span className="text-lg font-black leading-none">{score}</span>
+                                                                            <span className="text-[9px] font-bold opacity-60">{probs[idx]}% Prob.</span>
+                                                                        </button>
                                                                     );
                                                                 })}
                                                             </div>
-                                                            <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
-                                                                <p className="text-[10px] font-bold leading-tight text-blue-800">
-                                                                    "Análisis basado en estadísticas históricas y tendencias recientes de ambas selecciones."
-                                                                </p>
-                                                                <p className="mt-1.5 text-[10px] font-black uppercase text-blue-900">
-                                                                    Opción inteligente: <span className="text-blue-600">{ins.smartPick}</span>
-                                                                </p>
+                                                        </div>
+
+                                                        {/* Form analysis */}
+                                                        <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                                                            <div className="mb-3 flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <BarChart3 className="h-4 w-4 text-slate-400" />
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Análisis de Racha · Últimos 5</span>
+                                                                </div>
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tendencia</span>
+                                                            </div>
+                                                            <div className="flex items-start gap-2">
+                                                                {/* Home team */}
+                                                                <div className="flex min-w-0 flex-col items-start gap-1">
+                                                                    <span className="truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                                                    <span className="text-[9px] text-slate-400">{homeEff}% Eficacia</span>
+                                                                    <div className="flex gap-0.5">
+                                                                        {ins.homeForm.map((r, i) => (
+                                                                            <span key={i} className={`flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        {homeTrend === 'up'
+                                                                            ? <ArrowUp className="h-3 w-3 text-lime-600" />
+                                                                            : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                                                        <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Central insight */}
+                                                                <div className="flex-1 rounded-xl border border-blue-100 bg-blue-50 p-2.5">
+                                                                    <p className="text-[9px] font-bold leading-relaxed text-blue-800">
+                                                                        "{ins.insight || 'Análisis basado en estadísticas históricas y tendencias recientes de ambas selecciones.'}"
+                                                                    </p>
+                                                                    <p className="mt-1.5 text-[9px] font-black uppercase text-blue-900">
+                                                                        Opción inteligente: <span className="text-blue-600">{ins.smartPick}</span>
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Away team */}
+                                                                <div className="flex min-w-0 flex-col items-end gap-1">
+                                                                    <span className="truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                                                                    <span className="text-[9px] text-slate-400">{awayEff}% Eficacia</span>
+                                                                    <div className="flex gap-0.5">
+                                                                        {ins.awayForm.map((r, i) => (
+                                                                            <span key={i} className={`flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-0.5 justify-end">
+                                                                        {awayTrend === 'up'
+                                                                            ? <ArrowUp className="h-3 w-3 text-lime-600" />
+                                                                            : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                                                        <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>

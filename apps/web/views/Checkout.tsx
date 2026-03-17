@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Button, Card, Badge, Input } from '../components/UI';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
 import {
@@ -32,11 +32,13 @@ interface CheckoutResponse {
 
 const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
-  const [selectedPlan, setSelectedPlan] = React.useState<'gold' | 'diamond'>(initialPlan);
+  const planFromNav = (location.state as { plan?: string } | null)?.plan as 'gold' | 'diamond' | undefined;
+  const [selectedPlan, setSelectedPlan] = React.useState<'gold' | 'diamond'>(planFromNav ?? initialPlan);
   const [paymentData, setPaymentData] = React.useState({
     holder: '',
     cardNumber: '',
