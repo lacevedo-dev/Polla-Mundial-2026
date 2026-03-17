@@ -32,4 +32,26 @@ export class LeaguesController {
         const userId = req.user.userId;
         return this.leaguesService.joinLeagueByCode(userId, code);
     }
+
+    @Get('public')
+    async getPublicLeagues(@Request() req) {
+        return this.leaguesService.findPublicLeagues(req.user.userId);
+    }
+
+    @Get('invitations')
+    async getMyInvitations(@Request() req) {
+        return this.leaguesService.findMyInvitations(req.user.userId);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Post('invitations/:id/accept')
+    async acceptInvitation(@Request() req, @Param('id') invitationId: string) {
+        return this.leaguesService.acceptInvitation(req.user.userId, invitationId);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Post('invitations/:id/decline')
+    async declineInvitation(@Request() req, @Param('id') invitationId: string) {
+        return this.leaguesService.declineInvitation(invitationId);
+    }
 }

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
-import { MemberRole, MemberStatus, LeagueStatus, ScoringType } from '@prisma/client';
+import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -121,6 +121,87 @@ export class LeaguesService {
         }
 
         return league;
+    }
+
+    async findPublicLeagues(userId: string) {
+        const joinedIds = (
+            await this.prisma.leagueMember.findMany({
+                where: { userId, status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING] } },
+                select: { leagueId: true },
+            })
+        ).map((m) => m.leagueId);
+
+        return this.prisma.league.findMany({
+            where: {
+                privacy: 'PUBLIC',
+                status: { not: 'CANCELLED' as any },
+                id: { notIn: joinedIds },
+            },
+            include: { _count: { select: { members: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 12,
+        });
+    }
+
+    async findMyInvitations(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true },
+        });
+        if (!user) return [];
+
+        return this.prisma.invitation.findMany({
+            where: {
+                recipient: user.email,
+                status: InviteStatus.SENT,
+                OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+            },
+            include: {
+                league: { select: { id: true, name: true, cover: true, privacy: true } },
+                inviter: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+
+    async acceptInvitation(userId: string, invitationId: string) {
+        const invitation = await this.prisma.invitation.findUnique({
+            where: { id: invitationId },
+            include: { league: { select: { id: true, code: true, maxParticipants: true, privacy: true, _count: { select: { members: { where: { status: MemberStatus.ACTIVE } } } } } } },
+        });
+        if (!invitation || invitation.status !== InviteStatus.SENT) {
+            throw new NotFoundException('Invitación no encontrada o ya procesada');
+        }
+
+        const existing = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId, leagueId: invitation.leagueId } },
+        });
+        if (!existing) {
+            if (invitation.league.maxParticipants && invitation.league._count.members >= invitation.league.maxParticipants) {
+                throw new BadRequestException('La liga ya alcanzó su límite de participantes');
+            }
+            await this.prisma.leagueMember.create({
+                data: { userId, leagueId: invitation.leagueId, role: MemberRole.PLAYER, status: MemberStatus.ACTIVE },
+            });
+        }
+
+        await this.prisma.invitation.update({
+            where: { id: invitationId },
+            data: { status: InviteStatus.ACCEPTED },
+        });
+
+        return { ok: true, leagueId: invitation.leagueId };
+    }
+
+    async declineInvitation(invitationId: string) {
+        const invitation = await this.prisma.invitation.findUnique({ where: { id: invitationId } });
+        if (!invitation) throw new NotFoundException('Invitación no encontrada');
+
+        await this.prisma.invitation.update({
+            where: { id: invitationId },
+            data: { status: InviteStatus.EXPIRED },
+        });
+        return { ok: true };
     }
 
     async joinLeagueByCode(userId: string, code: string) {

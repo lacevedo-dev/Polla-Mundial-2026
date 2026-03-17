@@ -30,6 +30,7 @@ const Checkout = React.lazy(() => import('./views/Checkout'));
 
 // Vistas protegidas - lazy loaded
 const Dashboard = React.lazy(() => import('./views/Dashboard'));
+const MyLeagues = React.lazy(() => import('./views/MyLeagues'));
 const Predictions = React.lazy(() => import('./views/Predictions'));
 const Ranking = React.lazy(() => import('./views/Ranking'));
 const CreateLeague = React.lazy(() => import('./views/CreateLeague'));
@@ -58,6 +59,7 @@ const publicRoutes: RouteObject[] = [
 
 const appRoutes: RouteObject[] = [
     { path: '/dashboard', element: <Suspense fallback={<LoadingFallback />}><Dashboard /></Suspense> },
+    { path: '/my-leagues', element: <Suspense fallback={<LoadingFallback />}><MyLeagues /></Suspense> },
     { path: '/predictions', element: <Suspense fallback={<LoadingFallback />}><Predictions /></Suspense> },
     { path: '/ranking', element: <Suspense fallback={<LoadingFallback />}><Ranking /></Suspense> },
     { path: '/create-league', element: <Suspense fallback={<LoadingFallback />}><CreateLeague /></Suspense> },

@@ -14,9 +14,32 @@ export type { LeagueContext } from './league.adapters';
 
 type CreateLeagueInput = LeagueData | CreateLeagueRequest;
 
+export interface InvitationItem {
+    id: string;
+    leagueId: string;
+    leagueName: string;
+    leagueCover?: string;
+    inviterName: string;
+    expiresAt?: string | null;
+}
+
+export interface PublicLeagueItem {
+    id: string;
+    name: string;
+    description?: string;
+    memberCount: number;
+    maxParticipants?: number | null;
+    baseFee?: number | null;
+    currency?: string | null;
+    plan?: string | null;
+    cover?: string | null;
+}
+
 interface LeagueState {
     activeLeague: LeagueContext | null;
     myLeagues: LeagueContext[];
+    invitations: InvitationItem[];
+    publicLeagues: PublicLeagueItem[];
     isLoading: boolean;
 
     fetchMyLeagues: () => Promise<LeagueContext[]>;
@@ -24,6 +47,10 @@ interface LeagueState {
     setActiveLeague: (league: LeagueContext | string | null) => void;
     createLeague: (data: CreateLeagueInput) => Promise<LeagueContext>;
     joinLeague: (code: string) => Promise<void>;
+    fetchInvitations: () => Promise<void>;
+    fetchPublicLeagues: () => Promise<void>;
+    acceptInvitation: (id: string) => Promise<string>;
+    declineInvitation: (id: string) => Promise<void>;
 }
 
 function upsertLeague(leagues: LeagueContext[], nextLeague: LeagueContext): LeagueContext[] {
@@ -58,6 +85,8 @@ function resolveActiveLeague(
 export const useLeagueStore = create<LeagueState>((set, get) => ({
     activeLeague: null,
     myLeagues: [],
+    invitations: [],
+    publicLeagues: [],
     isLoading: false,
 
     fetchMyLeagues: async () => {
@@ -166,5 +195,60 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
             });
             throw error;
         }
+    },
+
+    fetchInvitations: async () => {
+        try {
+            const raw = await request<any[]>('/leagues/invitations');
+            const invitations: InvitationItem[] = raw.map((inv) => ({
+                id: inv.id,
+                leagueId: inv.league?.id ?? inv.leagueId,
+                leagueName: inv.league?.name ?? '—',
+                leagueCover: inv.league?.cover ?? undefined,
+                inviterName: inv.inviter?.name ?? 'Alguien',
+                expiresAt: inv.expiresAt ?? null,
+            }));
+            set({ invitations });
+        } catch {
+            set({ invitations: [] });
+        }
+    },
+
+    fetchPublicLeagues: async () => {
+        try {
+            const raw = await request<any[]>('/leagues/public');
+            const publicLeagues: PublicLeagueItem[] = raw.map((l) => ({
+                id: l.id,
+                name: l.name,
+                description: l.description ?? undefined,
+                memberCount: l._count?.members ?? 0,
+                maxParticipants: l.maxParticipants ?? null,
+                baseFee: l.baseFee ?? null,
+                currency: l.currency ?? null,
+                plan: l.plan ?? null,
+                cover: l.cover ?? null,
+            }));
+            set({ publicLeagues });
+        } catch {
+            set({ publicLeagues: [] });
+        }
+    },
+
+    acceptInvitation: async (id) => {
+        const res = await request<{ ok: boolean; leagueId: string }>(`/leagues/invitations/${id}/accept`, { method: 'POST' });
+        // Remove from list and refresh my leagues
+        set((state) => ({ invitations: state.invitations.filter((inv) => inv.id !== id) }));
+        const refreshed = await request<LeagueApiResponse[]>('/leagues');
+        const normalizedLeagues = refreshed.map(toLeagueContextListItem);
+        set((state) => ({
+            myLeagues: normalizedLeagues,
+            activeLeague: resolveActiveLeague(normalizedLeagues, state.activeLeague),
+        }));
+        return res.leagueId;
+    },
+
+    declineInvitation: async (id) => {
+        await request(`/leagues/invitations/${id}/decline`, { method: 'POST' });
+        set((state) => ({ invitations: state.invitations.filter((inv) => inv.id !== id) }));
     },
 }));

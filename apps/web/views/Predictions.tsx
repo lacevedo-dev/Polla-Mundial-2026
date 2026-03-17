@@ -23,7 +23,7 @@ import {
     Trophy,
     User,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useBlocker } from 'react-router-dom';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useConfigStore } from '../stores/config.store';
@@ -305,6 +305,20 @@ const Predictions: React.FC = () => {
     const [insightsLoading, setInsightsLoading] = React.useState(false);
     const [insightsData, setInsightsData] = React.useState<Record<string, object>>({});
     const [insightsError, setInsightsError] = React.useState<string | null>(null);
+    const [isSavingAll, setIsSavingAll] = React.useState(false);
+
+    // Dirty detection: open matches whose draft differs from saved prediction
+    const dirtyMatchIds = React.useMemo(() =>
+        matches
+            .filter((match) => {
+                if (match.status !== 'open' && match.status !== 'live') return false;
+                const draft = drafts[match.id];
+                if (!draft || draft.home === '' || draft.away === '') return false;
+                return draft.home !== match.prediction.home || draft.away !== match.prediction.away;
+            })
+            .map((m) => m.id),
+    [matches, drafts]);
+    const hasDirtyChanges = dirtyMatchIds.length > 0;
     // Plan for credits: user's own subscription plan takes priority over league plan
     const resolvedPlan = React.useMemo(() =>
         (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase(),
@@ -466,6 +480,42 @@ const Predictions: React.FC = () => {
             setSavingMatchId(null);
         }
     };
+
+    const handleSaveAll = async () => {
+        if (!activeLeague?.id || dirtyMatchIds.length === 0) return;
+        setIsSavingAll(true);
+        setError(null);
+        let failed = 0;
+        for (const matchId of dirtyMatchIds) {
+            const draft = drafts[matchId];
+            if (!draft || draft.home === '' || draft.away === '') continue;
+            try {
+                await savePrediction(
+                    activeLeague.id,
+                    matchId,
+                    Number.parseInt(draft.home, 10),
+                    Number.parseInt(draft.away, 10),
+                );
+            } catch {
+                failed++;
+            }
+        }
+        setIsSavingAll(false);
+        if (failed > 0) {
+            setError(`${failed} pronóstico(s) no pudieron guardarse. Inténtalo de nuevo.`);
+        }
+    };
+
+    // Block SPA navigation when there are unsaved changes
+    const blocker = useBlocker(hasDirtyChanges);
+
+    // Block browser close/refresh when there are unsaved changes
+    React.useEffect(() => {
+        if (!hasDirtyChanges) return;
+        const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [hasDirtyChanges]);
 
     const handleTeamMove = (groupIndex: number, teamIndex: number, direction: 'up' | 'down') => {
         setGroups((previous) => {
@@ -932,12 +982,14 @@ const Predictions: React.FC = () => {
                                                     </button>
 
                                                     <button
-                                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-lime-400 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-lime-400 px-3 sm:px-4 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                                                         disabled={isSaving}
                                                         onClick={() => handleSave(match.id)}
                                                     >
                                                         {match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                                                        {isSaving ? 'Guardando' : match.saved ? 'Actualizar' : 'Guardar'}
+                                                        <span className="hidden sm:inline">
+                                                            {isSaving ? 'Guardando' : match.saved ? 'Actualizar' : 'Guardar'}
+                                                        </span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -1052,17 +1104,25 @@ const Predictions: React.FC = () => {
                                                     );
                                                 }
 
-                                                // Error state — show actual error, allow retry via brain button
+                                                // Error state — friendly message for the user
                                                 if (insightsError && !cachedData) {
+                                                    console.warn('[SmartInsights] error:', insightsError);
                                                     return (
-                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-rose-200 bg-white">
-                                                            <div className="flex items-center gap-2 border-b border-rose-100 px-4 py-2.5">
-                                                                <Sparkles className="h-3.5 w-3.5 text-rose-400" />
+                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-amber-100 bg-white">
+                                                            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+                                                                <Sparkles className="h-3.5 w-3.5 text-violet-500" />
                                                                 <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
                                                             </div>
                                                             <div className="flex flex-col items-center gap-3 px-6 py-6 text-center">
-                                                                <p className="text-xs font-bold text-rose-600">Error al obtener el análisis</p>
-                                                                <p className="max-w-xs text-[10px] text-slate-500">{insightsError}</p>
+                                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50">
+                                                                    <Sparkles className="h-5 w-5 text-amber-400" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-xs font-bold text-slate-700">Análisis en procesamiento</p>
+                                                                    <p className="mt-1 max-w-xs text-[10px] text-slate-400">
+                                                                        El motor de IA está ocupado en este momento. Inténtalo de nuevo en unos segundos.
+                                                                    </p>
+                                                                </div>
                                                                 <p className="text-[9px] text-slate-400">Presiona el botón <span className="font-bold">IA</span> para reintentar · No se consumió crédito</p>
                                                             </div>
                                                         </div>
@@ -1350,6 +1410,60 @@ const Predictions: React.FC = () => {
                 )}
             </section>
         </div>
+        {/* FAB — save all dirty predictions */}
+        {hasDirtyChanges && (
+            <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={isSavingAll}
+                className="fixed bottom-6 right-4 z-40 flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 shadow-lg shadow-lime-400/30 transition-all hover:bg-lime-300 disabled:opacity-70 sm:right-6"
+            >
+                {isSavingAll
+                    ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" /><span className="hidden sm:inline">Guardando...</span></>
+                    : <><Save className="h-4 w-4" /><span>{dirtyMatchIds.length} {dirtyMatchIds.length === 1 ? 'cambio' : 'cambios'}</span></>
+                }
+            </button>
+        )}
+
+        {/* Unsaved changes dialog — triggered by useBlocker on SPA navigation */}
+        {blocker.state === 'blocked' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                <div className="w-full max-w-sm overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
+                    <div className="border-b border-slate-100 px-6 py-4">
+                        <p className="text-sm font-black text-slate-900">Cambios sin guardar</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Tienes {dirtyMatchIds.length} pronóstico{dirtyMatchIds.length !== 1 ? 's' : ''} sin guardar.
+                            ¿Qué deseas hacer?
+                        </p>
+                    </div>
+                    <div className="flex flex-col gap-2 p-4">
+                        <button
+                            type="button"
+                            onClick={async () => { await handleSaveAll(); blocker.proceed(); }}
+                            disabled={isSavingAll}
+                            className="flex items-center justify-center gap-2 rounded-xl bg-lime-400 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 hover:bg-lime-300 disabled:opacity-60"
+                        >
+                            <Save className="h-4 w-4" /> Guardar y salir
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => blocker.proceed()}
+                            className="rounded-xl border border-slate-200 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 hover:bg-slate-50"
+                        >
+                            Descartar y salir
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => blocker.reset()}
+                            className="rounded-xl px-4 py-2 text-[11px] font-bold text-slate-400 hover:text-slate-600"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {activeGroupModal ? (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                 <div className="w-full max-w-md overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">

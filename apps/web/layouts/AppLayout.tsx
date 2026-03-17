@@ -7,7 +7,7 @@ import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
 
 const primaryNavItems = [
     { to: '/dashboard', label: 'Inicio', icon: Home },
-    { to: '/predictions', label: 'Mis Pollas', icon: Trophy },
+    { to: '/my-leagues', label: 'Mis Pollas', icon: Trophy },
     { to: '/ranking', label: 'Ranking', icon: ListOrdered },
     { to: '/help', label: 'Ayuda', icon: HelpCircle },
 ];
