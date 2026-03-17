@@ -71,7 +71,8 @@ export interface LeaderboardRow {
     trend: 'same';
 }
 
-const DEFAULT_FLAG_URL = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+const DEFAULT_FLAG_URL =
+    "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 60'%3E%3Crect width='80' height='60' rx='6' fill='%23e2e8f0'/%3E%3Cpath d='M40 10 L56 18 L56 38 C56 47 40 53 40 53 C40 53 24 47 24 38 L24 18 Z' fill='%2394a3b8'/%3E%3Cpath d='M33 30 L37 34 L47 24' stroke='%23e2e8f0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E";
 
 function normalizeMatchStatus(status: string): MatchViewModel['status'] {
     switch (status) {
