@@ -165,7 +165,7 @@ export class LeaguesService {
                 OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
             },
             include: {
-                league: { select: { id: true, name: true, cover: true, privacy: true } },
+                league: { select: { id: true, name: true, privacy: true } },
                 inviter: { select: { id: true, name: true } },
             },
             orderBy: { createdAt: 'desc' },
