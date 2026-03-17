@@ -276,7 +276,7 @@ const MyLeagues: React.FC = () => {
                             return (
                                 <div
                                     key={league.id}
-                                    className="relative flex flex-col rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm"
+                                    className="group relative flex flex-col rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-blue-300 hover:shadow-[0_8px_24px_-4px_rgba(147,197,253,0.35)]"
                                 >
                                     {/* Price / badge */}
                                     <div className="absolute right-4 top-4 flex items-center gap-1.5">
@@ -293,12 +293,12 @@ const MyLeagues: React.FC = () => {
                                     </div>
 
                                     {/* Globe icon */}
-                                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400 transition-colors group-hover:bg-blue-50 group-hover:text-blue-400">
                                         <Globe size={18} />
                                     </div>
 
                                     {/* Name */}
-                                    <p className="pr-20 text-sm font-black uppercase leading-tight tracking-tight text-slate-900">
+                                    <p className="pr-20 text-sm font-black uppercase leading-tight tracking-tight text-slate-900 transition-colors group-hover:text-blue-700">
                                         {league.name}
                                     </p>
 
@@ -324,7 +324,7 @@ const MyLeagues: React.FC = () => {
                                     <button
                                         onClick={() => handleJoinPublic(league.id)}
                                         disabled={joiningId === league.id}
-                                        className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                                        className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50 group-hover:border-blue-200 group-hover:text-blue-600 disabled:opacity-50"
                                     >
                                         Ver detalles <ChevronRight size={12} />
                                     </button>
