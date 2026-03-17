@@ -10,6 +10,7 @@ export interface MatchInsightsResult {
     scores: string[];
     smartPick: string;
     insight: string;
+    personalInsight: string;
 }
 
 interface AiConfig {
@@ -19,7 +20,7 @@ interface AiConfig {
     systemPrompt: string;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `Eres un analista experto del Mundial FIFA 2026.
+const DEFAULT_SYSTEM_PROMPT = `Eres un analista experto del Mundial FIFA 2026 con acceso a estadísticas reales de los equipos.
 Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estructura exacta:
 {
   "homeWin": <número entero 0-100>,
@@ -29,12 +30,15 @@ Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estruc
   "awayForm": ["L","W","D","W","L"],
   "scores": ["2-1","1-1","0-2"],
   "smartPick": "<nombre del equipo local, visitante, o la palabra Empate>",
-  "insight": "<análisis breve en español, máximo 120 caracteres>"
+  "insight": "<análisis táctico general en español, máximo 100 caracteres, SIN mencionar nombres de equipos>",
+  "personalInsight": "<análisis personalizado específico en español: menciona los equipos por nombre, cita datos reales como su estado de forma actual, resultados recientes concretos, jugadores clave, fortalezas/debilidades específicas del equipo en este torneo. Máximo 220 caracteres. NO uses frases genéricas como 'es un partido emocionante' o 'ambos equipos buscarán la victoria'.>"
 }
 Reglas:
 - homeWin + draw + awayWin debe ser exactamente 100.
 - scores: array de 3 strings con formato "goles_local-goles_visitante", ordenados [más_probable, equilibrado, sorpresa].
-- homeForm y awayForm: arrays de 5 resultados de los últimos partidos (W=victoria, D=empate, L=derrota).
+- homeForm y awayForm: basados en resultados REALES y recientes de cada equipo (últimas 5 apariciones).
+- insight: frase táctica concisa y general (sin nombres de equipos).
+- personalInsight: análisis detallado que SÍ menciona los equipos por nombre, cita estadísticas reales, resultados previos entre ellos si existen, y el contexto específico del encuentro.
 - Responde ÚNICAMENTE con el JSON, sin texto adicional, sin markdown, sin comentarios.`;
 
 @Injectable()
@@ -89,7 +93,7 @@ export class InsightsService {
             },
             body: JSON.stringify({
                 model: config.model,
-                max_tokens: 512,
+                max_tokens: 800,
                 system: config.systemPrompt,
                 messages: [{ role: 'user', content: userMessage }],
             }),
@@ -113,7 +117,7 @@ export class InsightsService {
             },
             body: JSON.stringify({
                 model: config.model,
-                max_tokens: 512,
+                max_tokens: 800,
                 response_format: { type: 'json_object' },
                 messages: [
                     { role: 'system', content: config.systemPrompt },
@@ -163,6 +167,7 @@ export class InsightsService {
             scores,
             smartPick: parsed.smartPick || homeTeam,
             insight: parsed.insight || '',
+            personalInsight: parsed.personalInsight || '',
         };
     }
 }

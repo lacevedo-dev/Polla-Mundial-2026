@@ -30,7 +30,7 @@ const PERMISSION_LABELS: Record<string, { label: string; icon: React.ElementType
     adminPlans: { label: 'Gestión Planes', icon: CreditCard },
 };
 
-const DEFAULT_PROMPT = `Eres un analista experto del Mundial FIFA 2026.
+const DEFAULT_PROMPT = `Eres un analista experto del Mundial FIFA 2026 con acceso a estadísticas reales de los equipos.
 Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estructura exacta:
 {
   "homeWin": <número entero 0-100>,
@@ -40,9 +40,10 @@ Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estruc
   "awayForm": ["L","W","D","W","L"],
   "scores": ["2-1","1-1","0-2"],
   "smartPick": "<nombre del equipo o la palabra Empate>",
-  "insight": "<análisis breve en español, máximo 120 caracteres>"
+  "insight": "<análisis táctico general en español, máximo 100 caracteres, SIN nombres de equipos>",
+  "personalInsight": "<análisis personalizado específico: menciona los equipos por nombre, cita datos reales, forma actual, resultados recientes y contexto del encuentro. Máximo 220 caracteres. NO uses frases genéricas.>"
 }
-Reglas: homeWin + draw + awayWin = 100. scores tiene 3 elementos [más_probable, equilibrado, sorpresa].
+Reglas: homeWin + draw + awayWin = 100. scores tiene 3 elementos [más_probable, equilibrado, sorpresa]. homeForm y awayForm basados en resultados reales recientes.
 Responde ÚNICAMENTE con el JSON.`;
 
 interface AiConfigForm {
