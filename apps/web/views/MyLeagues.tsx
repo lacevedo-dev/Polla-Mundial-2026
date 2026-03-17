@@ -165,54 +165,36 @@ const MyLeagues: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {/* Create new */}
-                    <button
-                        onClick={() => navigate('/create-league')}
-                        className="group flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-[1.75rem] border-2 border-dashed border-slate-200 bg-white p-6 transition hover:border-lime-400 hover:bg-lime-50"
-                    >
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 text-slate-300 transition group-hover:border-lime-400 group-hover:text-lime-500">
-                            <Plus size={24} />
-                        </div>
-                        <div className="text-center">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 group-hover:text-slate-900">
-                                Crear nueva polla
-                            </p>
-                            <p className="mt-1 text-[10px] text-slate-400">
-                                Organiza tu propia liga<br />con amigos o compañeros.
-                            </p>
-                        </div>
-                    </button>
-
                     {/* Loading skeletons */}
                     {isLoading && myLeagues.length === 0 &&
                         [1, 2].map((i) => (
-                            <div key={i} className="h-40 animate-pulse rounded-[1.75rem] bg-slate-100" />
+                            <div key={i} className="h-44 animate-pulse rounded-[1.75rem] bg-slate-100" />
                         ))
                     }
 
-                    {/* League cards */}
+                    {/* League cards — hover: lift + lime accent */}
                     {myLeagues.map((league) => (
                         <button
                             key={league.id}
                             onClick={() => handleSelectLeague(league.id)}
-                            className="group relative flex flex-col rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-lime-300 hover:shadow-md"
+                            className="group relative flex flex-col rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-lime-400 hover:shadow-[0_8px_24px_-4px_rgba(163,230,53,0.25)]"
                         >
                             {/* Role badge */}
-                            <span className={`absolute right-4 top-4 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+                            <span className={`absolute right-4 top-4 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase tracking-wider transition-colors ${
                                 league.role === 'ADMIN'
                                     ? 'bg-slate-900 text-lime-400'
-                                    : 'bg-slate-100 text-slate-500'
+                                    : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
                             }`}>
                                 {league.role === 'ADMIN' ? 'Admin' : 'Jugador'}
                             </span>
 
                             {/* Avatar */}
-                            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-sm font-black text-white">
+                            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-sm font-black text-white transition-colors group-hover:bg-lime-400 group-hover:text-slate-900">
                                 {leagueInitials(league.name)}
                             </div>
 
                             {/* Name */}
-                            <p className="pr-16 text-sm font-black uppercase leading-tight tracking-tight text-slate-900">
+                            <p className="pr-16 text-sm font-black uppercase leading-tight tracking-tight text-slate-900 transition-colors group-hover:text-lime-600">
                                 {league.name}
                             </p>
                             <p className="mt-1 text-[10px] text-slate-400">
@@ -220,7 +202,7 @@ const MyLeagues: React.FC = () => {
                             </p>
 
                             {/* Stats */}
-                            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+                            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 transition-colors group-hover:border-lime-100">
                                 <div>
                                     <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Ranking</p>
                                     <p className="text-lg font-black text-slate-900">
@@ -236,6 +218,24 @@ const MyLeagues: React.FC = () => {
                             </div>
                         </button>
                     ))}
+
+                    {/* Create new — always last */}
+                    <button
+                        onClick={() => navigate('/create-league')}
+                        className="group flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-[1.75rem] border-2 border-dashed border-slate-200 bg-white p-6 transition-all duration-200 hover:-translate-y-1 hover:border-lime-400 hover:bg-lime-50 hover:shadow-[0_8px_24px_-4px_rgba(163,230,53,0.15)]"
+                    >
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-lime-400 text-slate-900 shadow-md transition-transform duration-200 group-hover:scale-110">
+                            <Plus size={24} />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition-colors group-hover:text-lime-700">
+                                Crear nueva polla
+                            </p>
+                            <p className="mt-1 text-[10px] text-slate-400">
+                                Organiza tu propia liga<br />con amigos o compañeros.
+                            </p>
+                        </div>
+                    </button>
                 </div>
             </section>
 
