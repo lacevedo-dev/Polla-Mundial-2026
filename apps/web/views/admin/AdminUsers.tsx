@@ -31,7 +31,7 @@ const EditUserDialog: React.FC<{
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
             <DialogPrimitive.Portal>
                 <DialogPrimitive.Overlay className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" />
-                <DialogPrimitive.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-white rounded-[1.75rem] shadow-2xl p-6">
+                <DialogPrimitive.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md mx-4 bg-white rounded-[1.75rem] shadow-2xl p-6">
                     <DialogPrimitive.Title className="font-black text-lg text-slate-900 mb-1">
                         Editar Usuario
                     </DialogPrimitive.Title>
@@ -129,7 +129,7 @@ const AdminUsers: React.FC = () => {
                             Buscar
                         </button>
                     </form>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <div className="relative">
                             <select
                                 value={filters.plan ?? ''}
@@ -159,10 +159,10 @@ const AdminUsers: React.FC = () => {
             {/* Table */}
             <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
                 {/* Header */}
-                <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Usuario</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Plan</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Rol</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Rol</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acciones</p>
                 </div>
 
@@ -173,7 +173,7 @@ const AdminUsers: React.FC = () => {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {users.map((user) => (
-                            <div key={user.id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3.5 items-center hover:bg-slate-50 transition-colors">
+                            <div key={user.id} className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3.5 items-center hover:bg-slate-50 transition-colors">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <img
                                         src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=e2e8f0&color=64748b`}
@@ -186,7 +186,7 @@ const AdminUsers: React.FC = () => {
                                     </div>
                                 </div>
                                 <StatusBadge status={user.plan} />
-                                <StatusBadge status={user.systemRole} />
+                                <div className="hidden md:block"><StatusBadge status={user.systemRole} /></div>
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => setEditUser(user)}

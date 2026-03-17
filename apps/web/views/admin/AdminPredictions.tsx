@@ -57,12 +57,12 @@ const AdminPredictions: React.FC = () => {
 
             {/* Table */}
             <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="grid grid-cols-[1fr_2fr_auto] md:grid-cols-[1fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Usuario</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Partido</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Predicho</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Real</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Puntos</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Real</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Puntos</p>
                 </div>
 
                 {isLoading ? (
@@ -74,7 +74,7 @@ const AdminPredictions: React.FC = () => {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {predictions.map((pred) => (
-                            <div key={pred.id} className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 items-center hover:bg-slate-50 transition-colors">
+                            <div key={pred.id} className="grid grid-cols-[1fr_2fr_auto] md:grid-cols-[1fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 items-center hover:bg-slate-50 transition-colors">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <img
                                         src={pred.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(pred.user.name)}&background=e2e8f0&color=64748b`}
@@ -92,12 +92,12 @@ const AdminPredictions: React.FC = () => {
                                 <p className={`text-sm font-black ${getResultColor(pred)}`}>
                                     {pred.homeScore} – {pred.awayScore}
                                 </p>
-                                <p className="text-sm text-slate-500">
+                                <p className="hidden md:block text-sm text-slate-500">
                                     {pred.match.homeScore != null
                                         ? `${pred.match.homeScore} – ${pred.match.awayScore}`
                                         : '—'}
                                 </p>
-                                <p className={`text-sm font-black ${pred.points != null && pred.points > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
+                                <p className={`hidden md:block text-sm font-black ${pred.points != null && pred.points > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
                                     {pred.points ?? '—'}
                                 </p>
                             </div>

@@ -33,7 +33,7 @@ const AdminStatCard: React.FC<AdminStatCardProps> = ({
                     <Icon size={16} className={colors.icon} />
                 </div>
             </div>
-            <p className={`text-2xl font-black ${colors.value}`}>{value}</p>
+            <p className={`text-xl lg:text-2xl font-black ${colors.value}`}>{value}</p>
             {trend && <p className="text-[11px] text-slate-400 mt-1">{trend}</p>}
         </div>
     );

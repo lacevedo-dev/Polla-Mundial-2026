@@ -67,9 +67,9 @@ const AdminAffiliations: React.FC = () => {
 
             {/* Table */}
             <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="grid grid-cols-[2fr_1fr_1fr] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="grid grid-cols-[2fr_auto] md:grid-cols-[2fr_1fr_1fr] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Usuario</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Plan Actual</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Plan Actual</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Cambiar Plan</p>
                 </div>
                 {isLoading ? (
@@ -79,7 +79,7 @@ const AdminAffiliations: React.FC = () => {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {affiliations.map((user) => (
-                            <div key={user.id} className="grid grid-cols-[2fr_1fr_1fr] gap-4 px-5 py-3.5 items-center">
+                            <div key={user.id} className="grid grid-cols-[2fr_auto] md:grid-cols-[2fr_1fr_1fr] gap-4 px-5 py-3.5 items-center">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <img
                                         src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=e2e8f0&color=64748b`}
@@ -91,14 +91,14 @@ const AdminAffiliations: React.FC = () => {
                                         <p className="text-xs text-slate-400 truncate">{user.email}</p>
                                     </div>
                                 </div>
-                                <StatusBadge status={user.plan} size="md" />
+                                <div className="hidden md:block"><StatusBadge status={user.plan} size="md" /></div>
                                 <div>
                                     {editingId === user.id ? (
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             <select
                                                 value={editingPlan}
                                                 onChange={(e) => setEditingPlan(e.target.value)}
-                                                className="flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                                className="w-full rounded-xl border border-slate-200 px-2 py-1.5 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                                             >
                                                 {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
                                             </select>

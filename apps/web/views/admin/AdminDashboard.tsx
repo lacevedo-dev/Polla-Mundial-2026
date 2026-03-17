@@ -169,9 +169,9 @@ const AdminDashboard: React.FC = () => {
                     <a
                         key={action.href}
                         href={action.href}
-                        className={`rounded-2xl border p-4 flex items-center gap-3 font-bold text-sm transition-all hover:shadow-sm ${action.color}`}
+                        className={`rounded-2xl border p-4 flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 font-bold text-xs sm:text-sm text-center sm:text-left transition-all hover:shadow-sm ${action.color}`}
                     >
-                        <action.icon size={18} />
+                        <action.icon size={18} className="shrink-0" />
                         {action.label}
                     </a>
                 ))}

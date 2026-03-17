@@ -65,12 +65,12 @@ const AdminLeagueDetail: React.FC = () => {
             </div>
 
             <TabsPrimitive.Root defaultValue="info">
-                <TabsPrimitive.List className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-fit">
+                <TabsPrimitive.List className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-full sm:w-fit">
                     {['info', 'members'].map((tab) => (
                         <TabsPrimitive.Trigger
                             key={tab}
                             value={tab}
-                            className="px-4 py-2 text-sm font-bold rounded-lg text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all capitalize"
+                            className="flex-1 sm:flex-none text-center px-4 py-2 text-sm font-bold rounded-lg text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all capitalize"
                         >
                             {tab === 'info' ? 'Información' : 'Miembros'}
                         </TabsPrimitive.Trigger>
@@ -127,15 +127,15 @@ const AdminLeagueDetail: React.FC = () => {
 
                 <TabsPrimitive.Content value="members">
                     <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
-                        <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                        <div className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Miembro</p>
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Rol</p>
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
+                            <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acción</p>
                         </div>
                         <div className="divide-y divide-slate-100">
                             {members.map((member) => (
-                                <div key={member.id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 items-center">
+                                <div key={member.id} className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 items-center">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <img
                                             src={member.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.name)}&background=e2e8f0&color=64748b`}
@@ -148,7 +148,7 @@ const AdminLeagueDetail: React.FC = () => {
                                         </div>
                                     </div>
                                     <StatusBadge status={member.role} />
-                                    <StatusBadge status={member.status} />
+                                    <div className="hidden md:block"><StatusBadge status={member.status} /></div>
                                     <button
                                         onClick={() => setConfirmBan({ userId: member.user.id, name: member.user.name })}
                                         className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"

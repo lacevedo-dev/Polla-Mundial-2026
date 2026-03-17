@@ -109,7 +109,7 @@ const CreateMatchDialog: React.FC<{
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
             <DialogPrimitive.Portal>
                 <DialogPrimitive.Overlay className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" />
-                <DialogPrimitive.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white rounded-[1.75rem] shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+                <DialogPrimitive.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg mx-4 bg-white rounded-[1.75rem] shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
                     <DialogPrimitive.Title className="font-black text-lg text-slate-900 mb-5">Crear Partido</DialogPrimitive.Title>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
@@ -211,14 +211,14 @@ const AdminMatches: React.FC = () => {
 
     return (
         <div className="space-y-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">Partidos</h1>
                     <p className="text-sm text-slate-500 mt-1">{total.toLocaleString()} partidos</p>
                 </div>
                 <button
                     onClick={() => setShowCreate(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-sm hover:bg-amber-500 transition-all"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 text-slate-950 font-bold rounded-xl text-sm hover:bg-amber-500 transition-all w-full sm:w-auto"
                 >
                     <Plus size={16} />
                     Nuevo Partido
@@ -253,10 +253,10 @@ const AdminMatches: React.FC = () => {
 
             {/* Table */}
             <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="grid grid-cols-[2fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Partido</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Resultado</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Resultado</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acciones</p>
                 </div>
                 {isLoading ? (
@@ -266,17 +266,17 @@ const AdminMatches: React.FC = () => {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {matches.map((match) => (
-                            <div key={match.id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3.5 items-center hover:bg-slate-50 transition-colors">
+                            <div key={match.id} className="grid grid-cols-[2fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3.5 items-center hover:bg-slate-50 transition-colors">
                                 <div>
                                     <p className="text-sm font-bold text-slate-800">
                                         {match.homeTeam.name} <span className="text-slate-400 font-normal">vs</span> {match.awayTeam.name}
                                     </p>
                                     <p className="text-xs text-slate-400">{formatDate(match.matchDate)} — {match.phase}</p>
                                 </div>
-                                <p className="text-sm font-black text-slate-700">
+                                <p className="hidden md:block text-sm font-black text-slate-700">
                                     {match.homeScore != null ? `${match.homeScore} – ${match.awayScore}` : '– – –'}
                                 </p>
-                                <StatusBadge status={match.status} />
+                                <div className="hidden md:block"><StatusBadge status={match.status} /></div>
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => setScoreMatch(match)}

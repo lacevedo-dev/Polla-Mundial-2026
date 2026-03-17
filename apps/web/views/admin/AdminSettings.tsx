@@ -253,7 +253,7 @@ const AdminSettings: React.FC = () => {
                         <p>• Cambiar el límite de un plan <span className="font-bold">resetea automáticamente</span> los créditos de esos usuarios (próxima vez que carguen la app).</p>
                         <p>• El botón de abajo resetea todos los créditos sin importar el plan.</p>
                     </div>
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-1 border-t border-slate-200">
                         <div>
                             {lastReset && (
                                 <p className="text-[9px] text-slate-400">
@@ -264,7 +264,7 @@ const AdminSettings: React.FC = () => {
                         <button
                             onClick={handleResetCredits}
                             disabled={resetStatus === 'resetting'}
-                            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all disabled:opacity-50 ${
+                            className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all disabled:opacity-50 w-full sm:w-auto ${
                                 resetStatus === 'done' ? 'bg-lime-400 text-slate-900' :
                                 resetStatus === 'error' ? 'bg-rose-100 text-rose-700' :
                                 'bg-amber-400 text-slate-900 hover:bg-amber-300'
@@ -309,7 +309,7 @@ const AdminSettings: React.FC = () => {
                 ) : (
                     <div className="space-y-4">
                         {/* Provider + Model row */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                                     Proveedor

@@ -78,12 +78,6 @@ const INITIAL_GROUPS: SimulatorGroup[] = [
     },
 ];
 
-const MOCK_STANDINGS = [
-    { pos: 1, team: 'México', iso: 'mx', pj: 2, dg: 4, pts: 6 },
-    { pos: 2, team: 'Dinamarca', iso: 'dk', pj: 2, dg: 2, pts: 4 },
-    { pos: 3, team: 'Corea del Sur', iso: 'kr', pj: 2, dg: -2, pts: 1 },
-    { pos: 4, team: 'Sudáfrica', iso: 'za', pj: 2, dg: -4, pts: 0 },
-];
 
 function buildDrafts(matches: MatchViewModel[]): DraftMap {
     return Object.fromEntries(
@@ -377,6 +371,32 @@ const Predictions: React.FC = () => {
         return openMatch?.id ?? null;
     }, [matches]);
 
+    const groupStandings = React.useMemo(() => {
+        if (!activeGroupModal) return [];
+        const groupMatches = matches.filter(
+            (m) => m.group === activeGroupModal && m.status === 'finished' && m.result,
+        );
+        const table: Record<string, { team: string; flag: string; pj: number; gf: number; gc: number; pts: number }> = {};
+        const row = (team: string, flag: string) => {
+            if (!table[team]) table[team] = { team, flag, pj: 0, gf: 0, gc: 0, pts: 0 };
+            return table[team];
+        };
+        for (const m of groupMatches) {
+            const h = row(m.homeTeam, m.homeFlag);
+            const a = row(m.awayTeam, m.awayFlag);
+            const { home: hg, away: ag } = m.result!;
+            h.pj++; a.pj++;
+            h.gf += hg; h.gc += ag;
+            a.gf += ag; a.gc += hg;
+            if (hg > ag) { h.pts += 3; }
+            else if (hg < ag) { a.pts += 3; }
+            else { h.pts += 1; a.pts += 1; }
+        }
+        return Object.values(table)
+            .sort((a, b) => b.pts - a.pts || (b.gf - b.gc) - (a.gf - a.gc) || b.gf - a.gf)
+            .map((r, i) => ({ ...r, pos: i + 1, dg: r.gf - r.gc }));
+    }, [activeGroupModal, matches]);
+
     const savedCount = React.useMemo(() => matches.filter((match) => match.saved).length, [matches]);
     const openCount = React.useMemo(
         () => matches.filter((match) => match.status === 'open' || match.status === 'live').length,
@@ -665,7 +685,9 @@ const Predictions: React.FC = () => {
                                                     onClick={() => setActiveGroupModal(dateMatches[0].group ?? null)}
                                                     className="flex items-center gap-0.5 text-[10px] font-black uppercase tracking-wider text-lime-600 hover:text-lime-700"
                                                 >
-                                                    Ver {dateMatches[0].group} <ChevronRight className="h-3 w-3" />
+                                                    <span className="hidden sm:inline">Ver Grupo </span>
+                                                    <span className="sm:hidden">Ver </span>
+                                                    {dateMatches[0].group} <ChevronRight className="h-3 w-3" />
                                                 </button>
                                             ) : null}
                                         </div>
@@ -1349,13 +1371,13 @@ const Predictions: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {MOCK_STANDINGS.map((row) => (
-                                    <tr key={row.pos}>
+                                {groupStandings.length > 0 ? groupStandings.map((row) => (
+                                    <tr key={row.team}>
                                         <td className="py-3 font-bold text-slate-500">{row.pos}</td>
                                         <td className="py-3">
                                             <div className="flex items-center gap-2">
                                                 <img
-                                                    src={`https://flagcdn.com/w40/${row.iso}.png`}
+                                                    src={row.flag}
                                                     alt={row.team}
                                                     className="h-4 w-6 rounded-sm border border-slate-200 object-cover"
                                                 />
@@ -1366,7 +1388,13 @@ const Predictions: React.FC = () => {
                                         <td className="py-3 text-center text-slate-500">{row.dg > 0 ? `+${row.dg}` : row.dg}</td>
                                         <td className="py-3 text-center font-black text-slate-900">{row.pts}</td>
                                     </tr>
-                                ))}
+                                )) : (
+                                    <tr>
+                                        <td colSpan={5} className="py-6 text-center text-xs text-slate-400">
+                                            Sin partidos finalizados en este grupo
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

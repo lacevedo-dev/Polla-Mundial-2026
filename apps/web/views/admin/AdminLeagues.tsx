@@ -46,7 +46,7 @@ const AdminLeagues: React.FC = () => {
                             Buscar
                         </button>
                     </form>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <div className="relative">
                             <select
                                 value={filters.status ?? ''}
@@ -75,11 +75,11 @@ const AdminLeagues: React.FC = () => {
 
             {/* Table */}
             <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="grid grid-cols-[2fr_1fr_1fr_80px_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_80px_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Polla</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Plan</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Miembros</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
+                    <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Miembros</p>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Ver</p>
                 </div>
 
@@ -90,14 +90,14 @@ const AdminLeagues: React.FC = () => {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {leagues.map((league) => (
-                            <div key={league.id} className="grid grid-cols-[2fr_1fr_1fr_80px_auto] gap-4 px-5 py-3.5 items-center hover:bg-slate-50 transition-colors">
+                            <div key={league.id} className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_80px_auto] gap-4 px-5 py-3.5 items-center hover:bg-slate-50 transition-colors">
                                 <div className="min-w-0">
                                     <p className="text-sm font-bold text-slate-800 truncate">{league.name}</p>
                                     <p className="text-xs text-slate-400 font-mono truncate">{league.code}</p>
                                 </div>
                                 <StatusBadge status={league.plan} />
-                                <StatusBadge status={league.status} />
-                                <p className="text-sm font-bold text-slate-600">{league._count?.members ?? 0}</p>
+                                <div className="hidden md:block"><StatusBadge status={league.status} /></div>
+                                <p className="hidden md:block text-sm font-bold text-slate-600">{league._count?.members ?? 0}</p>
                                 <button
                                     onClick={() => navigate(`/admin/leagues/${league.id}`)}
                                     className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-all"

@@ -48,8 +48,8 @@ const PlanCard: React.FC<{
     const featureBgClass = isGold ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-700';
 
     const cardClasses = isGold
-        ? 'p-10 rounded-[3rem] bg-slate-900 text-white shadow-2xl scale-105 relative overflow-hidden space-y-6'
-        : 'p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6 shadow-sm';
+        ? 'p-6 lg:p-10 rounded-[3rem] bg-slate-900 text-white shadow-2xl lg:scale-105 relative overflow-hidden space-y-6'
+        : 'p-6 lg:p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6 shadow-sm';
 
     return (
         <div className={cardClasses}>
@@ -146,7 +146,7 @@ const PlanCard: React.FC<{
                             <span className={`flex-1 text-sm font-bold ${featureTextColor}`}>{f}</span>
                             <button
                                 onClick={() => removeFeature(i)}
-                                className={`w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all ${isGold ? 'text-slate-500 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
+                                className={`w-6 h-6 flex items-center justify-center rounded-lg opacity-40 sm:opacity-0 sm:group-hover:opacity-100 transition-all ${isGold ? 'text-slate-500 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
                             >
                                 <Trash2 size={12} />
                             </button>
