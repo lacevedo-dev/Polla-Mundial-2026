@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useConfigStore } from '../stores/config.store';
+import { useAuthStore } from '../stores/auth.store';
 
 type DraftMap = Record<string, { home: string; away: string }>;
 type PhaseFilter = 'ALL' | 'GROUP' | 'KNOCKOUT';
@@ -164,11 +165,24 @@ function getSiCredits(plan: string, cap: number): number {
 function consumeSiCredit(plan: string, cap: number): number {
     try {
         const next = Math.max(0, getSiCredits(plan, cap) - 1);
-        localStorage.setItem(getSiCreditKey(plan), JSON.stringify({ credits: next, cap }));
+        localStorage.setItem(getSiCreditKey(plan), JSON.stringify({ credits: next, cap, storedAt: new Date().toISOString() }));
         return next;
     } catch {
         return 0;
     }
+}
+
+function clearSiCreditsIfReset(plan: string, resetAt: string | null): void {
+    if (!resetAt) return;
+    try {
+        const stored = localStorage.getItem(getSiCreditKey(plan));
+        if (!stored) return;
+        const parsed = JSON.parse(stored) as { storedAt?: string };
+        const storedAt = parsed.storedAt ?? '1970-01-01T00:00:00.000Z';
+        if (resetAt > storedAt) {
+            localStorage.removeItem(getSiCreditKey(plan));
+        }
+    } catch { /* ignore */ }
 }
 
 // Session-level cache for AI insights — avoids re-fetching and re-consuming credits
@@ -268,6 +282,7 @@ function getStatusBadge(status: MatchViewModel['status']) {
 
 const Predictions: React.FC = () => {
     const navigate = useNavigate();
+    const { user } = useAuthStore();
     const activeLeague = useLeagueStore((state) => state.activeLeague);
     const myLeagues = useLeagueStore((state) => state.myLeagues);
     const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
@@ -278,6 +293,7 @@ const Predictions: React.FC = () => {
     const savePrediction = usePredictionStore((state) => state.savePrediction);
     const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
     const getRemoteSiCredits = useConfigStore((state) => state.getSiCredits);
+    const creditsResetAt = useConfigStore((state) => state.creditsResetAt);
 
     const [drafts, setDrafts] = React.useState<DraftMap>({});
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -288,8 +304,13 @@ const Predictions: React.FC = () => {
     const [insightsLocked, setInsightsLocked] = React.useState(false);
     const [insightsLoading, setInsightsLoading] = React.useState(false);
     const [insightsData, setInsightsData] = React.useState<Record<string, object>>({});
+    // Plan for credits: user's own subscription plan takes priority over league plan
+    const resolvedPlan = React.useMemo(() =>
+        (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase(),
+    [user?.plan, activeLeague?.settings?.plan]);
+
     const [siCredits, setSiCredits] = React.useState<number>(() => {
-        const plan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
+        const plan = (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
         const cap = SI_PLAN_CREDITS_FALLBACK[plan] ?? SI_PLAN_CREDITS_FALLBACK['FREE'];
         return getSiCredits(plan, cap);
     });
@@ -326,14 +347,14 @@ const Predictions: React.FC = () => {
         setDrafts(buildDrafts(matches));
     }, [matches]);
 
-    // Sync credits when active league or remote config changes
+    // Sync credits when user plan, active league, remote config, or global reset changes
     React.useEffect(() => {
-        const plan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
-        const cap = getRemoteSiCredits(plan);
-        setSiCredits(getSiCredits(plan, cap));
+        clearSiCreditsIfReset(resolvedPlan, creditsResetAt);
+        const cap = getRemoteSiCredits(resolvedPlan);
+        setSiCredits(getSiCredits(resolvedPlan, cap));
         setAnalysisMatchId(null);
         setInsightsLocked(false);
-    }, [activeLeague?.settings?.plan, getRemoteSiCredits]);
+    }, [resolvedPlan, getRemoteSiCredits, creditsResetAt]);
 
     const filteredMatches = React.useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -848,7 +869,7 @@ const Predictions: React.FC = () => {
                                                                 return;
                                                             }
 
-                                                            const leaguePlan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
+                                                            const leaguePlan = resolvedPlan;
                                                             const cap = getRemoteSiCredits(leaguePlan);
 
                                                             // Check sessionStorage cache first — no credit consumed
@@ -946,7 +967,7 @@ const Predictions: React.FC = () => {
                                             </div>
 
                                             {isAnalysisOpen ? (() => {
-                                                const leaguePlan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
+                                                const leaguePlan = resolvedPlan;
                                                 const planCap = getRemoteSiCredits(leaguePlan);
                                                 const cachedData = insightsData[match.id] ?? getCachedInsights(match.id) ?? null;
 

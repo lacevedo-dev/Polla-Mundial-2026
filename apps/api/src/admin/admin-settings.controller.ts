@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -31,6 +31,14 @@ export class AdminSettingsController {
             ? `${'*'.repeat(value.apiKey.length - 4)}${value.apiKey.slice(-4)}`
             : '';
         return { ...value, apiKey };
+    }
+
+    @Post('credits/reset')
+    @ApiOperation({ summary: 'Reset all users AI credits globally' })
+    async resetAllCredits() {
+        const resetAt = new Date().toISOString();
+        await this.adminService.setSystemConfig('si_credits_reset', { resetAt });
+        return { ok: true, resetAt };
     }
 
     @Patch('ai')

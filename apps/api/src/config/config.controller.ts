@@ -20,9 +20,9 @@ export class ConfigController {
      */
     @Get('plans')
     @ApiOperation({ summary: 'Get public plan configuration (credits, etc.)' })
-    async getPlanConfig(): Promise<Record<string, { siCredits: number }>> {
+    async getPlanConfig(): Promise<Record<string, unknown>> {
         const configs = await this.prisma.systemConfig.findMany({
-            where: { key: { in: ['plan:FREE', 'plan:GOLD', 'plan:DIAMOND'] } },
+            where: { key: { in: ['plan:FREE', 'plan:GOLD', 'plan:DIAMOND', 'si_credits_reset'] } },
         });
 
         const result: Record<string, { siCredits: number }> = {};
@@ -38,6 +38,9 @@ export class ConfigController {
             };
         }
 
-        return result;
+        const resetRecord = configs.find((c) => c.key === 'si_credits_reset');
+        const creditsResetAt = (resetRecord?.value as Record<string, unknown> | null)?.resetAt as string | null ?? null;
+
+        return { ...result, _meta: { creditsResetAt } };
     }
 }

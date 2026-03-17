@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, Layers, Settings, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth.store';
 import { request } from '../../api';
 
@@ -64,6 +64,8 @@ const AdminSettings: React.FC = () => {
     const [aiSaving, setAiSaving] = React.useState(false);
     const [aiStatus, setAiStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
     const [showApiKey, setShowApiKey] = React.useState(false);
+    const [resetStatus, setResetStatus] = React.useState<'idle' | 'resetting' | 'done' | 'error'>('idle');
+    const [lastReset, setLastReset] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         setAiLoading(true);
@@ -78,6 +80,19 @@ const AdminSettings: React.FC = () => {
             .catch(() => {})
             .finally(() => setAiLoading(false));
     }, []);
+
+    const handleResetCredits = async () => {
+        setResetStatus('resetting');
+        try {
+            const res = await request<{ ok: boolean; resetAt: string }>('/admin/settings/credits/reset', { method: 'POST' });
+            setLastReset(res.resetAt);
+            setResetStatus('done');
+            setTimeout(() => setResetStatus('idle'), 3000);
+        } catch {
+            setResetStatus('error');
+            setTimeout(() => setResetStatus('idle'), 3000);
+        }
+    };
 
     const handleSaveAi = async () => {
         setAiSaving(true);
@@ -174,6 +189,52 @@ const AdminSettings: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            {/* Credits Management */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-9 h-9 bg-lime-100 rounded-xl flex items-center justify-center">
+                        <BarChart3 size={18} className="text-lime-700" />
+                    </div>
+                    <div>
+                        <p className="font-black text-slate-900">Gestión de Créditos IA</p>
+                        <p className="text-xs text-slate-400">Controla los créditos Smart Insights de todos los usuarios</p>
+                    </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 space-y-3">
+                    <div className="text-xs text-slate-600 space-y-1">
+                        <p className="font-bold text-slate-800">¿Cómo funcionan los créditos?</p>
+                        <p>• Cada usuario consume un crédito al ver el análisis IA de un partido.</p>
+                        <p>• Los límites por plan se configuran en <span className="font-bold">Admin → Planes</span>.</p>
+                        <p>• Cambiar el límite de un plan <span className="font-bold">resetea automáticamente</span> los créditos de esos usuarios (próxima vez que carguen la app).</p>
+                        <p>• El botón de abajo resetea todos los créditos sin importar el plan.</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                        <div>
+                            {lastReset && (
+                                <p className="text-[9px] text-slate-400">
+                                    Último reset: {new Date(lastReset).toLocaleString('es-CO')}
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            onClick={handleResetCredits}
+                            disabled={resetStatus === 'resetting'}
+                            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all disabled:opacity-50 ${
+                                resetStatus === 'done' ? 'bg-lime-400 text-slate-900' :
+                                resetStatus === 'error' ? 'bg-rose-100 text-rose-700' :
+                                'bg-amber-400 text-slate-900 hover:bg-amber-300'
+                            }`}
+                        >
+                            <RefreshCw size={13} className={resetStatus === 'resetting' ? 'animate-spin' : ''} />
+                            {resetStatus === 'resetting' ? 'Reseteando...' :
+                             resetStatus === 'done' ? 'Créditos reseteados' :
+                             resetStatus === 'error' ? 'Error al resetear' :
+                             'Resetear todos los créditos'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
