@@ -188,7 +188,7 @@ export class InsightsService {
             },
             body: JSON.stringify({
                 model: config.model,
-                max_tokens: 800,
+                max_completion_tokens: 800,
                 messages: [
                     { role: 'system', content: config.systemPrompt },
                     { role: 'user', content: userMessage },
