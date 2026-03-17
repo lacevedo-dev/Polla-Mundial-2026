@@ -11,18 +11,21 @@ const PLAN_DEFAULTS = {
         maxParticipants: 10,
         features: ['Predicciones básicas', 'Clasificación', 'Acceso a ligas públicas'],
         price: 0,
+        siCredits: 3,
     },
     GOLD: {
         maxLeagues: 5,
         maxParticipants: 50,
         features: ['Todo lo de FREE', 'Múltiples ligas', 'Estadísticas avanzadas', 'Soporte prioritario'],
         price: 9900,
+        siCredits: 30,
     },
     DIAMOND: {
         maxLeagues: -1,
         maxParticipants: -1,
         features: ['Todo lo de GOLD', 'Ligas ilimitadas', 'Participantes ilimitados', 'Personalización avanzada', 'API access'],
         price: 29900,
+        siCredits: 100,
     },
 };
 

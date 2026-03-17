@@ -6,6 +6,7 @@ export interface PlanConfig {
     maxParticipants: number;
     features: string[];
     price: number;
+    siCredits: number;
 }
 
 export interface AffiliationUser {

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, Layers, Settings, BarChart3 } from 'lucide-react';
+import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, Layers, Settings, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth.store';
+import { request } from '../../api';
 
 const PERMISSIONS_MATRIX = [
     { role: 'USER', label: 'Usuario', color: 'text-slate-600', permissions: {
@@ -29,8 +30,70 @@ const PERMISSION_LABELS: Record<string, { label: string; icon: React.ElementType
     adminPlans: { label: 'Gestión Planes', icon: CreditCard },
 };
 
+const DEFAULT_PROMPT = `Eres un analista experto del Mundial FIFA 2026.
+Dado un partido de fútbol, devuelve SOLO un objeto JSON válido con esta estructura exacta:
+{
+  "homeWin": <número entero 0-100>,
+  "draw": <número entero 0-100>,
+  "awayWin": <número entero 0-100>,
+  "homeForm": ["W","D","L","W","W"],
+  "awayForm": ["L","W","D","W","L"],
+  "scores": ["2-1","1-1","0-2"],
+  "smartPick": "<nombre del equipo o la palabra Empate>",
+  "insight": "<análisis breve en español, máximo 120 caracteres>"
+}
+Reglas: homeWin + draw + awayWin = 100. scores tiene 3 elementos [más_probable, equilibrado, sorpresa].
+Responde ÚNICAMENTE con el JSON.`;
+
+interface AiConfigForm {
+    provider: 'anthropic' | 'openai';
+    apiKey: string;
+    model: string;
+    systemPrompt: string;
+}
+
 const AdminSettings: React.FC = () => {
     const { user } = useAuthStore();
+    const [aiConfig, setAiConfig] = React.useState<AiConfigForm>({
+        provider: 'anthropic',
+        apiKey: '',
+        model: 'claude-haiku-4-5-20251001',
+        systemPrompt: DEFAULT_PROMPT,
+    });
+    const [aiLoading, setAiLoading] = React.useState(false);
+    const [aiSaving, setAiSaving] = React.useState(false);
+    const [aiStatus, setAiStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
+    const [showApiKey, setShowApiKey] = React.useState(false);
+
+    React.useEffect(() => {
+        setAiLoading(true);
+        request<AiConfigForm>('/admin/settings/ai')
+            .then((data) => {
+                setAiConfig((prev) => ({
+                    ...prev,
+                    ...data,
+                    systemPrompt: data.systemPrompt || DEFAULT_PROMPT,
+                }));
+            })
+            .catch(() => {})
+            .finally(() => setAiLoading(false));
+    }, []);
+
+    const handleSaveAi = async () => {
+        setAiSaving(true);
+        setAiStatus('idle');
+        try {
+            await request('/admin/settings/ai', {
+                method: 'PATCH',
+                body: JSON.stringify(aiConfig),
+            });
+            setAiStatus('saved');
+        } catch {
+            setAiStatus('error');
+        } finally {
+            setAiSaving(false);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -112,6 +175,133 @@ const AdminSettings: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* AI Configuration */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100">
+                            <Brain size={18} className="text-purple-600" />
+                        </div>
+                        <div>
+                            <p className="font-black text-slate-900">Smart Insights — Configuración IA</p>
+                            <p className="text-xs text-slate-400">API key y prompt para el análisis de partidos</p>
+                        </div>
+                    </div>
+                    {aiStatus === 'saved' && (
+                        <span className="flex items-center gap-1.5 text-xs font-black text-lime-600">
+                            <CheckCircle2 size={14} /> Guardado
+                        </span>
+                    )}
+                    {aiStatus === 'error' && (
+                        <span className="flex items-center gap-1.5 text-xs font-black text-rose-600">
+                            <AlertCircle size={14} /> Error al guardar
+                        </span>
+                    )}
+                </div>
+
+                {aiLoading ? (
+                    <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
+                ) : (
+                    <div className="space-y-4">
+                        {/* Provider + Model row */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Proveedor
+                                </label>
+                                <select
+                                    value={aiConfig.provider}
+                                    onChange={(e) => {
+                                        const p = e.target.value as AiConfigForm['provider'];
+                                        setAiConfig((prev) => ({
+                                            ...prev,
+                                            provider: p,
+                                            model: p === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001',
+                                        }));
+                                    }}
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                >
+                                    <option value="anthropic">Anthropic (Claude)</option>
+                                    <option value="openai">OpenAI (GPT)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Modelo
+                                </label>
+                                <input
+                                    type="text"
+                                    value={aiConfig.model}
+                                    onChange={(e) => setAiConfig((prev) => ({ ...prev, model: e.target.value }))}
+                                    placeholder={aiConfig.provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001'}
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                />
+                            </div>
+                        </div>
+
+                        {/* API Key */}
+                        <div>
+                            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                API Key
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type={showApiKey ? 'text' : 'password'}
+                                    value={aiConfig.apiKey}
+                                    onChange={(e) => setAiConfig((prev) => ({ ...prev, apiKey: e.target.value }))}
+                                    placeholder={aiConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-10 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowApiKey((v) => !v)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    {showApiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                            </div>
+                            <p className="mt-1 text-[9px] text-slate-400">
+                                La key se almacena cifrada. Al editar, ingresa la nueva key completa.
+                            </p>
+                        </div>
+
+                        {/* System Prompt */}
+                        <div>
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    System Prompt
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setAiConfig((prev) => ({ ...prev, systemPrompt: DEFAULT_PROMPT }))}
+                                    className="text-[9px] font-black uppercase tracking-wider text-amber-600 hover:underline"
+                                >
+                                    Restaurar predeterminado
+                                </button>
+                            </div>
+                            <textarea
+                                rows={8}
+                                value={aiConfig.systemPrompt}
+                                onChange={(e) => setAiConfig((prev) => ({ ...prev, systemPrompt: e.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs leading-relaxed text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                            <p className="mt-1 text-[9px] text-slate-400">
+                                El prompt instruye al modelo qué estructura JSON retornar. Modifícalo con precaución.
+                            </p>
+                        </div>
+
+                        <button
+                            onClick={handleSaveAi}
+                            disabled={aiSaving}
+                            className="flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-amber-300 disabled:opacity-50"
+                        >
+                            <Save size={14} />
+                            {aiSaving ? 'Guardando...' : 'Guardar configuración IA'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* JWT Info */}

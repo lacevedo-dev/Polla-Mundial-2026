@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut, Shield } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
+import { useConfigStore } from '../stores/config.store';
 import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
 
 const primaryNavItems = [
@@ -29,6 +30,7 @@ const AppLayout: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const navigate = useNavigate();
     const { user, logout, isSuperAdmin } = useAuthStore();
+    const fetchPlanConfig = useConfigStore((state) => state.fetchPlanConfig);
 
     React.useEffect(() => {
         const token = localStorage.getItem('token');
@@ -36,6 +38,10 @@ const AppLayout: React.FC = () => {
             navigate('/login');
         }
     }, [navigate]);
+
+    React.useEffect(() => {
+        void fetchPlanConfig();
+    }, [fetchPlanConfig]);
 
     const handleLogout = () => {
         logout();

@@ -16,6 +16,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AdminModule } from './admin/admin.module';
+import { ConfigModule } from './config/config.module';
+import { InsightsModule } from './insights/insights.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { AdminModule } from './admin/admin.module';
     }),
     AuthModule,
     AdminModule,
+    ConfigModule,
+    InsightsModule,
     UsersModule,
     LeaguesModule,
     PredictionsModule,

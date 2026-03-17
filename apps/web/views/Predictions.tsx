@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
+import { useConfigStore } from '../stores/config.store';
 
 type DraftMap = Record<string, { home: string; away: string }>;
 type PhaseFilter = 'ALL' | 'GROUP' | 'KNOCKOUT';
@@ -127,9 +128,9 @@ function summarizeCloseTime(matchDate: string): string {
     return `${totalMinutes}m`;
 }
 
-// Smart Insights credit caps per plan.
-// Adjust these values to control AI usage costs.
-const SI_PLAN_CREDITS: Record<string, number> = {
+// Smart Insights credit caps — fallback values used before config loads from /config/plans.
+// The admin configures actual values via the Admin Panel → Planes.
+const SI_PLAN_CREDITS_FALLBACK: Record<string, number> = {
     FREE: 3,
     GOLD: 30,
     DIAMOND: 100,
@@ -139,8 +140,7 @@ function getSiCreditKey(plan: string): string {
     return `polla_si_credits_${plan.toUpperCase()}`;
 }
 
-function getSiCredits(plan: string): number {
-    const cap = SI_PLAN_CREDITS[plan.toUpperCase()] ?? SI_PLAN_CREDITS['FREE'];
+function getSiCredits(plan: string, cap: number): number {
     try {
         const stored = localStorage.getItem(getSiCreditKey(plan));
         if (stored === null) return cap;
@@ -151,14 +151,35 @@ function getSiCredits(plan: string): number {
     }
 }
 
-function consumeSiCredit(plan: string): number {
+function consumeSiCredit(plan: string, cap: number): number {
     try {
-        const next = Math.max(0, getSiCredits(plan) - 1);
+        const next = Math.max(0, getSiCredits(plan, cap) - 1);
         localStorage.setItem(getSiCreditKey(plan), String(next));
         return next;
     } catch {
         return 0;
     }
+}
+
+// Session-level cache for AI insights — avoids re-fetching and re-consuming credits
+// when the user closes and reopens the panel for the same match within the same tab.
+function getInsightsCacheKey(matchId: string): string {
+    return `polla_insights_${matchId}`;
+}
+
+function getCachedInsights(matchId: string): object | null {
+    try {
+        const raw = sessionStorage.getItem(getInsightsCacheKey(matchId));
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function setCachedInsights(matchId: string, data: object): void {
+    try {
+        sessionStorage.setItem(getInsightsCacheKey(matchId), JSON.stringify(data));
+    } catch {}
 }
 
 function simpleHash(str: string): number {
@@ -245,6 +266,7 @@ const Predictions: React.FC = () => {
     const fetchLeagueMatches = usePredictionStore((state) => state.fetchLeagueMatches);
     const savePrediction = usePredictionStore((state) => state.savePrediction);
     const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
+    const getRemoteSiCredits = useConfigStore((state) => state.getSiCredits);
 
     const [drafts, setDrafts] = React.useState<DraftMap>({});
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -253,9 +275,12 @@ const Predictions: React.FC = () => {
     const [savingMatchId, setSavingMatchId] = React.useState<string | null>(null);
     const [analysisMatchId, setAnalysisMatchId] = React.useState<string | null>(null);
     const [insightsLocked, setInsightsLocked] = React.useState(false);
+    const [insightsLoading, setInsightsLoading] = React.useState(false);
+    const [insightsData, setInsightsData] = React.useState<Record<string, object>>({});
     const [siCredits, setSiCredits] = React.useState<number>(() => {
         const plan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
-        return getSiCredits(plan);
+        const cap = SI_PLAN_CREDITS_FALLBACK[plan] ?? SI_PLAN_CREDITS_FALLBACK['FREE'];
+        return getSiCredits(plan, cap);
     });
     const [predictionMode, setPredictionMode] = React.useState<'matches' | 'simulator'>('matches');
     const [simulatorTab, setSimulatorTab] = React.useState<'groups' | 'bracket'>('groups');
@@ -290,13 +315,14 @@ const Predictions: React.FC = () => {
         setDrafts(buildDrafts(matches));
     }, [matches]);
 
-    // Sync credits when active league changes (different plan tier)
+    // Sync credits when active league or remote config changes
     React.useEffect(() => {
         const plan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
-        setSiCredits(getSiCredits(plan));
+        const cap = getRemoteSiCredits(plan);
+        setSiCredits(getSiCredits(plan, cap));
         setAnalysisMatchId(null);
         setInsightsLocked(false);
-    }, [activeLeague?.settings?.plan]);
+    }, [activeLeague?.settings?.plan, getRemoteSiCredits]);
 
     const filteredMatches = React.useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -804,20 +830,61 @@ const Predictions: React.FC = () => {
                                                 <div className="flex items-center justify-between gap-2 xl:w-[220px] xl:justify-end">
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             if (isAnalysisOpen) {
                                                                 setAnalysisMatchId(null);
                                                                 setInsightsLocked(false);
                                                                 return;
                                                             }
+
                                                             const leaguePlan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
+                                                            const cap = getRemoteSiCredits(leaguePlan);
+
+                                                            // Check sessionStorage cache first — no credit consumed
+                                                            const cached = getCachedInsights(match.id) ?? insightsData[match.id];
+                                                            if (cached) {
+                                                                setAnalysisMatchId(match.id);
+                                                                setInsightsLocked(false);
+                                                                return;
+                                                            }
+
+                                                            // No cache → check credits
                                                             if (siCredits === 0) {
                                                                 setInsightsLocked(true);
-                                                            } else {
-                                                                setInsightsLocked(false);
-                                                                setSiCredits(consumeSiCredit(leaguePlan));
+                                                                setAnalysisMatchId(match.id);
+                                                                return;
                                                             }
+
+                                                            // Consume credit and fetch from AI
+                                                            setInsightsLocked(false);
                                                             setAnalysisMatchId(match.id);
+                                                            setInsightsLoading(true);
+                                                            try {
+                                                                const { request: apiRequest } = await import('../api');
+                                                                const result = await apiRequest<object>(
+                                                                    `/insights/match/${match.id}`,
+                                                                    {
+                                                                        method: 'POST',
+                                                                        body: JSON.stringify({
+                                                                            homeTeam: match.homeTeam,
+                                                                            awayTeam: match.awayTeam,
+                                                                            phase: match.phase,
+                                                                            group: match.group,
+                                                                        }),
+                                                                    },
+                                                                );
+                                                                setCachedInsights(match.id, result);
+                                                                setInsightsData((prev) => ({ ...prev, [match.id]: result }));
+                                                                setSiCredits(consumeSiCredit(leaguePlan, cap));
+                                                            } catch {
+                                                                // Fall back to deterministic generation
+                                                                const fallback = generateMatchInsights(match);
+                                                                setCachedInsights(match.id, fallback);
+                                                                setInsightsData((prev) => ({ ...prev, [match.id]: fallback }));
+                                                                setSiCredits(consumeSiCredit(leaguePlan, cap));
+                                                            } finally {
+                                                                setInsightsLoading(false);
+                                                            }
                                                         }}
                                                         className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                                                             isAnalysisOpen
@@ -869,7 +936,8 @@ const Predictions: React.FC = () => {
 
                                             {isAnalysisOpen ? (() => {
                                                 const leaguePlan = (activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
-                                                const planCap = SI_PLAN_CREDITS[leaguePlan] ?? SI_PLAN_CREDITS['FREE'];
+                                                const planCap = getRemoteSiCredits(leaguePlan);
+                                                const cachedData = insightsData[match.id] ?? getCachedInsights(match.id) ?? null;
 
                                                 // Lock screen — credits exhausted for this plan
                                                 if (insightsLocked) {
@@ -922,8 +990,24 @@ const Predictions: React.FC = () => {
                                                     );
                                                 }
 
-                                                // Full panel
-                                                const ins = generateMatchInsights(match);
+                                                // Loading state
+                                                if (insightsLoading && analysisMatchId === match.id) {
+                                                    return (
+                                                        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+                                                            <div className="flex items-center gap-2 bg-slate-900 px-4 py-3">
+                                                                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                                                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-400">Smart Insights • IA Powered</span>
+                                                            </div>
+                                                            <div className="flex flex-col items-center gap-3 bg-white px-6 py-8 text-center">
+                                                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-400" />
+                                                                <p className="text-xs font-bold text-slate-500">Analizando partido con IA...</p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                // Full panel — use AI data if available, else deterministic fallback
+                                                const ins = (cachedData ?? generateMatchInsights(match)) as ReturnType<typeof generateMatchInsights>;
                                                 const scoreStyles = [
                                                     'bg-lime-400 text-slate-900',
                                                     'bg-slate-700 text-white hover:bg-slate-600',
@@ -941,6 +1025,11 @@ const Predictions: React.FC = () => {
                                                         <div className="flex items-center gap-2 bg-slate-900 px-4 py-3">
                                                             <Sparkles className="h-3.5 w-3.5 text-amber-400" />
                                                             <span className="text-[9px] font-black uppercase tracking-[0.22em] text-amber-400">Smart Insights • IA Powered</span>
+                                                            {cachedData && (
+                                                                <span className="rounded-full bg-purple-500 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">
+                                                                    IA
+                                                                </span>
+                                                            )}
                                                             <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${planBadgeColor}`}>
                                                                 {siCredits}/{planCap} créditos
                                                             </span>

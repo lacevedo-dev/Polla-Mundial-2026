@@ -108,15 +108,32 @@ const PlanCard: React.FC<{
                         />
                     </div>
                 </div>
-                <div>
-                    <label className={`text-[10px] font-black uppercase tracking-[0.18em] block mb-1.5 ${labelColor}`}>Max Participantes</label>
-                    <input
-                        type="number"
-                        value={local.maxParticipants}
-                        onChange={(e) => update({ maxParticipants: Number(e.target.value) })}
-                        className={inputClasses}
-                    />
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className={`text-[10px] font-black uppercase tracking-[0.18em] block mb-1.5 ${labelColor}`}>Max Participantes</label>
+                        <input
+                            type="number"
+                            value={local.maxParticipants}
+                            onChange={(e) => update({ maxParticipants: Number(e.target.value) })}
+                            className={inputClasses}
+                        />
+                    </div>
+                    <div>
+                        <label className={`text-[10px] font-black uppercase tracking-[0.18em] block mb-1.5 ${labelColor}`}>
+                            Créditos IA
+                        </label>
+                        <input
+                            type="number"
+                            min={0}
+                            value={local.siCredits ?? 0}
+                            onChange={(e) => update({ siCredits: Number(e.target.value) })}
+                            className={inputClasses}
+                        />
+                    </div>
                 </div>
+                <p className={`-mt-1 text-[9px] ${isGold ? 'text-slate-500' : 'text-slate-400'}`}>
+                    * Créditos IA = análisis Smart Insights disponibles por período por usuario
+                </p>
             </div>
 
             {/* Features list */}
