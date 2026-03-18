@@ -617,7 +617,7 @@ const Dashboard: React.FC = () => {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => navigate('/create-league')}
+                                        onClick={() => navigate('/manage-payments')}
                                         className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-lime-400 text-[10px] font-black uppercase tracking-[0.2em] text-slate-950 hover:bg-lime-500 transition-colors"
                                     >
                                         <Coins size={14} /> Gestionar pagos

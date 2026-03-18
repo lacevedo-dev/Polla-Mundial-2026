@@ -1,1011 +1,1219 @@
-import React from 'react';
-import { Card, Button, Badge, Input, Checkbox } from '../components/UI';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import {
-    ArrowLeft,
-    Search,
-    CheckCircle2,
-    Clock,
-    Wallet,
-    MoreVertical,
-    Download,
-    AlertCircle,
-    MessageCircle,
-    Banknote,
-    PieChart,
-    ChevronDown,
-    Filter,
-    Check,
-    Send,
-    FileText,
-    X,
-    Smartphone,
-    Hash,
-    Landmark,
-    History,
-    Trash2,
-    User,
-    Mail,
-    MessageSquare,
-    Share2,
-    Eye,
-    Users,
-    Phone,
-    ExternalLink,
-    Calendar,
-    Bell,
-    Edit3,
-    Copy,
-    Sparkles,
-    Bot
+    ArrowLeft, Banknote, Bell, Bot, Check, ChevronDown, Copy, Download,
+    Filter, Hash, History, Landmark, Mail, MessageCircle, MessageSquare,
+    MoreVertical, PieChart, Search, Send, Share2, Smartphone, Sparkles,
+    Trash2, Wallet, X, CheckCircle2,
 } from 'lucide-react';
+import { Button, Input, Badge, Card, Checkbox } from '../components/UI';
+import { useLeagueStore } from '../stores/league.store';
 
-interface ManagePaymentsProps {
+/* ─── types ─────────────────────────────────────────────────────── */
+
+type PaymentStatus = 'paid' | 'pending' | 'review';
+type ReminderChannel = 'whatsapp' | 'email' | 'sms' | 'push';
+type TemplateKey = 'friendly' | 'formal' | 'urgent' | 'ai' | 'custom';
+
+interface PaymentConcept {
+    id: string;
+    label: string;
+    type: 'general' | 'phase' | 'round' | 'match';
+    amount: number;
+    date: string;
 }
 
-import { usePaymentStore, PAYMENT_CONCEPTS, PaymentStatus, UserPaymentData, Transaction, PaymentConcept } from '../stores/payment.store';
+interface UserPaymentData {
+    id: string;
+    name: string;
+    avatar?: string;
+    paymentStatus: Record<string, PaymentStatus>;
+}
 
+interface PaymentTransaction {
+    id: string;
+    userId: string;
+    conceptIds: string[];
+    amount: number;
+    date: string;
+    method: string;
+    reference?: string;
+    note?: string;
+}
+
+/* ─── constants ─────────────────────────────────────────────────── */
 
 const PAYMENT_METHODS = [
-    { id: 'Efectivo', label: 'Efectivo', icon: Banknote, color: 'text-lime-600' },
-    { id: 'Nequi', label: 'Nequi', icon: Smartphone, color: 'text-purple-600' },
-    { id: 'Daviplata', label: 'Daviplata', icon: Smartphone, color: 'text-rose-600' },
-    { id: 'Bancolombia', label: 'Bancolombia', icon: Landmark, color: 'text-slate-900' },
+    { id: 'Efectivo', label: 'Efectivo', Icon: Banknote, color: 'text-lime-600' },
+    { id: 'Nequi', label: 'Nequi', Icon: Smartphone, color: 'text-purple-600' },
+    { id: 'Daviplata', label: 'Daviplata', Icon: Smartphone, color: 'text-rose-600' },
+    { id: 'Bancolombia', label: 'Bancolombia', Icon: Landmark, color: 'text-slate-900' },
 ];
 
-
-const LEAGUE_INFO = {
-    name: 'LOS CRACKS DEL BARRIO',
-    plan: 'GOLD',
-    role: 'ADMIN'
+const CHANNEL_CONFIG: Record<ReminderChannel, { label: string; Icon: React.ElementType; color: string; bg: string; border: string }> = {
+    whatsapp: { label: 'WhatsApp', Icon: MessageCircle, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
+    email: { label: 'Email', Icon: Mail, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+    sms: { label: 'SMS', Icon: MessageSquare, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
+    push: { label: 'Push', Icon: Bell, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
 };
 
-// Advanced Reminder Types
-type ReminderChannel = 'whatsapp' | 'email' | 'sms' | 'push';
-type TemplateType = 'friendly' | 'formal' | 'urgent' | 'ai' | 'custom';
-
-const CHANNEL_CONFIG = {
-    whatsapp: { label: 'WhatsApp', icon: MessageCircle, color: 'text-green-600', bg: 'bg-green-100', border: 'border-green-200' },
-    email: { label: 'Email', icon: Mail, color: 'text-blue-600', bg: 'bg-blue-100', border: 'border-blue-200' },
-    sms: { label: 'SMS', icon: MessageSquare, color: 'text-amber-600', bg: 'bg-amber-100', border: 'border-amber-200' },
-    push: { label: 'Push', icon: Bell, color: 'text-purple-600', bg: 'bg-purple-100', border: 'border-purple-200' },
-};
-
-const TEMPLATES = {
+const TEMPLATES: Record<'friendly' | 'formal' | 'urgent', Record<ReminderChannel, string>> = {
     friendly: {
-        label: 'Amigable',
-        whatsapp: "Hola {nombre} 👋! Te recuerdo que tienes un saldo pendiente de {deuda} en la polla {liga}. Agradecemos tu pago para seguir jugando!",
-        email: "Hola {nombre},\n\nEsperamos que estés bien. Te escribimos para recordarte amablemente sobre tu saldo pendiente de {deuda} en {liga}.\n\n¡Gracias por participar!",
-        sms: "{nombre}, recuerda tu pago de {deuda} en {liga}. ¡No te quedes fuera!",
-        push: "👋 {nombre}, no olvides ponerte al día en {liga}."
+        whatsapp: 'Hola {nombre} 👋! Te recuerdo que tienes un saldo pendiente de {deuda} en la polla {liga}. ¡Gracias!',
+        email: 'Hola {nombre},\n\nTe escribimos para recordarte amablemente sobre tu saldo pendiente de {deuda} en {liga}.\n\n¡Gracias por participar!',
+        sms: '{nombre}, recuerda tu pago de {deuda} en {liga}. ¡No te quedes fuera!',
+        push: '👋 {nombre}, no olvides ponerte al día en {liga}.',
     },
     formal: {
-        label: 'Formal',
-        whatsapp: "Estimado(a) {nombre}. Le informamos un saldo vencido de {deuda} en la liga {liga}. Por favor regularizar su estado.",
-        email: "Estimado/a {nombre},\n\nLe notificamos que presenta un saldo pendiente de {deuda} correspondiente a la liga {liga}. Agradecemos realizar el pago a la brevedad posible.\n\nAtentamente,\nLa Administración.",
-        sms: "Aviso de Cobro: {nombre}, saldo pendiente {deuda} en {liga}. Regularice hoy.",
-        push: "Aviso: Saldo pendiente de {deuda} en {liga}."
+        whatsapp: 'Estimado(a) {nombre}. Le informamos un saldo vencido de {deuda} en la liga {liga}. Por favor regularizar su estado.',
+        email: 'Estimado/a {nombre},\n\nLe notificamos que presenta un saldo pendiente de {deuda} en la liga {liga}.\n\nAtentamente,\nLa Administración.',
+        sms: 'Aviso de Cobro: {nombre}, saldo pendiente {deuda} en {liga}. Regularice hoy.',
+        push: 'Aviso: Saldo pendiente de {deuda} en {liga}.',
     },
     urgent: {
-        label: 'Urgente',
-        whatsapp: "🚨 {nombre}, ÚLTIMO AVISO. Tu deuda de {deuda} en {liga} debe ser pagada hoy para evitar sanciones.",
-        email: "URGENTE: {nombre}, tu participación en {liga} está en riesgo.\n\nSaldo: {deuda}\n\nPor favor realiza el pago inmediatamente.",
-        sms: "URGENTE {nombre}: Paga {deuda} hoy en {liga} para evitar bloqueo.",
-        push: "🚨 {nombre}, tu pago de {deuda} en {liga} requiere atención inmediata."
-    }
+        whatsapp: '🚨 {nombre}, ÚLTIMO AVISO. Tu deuda de {deuda} en {liga} debe ser pagada hoy.',
+        email: 'URGENTE: {nombre}, tu participación en {liga} está en riesgo.\n\nSaldo: {deuda}\n\nRealiza el pago inmediatamente.',
+        sms: 'URGENTE {nombre}: Paga {deuda} hoy en {liga} para evitar bloqueo.',
+        push: '🚨 {nombre}, tu pago de {deuda} en {liga} requiere atención inmediata.',
+    },
 };
 
-const ManagePayments: React.FC<ManagePaymentsProps> = () => {
-    const navigate = useNavigate();
-    const [selectedConceptIds, setSelectedConceptIds] = React.useState<string[]>(PAYMENT_CONCEPTS.map(c => c.id));
-    const [isConceptMenuOpen, setIsConceptMenuOpen] = React.useState(false);
-    const { users, setUsers, transactions, setTransactions } = usePaymentStore();
-    const [filter, setFilter] = React.useState<'all' | 'debtors' | 'solvents' | 'review'>('all');
-    const [search, setSearch] = React.useState('');
+/* ─── localStorage helpers ──────────────────────────────────────── */
 
-    const [selectedUserIds, setSelectedUserIds] = React.useState<string[]>([]);
+function storageKey(leagueId: string, kind: 'concepts' | 'payments' | 'txs') {
+    return `mp_${kind}_${leagueId}`;
+}
 
-    const [paymentModal, setPaymentModal] = React.useState<{ isOpen: boolean, userId: string | null }>({ isOpen: false, userId: null });
-    const [historyModal, setHistoryModal] = React.useState<{ isOpen: boolean, userId: string | null }>({ isOpen: false, userId: null });
-    const [quickPayModal, setQuickPayModal] = React.useState<{ isOpen: boolean, userId: string | null, amount: number, method: string, reference: string, date: string }>({
-        isOpen: false, userId: null, amount: 0, method: 'Efectivo', reference: '', date: new Date().toISOString().split('T')[0]
-    });
-    const [bulkPayModal, setBulkPayModal] = React.useState<{ isOpen: boolean, totalAmount: number, userCount: number }>({ isOpen: false, totalAmount: 0, userCount: 0 });
+function loadFromStorage<T>(key: string, fallback: T): T {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+        return fallback;
+    }
+}
 
-    // Advanced Reminder Modal State
-    const [reminderModal, setReminderModal] = React.useState<{ isOpen: boolean, step: 1 | 2 }>({ isOpen: false, step: 1 });
-    const [userChannels, setUserChannels] = React.useState<Record<string, ReminderChannel[]>>({});
-    const [messageDrafts, setMessageDrafts] = React.useState<Record<ReminderChannel, string>>({
-        whatsapp: TEMPLATES.friendly.whatsapp,
-        email: TEMPLATES.friendly.email,
-        sms: TEMPLATES.friendly.sms,
-        push: TEMPLATES.friendly.push
-    });
-    // Track selected template per channel to highlight buttons
-    const [selectedTemplate, setSelectedTemplate] = React.useState<Record<ReminderChannel, TemplateType>>({
-        whatsapp: 'friendly',
-        email: 'friendly',
-        sms: 'friendly',
-        push: 'friendly'
-    });
-    const [activeTab, setActiveTab] = React.useState<ReminderChannel>('whatsapp');
-    const [isGeneratingAI, setIsGeneratingAI] = React.useState(false);
+function saveToStorage(key: string, value: unknown) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+}
 
-    const [openActionMenuId, setOpenActionMenuId] = React.useState<string | null>(null);
+function avatarUrl(name: string, avatar?: string) {
+    return avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=e2e8f0&color=64748b&size=40`;
+}
 
-    const [paymentForm, setPaymentForm] = React.useState({
-        selectedConcepts: [] as string[],
-        amount: 0,
+function fmtCurrency(n: number) {
+    return `$${n.toLocaleString('es-CO')}`;
+}
+
+/* ─── sub-components ────────────────────────────────────────────── */
+
+const MethodIcon: React.FC<{ method: string; size?: number }> = ({ method, size = 14 }) => {
+    const m = PAYMENT_METHODS.find((p) => p.id === method);
+    if (!m) return <Wallet size={size} className="text-slate-400" />;
+    return <m.Icon size={size} className={m.color} />;
+};
+
+const StatusBadge: React.FC<{ isFullyPaid: boolean; hasReview: boolean; percentage: number }> = ({ isFullyPaid, hasReview, percentage }) => {
+    if (hasReview) return <Badge color="bg-amber-100 text-amber-700 border border-amber-200">REVISIÓN</Badge>;
+    if (isFullyPaid) return <Badge color="bg-lime-100 text-lime-700 border border-lime-200">AL DÍA</Badge>;
+    return <Badge color="bg-slate-100 text-slate-600 border border-slate-200">{percentage > 0 ? 'PARCIAL' : 'PENDIENTE'}</Badge>;
+};
+
+/* ─── Payment Modal ─────────────────────────────────────────────── */
+
+const PaymentModal: React.FC<{
+    userId: string | null;
+    users: UserPaymentData[];
+    concepts: PaymentConcept[];
+    selectedConceptIds: string[];
+    onClose: () => void;
+    onSubmit: (userId: string, conceptIds: string[], amount: number, method: string, reference: string, date: string, note: string) => void;
+}> = ({ userId, users, concepts, selectedConceptIds, onClose, onSubmit }) => {
+    const user = users.find((u) => u.id === userId);
+    const pendingIds = useMemo(
+        () => selectedConceptIds.filter((id) => user?.paymentStatus[id] !== 'paid'),
+        [user, selectedConceptIds],
+    );
+    const [form, setForm] = useState({
+        conceptIds: pendingIds,
         method: 'Efectivo',
         reference: '',
         date: new Date().toISOString().split('T')[0],
-        note: ''
+        note: '',
     });
 
-    const selectorRef = React.useRef<HTMLDivElement>(null);
+    const amount = form.conceptIds.reduce((s, id) => s + (concepts.find((c) => c.id === id)?.amount ?? 0), 0);
 
-    React.useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
-                setIsConceptMenuOpen(false);
-            }
-            const target = event.target as HTMLElement;
-            if (!target.closest('.action-menu-trigger')) {
-                setOpenActionMenuId(null);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const toggleConcept = (id: string) => {
-        setSelectedConceptIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
-    };
-
-    const calculateFinancials = () => {
-        let totalExpected = 0;
-        let totalCollected = 0;
-        const activeConcepts = PAYMENT_CONCEPTS.filter(c => selectedConceptIds.includes(c.id));
-        activeConcepts.forEach(concept => {
-            const conceptTotal = concept.amount * users.length;
-            totalExpected += conceptTotal;
-            users.forEach(user => {
-                if (user.paymentStatus[concept.id] === 'paid') totalCollected += concept.amount;
-            });
-        });
-        return { totalExpected, totalCollected, progress: totalExpected === 0 ? 0 : Math.round((totalCollected / totalExpected) * 100) };
-    };
-
-    const getUserAggregates = (user: UserPaymentData) => {
-        let totalToPay = 0;
-        let totalPaid = 0;
-        let pendingAmount = 0;
-        let hasReview = false;
-
-        selectedConceptIds.forEach(id => {
-            const concept = PAYMENT_CONCEPTS.find(c => c.id === id);
-            if (concept) {
-                totalToPay += concept.amount;
-                if (user.paymentStatus[id] === 'paid') totalPaid += concept.amount;
-                else pendingAmount += concept.amount;
-                if (user.paymentStatus[id] === 'review') hasReview = true;
-            }
-        });
-
-        const isFullyPaid = totalPaid === totalToPay && totalToPay > 0;
-        const isPartial = totalPaid > 0 && totalPaid < totalToPay;
-
-        return { totalToPay, totalPaid, pendingAmount, hasReview, isFullyPaid, isPartial, percentage: totalToPay === 0 ? 0 : (totalPaid / totalToPay) * 100 };
-    };
-
-    const { totalExpected, totalCollected, progress } = calculateFinancials();
-
-    const filteredUsers = users.filter(user => {
-        const { isFullyPaid, hasReview } = getUserAggregates(user);
-        const matchesFilter = filter === 'all' ? true :
-            filter === 'solvents' ? isFullyPaid :
-                filter === 'review' ? hasReview :
-                    !isFullyPaid;
-        const matchesSearch = user.name.toLowerCase().includes(search.toLowerCase()) || user.email.toLowerCase().includes(search.toLowerCase());
-        return matchesFilter && matchesSearch;
-    });
-
-    const getMethodIcon = (method: string) => {
-        switch (method) {
-            case 'Nequi': return <Smartphone size={14} className="text-purple-600" />;
-            case 'Daviplata': return <Smartphone size={14} className="text-rose-600" />;
-            case 'Bancolombia': return <Landmark size={14} className="text-slate-900" />;
-            case 'Efectivo': return <Banknote size={14} className="text-lime-600" />;
-            default: return <Wallet size={14} className="text-slate-400" />;
-        }
-    };
-
-    const toggleUserSelection = (userId: string) => {
-        setSelectedUserIds(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
-    };
-
-    const toggleAllUsers = () => {
-        if (selectedUserIds.length === filteredUsers.length) {
-            setSelectedUserIds([]);
-        } else {
-            setSelectedUserIds(filteredUsers.map(u => u.id));
-        }
-    };
-
-    // --- REMINDER LOGIC ---
-
-    // Compute active channels based on selection
-    const getActiveChannels = () => {
-        const channels = new Set<ReminderChannel>();
-        selectedUserIds.forEach(uid => {
-            const uChannels = userChannels[uid] || [];
-            uChannels.forEach(c => channels.add(c));
-        });
-        return Array.from(channels);
-    };
-
-    const initReminder = () => {
-        // Initialize channels for selected users (default: WhatsApp & Push)
-        const initialChannels: Record<string, ReminderChannel[]> = {};
-        selectedUserIds.forEach(id => {
-            initialChannels[id] = ['whatsapp', 'push'];
-        });
-        setUserChannels(initialChannels);
-        setReminderModal({ isOpen: true, step: 1 });
-    };
-
-    const toggleUserChannel = (userId: string, channel: ReminderChannel) => {
-        setUserChannels(prev => {
-            const current = prev[userId] || [];
-            const updated = current.includes(channel)
-                ? current.filter(c => c !== channel)
-                : [...current, channel];
-            return { ...prev, [userId]: updated };
-        });
-    };
-
-    const applyTemplate = (templateKey: 'friendly' | 'formal' | 'urgent') => {
-        const template = TEMPLATES[templateKey];
-        // Only update the active tab text
-        setMessageDrafts(prev => ({
-            ...prev,
-            [activeTab]: template[activeTab]
+    const toggleConcept = (id: string) =>
+        setForm((p) => ({
+            ...p,
+            conceptIds: p.conceptIds.includes(id) ? p.conceptIds.filter((c) => c !== id) : [...p.conceptIds, id],
         }));
-        setSelectedTemplate(prev => ({ ...prev, [activeTab]: templateKey }));
+
+    if (!user) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <Card className="w-full max-w-lg bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden max-h-[90vh] flex flex-col p-0">
+                <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-lime-400 rounded-xl flex items-center justify-center text-black"><Wallet size={20} /></div>
+                        <div>
+                            <h3 className="text-lg font-black uppercase">Registrar Pago</h3>
+                            <p className="text-xs text-slate-400">{user.name}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-5" style={{ scrollbarWidth: 'thin' }}>
+                    {/* Concepts */}
+                    <div className="space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Conceptos a cobrar</p>
+                        {selectedConceptIds.map((id) => {
+                            const concept = concepts.find((c) => c.id === id);
+                            const isPaid = user.paymentStatus[id] === 'paid';
+                            if (!concept) return null;
+                            const selected = form.conceptIds.includes(id);
+                            return (
+                                <div
+                                    key={id}
+                                    onClick={() => !isPaid && toggleConcept(id)}
+                                    className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${isPaid ? 'opacity-50 pointer-events-none bg-slate-50 border-slate-100' : selected ? 'bg-lime-50 border-lime-400' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${selected ? 'bg-lime-500 border-lime-500 text-white' : 'border-slate-300'}`}>
+                                            {selected && <Check size={12} strokeWidth={4} />}
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-700">{concept.label}</span>
+                                        {isPaid && <Badge color="bg-lime-100 text-lime-600">PAGADO</Badge>}
+                                    </div>
+                                    <span className="text-xs font-black text-slate-900">{fmtCurrency(concept.amount)}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Total + method */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                            <span className="text-xs font-black uppercase text-slate-500">Total</span>
+                            <span className="text-2xl font-black font-brand text-slate-900">{fmtCurrency(amount)}</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            {PAYMENT_METHODS.map((m) => (
+                                <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => setForm((p) => ({ ...p, method: m.id }))}
+                                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all ${form.method === m.id ? 'bg-white border-lime-400 ring-1 ring-lime-400 shadow-sm' : 'bg-slate-100 border-transparent hover:bg-slate-200'}`}
+                                >
+                                    <m.Icon size={16} className={m.color} />
+                                    <span className={`text-[10px] font-black uppercase ${form.method === m.id ? 'text-slate-900' : 'text-slate-400'}`}>{m.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <Input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} className="h-9 text-xs" />
+                        <Input placeholder="Referencia (opcional)" value={form.reference} onChange={(e) => setForm((p) => ({ ...p, reference: e.target.value }))} className="h-9 text-xs" leftIcon={<Hash size={12} />} />
+                        <Input placeholder="Nota (opcional)" value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} className="h-9 text-xs" />
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 shrink-0">
+                    <Button
+                        variant="secondary"
+                        className="w-full h-12 rounded-xl font-black uppercase text-xs"
+                        onClick={() => onSubmit(user.id, form.conceptIds, amount, form.method, form.reference, form.date, form.note)}
+                        disabled={amount === 0 || form.conceptIds.length === 0}
+                    >
+                        Confirmar Pago · {fmtCurrency(amount)}
+                    </Button>
+                </div>
+            </Card>
+        </div>
+    );
+};
+
+/* ─── History Modal ─────────────────────────────────────────────── */
+
+const HistoryModal: React.FC<{
+    userId: string | null;
+    users: UserPaymentData[];
+    transactions: PaymentTransaction[];
+    concepts: PaymentConcept[];
+    onClose: () => void;
+}> = ({ userId, users, transactions, concepts, onClose }) => {
+    const user = users.find((u) => u.id === userId);
+    const txs = transactions.filter((t) => t.userId === userId);
+    if (!user) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <Card className="w-full max-w-lg bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden max-h-[85vh] flex flex-col p-0">
+                <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3">
+                        <History size={20} />
+                        <div>
+                            <h3 className="text-lg font-black uppercase">Historial</h3>
+                            <p className="text-xs text-slate-400">{user.name}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-3" style={{ scrollbarWidth: 'thin' }}>
+                    {txs.length > 0 ? txs.map((tx) => (
+                        <div key={tx.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 space-y-2">
+                            <div className="flex justify-between items-start">
+                                <Badge color="bg-white border border-slate-200 text-slate-500">{tx.date}</Badge>
+                                <span className="text-lg font-black text-lime-600">+{fmtCurrency(tx.amount)}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                                {tx.conceptIds.map((cid) => (
+                                    <span key={cid} className="text-[9px] font-black uppercase bg-slate-200 text-slate-600 px-2 py-0.5 rounded">
+                                        {concepts.find((c) => c.id === cid)?.label ?? cid}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-2 pt-1 border-t border-slate-200/50">
+                                <MethodIcon method={tx.method} />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">{tx.method}</span>
+                                {tx.reference && <span className="text-[10px] text-slate-400">· {tx.reference}</span>}
+                                {tx.note && <span className="text-[10px] text-slate-400">· {tx.note}</span>}
+                            </div>
+                        </div>
+                    )) : (
+                        <div className="text-center py-10 text-slate-400 text-sm">Sin movimientos registrados.</div>
+                    )}
+                </div>
+
+                <div className="p-4 border-t border-slate-100 shrink-0">
+                    <Button variant="ghost" size="sm" className="w-full text-[10px] font-black uppercase" onClick={onClose}>Cerrar</Button>
+                </div>
+            </Card>
+        </div>
+    );
+};
+
+/* ─── Quick Pay Modal ───────────────────────────────────────────── */
+
+const QuickPayModal: React.FC<{
+    userId: string | null;
+    users: UserPaymentData[];
+    pendingAmount: number;
+    onClose: () => void;
+    onConfirm: (method: string, reference: string, date: string) => void;
+}> = ({ userId, users, pendingAmount, onClose, onConfirm }) => {
+    const user = users.find((u) => u.id === userId);
+    const [method, setMethod] = useState('Efectivo');
+    const [reference, setReference] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    if (!user) return null;
+
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.94, opacity: 0 }} transition={{ duration: 0.22, ease: 'easeOut' as const }}>
+                <Card className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl p-0 overflow-hidden">
+                    <div className="p-6 text-center space-y-4">
+                        <div className="w-14 h-14 bg-lime-100 rounded-full flex items-center justify-center text-lime-600 mx-auto">
+                            <Banknote size={28} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black font-brand uppercase">Pago Rápido</h3>
+                            <p className="text-sm text-slate-500">{user.name}</p>
+                        </div>
+                        <div className="bg-lime-50 rounded-2xl p-4">
+                            <p className="text-[10px] font-black uppercase text-lime-700 mb-1">Total a saldar</p>
+                            <p className="text-3xl font-black text-lime-700">{fmtCurrency(pendingAmount)}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            {PAYMENT_METHODS.map((m) => (
+                                <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => setMethod(m.id)}
+                                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all ${method === m.id ? 'border-lime-400 bg-lime-50 ring-1 ring-lime-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                                >
+                                    <m.Icon size={14} className={m.color} />
+                                    <span className="text-[10px] font-black uppercase text-slate-700">{m.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 text-xs" />
+                        <Input placeholder="Referencia (opcional)" value={reference} onChange={(e) => setReference(e.target.value)} className="h-9 text-xs" leftIcon={<Hash size={12} />} />
+                    </div>
+
+                    <div className="p-4 pt-0 space-y-2">
+                        <Button variant="secondary" className="w-full h-12 rounded-xl font-black uppercase text-xs" onClick={() => onConfirm(method, reference, date)}>
+                            Confirmar Pago Total
+                        </Button>
+                        <Button variant="ghost" size="sm" className="w-full text-[10px] font-black uppercase" onClick={onClose}>Cancelar</Button>
+                    </div>
+                </Card>
+            </motion.div>
+        </div>
+    );
+};
+
+/* ─── Bulk Pay Modal ────────────────────────────────────────────── */
+
+const BulkPayModal: React.FC<{
+    userCount: number;
+    totalAmount: number;
+    onClose: () => void;
+    onConfirm: () => void;
+}> = ({ userCount, totalAmount, onClose, onConfirm }) => (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <Card className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl p-6 text-center space-y-5">
+            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 size={28} className="text-lime-600" />
+            </div>
+            <div>
+                <h3 className="text-xl font-black uppercase">Pago Masivo</h3>
+                <p className="text-sm text-slate-500 mt-1">Se marcarán como pagados <strong>{userCount}</strong> usuarios</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total registrado</p>
+                <p className="text-3xl font-black text-slate-900">{fmtCurrency(totalAmount)}</p>
+            </div>
+            <div className="space-y-2">
+                <Button variant="secondary" className="w-full h-12 rounded-xl font-black uppercase text-xs" onClick={onConfirm}>
+                    Confirmar Pago Masivo
+                </Button>
+                <Button variant="ghost" size="sm" className="w-full text-[10px] font-black uppercase" onClick={onClose}>Cancelar</Button>
+            </div>
+        </Card>
+    </div>
+);
+
+/* ─── Reminder Modal ────────────────────────────────────────────── */
+
+const ReminderModal: React.FC<{
+    selectedUsers: UserPaymentData[];
+    leagueName: string;
+    onClose: () => void;
+}> = ({ selectedUsers, leagueName, onClose }) => {
+    const [step, setStep] = useState<1 | 2>(1);
+    const [userChannels, setUserChannels] = useState<Record<string, ReminderChannel[]>>(
+        Object.fromEntries(selectedUsers.map((u) => [u.id, ['whatsapp' as ReminderChannel]])),
+    );
+    const [activeTab, setActiveTab] = useState<ReminderChannel>('whatsapp');
+    const [drafts, setDrafts] = useState<Record<ReminderChannel, string>>({
+        whatsapp: TEMPLATES.friendly.whatsapp,
+        email: TEMPLATES.friendly.email,
+        sms: TEMPLATES.friendly.sms,
+        push: TEMPLATES.friendly.push,
+    });
+    const [selectedTpl, setSelectedTpl] = useState<Record<ReminderChannel, TemplateKey>>({
+        whatsapp: 'friendly', email: 'friendly', sms: 'friendly', push: 'friendly',
+    });
+    const [generating, setGenerating] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const activeChannels = useMemo(() => {
+        const set = new Set<ReminderChannel>();
+        Object.values(userChannels).forEach((chs) => chs.forEach((c) => set.add(c)));
+        return Array.from(set);
+    }, [userChannels]);
+
+    useEffect(() => {
+        if (step === 2 && activeChannels.length > 0 && !activeChannels.includes(activeTab)) {
+            setActiveTab(activeChannels[0]);
+        }
+    }, [step, activeChannels, activeTab]);
+
+    const toggleChannel = (uid: string, ch: ReminderChannel) =>
+        setUserChannels((prev) => {
+            const cur = prev[uid] ?? [];
+            return { ...prev, [uid]: cur.includes(ch) ? cur.filter((c) => c !== ch) : [...cur, ch] };
+        });
+
+    const applyTemplate = (key: 'friendly' | 'formal' | 'urgent') => {
+        setDrafts((p) => ({ ...p, [activeTab]: TEMPLATES[key][activeTab] }));
+        setSelectedTpl((p) => ({ ...p, [activeTab]: key }));
     };
 
-    const generateAIMessage = () => {
-        setIsGeneratingAI(true);
-        // Simulate AI Latency
+    const generateAI = () => {
+        setGenerating(true);
         setTimeout(() => {
-            const aiMessages: Record<ReminderChannel, string> = {
-                whatsapp: "🤖 Hola {nombre}, noté que se nos pasó la fecha de tu aporte en {liga}. Para mantener el juego emocionante, ¿podrías revisar tu saldo de {deuda}? ¡Gracias!",
-                email: "Asunto: Pequeño recordatorio de {liga}\n\nHola {nombre},\n\nLa inteligencia artificial de nuestra liga ha detectado un saldo pendiente. Ayúdanos a mantener la competencia al día.\n\nSaldo: {deuda}",
-                sms: "Hola {nombre}, un recordatorio amigable de tu IA favorita: saldo de {deuda} en {liga}.",
-                push: "🤖 Tu asistente de liga: {nombre}, no olvides tu aporte pendiente."
+            const aiMsgs: Record<ReminderChannel, string> = {
+                whatsapp: '🤖 Hola {nombre}, noté que se nos pasó la fecha de tu aporte en {liga}. ¿Podrías revisar tu saldo de {deuda}? ¡Gracias!',
+                email: 'Asunto: Pequeño recordatorio de {liga}\n\nHola {nombre},\n\nNuestra IA detectó un saldo pendiente de {deuda}. Ayúdanos a mantener la competencia al día.',
+                sms: 'Hola {nombre}, recordatorio amigable: saldo de {deuda} en {liga}.',
+                push: '🤖 {nombre}, no olvides tu aporte pendiente en {liga}.',
             };
-
-            setMessageDrafts(prev => ({ ...prev, [activeTab]: aiMessages[activeTab] }));
-            setSelectedTemplate(prev => ({ ...prev, [activeTab]: 'ai' }));
-            setIsGeneratingAI(false);
+            setDrafts((p) => ({ ...p, [activeTab]: aiMsgs[activeTab] }));
+            setSelectedTpl((p) => ({ ...p, [activeTab]: 'ai' }));
+            setGenerating(false);
         }, 1500);
     };
 
-    const insertVariable = (variable: string) => {
-        setMessageDrafts(prev => ({
-            ...prev,
-            [activeTab]: prev[activeTab] + ` {${variable}}`
-        }));
-        setSelectedTemplate(prev => ({ ...prev, [activeTab]: 'custom' }));
-    };
-
-    const handleSendReminder = () => {
-        let count = 0;
-        selectedUserIds.forEach(uid => {
-            const channels = userChannels[uid];
-            if (channels && channels.length > 0) count++;
-        });
-
-        alert(`Enviando recordatorios a ${count} usuarios por sus canales seleccionados.`);
-        setReminderModal({ isOpen: false, step: 1 });
-        setSelectedUserIds([]);
-    };
-
-    const handleIndividualReminder = (user: UserPaymentData) => {
-        setSelectedUserIds([user.id]);
-        initReminder(); // Reuse main logic for single user
-        setOpenActionMenuId(null);
-    };
-
-    // Ensure activeTab is valid when switching to Step 2
-    React.useEffect(() => {
-        if (reminderModal.step === 2) {
-            const activeCh = getActiveChannels();
-            if (activeCh.length > 0 && !activeCh.includes(activeTab)) {
-                setActiveTab(activeCh[0]);
-            }
-        }
-    }, [reminderModal.step]);
-
-    const renderStatusBadge = (isFullyPaid: boolean, hasReview: boolean, percentage: number) => {
-        if (hasReview) return <Badge color="bg-amber-100 text-amber-700 border border-amber-200">REVISIÓN</Badge>;
-        if (isFullyPaid) return <Badge color="bg-lime-100 text-lime-700 border border-lime-200">AL DÍA</Badge>;
-        return <Badge color="bg-slate-100 text-slate-600 border border-slate-200">{percentage > 0 ? 'PARCIAL' : 'PENDIENTE'}</Badge>;
-    };
-
-    const openPaymentModal = (userId: string) => {
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
-        const pendingConcepts = selectedConceptIds.filter(id => user.paymentStatus[id] !== 'paid');
-        const initialAmount = pendingConcepts.reduce((sum, id) => sum + (PAYMENT_CONCEPTS.find(pc => pc.id === id)?.amount || 0), 0);
-
-        setPaymentForm({
-            selectedConcepts: pendingConcepts,
-            amount: initialAmount,
-            method: 'Efectivo',
-            reference: '',
-            date: new Date().toISOString().split('T')[0],
-            note: ''
-        });
-        setPaymentModal({ isOpen: true, userId });
-    };
-
-    const handleModalConceptToggle = (conceptId: string) => {
-        setPaymentForm(prev => {
-            const newSelection = prev.selectedConcepts.includes(conceptId)
-                ? prev.selectedConcepts.filter(id => id !== conceptId)
-                : [...prev.selectedConcepts, conceptId];
-            const newAmount = newSelection.reduce((sum, id) => sum + (PAYMENT_CONCEPTS.find(pc => pc.id === id)?.amount || 0), 0);
-            return { ...prev, selectedConcepts: newSelection, amount: newAmount };
+    const handleSend = () => {
+        const preview = drafts[activeTab]
+            .replace('{nombre}', selectedUsers[0]?.name ?? 'Usuario')
+            .replace('{liga}', leagueName)
+            .replace('{deuda}', '$0');
+        void navigator.clipboard.writeText(preview).then(() => {
+            setCopied(true);
+            setTimeout(() => { setCopied(false); onClose(); }, 1500);
         });
     };
 
-    const submitPayment = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!paymentModal.userId) return;
-        setUsers(prev => prev.map(u => {
-            if (u.id !== paymentModal.userId) return u;
-            const newStatus = { ...u.paymentStatus };
-            paymentForm.selectedConcepts.forEach(id => newStatus[id] = 'paid');
-            return { ...u, paymentStatus: newStatus };
-        }));
-        setTransactions(prev => [{
-            id: Math.random().toString(36).substr(2, 9),
-            userId: paymentModal.userId!,
-            conceptIds: paymentForm.selectedConcepts,
-            amount: paymentForm.amount,
-            date: paymentForm.date,
-            method: paymentForm.method,
-            reference: paymentForm.reference,
-            note: paymentForm.note
-        }, ...prev]);
-        setPaymentModal({ isOpen: false, userId: null });
-    };
-
-    const initQuickPay = (userId: string) => {
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
-        const { pendingAmount } = getUserAggregates(user);
-        if (pendingAmount <= 0) return;
-        setQuickPayModal({
-            isOpen: true,
-            userId,
-            amount: pendingAmount,
-            method: 'Efectivo',
-            reference: '',
-            date: new Date().toISOString().split('T')[0]
-        });
-    };
-
-    const confirmQuickPay = () => {
-        const { userId, amount, method, reference, date } = quickPayModal;
-        if (!userId) return;
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
-        const pendingConceptIds = selectedConceptIds.filter(id => user.paymentStatus[id] !== 'paid');
-        setUsers(prev => prev.map(u => {
-            if (u.id !== userId) return u;
-            const newStatus = { ...u.paymentStatus };
-            pendingConceptIds.forEach(id => newStatus[id] = 'paid');
-            return { ...u, paymentStatus: newStatus };
-        }));
-        setTransactions(prev => [{
-            id: Math.random().toString(36).substr(2, 9),
-            userId,
-            conceptIds: pendingConceptIds,
-            amount: amount,
-            date: date,
-            method: method,
-            reference: reference,
-            note: 'Pago Rápido'
-        }, ...prev]);
-        setQuickPayModal({ isOpen: false, userId: null, amount: 0, method: 'Efectivo', reference: '', date: '' });
-    };
-
-    const initBulkPay = () => {
-        let totalAmount = 0;
-        let userCount = 0;
-        users.filter(u => selectedUserIds.includes(u.id)).forEach(u => {
-            const { pendingAmount } = getUserAggregates(u);
-            if (pendingAmount > 0) {
-                totalAmount += pendingAmount;
-                userCount++;
-            }
-        });
-        if (totalAmount === 0) return alert('Sin deuda en selección.');
-        setBulkPayModal({ isOpen: true, totalAmount, userCount });
-    };
-
-    const confirmBulkPay = () => {
-        const newTransactions: Transaction[] = [];
-        const updatedUsers = users.map(u => {
-            if (!selectedUserIds.includes(u.id)) return u;
-            const { pendingAmount } = getUserAggregates(u);
-            if (pendingAmount <= 0) return u;
-            const pendingConceptIds = selectedConceptIds.filter(id => u.paymentStatus[id] !== 'paid');
-            const newStatus = { ...u.paymentStatus };
-            pendingConceptIds.forEach(id => newStatus[id] = 'paid');
-            newTransactions.push({
-                id: Math.random().toString(36).substr(2, 9),
-                userId: u.id,
-                conceptIds: pendingConceptIds,
-                amount: pendingAmount,
-                date: new Date().toISOString().split('T')[0],
-                method: 'Efectivo',
-                note: 'Pago Masivo'
-            });
-            return { ...u, paymentStatus: newStatus };
-        });
-        setUsers(updatedUsers);
-        setTransactions(prev => [...newTransactions, ...prev]);
-        setBulkPayModal({ isOpen: false, totalAmount: 0, userCount: 0 });
-        setSelectedUserIds([]);
-    };
-
-    const handleResetUserPayments = (userId: string) => {
-        if (!window.confirm("¿Seguro que deseas anular todos los pagos?")) return;
-        setUsers(prev => prev.map(u => {
-            if (u.id !== userId) return u;
-            const newStatus = { ...u.paymentStatus };
-            selectedConceptIds.forEach(id => newStatus[id] = 'pending');
-            return { ...u, paymentStatus: newStatus };
-        }));
-        setOpenActionMenuId(null);
-    };
-
-    const handleExportCSV = () => {
-        const headers = ['Nombre', 'Email', 'Deuda', 'Estado'];
-        const rows = filteredUsers.map(u => {
-            const { pendingAmount, isFullyPaid } = getUserAggregates(u);
-            return [u.name, u.email, pendingAmount, isFullyPaid ? 'Al día' : 'Pendiente'].join(',');
-        });
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", "reporte_pagos.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const insertVar = (v: string) => {
+        setDrafts((p) => ({ ...p, [activeTab]: p[activeTab] + ` {${v}}` }));
+        setSelectedTpl((p) => ({ ...p, [activeTab]: 'custom' }));
     };
 
     return (
-        <div className="space-y-6 pb-24 animate-in fade-in duration-500 relative">
-            <style>{`
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-      `}</style>
-
-            {/* HEADER & FINANCIAL SUMMARY */}
-            <div className="flex flex-col gap-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <Button variant="outline" className="rounded-xl w-10 h-10 p-0 border-slate-200" onClick={() => navigate('/dashboard')}><ArrowLeft size={20} /></Button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <Card className="w-full max-w-xl bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden max-h-[90vh] flex flex-col p-0">
+                {/* Header */}
+                <div className="p-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center"><Send size={18} /></div>
                         <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">{LEAGUE_INFO.name}</h1>
-                                <Badge color="bg-amber-100 text-amber-700 border border-amber-200">{LEAGUE_INFO.plan}</Badge>
-                            </div>
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gestión de Pagos • {selectedConceptIds.length} Conceptos Activos</div>
+                            <h3 className="text-lg font-black uppercase">Enviar Recordatorio</h3>
+                            <p className="text-xs text-slate-400">{selectedUsers.length} usuario{selectedUsers.length !== 1 ? 's' : ''} seleccionado{selectedUsers.length !== 1 ? 's' : ''}</p>
                         </div>
                     </div>
-                    <div className="relative z-30" ref={selectorRef}>
-                        <button onClick={() => setIsConceptMenuOpen(!isConceptMenuOpen)} className="w-full md:w-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-2.5 px-4 flex items-center justify-between gap-4 hover:border-lime-400 transition-all group">
-                            <div className="flex items-center gap-3"><div className="bg-lime-100 text-lime-700 w-8 h-8 rounded-lg flex items-center justify-center"><Filter size={16} /></div><div className="text-left"><p className="text-[9px] font-black uppercase text-slate-400">Conceptos</p><p className="text-xs font-black text-slate-900">{selectedConceptIds.length} Seleccionados</p></div></div>
-                            <ChevronDown size={18} className={`text-slate-300 transition-transform ${isConceptMenuOpen ? 'rotate-180' : ''}`} />
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24} /></button>
+                </div>
+
+                {/* Steps */}
+                <div className="flex border-b border-slate-100 shrink-0">
+                    {(['1. Canales', '2. Mensaje'] as const).map((label, i) => (
+                        <button
+                            key={label}
+                            onClick={() => i === 0 && setStep(1)}
+                            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-[0.16em] transition-colors ${step === i + 1 ? 'border-b-2 border-indigo-500 text-indigo-700 bg-indigo-50/50' : 'text-slate-400'}`}
+                        >
+                            {label}
                         </button>
-                        {isConceptMenuOpen && (
-                            <div className="absolute top-full right-0 mt-2 w-full md:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50 p-2">
-                                {PAYMENT_CONCEPTS.map(concept => (
-                                    <button key={concept.id} onClick={() => toggleConcept(concept.id)} className={`w-full text-left p-2 rounded-xl flex items-center gap-3 transition-colors ${selectedConceptIds.includes(concept.id) ? 'bg-lime-50' : 'hover:bg-slate-50'}`}>
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${selectedConceptIds.includes(concept.id) ? 'bg-lime-500 border-lime-500 text-white' : 'border-slate-300 bg-white'}`}>{selectedConceptIds.includes(concept.id) && <Check size={12} strokeWidth={4} />}</div>
-                                        <div className="flex-1"><p className="text-xs font-bold uppercase">{concept.label}</p><span className="text-[10px] font-black text-slate-900">${concept.amount.toLocaleString()}</span></div>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    ))}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl col-span-1 md:col-span-2">
-                        <div className="relative z-10 flex flex-col md:flex-row justify-between items-end gap-6 h-full">
-                            <div className="space-y-2"><Badge color="bg-lime-400 text-black">RECAUDO GLOBAL</Badge><h2 className="text-5xl font-black font-brand tracking-tighter">${totalCollected.toLocaleString()}</h2><div className="flex items-center gap-2"><div className="h-1.5 w-32 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-lime-400 transition-all duration-1000" style={{ width: `${progress}%` }}></div></div><p className="text-sm font-bold text-slate-400">de ${totalExpected.toLocaleString()}</p></div></div>
-                            <div className="text-right"><p className="text-5xl font-black font-brand text-lime-400">{progress}%</p></div>
-                        </div>
-                        <div className="absolute -top-10 -right-10 w-64 h-64 bg-lime-500/10 rounded-full blur-3xl"></div>
-                    </div>
-                    <Card className="p-6 flex flex-col justify-center space-y-4 border-slate-200">
-                        <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><PieChart size={16} className="text-slate-400" /><span className="text-[10px] font-black uppercase text-slate-400">Estado Usuarios</span></div><button onClick={handleExportCSV} className="text-[9px] font-bold text-lime-600 flex items-center gap-1"><Download size={10} /> CSV</button></div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: 'thin' }}>
+                    {step === 1 ? (
+                        /* Step 1: Channel selection */
                         <div className="space-y-3">
-                            <div className="flex justify-between items-center p-3 bg-lime-50 rounded-xl border border-lime-100"><span className="text-xs font-bold text-lime-800">Al Día</span><span className="text-lg font-black text-lime-700">{users.filter(u => getUserAggregates(u).isFullyPaid).length}</span></div>
-                            <div className="flex justify-between items-center p-3 bg-rose-50 rounded-xl border border-rose-100"><span className="text-xs font-bold text-rose-800">Deudores</span><span className="text-lg font-black text-rose-700">{users.filter(u => !getUserAggregates(u).isFullyPaid).length}</span></div>
-                        </div>
-                    </Card>
-                </div>
-
-                {/* TOOLBAR RESPONSIVE */}
-                <div className="space-y-4 pt-4">
-                    {/* Top Row: Tabs & Search */}
-                    <div className="flex flex-col md:flex-row justify-between gap-4 items-center">
-                        <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-full md:w-auto overflow-x-auto custom-scrollbar shrink-0">
-                            {[{ id: 'all', label: 'Todos' }, { id: 'debtors', label: 'Deudores' }, { id: 'review', label: 'Revisión' }, { id: 'solvents', label: 'Al día' }].map(tab => (
-                                <button key={tab.id} onClick={() => setFilter(tab.id as any)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${filter === tab.id ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>{tab.label}</button>
-                            ))}
-                        </div>
-                        <div className="w-full md:w-64">
-                            <Input placeholder="Buscar..." leftIcon={<Search size={16} />} className="text-xs font-bold h-10" value={search} onChange={(e) => setSearch(e.target.value)} />
-                        </div>
-                    </div>
-
-                    {/* Action Buttons Row - Contextual */}
-                    {selectedUserIds.length > 0 && (
-                        <div className="flex gap-2 w-full animate-in slide-in-from-top-2 duration-200">
-                            <Button variant="secondary" className="flex-1 md:flex-none text-xs font-bold uppercase shadow-lg shadow-lime-400/20" onClick={initBulkPay}>
-                                <Banknote size={16} className="mr-2" />
-                                Pago Masivo ({selectedUserIds.length})
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                className="flex-1 md:flex-none text-xs font-bold uppercase bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
-                                onClick={initReminder}
-                            >
-                                <Send size={16} className="mr-2" />
-                                Recordar ({selectedUserIds.length})
-                            </Button>
-                        </div>
-                    )}
-                </div>
-
-                {/* MOBILE LIST VIEW (Cards) */}
-                <div className="md:hidden space-y-3">
-                    {filteredUsers.length > 0 ? filteredUsers.map(user => {
-                        const { pendingAmount, percentage, isFullyPaid, hasReview } = getUserAggregates(user);
-                        const isSelected = selectedUserIds.includes(user.id);
-                        return (
-                            <div key={user.id} className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-lime-500 shadow-md ring-1 ring-lime-500' : 'border-slate-200 shadow-sm'}`}>
-                                <div className="flex items-start justify-between mb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Selecciona canales por usuario</p>
+                            {selectedUsers.map((u) => (
+                                <div key={u.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
                                     <div className="flex items-center gap-3">
-                                        <Checkbox id={`mobile-check-${user.id}`} label="" checked={isSelected} onChange={() => toggleUserSelection(user.id)} />
-                                        <img src={user.avatar} className="w-10 h-10 rounded-xl" alt={user.name} />
-                                        <div>
-                                            <p className="text-sm font-black text-slate-900">{user.name}</p>
-                                            <p className="text-xs text-slate-500 truncate max-w-[120px]">{user.email}</p>
-                                        </div>
+                                        <img src={avatarUrl(u.name, u.avatar)} className="w-8 h-8 rounded-lg" alt={u.name} />
+                                        <p className="text-sm font-black text-slate-900">{u.name}</p>
                                     </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                        {renderStatusBadge(isFullyPaid, hasReview, percentage)}
-                                        {pendingAmount > 0 && <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg">-${pendingAmount.toLocaleString()}</span>}
-                                    </div>
-                                </div>
-
-                                {/* Progress Bar */}
-                                <div className="space-y-1 mb-4">
-                                    <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase">
-                                        <span>Progreso Pago</span>
-                                        <span>{Math.round(percentage)}%</span>
-                                    </div>
-                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div className={`h-full rounded-full ${isFullyPaid ? 'bg-lime-500' : 'bg-amber-400'}`} style={{ width: `${percentage}%` }}></div>
-                                    </div>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="flex gap-2">
-                                    {!isFullyPaid && (
-                                        <Button size="sm" className="flex-1 h-9 text-[10px] font-black uppercase" onClick={() => openPaymentModal(user.id)}>Cobrar</Button>
-                                    )}
-                                    <button onClick={() => initQuickPay(user.id)} className="w-9 h-9 bg-lime-50 rounded-xl flex items-center justify-center text-lime-600 border border-lime-100 hover:bg-lime-100 transition-colors">
-                                        <CheckCircle2 size={16} />
-                                    </button>
-                                    <button onClick={() => setHistoryModal({ isOpen: true, userId: user.id })} className="w-9 h-9 rounded-xl border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 transition-colors">
-                                        <History size={16} />
-                                    </button>
-                                    <div className="relative">
-                                        <button onClick={() => setOpenActionMenuId(openActionMenuId === user.id ? null : user.id)} className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${openActionMenuId === user.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-                                            <MoreVertical size={16} />
-                                        </button>
-                                        {openActionMenuId === user.id && (
-                                            <div className="absolute right-0 bottom-full mb-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                                                <button onClick={() => handleIndividualReminder(user)} className="w-full text-left px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Send size={14} /> Recordatorio</button>
-                                                <button onClick={() => setHistoryModal({ isOpen: true, userId: user.id })} className="w-full text-left px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><History size={14} /> Historial</button>
-                                                <div className="h-px bg-slate-100"></div>
-                                                <button onClick={() => handleResetUserPayments(user.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2"><Trash2 size={14} /> Anular Pagos</button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    }) : (
-                        <div className="text-center py-8 text-slate-400 bg-white rounded-2xl border border-slate-200 border-dashed">
-                            <p className="text-xs font-bold uppercase">No se encontraron resultados.</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* DESKTOP LIST VIEW (Table) */}
-                <div className="hidden md:block bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse min-w-[700px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 bg-slate-50/50">
-                                    <th className="p-6 w-16 text-center"><Checkbox id="select-all" label="" checked={selectedUserIds.length === filteredUsers.length && filteredUsers.length > 0} onChange={toggleAllUsers} /></th>
-                                    <th className="p-6 text-[10px] font-black uppercase text-slate-400">Participante</th>
-                                    <th className="p-6 text-[10px] font-black uppercase text-slate-400 text-center">Estado</th>
-                                    <th className="p-6 text-[10px] font-black uppercase text-slate-400 text-center">Deuda</th>
-                                    <th className="p-6 text-[10px] font-black uppercase text-slate-400 text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredUsers.length > 0 ? filteredUsers.map((user) => {
-                                    const { pendingAmount, percentage, isFullyPaid, hasReview } = getUserAggregates(user);
-                                    const isSelected = selectedUserIds.includes(user.id);
-                                    return (
-                                        <tr key={user.id} className={`group hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-lime-50/30' : ''}`}>
-                                            <td className="p-6 text-center"><Checkbox id={`check-${user.id}`} label="" checked={isSelected} onChange={() => toggleUserSelection(user.id)} /></td>
-                                            <td className="p-6">
-                                                <div className="flex items-center gap-4">
-                                                    <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-xl shadow-sm" />
-                                                    <div><p className="text-sm font-black text-slate-900">{user.name}</p><p className="text-xs text-slate-400">{user.email}</p></div>
-                                                </div>
-                                            </td>
-                                            <td className="p-6 align-middle text-center">
-                                                <div className="w-full max-w-[150px] mx-auto space-y-1">
-                                                    <div className="flex justify-center">{renderStatusBadge(isFullyPaid, hasReview, percentage)}</div>
-                                                    <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${isFullyPaid ? 'bg-lime-500' : 'bg-amber-400'}`} style={{ width: `${percentage}%` }}></div></div>
-                                                </div>
-                                            </td>
-                                            <td className="p-6 align-middle text-center">{pendingAmount > 0 ? <span className="font-mono font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-lg">-${pendingAmount.toLocaleString()}</span> : <span className="text-slate-300">-</span>}</td>
-                                            <td className="p-6 text-right">
-                                                <div className="flex items-center justify-end gap-2 relative action-menu-trigger">
-                                                    <Button onClick={() => setHistoryModal({ isOpen: true, userId: user.id })} className="h-9 px-4 text-[10px] font-black uppercase bg-white border border-slate-200 text-slate-500" variant="outline">Historial</Button>
-                                                    {!isFullyPaid && (
-                                                        <>
-                                                            <Button onClick={() => openPaymentModal(user.id)} className="h-9 px-4 text-[10px] font-black uppercase bg-slate-900 text-white" variant="primary">Cobrar</Button>
-                                                            <button onClick={() => initQuickPay(user.id)} className="w-9 h-9 rounded-xl bg-lime-50 text-lime-600 flex items-center justify-center hover:bg-lime-400 hover:text-black transition-all"><CheckCircle2 size={18} /></button>
-                                                        </>
-                                                    )}
-                                                    <div className="relative">
-                                                        <button onClick={() => setOpenActionMenuId(openActionMenuId === user.id ? null : user.id)} className={`w-9 h-9 rounded-xl border border-slate-200 text-slate-400 flex items-center justify-center ${openActionMenuId === user.id ? 'bg-slate-100 text-slate-900' : 'bg-white'}`}><MoreVertical size={18} /></button>
-                                                        {openActionMenuId === user.id && (
-                                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden text-left">
-                                                                <button onClick={() => handleIndividualReminder(user)} className="w-full text-left px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Send size={14} /> Recordatorio</button>
-                                                                <div className="h-px bg-slate-100"></div>
-                                                                <button onClick={() => handleResetUserPayments(user.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2"><Trash2 size={14} /> Anular Pagos</button>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                }) : <tr><td colSpan={5} className="p-12 text-center text-slate-400">No se encontraron participantes</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            {/* MODALS */}
-            {paymentModal.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <Card className="w-full max-w-lg bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden max-h-[90vh] flex flex-col p-0">
-                        <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-3"><div className="w-10 h-10 bg-lime-400 rounded-xl flex items-center justify-center text-black"><Wallet size={20} /></div><h3 className="text-lg font-black font-brand uppercase">Registrar Pago</h3></div>
-                            <button onClick={() => setPaymentModal({ isOpen: false, userId: null })} className="text-slate-400 hover:text-white"><X size={24} /></button>
-                        </div>
-                        <form onSubmit={submitPayment} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-                            <div className="space-y-2">
-                                {selectedConceptIds.map(id => {
-                                    const concept = PAYMENT_CONCEPTS.find(c => c.id === id);
-                                    const isPaid = users.find(u => u.id === paymentModal.userId)?.paymentStatus[id] === 'paid';
-                                    if (!concept) return null;
-                                    return (
-                                        <div key={id} onClick={() => !isPaid && handleModalConceptToggle(id)} className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer ${isPaid ? 'bg-slate-50 opacity-60 pointer-events-none' : paymentForm.selectedConcepts.includes(id) ? 'bg-lime-50 border-lime-400' : 'bg-white border-slate-200'}`}>
-                                            <div className="flex items-center gap-3"><div className={`w-5 h-5 rounded border flex items-center justify-center ${paymentForm.selectedConcepts.includes(id) ? 'bg-lime-500 border-lime-500 text-white' : 'border-slate-300'}`}>{paymentForm.selectedConcepts.includes(id) && <Check size={12} strokeWidth={4} />}</div><span className="text-xs font-bold">{concept.label}</span></div>
-                                            <span className="text-xs font-black">${concept.amount.toLocaleString()}</span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span className="text-xs font-black uppercase">Total</span><span className="text-2xl font-black font-brand text-slate-900">${paymentForm.amount.toLocaleString()}</span></div>
-
-                                <div className="grid grid-cols-2 gap-2">
-                                    {PAYMENT_METHODS.map(method => (
-                                        <button
-                                            key={method.id}
-                                            type="button"
-                                            onClick={() => setPaymentForm({ ...paymentForm, method: method.id })}
-                                            className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${paymentForm.method === method.id ? 'bg-white border-lime-500 shadow-sm ring-1 ring-lime-500' : 'bg-slate-100 border-transparent text-slate-400 hover:bg-slate-200'}`}
-                                        >
-                                            <method.icon size={16} className={method.color} />
-                                            <span className={`text-[10px] font-black uppercase ${paymentForm.method === method.id ? 'text-slate-900' : 'text-slate-500'}`}>{method.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <Input type="date" value={paymentForm.date} onChange={e => setPaymentForm({ ...paymentForm, date: e.target.value })} className="h-9 text-xs" />
-                                <Input placeholder="Referencia" value={paymentForm.reference} onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })} className="h-9 text-xs" leftIcon={<Hash size={12} />} />
-                            </div>
-                        </form>
-                        <div className="p-4 border-t border-slate-100 bg-white"><Button onClick={submitPayment} className="w-full h-12 rounded-xl font-black uppercase text-xs" variant="secondary" disabled={paymentForm.amount === 0}>Confirmar Pago</Button></div>
-                    </Card>
-                </div>
-            )}
-
-            {historyModal.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <Card className="w-full max-w-lg bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden max-h-[85vh] flex flex-col p-0">
-                        <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-3"><History size={20} /><h3 className="text-lg font-black uppercase">Historial</h3></div>
-                            <button onClick={() => setHistoryModal({ isOpen: false, userId: null })} className="text-slate-400 hover:text-white"><X size={24} /></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
-                            {transactions.filter(t => t.userId === historyModal.userId).length > 0 ? (
-                                transactions.filter(t => t.userId === historyModal.userId).map(tx => (
-                                    <div key={tx.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 space-y-2"><div className="flex justify-between items-start"><Badge color="bg-white border border-slate-200 text-slate-500">{tx.date}</Badge><span className="text-lg font-black text-lime-600">+${tx.amount.toLocaleString()}</span></div><div className="flex flex-wrap gap-1">{tx.conceptIds.map(cid => <span key={cid} className="text-[8px] font-black uppercase bg-slate-200 px-1.5 py-0.5 rounded">{PAYMENT_CONCEPTS.find(pc => pc.id === cid)?.label}</span>)}</div><div className="flex items-center gap-2 pt-1 border-t border-slate-200/50 mt-1">{getMethodIcon(tx.method)}<span className="text-[10px] font-bold text-slate-500 uppercase">{tx.method}</span></div></div>
-                                ))
-                            ) : <div className="text-center py-10 text-slate-400">Sin movimientos.</div>}
-                        </div>
-                        <div className="p-4 border-t border-slate-100 bg-white shrink-0 text-center"><Button variant="ghost" size="sm" className="text-[10px] font-black uppercase" onClick={() => setHistoryModal({ isOpen: false, userId: null })}>Cerrar</Button></div>
-                    </Card>
-                </div>
-            )}
-
-            {quickPayModal.isOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <Card className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl p-0 overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-6 text-center space-y-4">
-                            <div className="w-14 h-14 bg-lime-100 rounded-full flex items-center justify-center text-lime-600 mx-auto shadow-inner"><Banknote size={28} /></div>
-                            <h3 className="text-xl font-black font-brand uppercase tracking-tight text-slate-900">¿CONFIRMAR PAGO?</h3>
-
-                            <div className="bg-slate-900 p-4 rounded-2xl text-white font-black font-brand text-3xl shadow-lg">
-                                ${quickPayModal.amount.toLocaleString()}
-                            </div>
-
-                            <div className="space-y-4 text-left pt-2">
-                                {/* Método de Pago */}
-                                <div className="space-y-2">
-                                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Método de Pago</p>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {PAYMENT_METHODS.map(method => (
-                                            <button
-                                                key={method.id}
-                                                type="button"
-                                                onClick={() => setQuickPayModal({ ...quickPayModal, method: method.id })}
-                                                className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${quickPayModal.method === method.id ? 'bg-white border-lime-500 shadow-sm ring-1 ring-lime-500' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}
-                                            >
-                                                <method.icon size={14} className={method.color} />
-                                                <span className={`text-[9px] font-black uppercase ${quickPayModal.method === method.id ? 'text-slate-900' : 'text-slate-500'}`}>{method.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Reporte Rápido (Fecha/Referencia) */}
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Fecha</p>
-                                        <Input
-                                            type="date"
-                                            value={quickPayModal.date}
-                                            onChange={e => setQuickPayModal({ ...quickPayModal, date: e.target.value })}
-                                            className="h-9 text-[10px] font-bold px-2 rounded-xl"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Referencia</p>
-                                        <Input
-                                            placeholder="Nº Ref"
-                                            value={quickPayModal.reference}
-                                            onChange={e => setQuickPayModal({ ...quickPayModal, reference: e.target.value })}
-                                            className="h-9 text-[10px] font-bold px-2 rounded-xl"
-                                            leftIcon={<Hash size={10} />}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 p-4 pt-0 gap-3">
-                            <Button variant="outline" className="rounded-xl font-black text-xs uppercase h-12" onClick={() => setQuickPayModal({ isOpen: false, userId: null, amount: 0, method: 'Efectivo', reference: '', date: '' })}>CANCELAR</Button>
-                            <Button variant="secondary" className="rounded-xl font-black text-xs uppercase h-12 shadow-lg shadow-lime-400/20" onClick={confirmQuickPay}>CONFIRMAR</Button>
-                        </div>
-                    </Card>
-                </div>
-            )}
-
-            {reminderModal.isOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <Card className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center"><Send size={20} /></div>
-                                <div>
-                                    <h3 className="text-lg font-black font-brand uppercase tracking-tight text-slate-900">
-                                        {reminderModal.step === 1 ? 'Canales de Envío' : 'Personalizar Mensaje'}
-                                    </h3>
-                                    <p className="text-xs text-slate-500 font-bold">{selectedUserIds.length} Destinatarios Seleccionados</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setReminderModal({ ...reminderModal, isOpen: false })}><X size={20} className="text-slate-400 hover:text-black" /></button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                            {reminderModal.step === 1 ? (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-2 px-1">
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">SELECCIÓN POR USUARIO</span>
-                                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">Total: ${selectedUserIds.reduce((acc, uid) => {
-                                            const u = users.find(u => u.id === uid);
-                                            return acc + (u ? getUserAggregates(u).pendingAmount : 0);
-                                        }, 0).toLocaleString()}</span>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {selectedUserIds.map(uid => {
-                                            const user = users.find(u => u.id === uid);
-                                            if (!user) return null;
-                                            const channels = userChannels[uid] || [];
-                                            const { pendingAmount } = getUserAggregates(user);
-
+                                    <div className="flex flex-wrap gap-2">
+                                        {(Object.keys(CHANNEL_CONFIG) as ReminderChannel[]).map((ch) => {
+                                            const cfg = CHANNEL_CONFIG[ch];
+                                            const active = (userChannels[u.id] ?? []).includes(ch);
                                             return (
-                                                <div key={uid} className="flex items-center justify-between p-3 border border-slate-200 rounded-2xl hover:border-indigo-300 transition-colors bg-white">
-                                                    <div className="flex items-center gap-3">
-                                                        <img src={user.avatar} className="w-10 h-10 rounded-xl" alt={user.name} />
-                                                        <div>
-                                                            <p className="text-xs font-black text-slate-900 uppercase">{user.name}</p>
-                                                            <p className="text-[10px] font-bold text-rose-500 bg-rose-50 inline-block px-1.5 rounded mt-0.5">Deuda: ${pendingAmount.toLocaleString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        {(['whatsapp', 'email', 'sms', 'push'] as ReminderChannel[]).map(ch => {
-                                                            const isActive = channels.includes(ch);
-                                                            const Config = CHANNEL_CONFIG[ch];
-                                                            const Icon = Config.icon;
-                                                            return (
-                                                                <button
-                                                                    key={ch}
-                                                                    onClick={() => toggleUserChannel(uid, ch)}
-                                                                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isActive ? `${Config.bg} ${Config.color} border ${Config.border}` : 'bg-slate-50 text-slate-300 border border-slate-100 hover:bg-slate-100'}`}
-                                                                    title={Config.label}
-                                                                >
-                                                                    <Icon size={16} />
-                                                                </button>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )
+                                                <button
+                                                    key={ch}
+                                                    onClick={() => toggleChannel(u.id, ch)}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase transition-all ${active ? `${cfg.bg} ${cfg.border} ${cfg.color}` : 'border-slate-200 text-slate-400 hover:bg-slate-100'}`}
+                                                >
+                                                    <cfg.Icon size={12} />
+                                                    {cfg.label}
+                                                </button>
+                                            );
                                         })}
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {/* Templates Quick Actions */}
-                                    <div className="flex justify-between items-end mb-2">
-                                        <div className="space-y-2 flex-1 mr-4">
-                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">PLANTILLAS SUGERIDAS</span>
-                                            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                                                {(['friendly', 'formal', 'urgent'] as const).map(tKey => {
-                                                    const isActive = selectedTemplate[activeTab] === tKey;
-                                                    return (
-                                                        <button
-                                                            key={tKey}
-                                                            onClick={() => applyTemplate(tKey)}
-                                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border ${isActive ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                                                        >
-                                                            {TEMPLATES[tKey].label}
-                                                        </button>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-
-                                        {/* AI Premium Feature */}
+                            ))}
+                        </div>
+                    ) : (
+                        /* Step 2: Message editor */
+                        <div className="space-y-4">
+                            {/* Channel tabs */}
+                            <div className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                                {activeChannels.map((ch) => {
+                                    const cfg = CHANNEL_CONFIG[ch];
+                                    return (
                                         <button
-                                            onClick={generateAIMessage}
-                                            disabled={isGeneratingAI}
-                                            className="flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg hover:shadow-purple-500/30 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed shrink-0"
+                                            key={ch}
+                                            onClick={() => setActiveTab(ch)}
+                                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === ch ? `${cfg.bg} ${cfg.border} border ${cfg.color}` : 'text-slate-400 hover:bg-slate-50'}`}
                                         >
-                                            {isGeneratingAI ? <Bot size={16} className="animate-bounce" /> : <Sparkles size={16} />}
-                                            <span className="text-[9px] font-black uppercase tracking-widest">{isGeneratingAI ? 'Pensando...' : 'Redactar con IA'}</span>
+                                            <cfg.Icon size={12} /> {cfg.label}
                                         </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Template buttons */}
+                            <div className="flex flex-wrap gap-2">
+                                {(['friendly', 'formal', 'urgent'] as const).map((key) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => applyTemplate(key)}
+                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border transition-all ${selectedTpl[activeTab] === key ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        {key === 'friendly' ? '😊 Amigable' : key === 'formal' ? '📋 Formal' : '🚨 Urgente'}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={generateAI}
+                                    disabled={generating}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border transition-all ${selectedTpl[activeTab] === 'ai' ? 'bg-purple-600 text-white border-purple-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'} disabled:opacity-60`}
+                                >
+                                    {generating ? <><Bot size={12} className="animate-spin" /> Generando…</> : <><Sparkles size={12} /> IA</>}
+                                </button>
+                            </div>
+
+                            {/* Variables */}
+                            <div className="flex flex-wrap gap-1.5">
+                                <span className="text-[9px] font-black uppercase text-slate-400 mr-1">Variables:</span>
+                                {['nombre', 'deuda', 'liga'].map((v) => (
+                                    <button key={v} onClick={() => insertVar(v)} className="px-2 py-0.5 rounded-lg bg-slate-100 text-[10px] font-bold text-slate-600 hover:bg-slate-200 transition-colors">
+                                        {`{${v}}`}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Message editor */}
+                            <textarea
+                                value={drafts[activeTab]}
+                                onChange={(e) => { setDrafts((p) => ({ ...p, [activeTab]: e.target.value })); setSelectedTpl((p) => ({ ...p, [activeTab]: 'custom' })); }}
+                                rows={6}
+                                className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                                style={{ scrollbarWidth: 'thin' }}
+                            />
+
+                            {/* Preview */}
+                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-1">
+                                <p className="text-[9px] font-black uppercase text-slate-400">Preview con {selectedUsers[0]?.name ?? 'usuario'}</p>
+                                <p className="text-xs text-slate-600">
+                                    {drafts[activeTab]
+                                        .replace('{nombre}', selectedUsers[0]?.name ?? 'Usuario')
+                                        .replace('{liga}', leagueName)
+                                        .replace('{deuda}', '$50.000')}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-100 shrink-0 flex gap-2">
+                    {step === 1 ? (
+                        <Button
+                            variant="secondary"
+                            className="flex-1 h-11 font-black uppercase text-xs"
+                            onClick={() => setStep(2)}
+                            disabled={activeChannels.length === 0}
+                        >
+                            Siguiente · Editar mensaje
+                        </Button>
+                    ) : (
+                        <>
+                            <Button variant="outline" className="h-11 px-4 font-black uppercase text-xs" onClick={() => setStep(1)}>Atrás</Button>
+                            <Button
+                                variant="secondary"
+                                className="flex-1 h-11 font-black uppercase text-xs"
+                                onClick={handleSend}
+                            >
+                                {copied ? <><Copy size={14} /> Copiado!</> : <><Send size={14} /> Enviar recordatorio</>}
+                            </Button>
+                        </>
+                    )}
+                </div>
+            </Card>
+        </div>
+    );
+};
+
+/* ─── Main Component ────────────────────────────────────────────── */
+
+const ManagePayments: React.FC = () => {
+    const navigate = useNavigate();
+    const activeLeague = useLeagueStore((s) => s.activeLeague);
+    const fetchLeagueDetails = useLeagueStore((s) => s.fetchLeagueDetails);
+
+    const leagueId = activeLeague?.id ?? '';
+    const leagueName = activeLeague?.name ?? 'Polla';
+    const baseFee = activeLeague?.settings.baseFee ?? 0;
+    const currency = activeLeague?.settings.currency ?? 'COP';
+
+    /* ─ concepts (from localStorage, seeded from league fee) ─ */
+    const [concepts, setConcepts] = useState<PaymentConcept[]>(() => {
+        const stored = loadFromStorage<PaymentConcept[]>(storageKey(leagueId, 'concepts'), []);
+        if (stored.length > 0) return stored;
+        const defaults: PaymentConcept[] = [];
+        if (baseFee > 0) defaults.push({ id: 'general', label: 'Cuota General', type: 'general', amount: baseFee, date: 'Inicio' });
+        return defaults;
+    });
+
+    const [selectedConceptIds, setSelectedConceptIds] = useState<string[]>(() => concepts.map((c) => c.id));
+    const [conceptMenuOpen, setConceptMenuOpen] = useState(false);
+    const conceptMenuRef = useRef<HTMLDivElement>(null);
+
+    /* ─ members (from league API) ─ */
+    const [users, setUsers] = useState<UserPaymentData[]>([]);
+
+    /* ─ payment statuses (from localStorage) ─ */
+    const [paymentStatuses, setPaymentStatuses] = useState<Record<string, Record<string, PaymentStatus>>>(() =>
+        loadFromStorage(storageKey(leagueId, 'payments'), {}),
+    );
+
+    /* ─ transactions (from localStorage) ─ */
+    const [transactions, setTransactions] = useState<PaymentTransaction[]>(() =>
+        loadFromStorage(storageKey(leagueId, 'txs'), []),
+    );
+
+    /* ─ UI state ─ */
+    const [filter, setFilter] = useState<'all' | 'debtors' | 'solvents' | 'review'>('all');
+    const [search, setSearch] = useState('');
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+    /* ─ modal state ─ */
+    const [payModal, setPayModal] = useState<string | null>(null);      // userId
+    const [histModal, setHistModal] = useState<string | null>(null);    // userId
+    const [quickModal, setQuickModal] = useState<string | null>(null);  // userId
+    const [bulkModal, setBulkModal] = useState(false);
+    const [reminderOpen, setReminderOpen] = useState(false);
+
+    /* ─ load members ─ */
+    useEffect(() => {
+        if (!leagueId) return;
+        void fetchLeagueDetails(leagueId).then((league) => {
+            const members = (league.members ?? []).filter((m) => m.role !== 'ADMIN');
+            setUsers(members.map((m) => ({
+                id: m.id,
+                name: m.name,
+                avatar: m.avatar,
+                paymentStatus: paymentStatuses[m.id] ?? {},
+            })));
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [leagueId]);
+
+    /* ─ seed default concept when baseFee becomes known ─ */
+    useEffect(() => {
+        if (concepts.length === 0 && baseFee > 0) {
+            const def: PaymentConcept[] = [{ id: 'general', label: 'Cuota General', type: 'general', amount: baseFee, date: 'Inicio' }];
+            setConcepts(def);
+            setSelectedConceptIds(def.map((c) => c.id));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [baseFee]);
+
+    /* ─ persist ─ */
+    useEffect(() => { if (leagueId) saveToStorage(storageKey(leagueId, 'concepts'), concepts); }, [concepts, leagueId]);
+    useEffect(() => { if (leagueId) saveToStorage(storageKey(leagueId, 'payments'), paymentStatuses); }, [paymentStatuses, leagueId]);
+    useEffect(() => { if (leagueId) saveToStorage(storageKey(leagueId, 'txs'), transactions); }, [transactions, leagueId]);
+
+    /* ─ close menus on outside click ─ */
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (conceptMenuRef.current && !conceptMenuRef.current.contains(e.target as Node)) setConceptMenuOpen(false);
+            if (!(e.target as HTMLElement).closest('.action-menu-btn')) setOpenMenuId(null);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    /* ─ helpers ─ */
+    const getUserWithStatus = useCallback((u: UserPaymentData): UserPaymentData => ({
+        ...u,
+        paymentStatus: paymentStatuses[u.id] ?? {},
+    }), [paymentStatuses]);
+
+    const getAggregates = useCallback((u: UserPaymentData) => {
+        const status = paymentStatuses[u.id] ?? {};
+        let paid = 0, pending = 0, hasReview = false;
+        selectedConceptIds.forEach((id) => {
+            const amt = concepts.find((c) => c.id === id)?.amount ?? 0;
+            if (status[id] === 'paid') paid += amt;
+            else pending += amt;
+            if (status[id] === 'review') hasReview = true;
+        });
+        const total = paid + pending;
+        return { paid, pending, hasReview, isFullyPaid: total > 0 && pending === 0, percentage: total > 0 ? (paid / total) * 100 : 0 };
+    }, [concepts, selectedConceptIds, paymentStatuses]);
+
+    const financials = useMemo(() => {
+        let expected = 0, collected = 0;
+        concepts.filter((c) => selectedConceptIds.includes(c.id)).forEach((c) => {
+            users.forEach((u) => {
+                expected += c.amount;
+                if ((paymentStatuses[u.id] ?? {})[c.id] === 'paid') collected += c.amount;
+            });
+        });
+        return { expected, collected, progress: expected === 0 ? 0 : Math.round((collected / expected) * 100) };
+    }, [concepts, selectedConceptIds, users, paymentStatuses]);
+
+    const filteredUsers = useMemo(() => users.filter((u) => {
+        const agg = getAggregates(u);
+        const matchFilter = filter === 'all' ? true : filter === 'solvents' ? agg.isFullyPaid : filter === 'review' ? agg.hasReview : !agg.isFullyPaid;
+        const matchSearch = u.name.toLowerCase().includes(search.toLowerCase());
+        return matchFilter && matchSearch;
+    }), [users, filter, search, getAggregates]);
+
+    /* ─ actions ─ */
+    const markPaid = (userId: string, conceptIds: string[], method: string, reference: string, date: string, amount: number, note = '') => {
+        setPaymentStatuses((prev) => {
+            const cur = prev[userId] ?? {};
+            const next = { ...cur };
+            conceptIds.forEach((id) => { next[id] = 'paid'; });
+            return { ...prev, [userId]: next };
+        });
+        setTransactions((prev) => [{
+            id: Math.random().toString(36).slice(2, 9),
+            userId, conceptIds, amount, date, method, reference, note,
+        }, ...prev]);
+    };
+
+    const handlePaySubmit = (userId: string, cIds: string[], amount: number, method: string, reference: string, date: string, note: string) => {
+        markPaid(userId, cIds, method, reference, date, amount, note);
+        setPayModal(null);
+    };
+
+    const handleQuickConfirm = (method: string, reference: string, date: string) => {
+        const u = users.find((u) => u.id === quickModal);
+        if (!u) return;
+        const pendingIds = selectedConceptIds.filter((id) => (paymentStatuses[u.id] ?? {})[id] !== 'paid');
+        const amount = getAggregates(u).pending;
+        markPaid(u.id, pendingIds, method, reference, date, amount, 'Pago Rápido');
+        setQuickModal(null);
+    };
+
+    const handleBulkConfirm = () => {
+        users.filter((u) => selectedUserIds.includes(u.id)).forEach((u) => {
+            const agg = getAggregates(u);
+            if (agg.pending <= 0) return;
+            const pendingIds = selectedConceptIds.filter((id) => (paymentStatuses[u.id] ?? {})[id] !== 'paid');
+            markPaid(u.id, pendingIds, 'Efectivo', '', new Date().toISOString().split('T')[0], agg.pending, 'Pago Masivo');
+        });
+        setBulkModal(false);
+        setSelectedUserIds([]);
+    };
+
+    const handleReset = (userId: string) => {
+        if (!window.confirm('¿Anular todos los pagos de este usuario?')) return;
+        setPaymentStatuses((prev) => {
+            const cur = { ...(prev[userId] ?? {}) };
+            selectedConceptIds.forEach((id) => { cur[id] = 'pending'; });
+            return { ...prev, [userId]: cur };
+        });
+        setOpenMenuId(null);
+    };
+
+    const exportCSV = () => {
+        const rows = filteredUsers.map((u) => {
+            const agg = getAggregates(u);
+            return [u.name, agg.pending, agg.isFullyPaid ? 'Al día' : 'Pendiente'].join(',');
+        });
+        const csv = 'data:text/csv;charset=utf-8,' + ['Nombre,Deuda,Estado', ...rows].join('\n');
+        const a = document.createElement('a');
+        a.href = encodeURI(csv);
+        a.download = 'reporte_pagos.csv';
+        a.click();
+    };
+
+    const bulkTotal = useMemo(() => {
+        return users.filter((u) => selectedUserIds.includes(u.id)).reduce((s, u) => s + getAggregates(u).pending, 0);
+    }, [users, selectedUserIds, getAggregates]);
+
+    const reminderUsers = useMemo(
+        () => users.filter((u) => selectedUserIds.includes(u.id)).map(getUserWithStatus),
+        [users, selectedUserIds, getUserWithStatus],
+    );
+
+    /* ─ render ─ */
+    return (
+        <div className="space-y-6 pb-24">
+            {/* ── Header ── */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">{leagueName}</h1>
+                            {activeLeague?.settings.plan && (
+                                <Badge color="bg-amber-100 text-amber-700 border border-amber-200">{activeLeague.settings.plan}</Badge>
+                            )}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Gestión de Pagos · {selectedConceptIds.length} Conceptos activos
+                        </p>
+                    </div>
+                </div>
+
+                {/* Concept filter */}
+                <div className="relative z-30" ref={conceptMenuRef}>
+                    <button
+                        onClick={() => setConceptMenuOpen((v) => !v)}
+                        className="w-full md:w-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-2.5 px-4 flex items-center justify-between gap-4 hover:border-lime-400 transition-all"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="bg-lime-100 text-lime-700 w-8 h-8 rounded-lg flex items-center justify-center"><Filter size={16} /></div>
+                            <div className="text-left">
+                                <p className="text-[9px] font-black uppercase text-slate-400">Conceptos</p>
+                                <p className="text-xs font-black text-slate-900">{selectedConceptIds.length} Seleccionados</p>
+                            </div>
+                        </div>
+                        <ChevronDown size={18} className={`text-slate-300 transition-transform ${conceptMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                        {conceptMenuOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                                transition={{ duration: 0.16, ease: 'easeOut' as const }}
+                                className="absolute top-full right-0 mt-2 w-full md:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50 p-2"
+                            >
+                                {concepts.map((c) => {
+                                    const active = selectedConceptIds.includes(c.id);
+                                    return (
+                                        <button
+                                            key={c.id}
+                                            onClick={() => setSelectedConceptIds((prev) => active ? prev.filter((x) => x !== c.id) : [...prev, c.id])}
+                                            className={`w-full text-left p-2.5 rounded-xl flex items-center gap-3 transition-colors ${active ? 'bg-lime-50' : 'hover:bg-slate-50'}`}
+                                        >
+                                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${active ? 'bg-lime-500 border-lime-500 text-white' : 'border-slate-300'}`}>
+                                                {active && <Check size={12} strokeWidth={4} />}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold uppercase text-slate-700">{c.label}</p>
+                                                <p className="text-[10px] font-black text-slate-500">{fmtCurrency(c.amount)} · {c.date}</p>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                                {concepts.length === 0 && (
+                                    <p className="text-xs text-slate-400 text-center py-3">Sin conceptos. Configura la cuota base en la liga.</p>
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </div>
+
+            {/* ── Financial summary ── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* Main card */}
+                <div className="bg-slate-900 rounded-[2rem] p-8 text-white relative overflow-hidden shadow-xl md:col-span-2">
+                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-end gap-6">
+                        <div className="space-y-2">
+                            <Badge color="bg-lime-400 text-black">RECAUDO GLOBAL</Badge>
+                            <p className="text-5xl font-black font-brand tracking-tighter">{fmtCurrency(financials.collected)}</p>
+                            <div className="flex items-center gap-3">
+                                <div className="h-1.5 w-32 bg-white/20 rounded-full overflow-hidden">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${financials.progress}%` }}
+                                        transition={{ duration: 1, ease: 'easeOut' as const }}
+                                        className="h-full bg-lime-400 rounded-full"
+                                    />
+                                </div>
+                                <p className="text-sm font-bold text-slate-400">de {fmtCurrency(financials.expected)}</p>
+                            </div>
+                        </div>
+                        <p className="text-5xl font-black font-brand text-lime-400">{financials.progress}%</p>
+                    </div>
+                    <div className="absolute -top-10 -right-10 w-64 h-64 bg-lime-500/10 rounded-full blur-3xl pointer-events-none" />
+                </div>
+
+                {/* Status card */}
+                <Card className="p-5 flex flex-col justify-center space-y-4 border-slate-200">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <PieChart size={14} className="text-slate-400" />
+                            <span className="text-[10px] font-black uppercase text-slate-400">Estado Usuarios</span>
+                        </div>
+                        <button onClick={exportCSV} className="text-[9px] font-bold text-lime-600 flex items-center gap-1 hover:text-lime-700">
+                            <Download size={10} /> CSV
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex justify-between items-center p-3 bg-lime-50 rounded-xl border border-lime-100">
+                            <span className="text-xs font-bold text-lime-800">Al día</span>
+                            <span className="text-lg font-black text-lime-700">{users.filter((u) => getAggregates(u).isFullyPaid).length}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-rose-50 rounded-xl border border-rose-100">
+                            <span className="text-xs font-bold text-rose-800">Deudores</span>
+                            <span className="text-lg font-black text-rose-700">{users.filter((u) => !getAggregates(u).isFullyPaid).length}</span>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
+            {/* ── Toolbar ── */}
+            <div className="space-y-3">
+                <div className="flex flex-col md:flex-row justify-between gap-3 items-center">
+                    {/* Filter tabs */}
+                    <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-full md:w-auto overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                        {[
+                            { id: 'all', label: 'Todos' },
+                            { id: 'debtors', label: 'Deudores' },
+                            { id: 'review', label: 'Revisión' },
+                            { id: 'solvents', label: 'Al día' },
+                        ].map((tab) => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setFilter(tab.id as typeof filter)}
+                                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${filter === tab.id ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="w-full md:w-64">
+                        <Input placeholder="Buscar..." leftIcon={<Search size={16} />} className="text-xs font-bold h-10" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    </div>
+                </div>
+
+                {/* Bulk actions */}
+                <AnimatePresence>
+                    {selectedUserIds.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.2 }}
+                            className="flex gap-2"
+                        >
+                            <Button
+                                variant="secondary"
+                                className="flex-1 md:flex-none text-xs font-bold uppercase"
+                                onClick={() => setBulkModal(true)}
+                            >
+                                <Banknote size={15} className="mr-2" />
+                                Pago Masivo ({selectedUserIds.length})
+                            </Button>
+                            <Button
+                                className="flex-1 md:flex-none text-xs font-bold uppercase bg-indigo-600 hover:bg-indigo-700 text-white border-0"
+                                onClick={() => setReminderOpen(true)}
+                            >
+                                <Send size={15} className="mr-2" />
+                                Recordar ({selectedUserIds.length})
+                            </Button>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* ── Mobile list ── */}
+            <div className="md:hidden space-y-3">
+                {filteredUsers.length > 0 ? filteredUsers.map((u) => {
+                    const agg = getAggregates(u);
+                    const isSelected = selectedUserIds.includes(u.id);
+                    return (
+                        <motion.div
+                            key={u.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-lime-500 ring-1 ring-lime-500 shadow-md' : 'border-slate-200 shadow-sm'}`}
+                        >
+                            <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                    <Checkbox id={`m-${u.id}`} label="" checked={isSelected} onChange={() => setSelectedUserIds((p) => p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id])} />
+                                    <img src={avatarUrl(u.name, u.avatar)} className="w-10 h-10 rounded-xl object-cover" alt={u.name} />
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">{u.name}</p>
                                     </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                    <StatusBadge isFullyPaid={agg.isFullyPaid} hasReview={agg.hasReview} percentage={agg.percentage} />
+                                    {agg.pending > 0 && <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg">-{fmtCurrency(agg.pending)}</span>}
+                                </div>
+                            </div>
 
-                                    {/* Editor */}
-                                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                                        <div className="flex bg-slate-50 border-b border-slate-200 overflow-x-auto scrollbar-hide">
-                                            {getActiveChannels().map(ch => {
-                                                const Config = CHANNEL_CONFIG[ch];
-                                                const Icon = Config.icon;
-                                                return (
-                                                    <button
-                                                        key={ch}
-                                                        onClick={() => setActiveTab(ch)}
-                                                        className={`flex-1 py-3 px-4 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap min-w-[100px] ${activeTab === ch ? 'bg-white text-slate-900 shadow-sm border-b-2 border-indigo-500' : 'text-slate-400 hover:text-slate-600'}`}
-                                                    >
-                                                        <Icon size={14} className={activeTab === ch ? Config.color : ''} />
-                                                        <span>{Config.label}</span>
-                                                    </button>
-                                                )
-                                            })}
+                            <div className="mb-3 space-y-1">
+                                <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase">
+                                    <span>Progreso</span><span>{Math.round(agg.percentage)}%</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${agg.isFullyPaid ? 'bg-lime-500' : 'bg-amber-400'}`} style={{ width: `${agg.percentage}%` }} />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                                {!agg.isFullyPaid && (
+                                    <Button size="sm" className="flex-1 h-9 text-[10px] font-black uppercase" variant="primary" onClick={() => setPayModal(u.id)}>Cobrar</Button>
+                                )}
+                                <button onClick={() => setQuickModal(u.id)} className="w-9 h-9 bg-lime-50 rounded-xl flex items-center justify-center text-lime-600 border border-lime-100 hover:bg-lime-100 transition-colors" title="Pago rápido">
+                                    <CheckCircle2 size={16} />
+                                </button>
+                                <button onClick={() => setHistModal(u.id)} className="w-9 h-9 rounded-xl border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 transition-colors" title="Historial">
+                                    <History size={16} />
+                                </button>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                                        className={`action-menu-btn w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${openMenuId === u.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                                    >
+                                        <MoreVertical size={16} />
+                                    </button>
+                                    {openMenuId === u.id && (
+                                        <div className="absolute right-0 bottom-full mb-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                                            <button onClick={() => { setSelectedUserIds([u.id]); setReminderOpen(true); setOpenMenuId(null); }} className="w-full text-left px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Send size={14} /> Recordatorio</button>
+                                            <div className="h-px bg-slate-100" />
+                                            <button onClick={() => handleReset(u.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2"><Trash2 size={14} /> Anular pagos</button>
                                         </div>
-                                        <div className="p-4 bg-white space-y-3 relative">
-                                            <textarea
-                                                className="w-full h-32 resize-none outline-none text-sm text-slate-700 placeholder:text-slate-300 font-medium bg-transparent relative z-10"
-                                                placeholder={`Escribe tu mensaje para ${CHANNEL_CONFIG[activeTab].label}...`}
-                                                value={messageDrafts[activeTab]}
-                                                onChange={(e) => {
-                                                    setMessageDrafts({ ...messageDrafts, [activeTab]: e.target.value });
-                                                    if (selectedTemplate[activeTab] !== 'custom') {
-                                                        setSelectedTemplate(prev => ({ ...prev, [activeTab]: 'custom' }));
-                                                    }
-                                                }}
-                                            />
-                                            {/* AI Decoration Background */}
-                                            {selectedTemplate[activeTab] === 'ai' && (
-                                                <div className="absolute top-2 right-2 pointer-events-none opacity-10">
-                                                    <Sparkles size={80} className="text-purple-500" />
-                                                </div>
-                                            )}
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    );
+                }) : (
+                    <div className="text-center py-10 text-slate-400 bg-white rounded-2xl border border-slate-200 border-dashed">
+                        <p className="text-xs font-bold uppercase">No se encontraron resultados.</p>
+                    </div>
+                )}
+            </div>
 
-                                            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
-                                                <span className="text-[10px] font-black text-slate-400 uppercase mr-1">Variables:</span>
-                                                {['nombre', 'deuda', 'liga'].map(v => (
-                                                    <button key={v} onClick={() => insertVariable(v)} className="px-2 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold hover:bg-slate-200 transition-colors">{`{${v}}`}</button>
-                                                ))}
-                                                <div className="ml-auto flex items-center text-[10px] text-slate-400">
-                                                    <Edit3 size={12} className="mr-1" />
-                                                    {selectedTemplate[activeTab] === 'ai' ? (
-                                                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500 font-bold">Generado por IA</span>
-                                                    ) : (
-                                                        <span>Editando para {CHANNEL_CONFIG[activeTab].label}</span>
+            {/* ── Desktop table ── */}
+            <div className="hidden md:block bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-sm">
+                <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
+                    <table className="w-full text-left border-collapse min-w-[700px]">
+                        <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50/50">
+                                <th className="p-5 w-14 text-center">
+                                    <Checkbox
+                                        id="select-all"
+                                        label=""
+                                        checked={selectedUserIds.length === filteredUsers.length && filteredUsers.length > 0}
+                                        onChange={() => setSelectedUserIds(selectedUserIds.length === filteredUsers.length ? [] : filteredUsers.map((u) => u.id))}
+                                    />
+                                </th>
+                                <th className="p-5 text-[10px] font-black uppercase text-slate-400">Participante</th>
+                                <th className="p-5 text-[10px] font-black uppercase text-slate-400 text-center">Estado</th>
+                                <th className="p-5 text-[10px] font-black uppercase text-slate-400 text-center">Deuda</th>
+                                <th className="p-5 text-[10px] font-black uppercase text-slate-400 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredUsers.length > 0 ? filteredUsers.map((u) => {
+                                const agg = getAggregates(u);
+                                const isSelected = selectedUserIds.includes(u.id);
+                                return (
+                                    <tr key={u.id} className={`group hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-lime-50/30' : ''}`}>
+                                        <td className="p-5 text-center">
+                                            <Checkbox id={`c-${u.id}`} label="" checked={isSelected} onChange={() => setSelectedUserIds((p) => p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id])} />
+                                        </td>
+                                        <td className="p-5">
+                                            <div className="flex items-center gap-3">
+                                                <img src={avatarUrl(u.name, u.avatar)} className="w-10 h-10 rounded-xl object-cover" alt={u.name} />
+                                                <p className="text-sm font-black text-slate-900">{u.name}</p>
+                                            </div>
+                                        </td>
+                                        <td className="p-5 text-center">
+                                            <div className="w-full max-w-[160px] mx-auto space-y-1.5">
+                                                <div className="flex justify-center">
+                                                    <StatusBadge isFullyPaid={agg.isFullyPaid} hasReview={agg.hasReview} percentage={agg.percentage} />
+                                                </div>
+                                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className={`h-full rounded-full ${agg.isFullyPaid ? 'bg-lime-500' : 'bg-amber-400'}`} style={{ width: `${agg.percentage}%` }} />
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="p-5 text-center">
+                                            {agg.pending > 0 ? (
+                                                <span className="font-mono font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-lg">-{fmtCurrency(agg.pending)}</span>
+                                            ) : (
+                                                <span className="text-slate-300">—</span>
+                                            )}
+                                        </td>
+                                        <td className="p-5">
+                                            <div className="flex items-center justify-end gap-2 action-menu-btn">
+                                                <button onClick={() => setHistModal(u.id)} className="h-9 px-4 rounded-xl border border-slate-200 text-[10px] font-black uppercase text-slate-500 hover:bg-slate-50 transition-colors">
+                                                    Historial
+                                                </button>
+                                                {!agg.isFullyPaid && (
+                                                    <>
+                                                        <button onClick={() => setPayModal(u.id)} className="h-9 px-4 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase hover:bg-slate-800 transition-colors">
+                                                            Cobrar
+                                                        </button>
+                                                        <button onClick={() => setQuickModal(u.id)} className="w-9 h-9 rounded-xl bg-lime-50 text-lime-600 flex items-center justify-center hover:bg-lime-400 hover:text-black transition-all" title="Pago rápido">
+                                                            <CheckCircle2 size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                                                        className={`action-menu-btn w-9 h-9 rounded-xl border border-slate-200 text-slate-400 flex items-center justify-center transition-all ${openMenuId === u.id ? 'bg-slate-100 text-slate-900' : 'bg-white hover:bg-slate-50'}`}
+                                                    >
+                                                        <MoreVertical size={16} />
+                                                    </button>
+                                                    {openMenuId === u.id && (
+                                                        <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                                                            <button onClick={() => { setSelectedUserIds([u.id]); setReminderOpen(true); setOpenMenuId(null); }} className="w-full text-left px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Send size={14} /> Recordatorio</button>
+                                                            <div className="h-px bg-slate-100" />
+                                                            <button onClick={() => handleReset(u.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2"><Trash2 size={14} /> Anular pagos</button>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                        </td>
+                                    </tr>
+                                );
+                            }) : (
+                                <tr><td colSpan={5} className="p-12 text-center text-slate-400 text-sm">No se encontraron participantes</td></tr>
                             )}
-                        </div>
-
-                        <div className="p-4 border-t border-slate-100 bg-white flex gap-3">
-                            {reminderModal.step === 2 && (
-                                <Button variant="outline" onClick={() => setReminderModal({ ...reminderModal, step: 1 })} className="w-14 rounded-xl border-slate-200 text-slate-500">
-                                    <ArrowLeft size={18} />
-                                </Button>
-                            )}
-                            <Button
-                                variant="secondary"
-                                onClick={() => reminderModal.step === 1 ? setReminderModal({ ...reminderModal, step: 2 }) : handleSendReminder()}
-                                className="flex-1 h-12 rounded-xl font-black text-xs uppercase shadow-xl"
-                            >
-                                {reminderModal.step === 1 ? 'Personalizar Mensaje' : 'Enviar Notificaciones'} <Send size={16} className="ml-2" />
-                            </Button>
-                        </div>
-                    </Card>
+                        </tbody>
+                    </table>
                 </div>
+            </div>
+
+            {/* ── Modals ── */}
+            {payModal && (
+                <PaymentModal
+                    userId={payModal}
+                    users={users}
+                    concepts={concepts}
+                    selectedConceptIds={selectedConceptIds}
+                    onClose={() => setPayModal(null)}
+                    onSubmit={handlePaySubmit}
+                />
+            )}
+            {histModal && (
+                <HistoryModal
+                    userId={histModal}
+                    users={users}
+                    transactions={transactions}
+                    concepts={concepts}
+                    onClose={() => setHistModal(null)}
+                />
+            )}
+            {quickModal && (
+                <QuickPayModal
+                    userId={quickModal}
+                    users={users}
+                    pendingAmount={getAggregates(users.find((u) => u.id === quickModal) ?? users[0]).pending}
+                    onClose={() => setQuickModal(null)}
+                    onConfirm={handleQuickConfirm}
+                />
+            )}
+            {bulkModal && (
+                <BulkPayModal
+                    userCount={selectedUserIds.filter((id) => getAggregates(users.find((u) => u.id === id) ?? users[0]).pending > 0).length}
+                    totalAmount={bulkTotal}
+                    onClose={() => setBulkModal(false)}
+                    onConfirm={handleBulkConfirm}
+                />
+            )}
+            {reminderOpen && (
+                <ReminderModal
+                    selectedUsers={reminderUsers}
+                    leagueName={leagueName}
+                    onClose={() => { setReminderOpen(false); setSelectedUserIds([]); }}
+                />
             )}
         </div>
     );
