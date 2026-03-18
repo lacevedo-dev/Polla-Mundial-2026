@@ -1846,23 +1846,41 @@ const Dashboard: React.FC = () => {
                         </div>
                         {predictions && predictions.length > 0 ? (
                             <div className="space-y-2">
-                                {predictions.slice(0, 3).map((p, i) => (
-                                    <motion.div
-                                        key={p.id}
-                                        initial={{ opacity: 0, x: 8 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.1 + i * 0.06 }}
-                                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-black text-slate-900">{p.match}</p>
-                                            <p className="mt-0.5 text-[10px] font-bold text-slate-400">Pronóstico: {p.tuPrediccion}</p>
-                                        </div>
-                                        <div className={`flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${p.acierto ? 'bg-lime-100 text-lime-700' : 'bg-rose-100 text-rose-700'}`}>
-                                            {p.acierto ? 'Acierto' : 'Error'}
-                                        </div>
-                                    </motion.div>
-                                ))}
+                                {predictions.slice(0, 3).map((p, i) => {
+                                    const isPending = p.resultado === 'Pendiente' || !p.resultado;
+                                    const badge = isPending
+                                        ? { label: 'Pendiente', cls: 'bg-slate-100 text-slate-500' }
+                                        : p.acierto
+                                        ? { label: 'Acierto', cls: 'bg-lime-100 text-lime-700' }
+                                        : { label: 'Fallo', cls: 'bg-rose-100 text-rose-700' };
+                                    return (
+                                        <motion.div
+                                            key={p.id}
+                                            initial={{ opacity: 0, x: 8 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.1 + i * 0.06 }}
+                                            className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-3 ${
+                                                isPending ? 'border-slate-100 bg-slate-50'
+                                                : p.acierto ? 'border-lime-100 bg-lime-50/50'
+                                                : 'border-rose-100 bg-rose-50/40'
+                                            }`}
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-black text-slate-900">{p.match}</p>
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                    <span className="text-[10px] font-bold text-slate-400">Mi pronóstico: <span className="text-slate-600">{p.tuPrediccion}</span></span>
+                                                    {!isPending && (
+                                                        <span className="text-[10px] font-bold text-slate-400">Resultado: <span className="text-slate-600">{p.resultado}</span></span>
+                                                    )}
+                                                    <span className="text-[9px] text-slate-300">{p.fecha}</span>
+                                                </div>
+                                            </div>
+                                            <div className={`flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${badge.cls}`}>
+                                                {badge.label}
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
