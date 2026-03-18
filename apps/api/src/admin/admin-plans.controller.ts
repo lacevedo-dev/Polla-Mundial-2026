@@ -9,22 +9,22 @@ const PLAN_DEFAULTS = {
     FREE: {
         maxLeagues: 1,
         maxParticipants: 10,
-        features: ['Predicciones básicas', 'Clasificación', 'Acceso a ligas públicas'],
+        features: ['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'],
         price: 0,
         siCredits: 3,
     },
     GOLD: {
         maxLeagues: 5,
         maxParticipants: 50,
-        features: ['Todo lo de FREE', 'Múltiples ligas', 'Estadísticas avanzadas', 'Soporte prioritario'],
-        price: 9900,
+        features: ['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos'],
+        price: 29000,
         siCredits: 30,
     },
     DIAMOND: {
         maxLeagues: -1,
         maxParticipants: -1,
-        features: ['Todo lo de GOLD', 'Ligas ilimitadas', 'Participantes ilimitados', 'Personalización avanzada', 'API access'],
-        price: 29900,
+        features: ['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'],
+        price: 89000,
         siCredits: 100,
     },
 };

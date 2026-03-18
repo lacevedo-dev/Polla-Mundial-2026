@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Button, Badge, Card } from '../components/UI';
 import { useNavigate } from 'react-router-dom';
+import { useConfigStore } from '../stores/config.store';
 import {
   Trophy,
   Target,
@@ -23,8 +24,15 @@ import {
   LogIn,
   Settings2,
   X,
+  Menu,
   CheckCircle2
 } from 'lucide-react';
+
+function formatPlanPrice(price: number): string {
+  if (price === 0) return '$0';
+  if (price >= 1000) return `$${Math.round(price / 1000)}k`;
+  return `$${price.toLocaleString('es-CO')}`;
+}
 
 // Props eliminadas — navegación via useNavigate
 
@@ -33,7 +41,17 @@ const Landing: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>('hero');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showDemoMenu, setShowDemoMenu] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const observer = useRef<IntersectionObserver | null>(null);
+  const { planConfig, fetchPlanConfig } = useConfigStore();
+
+  useEffect(() => {
+    void fetchPlanConfig();
+  }, [fetchPlanConfig]);
+
+  const freePlan  = planConfig['FREE'];
+  const goldPlan  = planConfig['GOLD'];
+  const diamondPlan = planConfig['DIAMOND'];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -123,10 +141,77 @@ const Landing: React.FC = () => {
 
           <div className="flex items-center gap-2 sm:gap-4">
             <button onClick={() => navigate('/login')} className="hidden sm:block text-xs font-black uppercase tracking-widest text-slate-900 hover:text-lime-700 transition-colors">Entrar</button>
-            <Button onClick={() => navigate('/register')} variant="secondary" size="sm" className="px-4 sm:px-6 rounded-full font-black text-xs sm:text-sm">¡JUGAR YA!</Button>
+            <Button onClick={() => navigate('/register')} variant="secondary" size="sm" className="hidden sm:flex px-4 sm:px-6 rounded-full font-black text-xs sm:text-sm">¡JUGAR YA!</Button>
+            <button
+              onClick={() => setIsMobileNavOpen(true)}
+              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              aria-label="Abrir menú"
+            >
+              <Menu size={20} />
+            </button>
           </div>
         </div>
       </nav>
+
+      {/* Mobile Nav Overlay */}
+      {isMobileNavOpen && (
+        <div
+          className="fixed inset-0 bg-slate-950 z-[80] flex flex-col lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menú de navegación"
+        >
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-brand text-black text-xl font-black">26</div>
+              <span className="font-brand text-sm text-white uppercase font-black tracking-tighter">POLLA<span className="text-lime-400">2026</span></span>
+            </div>
+            <button
+              onClick={() => setIsMobileNavOpen(false)}
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              aria-label="Cerrar menú"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Nav links */}
+          <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2" role="navigation" aria-label="Navegación principal">
+            {[
+              { id: 'how-it-works', label: 'Cómo Funciona' },
+              { id: 'prizes',       label: 'Premios' },
+              { id: 'community',    label: 'Comunidad' },
+              { id: 'pricing',      label: 'Precios' },
+            ].map((link) => (
+              <button
+                key={link.id}
+                onClick={() => { scrollTo(link.id); setIsMobileNavOpen(false); }}
+                className="w-full flex items-center px-4 py-3.5 rounded-xl text-sm font-black uppercase tracking-widest text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left"
+              >
+                {link.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Bottom CTA */}
+          <div className="px-4 pb-8 pt-4 border-t border-slate-800 shrink-0 space-y-3">
+            <button
+              onClick={() => { navigate('/login'); setIsMobileNavOpen(false); }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-black uppercase tracking-widest text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            >
+              <LogIn size={16} /> Entrar
+            </button>
+            <Button
+              onClick={() => { navigate('/register'); setIsMobileNavOpen(false); }}
+              variant="secondary"
+              className="w-full h-12 rounded-2xl font-black uppercase tracking-widest text-sm"
+            >
+              ¡JUGAR YA!
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="flex-1">
@@ -135,7 +220,7 @@ const Landing: React.FC = () => {
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
             <div className="relative z-10 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000">
               <Badge color="bg-lime-100 text-lime-800 border border-lime-200 px-3 sm:px-4 py-1.5 sm:py-2 uppercase tracking-widest text-[10px] sm:text-xs">MUNDIAL 2026 • ACCESO ANTICIPADO</Badge>
-              <h1 className="text-4xl sm:text-6xl lg:text-8xl font-black font-brand leading-[0.85] tracking-tighter uppercase text-slate-900">
+              <h1 className="text-4xl sm:text-6xl lg:text-8xl font-black font-brand leading-tight sm:leading-[0.9] lg:leading-[0.85] tracking-tighter uppercase text-slate-900">
                 PRONOSTICA <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-emerald-600">GANA & DOMINA.</span>
               </h1>
               <p className="text-slate-500 text-base sm:text-xl max-w-xl leading-relaxed font-medium">
@@ -282,10 +367,12 @@ const Landing: React.FC = () => {
               <div className="p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 space-y-5 sm:space-y-6">
                 <div className="space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase">GRATIS</h4>
-                  <p className="text-3xl sm:text-4xl font-black font-brand text-slate-900">$0 <span className="text-sm font-bold text-slate-400">/ SIEMPRE</span></p>
+                  <p className="text-3xl sm:text-4xl font-black font-brand text-slate-900">
+                    {freePlan ? formatPlanPrice(freePlan.price) : '$0'} <span className="text-sm font-bold text-slate-400">/ SIEMPRE</span>
+                  </p>
                 </div>
                 <ul className="space-y-3">
-                  {['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'].map(f => (
+                  {(freePlan?.features ?? ['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico']).map(f => (
                     <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-slate-300 shrink-0" /> {f}</li>
                   ))}
                 </ul>
@@ -297,11 +384,13 @@ const Landing: React.FC = () => {
                 <div className="absolute top-0 right-0 p-3 sm:p-4 bg-lime-400 text-black text-[10px] font-black uppercase tracking-widest rounded-bl-2xl">POPULAR</div>
                 <div className="space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase text-lime-400">GOLD</h4>
-                  <p className="text-4xl sm:text-5xl font-black font-brand text-white">$29k <span className="text-sm font-bold text-slate-500">/ ÚNICO</span></p>
+                  <p className="text-4xl sm:text-5xl font-black font-brand text-white">
+                    {goldPlan ? formatPlanPrice(goldPlan.price) : '$29k'} <span className="text-sm font-bold text-slate-500">/ ÚNICO</span>
+                  </p>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Pago único por administrador</p>
                 </div>
                 <ul className="space-y-3 sm:space-y-4">
-                  {['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos'].map(f => (
+                  {(goldPlan?.features ?? ['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos']).map(f => (
                     <li key={f} className="flex items-center gap-3 text-sm font-bold text-slate-300"><CheckCircle2 size={18} className="text-lime-400 shrink-0" /> {f}</li>
                   ))}
                 </ul>
@@ -312,10 +401,12 @@ const Landing: React.FC = () => {
               <div className="p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 space-y-5 sm:space-y-6">
                 <div className="space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase text-cyan-500">DIAMOND</h4>
-                  <p className="text-3xl sm:text-4xl font-black font-brand text-slate-900">$89k <span className="text-sm font-bold text-slate-400">/ ÚNICO</span></p>
+                  <p className="text-3xl sm:text-4xl font-black font-brand text-slate-900">
+                    {diamondPlan ? formatPlanPrice(diamondPlan.price) : '$89k'} <span className="text-sm font-bold text-slate-400">/ ÚNICO</span>
+                  </p>
                 </div>
                 <ul className="space-y-3">
-                  {['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'].map(f => (
+                  {(diamondPlan?.features ?? ['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7']).map(f => (
                     <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-cyan-500 shrink-0" /> {f}</li>
                   ))}
                 </ul>

@@ -2,10 +2,10 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 
-const SI_CREDITS_DEFAULTS: Record<string, number> = {
-    FREE: 3,
-    GOLD: 30,
-    DIAMOND: 100,
+const PLAN_DEFAULTS: Record<string, { siCredits: number; price: number; features: string[]; maxParticipants: number }> = {
+    FREE:    { siCredits: 3,   price: 0,     features: ['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'],                                               maxParticipants: 10 },
+    GOLD:    { siCredits: 30,  price: 29000, features: ['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos'],                 maxParticipants: 50 },
+    DIAMOND: { siCredits: 100, price: 89000, features: ['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'], maxParticipants: -1 },
 };
 
 @ApiTags('config')
@@ -25,16 +25,17 @@ export class ConfigController {
             where: { key: { in: ['plan:FREE', 'plan:GOLD', 'plan:DIAMOND', 'si_credits_reset'] } },
         });
 
-        const result: Record<string, { siCredits: number }> = {};
+        const result: Record<string, { siCredits: number; price: number; features: string[]; maxParticipants: number }> = {};
 
         for (const plan of ['FREE', 'GOLD', 'DIAMOND']) {
             const saved = configs.find((c) => c.key === `plan:${plan}`);
             const planData = saved?.value as Record<string, unknown> | null;
+            const defaults = PLAN_DEFAULTS[plan];
             result[plan] = {
-                siCredits:
-                    typeof planData?.siCredits === 'number'
-                        ? planData.siCredits
-                        : SI_CREDITS_DEFAULTS[plan],
+                siCredits:       typeof planData?.siCredits === 'number'       ? planData.siCredits       : defaults.siCredits,
+                price:           typeof planData?.price === 'number'           ? planData.price           : defaults.price,
+                features:        Array.isArray(planData?.features)             ? planData.features as string[] : defaults.features,
+                maxParticipants: typeof planData?.maxParticipants === 'number' ? planData.maxParticipants : defaults.maxParticipants,
             };
         }
 

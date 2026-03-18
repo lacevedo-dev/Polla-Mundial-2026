@@ -3,6 +3,9 @@ import { request } from '../api';
 
 export interface PlanPublicConfig {
     siCredits: number;
+    price: number;
+    features: string[];
+    maxParticipants: number;
 }
 
 interface ConfigState {
