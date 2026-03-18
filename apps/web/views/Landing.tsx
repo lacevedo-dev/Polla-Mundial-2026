@@ -93,7 +93,7 @@ const Landing: React.FC = () => {
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col relative">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-4">
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-4 sm:px-6 py-3 sm:py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => scrollToTop()}>
             <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center font-brand text-white text-2xl font-black shadow-lg">26</div>
@@ -121,9 +121,9 @@ const Landing: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/login')} className="text-xs font-black uppercase tracking-widest text-slate-900 hover:text-lime-700 transition-colors">Entrar</button>
-            <Button onClick={() => navigate('/register')} variant="secondary" size="md" className="px-6 rounded-full font-black">¡JUGAR YA!</Button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button onClick={() => navigate('/login')} className="hidden sm:block text-xs font-black uppercase tracking-widest text-slate-900 hover:text-lime-700 transition-colors">Entrar</button>
+            <Button onClick={() => navigate('/register')} variant="secondary" size="sm" className="px-4 sm:px-6 rounded-full font-black text-xs sm:text-sm">¡JUGAR YA!</Button>
           </div>
         </div>
       </nav>
@@ -131,35 +131,36 @@ const Landing: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1">
         {/* Hero Section */}
-        <section id="hero" className="relative px-6 pt-16 pb-24 lg:pt-32 lg:pb-40 overflow-hidden">
-          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div className="relative z-10 space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000">
-              <Badge color="bg-lime-100 text-lime-800 border border-lime-200 px-4 py-2 uppercase tracking-widest">MUNDIAL 2026 • ACCESO ANTICIPADO</Badge>
-              <h1 className="text-6xl lg:text-8xl font-black font-brand leading-[0.85] tracking-tighter uppercase text-slate-900">
+        <section id="hero" className="relative px-4 sm:px-6 pt-10 pb-16 sm:pt-16 sm:pb-24 lg:pt-32 lg:pb-40 overflow-hidden">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+            <div className="relative z-10 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000">
+              <Badge color="bg-lime-100 text-lime-800 border border-lime-200 px-3 sm:px-4 py-1.5 sm:py-2 uppercase tracking-widest text-[10px] sm:text-xs">MUNDIAL 2026 • ACCESO ANTICIPADO</Badge>
+              <h1 className="text-4xl sm:text-6xl lg:text-8xl font-black font-brand leading-[0.85] tracking-tighter uppercase text-slate-900">
                 PRONOSTICA <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-emerald-600">GANA & DOMINA.</span>
               </h1>
-              <p className="text-slate-500 text-xl max-w-xl leading-relaxed font-medium">
+              <p className="text-slate-500 text-base sm:text-xl max-w-xl leading-relaxed font-medium">
                 La plataforma más estética y potente para gestionar tu polla mundialista. Desde grupos de amigos hasta ligas corporativas masivas.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button onClick={() => navigate('/register')} size="lg" className="px-10 py-7 text-lg rounded-full group shadow-2xl shadow-lime-500/20" variant="secondary">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <Button onClick={() => navigate('/register')} size="lg" className="px-6 py-4 sm:px-10 sm:py-7 text-sm sm:text-lg rounded-full group shadow-2xl shadow-lime-500/20" variant="secondary">
                   REGISTRARME <ArrowRight className="ml-2 group-hover:translate-x-2 transition-transform" />
                 </Button>
-                <Button variant="ghost" size="lg" className="rounded-full px-10 py-7 text-lg border-2 border-slate-100 text-slate-500 hover:text-lime-700 hover:border-lime-200 font-black gap-2 transition-all" onClick={() => navigate('/dashboard')}>
-                  <PlayCircle size={22} className="text-lime-600" /> VER DEMO
+                <Button variant="ghost" size="lg" className="rounded-full px-6 py-4 sm:px-10 sm:py-7 text-sm sm:text-lg border-2 border-slate-100 text-slate-500 hover:text-lime-700 hover:border-lime-200 font-black gap-2 transition-all" onClick={() => navigate('/dashboard')}>
+                  <PlayCircle size={18} className="text-lime-600 sm:hidden" />
+                  <PlayCircle size={22} className="text-lime-600 hidden sm:block" /> VER DEMO
                 </Button>
-                <Button variant="outline" size="lg" className="rounded-full px-10 py-7 text-lg border-slate-200" onClick={() => scrollTo('how-it-works')}>
+                <Button variant="outline" size="lg" className="hidden sm:flex rounded-full px-10 py-7 text-lg border-slate-200" onClick={() => scrollTo('how-it-works')}>
                   CÓMO FUNCIONA
                 </Button>
               </div>
             </div>
-            <div className="relative animate-in zoom-in duration-1000">
-              <div className="relative bg-slate-900 rounded-[3rem] p-4 shadow-3xl border border-white/10 rotate-2 hover:rotate-0 transition-transform duration-700 overflow-hidden">
-                <img src="https://picsum.photos/seed/polla-ui-v2/1200/800" className="rounded-[2.5rem] opacity-90 w-full h-auto" alt="App Preview" />
+            <div className="relative animate-in zoom-in duration-1000 overflow-hidden">
+              <div className="relative bg-slate-900 rounded-[2rem] sm:rounded-[3rem] p-3 sm:p-4 shadow-3xl border border-white/10 rotate-2 hover:rotate-0 transition-transform duration-700 overflow-hidden">
+                <img src="https://picsum.photos/seed/polla-ui-v2/1200/800" className="rounded-[1.5rem] sm:rounded-[2.5rem] opacity-90 w-full h-auto" alt="App Preview" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none"></div>
-                <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-3xl shadow-2xl border border-slate-50 flex items-center gap-4 animate-bounce">
-                  <div className="w-12 h-12 bg-lime-400 rounded-2xl flex items-center justify-center text-black shadow-lg"><TrendingUp /></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Liderando</p><p className="text-lg font-black uppercase">Juan (+15pts)</p></div>
+                <div className="absolute bottom-4 left-4 sm:-bottom-6 sm:-left-6 bg-white p-3 sm:p-6 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-50 flex items-center gap-3 sm:gap-4 animate-bounce">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 bg-lime-400 rounded-xl sm:rounded-2xl flex items-center justify-center text-black shadow-lg"><TrendingUp size={18} /></div>
+                  <div><p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Liderando</p><p className="text-sm sm:text-lg font-black uppercase">Juan (+15pts)</p></div>
                 </div>
               </div>
             </div>
@@ -167,27 +168,28 @@ const Landing: React.FC = () => {
         </section>
 
         {/* Content sections for scrollability */}
-        <section id="how-it-works" className="py-32 bg-slate-50 border-y border-slate-100 px-6">
-          <div className="max-w-7xl mx-auto space-y-20">
-            <div className="text-center max-w-3xl mx-auto space-y-6">
+        <section id="how-it-works" className="py-16 lg:py-32 bg-slate-50 border-y border-slate-100 px-4 sm:px-6">
+          <div className="max-w-7xl mx-auto space-y-12 lg:space-y-20">
+            <div className="text-center max-w-3xl mx-auto space-y-4 sm:space-y-6">
               <Badge color="bg-lime-100 text-lime-800">GUÍA PASO A PASO</Badge>
-              <h3 className="text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter">¿CÓMO FUNCIONA LA <span className="text-lime-600">POLLA 2026?</span></h3>
-              <p className="text-slate-500 text-xl font-medium leading-relaxed">Configura tu perfil, únete a una liga y empieza a predecir marcadores reales.</p>
+              <h3 className="text-3xl sm:text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter">¿CÓMO FUNCIONA LA <span className="text-lime-600">POLLA 2026?</span></h3>
+              <p className="text-slate-500 text-base sm:text-xl font-medium leading-relaxed">Configura tu perfil, únete a una liga y empieza a predecir marcadores reales.</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
               {[
                 { step: '01', title: 'Registro y Perfil', icon: UserPlus },
                 { step: '02', title: 'Únete a Ligas', icon: Globe },
                 { step: '03', title: 'Tus Marcadores', icon: Target },
                 { step: '04', title: 'Gana Premios', icon: Award },
               ].map((item, i) => (
-                <div key={i} className="flex flex-col gap-6 items-start p-8 rounded-[2.5rem] bg-white border border-slate-100 hover:shadow-xl transition-all group">
-                  <div className="w-14 h-14 bg-black text-white rounded-2xl flex items-center justify-center group-hover:bg-lime-400 group-hover:text-black transition-colors">
-                    <item.icon size={28} />
+                <div key={i} className="flex flex-col gap-4 sm:gap-6 items-start p-5 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] bg-white border border-slate-100 hover:shadow-xl transition-all group">
+                  <div className="w-11 h-11 sm:w-14 sm:h-14 bg-black text-white rounded-xl sm:rounded-2xl flex items-center justify-center group-hover:bg-lime-400 group-hover:text-black transition-colors">
+                    <item.icon size={22} className="sm:hidden" />
+                    <item.icon size={28} className="hidden sm:block" />
                   </div>
-                  <div className="space-y-2">
-                    <span className="text-xs font-black text-lime-700 uppercase tracking-[0.3em]">{item.step}</span>
-                    <h3 className="text-xl font-black font-brand uppercase tracking-tight">{item.title}</h3>
+                  <div className="space-y-1 sm:space-y-2">
+                    <span className="text-[10px] sm:text-xs font-black text-lime-700 uppercase tracking-[0.3em]">{item.step}</span>
+                    <h3 className="text-base sm:text-xl font-black font-brand uppercase tracking-tight">{item.title}</h3>
                   </div>
                 </div>
               ))}
@@ -195,30 +197,31 @@ const Landing: React.FC = () => {
           </div>
         </section>
 
-        <section id="prizes" className="py-32 px-6">
-          <div className="max-w-7xl mx-auto space-y-20">
+        <section id="prizes" className="py-16 lg:py-32 px-4 sm:px-6">
+          <div className="max-w-7xl mx-auto space-y-12 lg:space-y-20">
             <div className="text-center max-w-3xl mx-auto space-y-4">
               <Badge color="bg-purple-100 text-purple-700">RECOMPENSAS REALES</Badge>
-              <h3 className="text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter leading-none text-slate-900">GRANDES <span className="text-purple-600">PREMIOS.</span></h3>
+              <h3 className="text-3xl sm:text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter leading-none text-slate-900">GRANDES <span className="text-purple-600">PREMIOS.</span></h3>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-              <div className="bg-gradient-to-br from-purple-600 to-indigo-800 rounded-[3rem] p-12 text-white space-y-6 relative overflow-hidden shadow-2xl flex flex-col justify-center">
-                <Trophy size={400} className="absolute -bottom-20 -right-20 opacity-10" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-stretch">
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-800 rounded-[2rem] sm:rounded-[3rem] p-8 sm:p-12 text-white space-y-6 relative overflow-hidden shadow-2xl flex flex-col justify-center">
+                <Trophy size={300} className="absolute -bottom-16 -right-16 opacity-10" />
                 <div className="relative z-10 space-y-4">
                   <Badge color="bg-white/20 text-white backdrop-blur-md uppercase">Primer Puesto Global</Badge>
-                  <h2 className="text-5xl lg:text-7xl font-black font-brand uppercase leading-[0.9] tracking-tighter">VIAJE A LA <br />GRAN FINAL</h2>
-                  <Button variant="secondary" className="bg-white text-purple-600 font-black px-12 py-4 rounded-full mt-6 shadow-xl">DETALLES</Button>
+                  <h2 className="text-3xl sm:text-5xl lg:text-7xl font-black font-brand uppercase leading-[0.9] tracking-tighter">VIAJE A LA <br />GRAN FINAL</h2>
+                  <Button variant="secondary" className="bg-white text-purple-600 font-black px-8 sm:px-12 py-3 sm:py-4 rounded-full mt-4 sm:mt-6 shadow-xl">DETALLES</Button>
                 </div>
               </div>
-              <div className="flex flex-col gap-8">
+              <div className="flex flex-col gap-4 sm:gap-8">
                 {[
                   { title: 'iPhone 15 Pro Max', icon: Smartphone, color: 'bg-slate-900 text-white' },
                   { title: '$5,000 USD Cash', icon: Sparkles, color: 'bg-lime-400 text-black' },
                   { title: 'Consola PS5 Pro', icon: Zap, color: 'bg-cyan-500 text-white' },
                 ].map((p, i) => (
-                  <div key={i} className={`p-10 rounded-[2.5rem] flex items-center justify-between ${p.color} shadow-lg flex-1`}>
-                    <h3 className="text-2xl font-black font-brand uppercase tracking-tight">{p.title}</h3>
-                    <p.icon size={48} className="opacity-30" />
+                  <div key={i} className={`p-6 sm:p-10 rounded-[1.5rem] sm:rounded-[2.5rem] flex items-center justify-between ${p.color} shadow-lg flex-1`}>
+                    <h3 className="text-xl sm:text-2xl font-black font-brand uppercase tracking-tight">{p.title}</h3>
+                    <p.icon size={36} className="opacity-30 sm:hidden" />
+                    <p.icon size={48} className="opacity-30 hidden sm:block" />
                   </div>
                 ))}
               </div>
@@ -227,33 +230,33 @@ const Landing: React.FC = () => {
         </section>
 
         {/* Community Section */}
-        <section id="community" className="py-32 bg-black text-white px-6 relative overflow-hidden">
+        <section id="community" className="py-16 lg:py-32 bg-black text-white px-4 sm:px-6 relative overflow-hidden">
           {/* Background decoration */}
           <div className="absolute top-0 left-0 w-full h-full opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #3EE93E 0%, transparent 50%)' }}></div>
-          <div className="max-w-7xl mx-auto relative z-10 space-y-20">
-            <div className="flex flex-col md:flex-row justify-between items-end gap-8 border-b border-white/10 pb-12">
+          <div className="max-w-7xl mx-auto relative z-10 space-y-12 lg:space-y-20">
+            <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 sm:gap-8 border-b border-white/10 pb-10 sm:pb-12">
               <div className="space-y-4">
                 <Badge color="bg-lime-400 text-black">GLOBAL & SOCIAL</Badge>
-                <h3 className="text-5xl lg:text-7xl font-black font-brand uppercase tracking-tighter leading-none">LA HINCHADA <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-400">DIGITAL.</span></h3>
+                <h3 className="text-3xl sm:text-5xl lg:text-7xl font-black font-brand uppercase tracking-tighter leading-none">LA HINCHADA <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-400">DIGITAL.</span></h3>
               </div>
-              <p className="text-slate-400 text-xl font-medium max-w-md text-right">
+              <p className="text-slate-400 text-base sm:text-xl font-medium max-w-md md:text-right">
                 Más de 50,000 fanáticos ya están creando sus ligas. Únete al movimiento más grande de predicciones deportivas.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
               {[
                 { quote: "La mejor interfaz que he visto para una polla. Mis amigos quedaron locos con el diseño.", user: "Carlos R.", role: "Admin de Liga" },
                 { quote: "Gestionar los pagos era un dolor de cabeza, aquí es automático y transparente.", user: "Ana M.", role: "Tesorera" },
                 { quote: "Los premios reales motivan a todos a participar hasta el final del mundial.", user: "David S.", role: "Fanático" }
               ].map((t, i) => (
-                <div key={i} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/10 transition-colors">
+                <div key={i} className="bg-white/5 border border-white/10 p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] hover:bg-white/10 transition-colors">
                   <div className="flex gap-1 text-lime-400 mb-4">
                     {[1, 2, 3, 4, 5].map(s => <Sparkles key={s} size={14} fill="currentColor" />)}
                   </div>
-                  <p className="text-lg font-medium text-slate-200 mb-6">"{t.quote}"</p>
+                  <p className="text-base sm:text-lg font-medium text-slate-200 mb-4 sm:mb-6">"{t.quote}"</p>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-lime-400 to-emerald-600 rounded-full"></div>
+                    <div className="w-10 h-10 bg-gradient-to-br from-lime-400 to-emerald-600 rounded-full shrink-0"></div>
                     <div>
                       <p className="font-bold text-white">{t.user}</p>
                       <p className="text-xs text-slate-500 uppercase font-black tracking-widest">{t.role}</p>
@@ -266,54 +269,54 @@ const Landing: React.FC = () => {
         </section>
 
         {/* Pricing Section */}
-        <section id="pricing" className="py-32 px-6 bg-slate-50">
-          <div className="max-w-7xl mx-auto space-y-16">
+        <section id="pricing" className="py-16 lg:py-32 px-4 sm:px-6 bg-slate-50">
+          <div className="max-w-7xl mx-auto space-y-10 sm:space-y-16">
             <div className="text-center space-y-4 max-w-3xl mx-auto">
               <Badge color="bg-slate-900 text-white">PLANES 2026</Badge>
-              <h3 className="text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter text-slate-900">ELIGE TU <span className="text-lime-600">NIVEL.</span></h3>
-              <p className="text-slate-500 text-xl font-medium">Desde grupos de oficina hasta marcas globales. Tenemos un plan para tu liga.</p>
+              <h3 className="text-3xl sm:text-4xl lg:text-6xl font-black font-brand uppercase tracking-tighter text-slate-900">ELIGE TU <span className="text-lime-600">NIVEL.</span></h3>
+              <p className="text-slate-500 text-base sm:text-xl font-medium">Desde grupos de oficina hasta marcas globales. Tenemos un plan para tu liga.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:items-center">
               {/* FREE */}
-              <div className="p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6">
+              <div className="p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 space-y-5 sm:space-y-6">
                 <div className="space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase">GRATIS</h4>
-                  <p className="text-4xl font-black font-brand text-slate-900">$0 <span className="text-sm font-bold text-slate-400">/ SIEMPRE</span></p>
+                  <p className="text-3xl sm:text-4xl font-black font-brand text-slate-900">$0 <span className="text-sm font-bold text-slate-400">/ SIEMPRE</span></p>
                 </div>
                 <ul className="space-y-3">
                   {['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'].map(f => (
-                    <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-slate-300" /> {f}</li>
+                    <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-slate-300 shrink-0" /> {f}</li>
                   ))}
                 </ul>
                 <Button variant="outline" className="w-full rounded-2xl font-black uppercase tracking-widest" onClick={() => navigate('/register')}>EMPEZAR</Button>
               </div>
 
               {/* GOLD (Highlight) */}
-              <div className="p-10 rounded-[3rem] bg-slate-900 text-white shadow-2xl scale-105 relative overflow-hidden space-y-8">
-                <div className="absolute top-0 right-0 p-4 bg-lime-400 text-black text-[10px] font-black uppercase tracking-widest rounded-bl-2xl">POPULAR</div>
+              <div className="p-8 sm:p-10 rounded-[2rem] sm:rounded-[3rem] bg-slate-900 text-white shadow-2xl md:scale-105 relative overflow-hidden space-y-6 sm:space-y-8">
+                <div className="absolute top-0 right-0 p-3 sm:p-4 bg-lime-400 text-black text-[10px] font-black uppercase tracking-widest rounded-bl-2xl">POPULAR</div>
                 <div className="space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase text-lime-400">GOLD</h4>
-                  <p className="text-5xl font-black font-brand text-white">$29k <span className="text-sm font-bold text-slate-500">/ ÚNICO</span></p>
+                  <p className="text-4xl sm:text-5xl font-black font-brand text-white">$29k <span className="text-sm font-bold text-slate-500">/ ÚNICO</span></p>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Pago único por administrador</p>
                 </div>
-                <ul className="space-y-4">
+                <ul className="space-y-3 sm:space-y-4">
                   {['Hasta 50 Jugadores', 'Sin Publicidad', 'Personalización Básica', 'Soporte Prioritario', 'Exportar Datos'].map(f => (
-                    <li key={f} className="flex items-center gap-3 text-sm font-bold text-slate-300"><CheckCircle2 size={18} className="text-lime-400" /> {f}</li>
+                    <li key={f} className="flex items-center gap-3 text-sm font-bold text-slate-300"><CheckCircle2 size={18} className="text-lime-400 shrink-0" /> {f}</li>
                   ))}
                 </ul>
-                <Button variant="secondary" className="w-full h-14 rounded-2xl font-black uppercase tracking-widest text-xs" onClick={() => navigate('/checkout')}>MEJORAR AHORA</Button>
+                <Button variant="secondary" className="w-full h-12 sm:h-14 rounded-2xl font-black uppercase tracking-widest text-xs" onClick={() => navigate('/checkout')}>MEJORAR AHORA</Button>
               </div>
 
               {/* DIAMOND */}
-              <div className="p-8 rounded-[2.5rem] bg-white border border-slate-200 space-y-6">
+              <div className="p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] bg-white border border-slate-200 space-y-5 sm:space-y-6">
                 <div className="space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase text-cyan-500">DIAMOND</h4>
-                  <p className="text-4xl font-black font-brand text-slate-900">$89k <span className="text-sm font-bold text-slate-400">/ ÚNICO</span></p>
+                  <p className="text-3xl sm:text-4xl font-black font-brand text-slate-900">$89k <span className="text-sm font-bold text-slate-400">/ ÚNICO</span></p>
                 </div>
                 <ul className="space-y-3">
                   {['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'].map(f => (
-                    <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-cyan-500" /> {f}</li>
+                    <li key={f} className="flex items-center gap-2 text-sm font-bold text-slate-500"><CheckCircle2 size={16} className="text-cyan-500 shrink-0" /> {f}</li>
                   ))}
                 </ul>
                 <Button variant="outline" className="w-full rounded-2xl font-black uppercase tracking-widest border-slate-200 hover:border-cyan-400 hover:text-cyan-600" onClick={() => navigate('/checkout')}>CONTACTAR VENTAS</Button>
@@ -326,7 +329,7 @@ const Landing: React.FC = () => {
       {/* FOOTER AREA WITH PERSISTENT STICKY LEGAL BAR */}
       <footer className="relative flex flex-col bg-white overflow-hidden">
         {/* Main Footer Links */}
-        <div className="max-w-7xl mx-auto px-6 pt-24 pb-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 items-start">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-12 pb-10 sm:pt-16 sm:pb-12 lg:pt-24 lg:pb-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 sm:gap-12 items-start">
           <div className="lg:col-span-4 space-y-8">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center font-brand text-white text-3xl font-black shadow-lg">26</div>
@@ -376,8 +379,8 @@ const Landing: React.FC = () => {
         </div>
 
         {/* STICKY BOTTOM LEGAL BAR - Persistent from start */}
-        <div className="sticky bottom-0 z-40 w-full bg-white/95 backdrop-blur-md border-t border-slate-100 py-6 px-6 shadow-[0_-8px_30px_-10px_rgba(0,0,0,0.08)]">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="sticky bottom-0 z-40 w-full bg-white/95 backdrop-blur-md border-t border-slate-100 py-4 sm:py-6 px-4 sm:px-6 shadow-[0_-8px_30px_-10px_rgba(0,0,0,0.08)]">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 sm:gap-6">
             <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8 text-center md:text-left">
               <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-tight mb-1">
@@ -412,7 +415,7 @@ const Landing: React.FC = () => {
       </footer>
 
       {/* Demo Quick Access Floating Menu */}
-      <div className="fixed bottom-8 left-8 z-[70] flex flex-col items-start gap-3">
+      <div className="hidden sm:flex fixed bottom-8 left-8 z-[70] flex-col items-start gap-3">
         {showDemoMenu && (
           <div className="bg-white/90 backdrop-blur-xl border border-slate-200 p-5 rounded-[2rem] shadow-2xl space-y-4 animate-in slide-in-from-left-4 fade-in duration-300 w-64">
             <div className="flex items-center justify-between">
@@ -451,7 +454,7 @@ const Landing: React.FC = () => {
       {/* Floating Back to Top Button */}
       <button
         onClick={scrollToTop}
-        className={`fixed bottom-28 right-8 w-14 h-14 bg-black text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-500 z-[60] hover:bg-slate-800 hover:-translate-y-2 active:scale-95 border-2 border-lime-400/30 ${showScrollTop ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-20 opacity-0 scale-50 pointer-events-none'
+        className={`fixed bottom-6 sm:bottom-8 right-4 sm:right-8 w-12 h-12 sm:w-14 sm:h-14 bg-black text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-500 z-[60] hover:bg-slate-800 hover:-translate-y-2 active:scale-95 border-2 border-lime-400/30 ${showScrollTop ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-20 opacity-0 scale-50 pointer-events-none'
           }`}
         aria-label="Volver arriba"
       >
