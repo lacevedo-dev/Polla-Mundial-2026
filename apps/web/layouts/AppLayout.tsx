@@ -29,15 +29,17 @@ const navItems = runtimeFlags.includeDevRoutes
 const AppLayout: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const navigate = useNavigate();
-    const { user, logout, isSuperAdmin } = useAuthStore();
+    const { user, logout, isSuperAdmin, checkAuth } = useAuthStore();
     const fetchPlanConfig = useConfigStore((state) => state.fetchPlanConfig);
 
     React.useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) {
             navigate('/login');
+            return;
         }
-    }, [navigate]);
+        void checkAuth();
+    }, [navigate, checkAuth]);
 
     React.useEffect(() => {
         void fetchPlanConfig();

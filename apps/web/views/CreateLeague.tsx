@@ -47,6 +47,7 @@ import {
   Check
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/auth.store';
 
 // Props eliminadas â€” navegaciÃ³n via useNavigate
 
@@ -144,6 +145,7 @@ const STORAGE_KEY = 'polla_league_wizard_state';
 const CreateLeague: React.FC = () => {
   const navigate = useNavigate();
   const createLeagueStore = useLeagueStore(state => state.createLeague);
+  const authUser = useAuthStore(state => state.user);
   const getSavedState = () => {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -184,7 +186,7 @@ const CreateLeague: React.FC = () => {
       round: { winnersCount: 1, distribution: getInitialDistribution(1, 10) },
       phase: { winnersCount: 1, distribution: getInitialDistribution(1, 10) }
     },
-    currency: 'COP', plan: 'free'
+    currency: 'COP', plan: (authUser?.plan?.toLowerCase() as 'free' | 'gold' | 'diamond') ?? 'free'
   });
 
   React.useEffect(() => {
@@ -201,6 +203,16 @@ const CreateLeague: React.FC = () => {
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [step, activeCategory, invitedUsers, newUserInput, searchQuery, leagueId, leagueData, selectedCountry, foundExistingUser]);
+
+  // Sync leagueData.plan with the authenticated user's plan when user loads (handles page-reload race condition)
+  const hasSavedLeagueData = React.useRef(Boolean(getSavedState()?.leagueData));
+  React.useEffect(() => {
+    if (hasSavedLeagueData.current) return; // Respect in-progress form data
+    const plan = authUser?.plan?.toLowerCase() as 'free' | 'gold' | 'diamond' | undefined;
+    if (!plan || plan === leagueData.plan) return;
+    setLeagueData(prev => ({ ...prev, plan }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.plan]);
 
   // Click outside for country selector
   React.useEffect(() => {

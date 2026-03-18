@@ -719,8 +719,16 @@ const LeagueConfigModal: React.FC<{
     const [positions, setPositions] = useState(3);
     const [dists, setDists] = useState<Record<string, DistLocal[]>>({ GENERAL: defaultDist(3) });
 
-    // ── Derived: which prize categories exist for this league ──
-    const [availablePrizeTabs, setAvailablePrizeTabs] = useState<Array<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'>>(['GENERAL']);
+    // ── Derived: which prize categories exist — reactive to current stageFees state ──
+    const availablePrizeTabs = useMemo<Array<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'>>(() => {
+        const tabs: Array<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'> = ['GENERAL'];
+        if (includeStageFees) {
+            if (stageFees.some((sf) => sf.type === 'MATCH' && sf.active)) tabs.push('MATCH');
+            if (stageFees.some((sf) => sf.type === 'ROUND' && sf.active)) tabs.push('ROUND');
+            if (stageFees.some((sf) => sf.type === 'PHASE' && sf.active)) tabs.push('PHASE');
+        }
+        return tabs;
+    }, [includeStageFees, stageFees]);
 
     // ── Participants ──
     const [maxPart, setMaxPart] = useState(50);
@@ -754,17 +762,6 @@ const LeagueConfigModal: React.FC<{
                     setStageFees(STAGE_DEFAULTS.map((d) => ({ ...d, active: false })));
                 }
 
-                // Derive which prize tabs are available from saved distributions
-                const hasDist = (cat: string) =>
-                    (data.distributions?.filter((d) => d.category === cat) ?? []).length > 0;
-
-                const tabs: Array<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'> = ['GENERAL'];
-                if (hasStage) {
-                    if (hasDist('MATCH') || data.stageFees?.some((sf) => sf.type === 'MATCH' && sf.active)) tabs.push('MATCH');
-                    if (hasDist('ROUND') || data.stageFees?.some((sf) => sf.type === 'ROUND' && sf.active)) tabs.push('ROUND');
-                    if (hasDist('PHASE') || data.stageFees?.some((sf) => sf.type === 'PHASE' && sf.active)) tabs.push('PHASE');
-                }
-                setAvailablePrizeTabs(tabs);
                 setPrizeTab('GENERAL');
 
                 // Load distributions per category
@@ -783,6 +780,13 @@ const LeagueConfigModal: React.FC<{
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [open, leagueId]);
+
+    // If active prizeTab becomes unavailable (user deactivated that fee), reset to GENERAL
+    useEffect(() => {
+        if (!availablePrizeTabs.includes(prizeTab)) {
+            setPrizeTab('GENERAL');
+        }
+    }, [availablePrizeTabs, prizeTab]);
 
     // Sync positions counter → only affects the active prizeTab's distribution
     useEffect(() => {
@@ -880,7 +884,7 @@ const LeagueConfigModal: React.FC<{
 
     const activeMemberCount = members?.filter((m) => m.status === 'ACTIVE').length ?? 0;
 
-    const inputCls = 'w-full px-3 py-2.5 text-[13px] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-lime-400 placeholder:text-slate-400';
+    const inputCls = 'w-full px-4 py-3 text-[13px] font-medium rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all placeholder:text-slate-400 text-slate-900 bg-white';
 
     return (
         <AnimatePresence>
@@ -973,7 +977,7 @@ const LeagueConfigModal: React.FC<{
                                                     {includeBaseFee && (
                                                         <div className="relative">
                                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px] font-bold">$</span>
-                                                            <input type="number" value={baseFee} onChange={(e) => setBaseFee(Number(e.target.value))} className="w-full pl-7 pr-3 py-2 text-[13px] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-lime-400" />
+                                                            <input type="number" value={baseFee} onChange={(e) => setBaseFee(Number(e.target.value))} className="w-full pl-7 pr-3 py-3 text-[13px] font-medium rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-slate-900 bg-white" />
                                                         </div>
                                                     )}
                                                 </div>
@@ -1002,7 +1006,7 @@ const LeagueConfigModal: React.FC<{
                                                                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]">$</span>
                                                                 <input type="number" value={sf.amount}
                                                                     onChange={(e) => setStageFees((prev) => prev.map((s, i) => i === idx ? { ...s, amount: Number(e.target.value) } : s))}
-                                                                    className="w-full pl-5 pr-2 py-1.5 text-[12px] rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-lime-400 text-right"
+                                                                    className="w-full pl-5 pr-2 py-2 text-[12px] font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-right text-slate-900 bg-white"
                                                                 />
                                                             </div>
                                                         </div>
@@ -1078,7 +1082,7 @@ const LeagueConfigModal: React.FC<{
                                                                         ...prev,
                                                                         [prizeTab]: (prev[prizeTab] ?? []).map((x, i) => i === idx ? { ...x, percentage: Number(e.target.value) } : x),
                                                                     }))}
-                                                                    className="w-14 text-center px-2 py-1.5 text-[12px] rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-lime-400"
+                                                                    className="w-14 text-center px-2 py-2 text-[12px] font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-slate-900 bg-white"
                                                                 />
                                                                 <span className="text-[11px] text-slate-400">%</span>
                                                             </div>
