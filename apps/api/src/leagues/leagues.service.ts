@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
+import { UpdateLeagueDto } from './dto/update-league.dto';
 import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Plan } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
@@ -256,5 +257,66 @@ export class LeaguesService {
             leagueId: league.id,
             status: newMember.status,
         };
+    }
+
+    async updateLeague(userId: string, leagueId: string, dto: UpdateLeagueDto) {
+        const member = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId, leagueId } },
+        });
+        if (!member || member.role !== MemberRole.ADMIN) {
+            throw new BadRequestException('No tienes permisos para editar esta liga');
+        }
+
+        const { stageFees: sfDto, distributions: distDto, ...scalarFields } = dto;
+
+        if (Object.keys(scalarFields).length) {
+            await this.prisma.league.update({ where: { id: leagueId }, data: scalarFields as any });
+        }
+
+        if (sfDto?.length) {
+            for (const sf of sfDto) {
+                await this.prisma.stageFee.upsert({
+                    where: { leagueId_type_label: { leagueId, type: sf.type as any, label: sf.label } },
+                    create: { leagueId, type: sf.type as any, label: sf.label, amount: sf.amount, active: sf.active },
+                    update: { amount: sf.amount, active: sf.active },
+                });
+            }
+        }
+
+        if (distDto?.length) {
+            for (const d of distDto) {
+                await this.prisma.prizeDistribution.upsert({
+                    where: { leagueId_category_position: { leagueId, category: d.category as any, position: d.position } },
+                    create: { leagueId, category: d.category as any, position: d.position, label: d.label, percentage: d.percentage, active: d.active },
+                    update: { percentage: d.percentage, label: d.label, active: d.active },
+                });
+            }
+        }
+
+        return this.prisma.league.findUnique({
+            where: { id: leagueId },
+            include: {
+                _count: { select: { members: true } },
+                members: { where: { userId }, select: { role: true, status: true } },
+                stageFees: true,
+                distributions: true,
+            },
+        });
+    }
+
+    async removeMember(adminUserId: string, leagueId: string, targetUserId: string) {
+        if (adminUserId === targetUserId) {
+            throw new BadRequestException('No puedes eliminarte a ti mismo de la liga');
+        }
+        const adminMember = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId: adminUserId, leagueId } },
+        });
+        if (!adminMember || adminMember.role !== MemberRole.ADMIN) {
+            throw new BadRequestException('No tienes permisos para eliminar miembros');
+        }
+        await this.prisma.leagueMember.delete({
+            where: { userId_leagueId: { userId: targetUserId, leagueId } },
+        });
+        return { ok: true };
     }
 }

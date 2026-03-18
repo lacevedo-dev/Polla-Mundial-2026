@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Get, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Patch, Delete, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { LeaguesService } from './leagues.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
+import { UpdateLeagueDto } from './dto/update-league.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @UseGuards(JwtAuthGuard)
@@ -53,5 +54,16 @@ export class LeaguesController {
     @Post('invitations/:id/decline')
     async declineInvitation(@Request() req, @Param('id') invitationId: string) {
         return this.leaguesService.declineInvitation(invitationId);
+    }
+
+    @Patch(':id')
+    async updateLeague(@Request() req, @Param('id') leagueId: string, @Body() dto: UpdateLeagueDto) {
+        return this.leaguesService.updateLeague(req.user.userId, leagueId, dto);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Delete(':id/members/:userId')
+    async removeMember(@Request() req, @Param('id') leagueId: string, @Param('userId') targetUserId: string) {
+        return this.leaguesService.removeMember(req.user.userId, leagueId, targetUserId);
     }
 }
