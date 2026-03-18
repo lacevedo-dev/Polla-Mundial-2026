@@ -129,7 +129,7 @@ const AppLayout: React.FC = () => {
             {/* Mobile Menu Overlay */}
             {isMobileMenuOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-950/98 backdrop-blur-sm z-40 md:hidden flex flex-col"
+                    className="fixed inset-0 bg-slate-950 z-50 md:hidden flex flex-col"
                     role="dialog"
                     aria-modal="true"
                     aria-label="Menú de navegación"
