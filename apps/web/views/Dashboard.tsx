@@ -803,8 +803,17 @@ const LeagueConfigModal: React.FC<{
 
     const currentDist = dists[prizeTab] ?? defaultDist(positions);
     const totalPct = currentDist.reduce((s, d) => s + d.percentage, 0);
-    const grossPool = baseFee * memberCount;
+    // Pool is based on the fee for the active prize category
+    const tabFee = prizeTab === 'GENERAL'
+        ? baseFee
+        : (stageFees.find((sf) => sf.type === prizeTab)?.amount ?? 0);
+    const grossPool = tabFee * memberCount;
     const adminCut = Math.round(grossPool * adminPct / 100);
+    const netPool = grossPool - adminCut;
+    const poolLabel = prizeTab === 'GENERAL' ? 'Fondo general'
+        : prizeTab === 'MATCH' ? 'Fondo por partido'
+        : prizeTab === 'ROUND' ? 'Fondo por ronda'
+        : 'Fondo por fase';
 
     const handleSaveDetails = async () => {
         if (!leagueId) return;
@@ -975,9 +984,9 @@ const LeagueConfigModal: React.FC<{
                                                         </button>
                                                     </div>
                                                     {includeBaseFee && (
-                                                        <div className="relative">
-                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px] font-bold">$</span>
-                                                            <input type="number" value={baseFee} onChange={(e) => setBaseFee(Number(e.target.value))} className="w-full pl-7 pr-3 py-3 text-[13px] font-medium rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-slate-900 bg-white" />
+                                                        <div className="flex items-center gap-2 border border-slate-300 rounded-2xl px-3 py-3 bg-white focus-within:ring-2 focus-within:ring-lime-400 focus-within:border-lime-500 transition-all">
+                                                            <span className="text-[12px] font-bold text-slate-400 shrink-0">$</span>
+                                                            <input type="number" value={baseFee} onChange={(e) => setBaseFee(Number(e.target.value))} className="flex-1 text-[13px] font-medium text-slate-900 outline-none bg-transparent" placeholder="0" />
                                                         </div>
                                                     )}
                                                 </div>
@@ -1002,11 +1011,12 @@ const LeagueConfigModal: React.FC<{
                                                                 {sf.active && <CheckCircle2 size={10} />}
                                                             </button>
                                                             <span className="text-[11px] font-bold text-slate-600 w-14 shrink-0">{sf.label}</span>
-                                                            <div className="relative flex-1">
-                                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]">$</span>
+                                                            <div className={`flex items-center gap-1.5 flex-1 border rounded-xl px-2 py-1.5 bg-white focus-within:ring-2 focus-within:ring-lime-400 focus-within:border-lime-500 transition-all ${sf.active ? 'border-slate-300' : 'border-slate-200 opacity-60'}`}>
+                                                                <span className="text-[11px] font-bold text-slate-400 shrink-0">$</span>
                                                                 <input type="number" value={sf.amount}
                                                                     onChange={(e) => setStageFees((prev) => prev.map((s, i) => i === idx ? { ...s, amount: Number(e.target.value) } : s))}
-                                                                    className="w-full pl-5 pr-2 py-2 text-[12px] font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-right text-slate-900 bg-white"
+                                                                    className="flex-1 text-[12px] font-medium text-right text-slate-900 outline-none bg-transparent"
+                                                                    disabled={!sf.active}
                                                                 />
                                                             </div>
                                                         </div>
@@ -1070,24 +1080,24 @@ const LeagueConfigModal: React.FC<{
                                             </div>
 
                                             {/* Distribution rows */}
-                                            <div className="space-y-2">
+                                            <div className="space-y-2.5">
                                                 {currentDist.map((d, idx) => {
-                                                    const prizeAmt = Math.round(grossPool * d.percentage / 100);
+                                                    const prizeAmt = Math.round(netPool * d.percentage / (100 - adminPct || 1));
                                                     return (
                                                         <div key={d.position} className="flex items-center gap-3">
                                                             <span className="text-[11px] font-black text-slate-500 w-16 shrink-0">{d.position}° Puesto</span>
-                                                            <div className="flex items-center gap-1 flex-1">
+                                                            <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-2 focus-within:ring-lime-400 focus-within:border-lime-500 transition-all bg-white overflow-hidden flex-1">
                                                                 <input type="number" value={d.percentage} min={0} max={100}
                                                                     onChange={(e) => setDists((prev) => ({
                                                                         ...prev,
                                                                         [prizeTab]: (prev[prizeTab] ?? []).map((x, i) => i === idx ? { ...x, percentage: Number(e.target.value) } : x),
                                                                     }))}
-                                                                    className="w-14 text-center px-2 py-2 text-[12px] font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-slate-900 bg-white"
+                                                                    className="w-12 text-center px-2 py-2 text-[12px] font-medium outline-none bg-transparent text-slate-900"
                                                                 />
-                                                                <span className="text-[11px] text-slate-400">%</span>
+                                                                <span className="text-[11px] text-slate-400 pr-2">%</span>
                                                             </div>
-                                                            <span className="text-[12px] font-black text-lime-600 shrink-0">
-                                                                {grossPool > 0 ? fmtCOP(prizeAmt) : '—'}
+                                                            <span className="text-[12px] font-black text-lime-600 shrink-0 min-w-[4rem] text-right">
+                                                                {netPool > 0 ? fmtCOP(prizeAmt) : '—'}
                                                             </span>
                                                         </div>
                                                     );
@@ -1095,17 +1105,23 @@ const LeagueConfigModal: React.FC<{
                                             </div>
 
                                             {/* Summary bar */}
-                                            <div className="rounded-2xl bg-slate-950 p-4 flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">Fondo neto general</p>
-                                                    <p className="text-[18px] font-black text-white mt-0.5">{grossPool > 0 ? fmtCOP(grossPool) : '—'}</p>
+                                            <div className="rounded-2xl bg-slate-950 p-4 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">{poolLabel}</p>
+                                                        <p className="text-[18px] font-black text-white mt-0.5">{grossPool > 0 ? fmtCOP(grossPool) : '—'}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-rose-400">Admin ({adminPct}%)</p>
+                                                        <p className="text-[14px] font-black text-rose-300 mt-0.5">{adminCut > 0 ? fmtCOP(adminCut) : '—'}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-[8px] font-black uppercase tracking-[0.2em] text-rose-400">Admin ({adminPct}%)</p>
-                                                    <p className="text-[14px] font-black text-rose-300 mt-0.5">{grossPool > 0 ? fmtCOP(adminCut) : '—'}</p>
+                                                <div className="flex items-center justify-between border-t border-slate-800 pt-2">
+                                                    <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Bolsa neta</p>
+                                                    <p className="text-[13px] font-black text-lime-400">{netPool > 0 ? fmtCOP(netPool) : '—'}</p>
                                                 </div>
                                             </div>
-                                            {totalPct !== 100 - adminPct && (
+                                            {totalPct !== 100 - adminPct && totalPct > 0 && (
                                                 <p className="text-[10px] text-amber-500 text-center">Los porcentajes suman {totalPct}% (deberían ser {100 - adminPct}%)</p>
                                             )}
 
