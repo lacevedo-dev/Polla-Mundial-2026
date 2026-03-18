@@ -40,11 +40,12 @@ export class LeaguesService {
             leaguePlan = creator?.plan ?? Plan.FREE;
         }
 
+        const { stageFees: sfInput, distributions: distInput, ...leagueScalars } = createLeagueDto;
+
         try {
-            // Usar transición para asegurar integridad de creación de Liga + Miembro Admin
             const league = await this.prisma.league.create({
                 data: {
-                    ...createLeagueDto,
+                    ...leagueScalars,
                     plan: leaguePlan,
                     code,
                     status: LeagueStatus.SETUP,
@@ -55,16 +56,42 @@ export class LeaguesService {
                             status: MemberStatus.ACTIVE,
                         },
                     },
-                    // Baseline de reglas por liga: requerido por spec para evitar ligas sin configuración de puntaje
                     scoringRules: {
                         createMany: {
                             data: [...LeaguesService.DEFAULT_SCORING_RULES],
                         },
                     },
+                    ...(sfInput?.length && {
+                        stageFees: {
+                            createMany: {
+                                data: sfInput.map((sf) => ({
+                                    type: sf.type as any,
+                                    label: sf.label,
+                                    amount: sf.amount,
+                                    active: sf.active,
+                                })),
+                            },
+                        },
+                    }),
+                    ...(distInput?.length && {
+                        distributions: {
+                            createMany: {
+                                data: distInput.map((d) => ({
+                                    category: d.category as any,
+                                    position: d.position,
+                                    label: d.label,
+                                    percentage: d.percentage,
+                                    active: d.active,
+                                })),
+                            },
+                        },
+                    }),
                 },
                 include: {
                     members: true,
                     scoringRules: true,
+                    stageFees: true,
+                    distributions: true,
                 },
             });
 

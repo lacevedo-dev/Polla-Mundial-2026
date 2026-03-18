@@ -715,9 +715,12 @@ const LeagueConfigModal: React.FC<{
 
     // ── Prizes ──
     const [adminPct, setAdminPct] = useState(10);
-    const [prizeTab, setPrizeTab] = useState<'GENERAL' | 'MATCH' | 'ROUND'>('GENERAL');
+    const [prizeTab, setPrizeTab] = useState<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'>('GENERAL');
     const [positions, setPositions] = useState(3);
-    const [dists, setDists] = useState<DistLocal[]>(defaultDist(3));
+    const [dists, setDists] = useState<Record<string, DistLocal[]>>({ GENERAL: defaultDist(3) });
+
+    // ── Derived: which prize categories exist for this league ──
+    const [availablePrizeTabs, setAvailablePrizeTabs] = useState<Array<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'>>(['GENERAL']);
 
     // ── Participants ──
     const [maxPart, setMaxPart] = useState(50);
@@ -735,42 +738,69 @@ const LeagueConfigModal: React.FC<{
                 setPrivacy(data.privacy ?? 'PRIVATE');
                 setIncludeBaseFee(data.includeBaseFee ?? true);
                 setBaseFee(data.baseFee ?? 0);
-                setIncludeStageFees(data.includeStageFees ?? false);
+                const hasStage = data.includeStageFees ?? false;
+                setIncludeStageFees(hasStage);
                 setAdminPct(data.adminFeePercent ?? 10);
                 setMaxPart(data.maxParticipants ?? 50);
                 setMembers(data.members ?? []);
-                // Stage fees
+
+                // Stage fees — only show rows for types that were configured
                 if (data.stageFees?.length) {
                     setStageFees(STAGE_DEFAULTS.map((def) => {
                         const found = data.stageFees!.find((sf) => sf.type === def.type);
-                        return found ? { ...def, amount: found.amount, active: found.active } : def;
+                        return found ? { ...def, amount: found.amount, active: found.active } : { ...def, active: false };
                     }));
                 } else {
-                    setStageFees(STAGE_DEFAULTS);
+                    setStageFees(STAGE_DEFAULTS.map((d) => ({ ...d, active: false })));
                 }
-                // Distributions
-                const genDist = data.distributions?.filter((d) => d.category === 'GENERAL') ?? [];
-                if (genDist.length) {
-                    setPositions(genDist.length);
-                    setDists(genDist.map((d) => ({ position: d.position, percentage: d.percentage })));
-                } else {
-                    setPositions(3);
-                    setDists(defaultDist(3));
+
+                // Derive which prize tabs are available from saved distributions
+                const hasDist = (cat: string) =>
+                    (data.distributions?.filter((d) => d.category === cat) ?? []).length > 0;
+
+                const tabs: Array<'GENERAL' | 'MATCH' | 'ROUND' | 'PHASE'> = ['GENERAL'];
+                if (hasStage) {
+                    if (hasDist('MATCH') || data.stageFees?.some((sf) => sf.type === 'MATCH' && sf.active)) tabs.push('MATCH');
+                    if (hasDist('ROUND') || data.stageFees?.some((sf) => sf.type === 'ROUND' && sf.active)) tabs.push('ROUND');
+                    if (hasDist('PHASE') || data.stageFees?.some((sf) => sf.type === 'PHASE' && sf.active)) tabs.push('PHASE');
                 }
+                setAvailablePrizeTabs(tabs);
+                setPrizeTab('GENERAL');
+
+                // Load distributions per category
+                const newDists: Record<string, DistLocal[]> = {};
+                for (const cat of ['GENERAL', 'MATCH', 'ROUND', 'PHASE']) {
+                    const catRows = data.distributions?.filter((d) => d.category === cat) ?? [];
+                    if (catRows.length) {
+                        newDists[cat] = catRows.map((d) => ({ position: d.position, percentage: d.percentage }));
+                    } else {
+                        newDists[cat] = defaultDist(cat === 'GENERAL' ? 3 : 1);
+                    }
+                }
+                setDists(newDists);
+                setPositions((newDists['GENERAL'] ?? defaultDist(3)).length);
             })
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [open, leagueId]);
 
-    // Sync distributions when positions counter changes
+    // Sync positions counter → only affects the active prizeTab's distribution
     useEffect(() => {
-        setDists(defaultDist(positions));
+        setDists((prev) => ({ ...prev, [prizeTab]: defaultDist(positions) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [positions]);
 
-    const totalPct = dists.reduce((s, d) => s + d.percentage, 0);
+    // Sync positions counter when switching prize tabs
+    useEffect(() => {
+        const tabDist = dists[prizeTab];
+        if (tabDist) setPositions(tabDist.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [prizeTab]);
+
+    const currentDist = dists[prizeTab] ?? defaultDist(positions);
+    const totalPct = currentDist.reduce((s, d) => s + d.percentage, 0);
     const grossPool = baseFee * memberCount;
     const adminCut = Math.round(grossPool * adminPct / 100);
-    const netPool = grossPool - adminCut;
 
     const handleSaveDetails = async () => {
         if (!leagueId) return;
@@ -805,13 +835,15 @@ const LeagueConfigModal: React.FC<{
                 method: 'PATCH',
                 body: JSON.stringify({
                     adminFeePercent: adminPct,
-                    distributions: dists.map((d) => ({
-                        category: prizeTab,
-                        position: d.position,
-                        label: `${d.position}° Puesto`,
-                        percentage: d.percentage,
-                        active: true,
-                    })),
+                    distributions: Object.entries(dists).flatMap(([cat, catDists]) =>
+                        catDists.map((d) => ({
+                            category: cat,
+                            position: d.position,
+                            label: `${d.position}° Puesto`,
+                            percentage: d.percentage,
+                            active: true,
+                        })),
+                    ),
                 }),
             });
             setSaved(true);
@@ -1002,15 +1034,17 @@ const LeagueConfigModal: React.FC<{
                                             </div>
 
                                             {/* Prize category tabs */}
-                                            <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
-                                                {(['GENERAL', 'MATCH', 'ROUND'] as const).map((pt) => (
-                                                    <button key={pt} onClick={() => setPrizeTab(pt)}
-                                                        className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-[0.12em] transition-all ${prizeTab === pt ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                                    >
-                                                        {pt === 'MATCH' ? 'Partido' : pt === 'ROUND' ? 'Ronda' : 'General'}
-                                                    </button>
-                                                ))}
-                                            </div>
+                                            {availablePrizeTabs.length > 1 && (
+                                                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+                                                    {availablePrizeTabs.map((pt) => (
+                                                        <button key={pt} onClick={() => setPrizeTab(pt)}
+                                                            className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-[0.12em] transition-all ${prizeTab === pt ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            {pt === 'MATCH' ? 'Partido' : pt === 'ROUND' ? 'Ronda' : pt === 'PHASE' ? 'Fase' : 'General'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
 
                                             {/* Positions counter */}
                                             <div className={`rounded-2xl border-2 p-3.5 ${true ? 'border-lime-400' : 'border-slate-200'}`}>
@@ -1033,14 +1067,17 @@ const LeagueConfigModal: React.FC<{
 
                                             {/* Distribution rows */}
                                             <div className="space-y-2">
-                                                {dists.map((d, idx) => {
+                                                {currentDist.map((d, idx) => {
                                                     const prizeAmt = Math.round(grossPool * d.percentage / 100);
                                                     return (
                                                         <div key={d.position} className="flex items-center gap-3">
                                                             <span className="text-[11px] font-black text-slate-500 w-16 shrink-0">{d.position}° Puesto</span>
                                                             <div className="flex items-center gap-1 flex-1">
                                                                 <input type="number" value={d.percentage} min={0} max={100}
-                                                                    onChange={(e) => setDists((prev) => prev.map((x, i) => i === idx ? { ...x, percentage: Number(e.target.value) } : x))}
+                                                                    onChange={(e) => setDists((prev) => ({
+                                                                        ...prev,
+                                                                        [prizeTab]: (prev[prizeTab] ?? []).map((x, i) => i === idx ? { ...x, percentage: Number(e.target.value) } : x),
+                                                                    }))}
                                                                     className="w-14 text-center px-2 py-1.5 text-[12px] rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-lime-400"
                                                                 />
                                                                 <span className="text-[11px] text-slate-400">%</span>

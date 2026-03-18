@@ -1,5 +1,21 @@
-import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 import { Privacy, Plan, Currency } from '@prisma/client';
+
+class CreateStageFeeDto {
+    @IsString() type: string;
+    @IsString() label: string;
+    @IsInt() @Min(0) amount: number;
+    @IsBoolean() active: boolean;
+}
+
+class CreateDistributionDto {
+    @IsString() category: string;
+    @IsInt() @Min(1) position: number;
+    @IsString() label: string;
+    @IsNumber() @Min(0) @Max(100) percentage: number;
+    @IsBoolean() active: boolean;
+}
 
 export class CreateLeagueDto {
     @IsNotEmpty({ message: 'El nombre de la liga es obligatorio' })
@@ -17,7 +33,7 @@ export class CreateLeagueDto {
     @IsOptional()
     @IsNumber()
     @Min(2)
-    @Max(100)
+    @Max(500)
     maxParticipants?: number;
 
     @IsOptional()
@@ -36,4 +52,26 @@ export class CreateLeagueDto {
     @IsOptional()
     @IsEnum(Plan, { message: 'Plan inválido (FREE, GOLD, DIAMOND)' })
     plan?: Plan;
+
+    @IsOptional()
+    @IsBoolean()
+    includeStageFees?: boolean;
+
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    @Max(50)
+    adminFeePercent?: number;
+
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateStageFeeDto)
+    stageFees?: CreateStageFeeDto[];
+
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateDistributionDto)
+    distributions?: CreateDistributionDto[];
 }

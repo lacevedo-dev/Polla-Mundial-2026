@@ -4,6 +4,21 @@ import { resolveApiAssetUrl } from '../api';
 export type BackendPrivacy = 'PUBLIC' | 'PRIVATE';
 export type BackendPlan = 'FREE' | 'GOLD' | 'DIAMOND';
 
+export interface CreateLeagueStageFee {
+    type: string;
+    label: string;
+    amount: number;
+    active: boolean;
+}
+
+export interface CreateLeagueDistribution {
+    category: string;
+    position: number;
+    label: string;
+    percentage: number;
+    active: boolean;
+}
+
 export interface CreateLeagueRequest {
     name: string;
     description?: string;
@@ -13,6 +28,10 @@ export interface CreateLeagueRequest {
     baseFee?: number;
     currency?: string;
     plan?: BackendPlan;
+    includeStageFees?: boolean;
+    adminFeePercent?: number;
+    stageFees?: CreateLeagueStageFee[];
+    distributions?: CreateLeagueDistribution[];
 }
 
 export interface LeagueApiMember {
@@ -173,6 +192,35 @@ export function toCreateLeagueRequest(input: LeagueData | CreateLeagueRequest): 
     const maxParticipants = parseOptionalInteger(input.participantsCount);
     const baseFee = input.includeBaseFee ? parseOptionalInteger(input.baseFeeAmount) : undefined;
 
+    // Build stage fees array from the nested object format in LeagueData
+    const stageFees: CreateLeagueStageFee[] | undefined = input.includeStageFees
+        ? [
+              { type: 'MATCH', label: 'Partido', amount: parseOptionalInteger(input.stageFees?.match?.amount) ?? 0, active: input.stageFees?.match?.active ?? false },
+              { type: 'ROUND', label: 'Ronda', amount: parseOptionalInteger(input.stageFees?.round?.amount) ?? 0, active: input.stageFees?.round?.active ?? false },
+              { type: 'PHASE', label: 'Fase', amount: parseOptionalInteger(input.stageFees?.phase?.amount) ?? 0, active: input.stageFees?.phase?.active ?? false },
+          ]
+        : undefined;
+
+    // Build distributions array from all configured categories
+    const distributions: CreateLeagueDistribution[] = [];
+    const categories = ['general', 'match', 'round', 'phase'] as const;
+    for (const cat of categories) {
+        const catDist = input.distributions?.[cat];
+        if (catDist?.distribution?.length) {
+            catDist.distribution.forEach((d) => {
+                if (d.active) {
+                    distributions.push({
+                        category: cat.toUpperCase(),
+                        position: d.position,
+                        label: d.label,
+                        percentage: d.percentage,
+                        active: d.active,
+                    });
+                }
+            });
+        }
+    }
+
     return {
         name: input.name.trim(),
         description: trimOptionalText(input.description),
@@ -182,6 +230,10 @@ export function toCreateLeagueRequest(input: LeagueData | CreateLeagueRequest): 
         baseFee,
         currency: input.currency?.toUpperCase(),
         plan: toBackendPlan(input.plan),
+        includeStageFees: input.includeStageFees,
+        adminFeePercent: input.adminFeePercent,
+        stageFees: stageFees ?? undefined,
+        distributions: distributions.length ? distributions : undefined,
     };
 }
 
