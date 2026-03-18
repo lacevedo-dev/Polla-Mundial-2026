@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+    AlignJustify,
     AlertCircle,
     ArrowRight,
     CheckCircle2,
@@ -12,10 +13,14 @@ import {
     Eye,
     EyeOff,
     ListChecks,
+    Mail,
+    MessageCircle,
+    Send,
     Settings,
     Share2,
     TrendingUp,
     Trophy,
+    UserPlus,
     Users,
     X,
     Zap,
@@ -69,12 +74,48 @@ const fade = (delay = 0) => ({
 
 /* ─── Invite Modal ─────────────────────────────────────────────── */
 
+interface InviteFriend {
+    id: string;
+    name: string;
+    phone: string;
+    email: string;
+}
+
+function parseBulkText(raw: string): InviteFriend[] {
+    const entries = raw.split(/[;\n]/).map((s) => s.trim()).filter(Boolean);
+    return entries.reduce<InviteFriend[]>((acc, entry) => {
+        const emailMatch = entry.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        const phoneMatch = entry.match(/\b(3\d{9}|\+57\d{10}|\d{7,10})\b/);
+        const namePart = entry
+            .replace(/<[^>]*>/g, '')
+            .replace(emailMatch?.[0] ?? '', '')
+            .replace(phoneMatch?.[0] ?? '', '')
+            .trim()
+            .replace(/[,;]+$/, '')
+            .trim();
+        if (!namePart && !emailMatch && !phoneMatch) return acc;
+        acc.push({
+            id: `${Date.now()}-${Math.random()}`,
+            name: namePart || 'Invitado',
+            phone: phoneMatch?.[0] ?? '',
+            email: emailMatch?.[0] ?? '',
+        });
+        return acc;
+    }, []);
+}
+
 const InviteModal: React.FC<{
     open: boolean;
     onClose: () => void;
     code?: string;
     leagueName?: string;
 }> = ({ open, onClose, code, leagueName }) => {
+    const [tab, setTab] = useState<'one' | 'bulk'>('one');
+    const [friends, setFriends] = useState<InviteFriend[]>([]);
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [email, setEmail] = useState('');
+    const [bulkText, setBulkText] = useState('');
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {
@@ -85,8 +126,15 @@ const InviteModal: React.FC<{
         });
     };
 
+    const handleWhatsApp = () => {
+        const text = encodeURIComponent(
+            `¡Únete a mi polla "${leagueName}"! 🏆\nUsa el código: *${code}* en la app.`,
+        );
+        window.open(`https://wa.me/?text=${text}`, '_blank');
+    };
+
     const handleShare = () => {
-        const text = `Únete a mi polla "${leagueName}" con el código: ${code}`;
+        const text = `¡Únete a la polla "${leagueName}"! Código: ${code}`;
         if (navigator.share) {
             void navigator.share({ title: leagueName, text });
         } else {
@@ -96,6 +144,27 @@ const InviteModal: React.FC<{
             });
         }
     };
+
+    const handleAddOne = () => {
+        if (!name.trim()) return;
+        setFriends((prev) => [
+            ...prev,
+            { id: Date.now().toString(), name: name.trim(), phone: phone.trim(), email: email.trim() },
+        ]);
+        setName('');
+        setPhone('');
+        setEmail('');
+    };
+
+    const handleBulkProcess = () => {
+        const parsed = parseBulkText(bulkText);
+        if (parsed.length) {
+            setFriends((prev) => [...prev, ...parsed]);
+            setBulkText('');
+        }
+    };
+
+    const handleRemoveFriend = (id: string) => setFriends((prev) => prev.filter((f) => f.id !== id));
 
     return (
         <AnimatePresence>
@@ -113,32 +182,186 @@ const InviteModal: React.FC<{
                         transition={{ duration: 0.26, ease: 'easeOut' as const }}
                         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm px-4"
                     >
-                        <div className="bg-white rounded-[2rem] shadow-2xl p-6 space-y-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <h2 className="text-lg font-black text-slate-900">Invitar a la polla</h2>
-                                    <p className="text-sm text-slate-500 mt-0.5 truncate max-w-[220px]">{leagueName}</p>
+                        <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden">
+                            {/* Header */}
+                            <div className="flex items-center gap-3 px-5 pt-5 pb-4">
+                                <div className="w-10 h-10 rounded-2xl bg-slate-950 flex items-center justify-center shrink-0">
+                                    <UserPlus size={18} className="text-white" />
                                 </div>
-                                <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
-                                    <X size={16} />
+                                <div className="flex-1 min-w-0">
+                                    <h2 className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-900">Agregar amigos</h2>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">{friends.length} Invitados</p>
+                                </div>
+                                <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+                                    <X size={15} />
                                 </button>
                             </div>
-                            <div className="rounded-2xl bg-slate-950 p-5 text-center">
-                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 mb-3">Código de invitación</p>
-                                <p className="text-4xl font-black tracking-[0.25em] text-white font-brand">{code || '------'}</p>
-                                <p className="text-[10px] text-slate-500 mt-2">Comparte este código con tus amigos</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button onClick={handleCopy} className="flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all">
-                                    {copied ? <><CheckCircle2 size={16} className="text-lime-500" /> Copiado</> : <><Copy size={16} /> Copiar código</>}
+
+                            <div className="px-5 pb-5 space-y-4">
+                                {/* Access card */}
+                                <div className="rounded-2xl bg-slate-900 px-4 py-3.5 flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500 mb-1">Acceso rápido</p>
+                                        <p className="text-[17px] font-black text-white tracking-widest leading-tight truncate">
+                                            {leagueName?.toUpperCase() || '——'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                            onClick={handleCopy}
+                                            className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors"
+                                            title="Copiar código"
+                                        >
+                                            {copied ? <CheckCircle2 size={15} className="text-lime-400" /> : <Copy size={15} />}
+                                        </button>
+                                        <button
+                                            onClick={handleWhatsApp}
+                                            className="w-9 h-9 flex items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90 transition-opacity"
+                                            title="Compartir en WhatsApp"
+                                        >
+                                            <MessageCircle size={15} />
+                                        </button>
+                                        <button
+                                            onClick={handleShare}
+                                            className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors"
+                                            title="Compartir"
+                                        >
+                                            <Share2 size={15} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Manual add section */}
+                                <div>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400 mb-2.5">Agregar manualmente</p>
+                                    {/* Tabs */}
+                                    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-3">
+                                        <button
+                                            onClick={() => setTab('one')}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[9px] font-black uppercase tracking-[0.15em] transition-all ${tab === 'one' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            <UserPlus size={11} /> Uno a uno
+                                        </button>
+                                        <button
+                                            onClick={() => setTab('bulk')}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[9px] font-black uppercase tracking-[0.15em] transition-all ${tab === 'bulk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            <AlignJustify size={11} /> Lista rápida
+                                        </button>
+                                    </div>
+
+                                    {/* Tab content */}
+                                    <AnimatePresence mode="wait">
+                                        {tab === 'one' ? (
+                                            <motion.div
+                                                key="one"
+                                                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                                                transition={{ duration: 0.15 }}
+                                                className="space-y-2"
+                                            >
+                                                <div className="relative">
+                                                    <UserPlus size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                    <input
+                                                        value={name}
+                                                        onChange={(e) => setName(e.target.value)}
+                                                        onKeyDown={(e) => e.key === 'Enter' && handleAddOne()}
+                                                        placeholder="Nombre del Amigo *"
+                                                        className="w-full pl-8 pr-3 py-2.5 text-[12px] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-lime-400 placeholder:text-slate-400"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div className="relative">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px]">📱</span>
+                                                        <input
+                                                            value={phone}
+                                                            onChange={(e) => setPhone(e.target.value)}
+                                                            placeholder="Celular"
+                                                            className="w-full pl-8 pr-3 py-2.5 text-[12px] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-lime-400 placeholder:text-slate-400"
+                                                        />
+                                                    </div>
+                                                    <div className="relative">
+                                                        <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                        <input
+                                                            value={email}
+                                                            onChange={(e) => setEmail(e.target.value)}
+                                                            placeholder="Email"
+                                                            type="email"
+                                                            className="w-full pl-8 pr-3 py-2.5 text-[12px] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-lime-400 placeholder:text-slate-400"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={handleAddOne}
+                                                    disabled={!name.trim()}
+                                                    className="w-full py-2.5 rounded-xl bg-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-lime-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    + Agregar a la lista
+                                                </button>
+                                            </motion.div>
+                                        ) : (
+                                            <motion.div
+                                                key="bulk"
+                                                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                                                transition={{ duration: 0.15 }}
+                                                className="space-y-2"
+                                            >
+                                                <div className="relative">
+                                                    <textarea
+                                                        value={bulkText}
+                                                        onChange={(e) => setBulkText(e.target.value)}
+                                                        placeholder="Ejemplo: Juan Perez <juan@mail.com>; Maria 3001234567"
+                                                        rows={4}
+                                                        className="w-full px-3 py-2.5 pb-6 text-[12px] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-lime-400 placeholder:text-slate-400 resize-none"
+                                                    />
+                                                    <span className="absolute bottom-3 right-3 text-[9px] text-slate-400 pointer-events-none">
+                                                        Soporta Outlook CSV y Texto
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={handleBulkProcess}
+                                                    disabled={!bulkText.trim()}
+                                                    className="w-full py-2.5 rounded-xl bg-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-lime-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                                >
+                                                    <AlignJustify size={12} /> Procesar lista
+                                                </button>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* Friends list */}
+                                <AnimatePresence>
+                                    {friends.length > 0 && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                            className="space-y-1.5 max-h-28 overflow-y-auto"
+                                        >
+                                            {friends.map((f) => (
+                                                <div key={f.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
+                                                    <div className="w-6 h-6 rounded-full bg-lime-100 flex items-center justify-center text-[10px] font-black text-lime-700 shrink-0">
+                                                        {f.name[0]?.toUpperCase()}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[11px] font-bold text-slate-800 truncate">{f.name}</p>
+                                                        <p className="text-[9px] text-slate-400 truncate">{f.email || f.phone || '—'}</p>
+                                                    </div>
+                                                    <button onClick={() => handleRemoveFriend(f.id)} className="text-slate-300 hover:text-rose-400 transition-colors shrink-0">
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                {/* Personalizar mensaje */}
+                                <button
+                                    onClick={handleShare}
+                                    className="w-full py-3 rounded-2xl bg-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-lime-500 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    Personalizar mensaje <Send size={13} />
                                 </button>
-                                <button onClick={handleShare} className="flex items-center justify-center gap-2 py-3 rounded-xl bg-lime-400 text-slate-950 text-sm font-bold hover:bg-lime-500 transition-all">
-                                    <Share2 size={16} /> Compartir
-                                </button>
                             </div>
-                            <p className="text-[11px] text-slate-400 text-center">
-                                Los amigos pueden unirse desde <span className="font-bold text-slate-600">/join</span> en la app
-                            </p>
                         </div>
                     </motion.div>
                 </>
