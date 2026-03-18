@@ -1416,16 +1416,16 @@ const Dashboard: React.FC = () => {
                         </button>
                     )}
 
-                    {/* Plan badge */}
-                    {activeLeague?.settings.plan && (
+                    {/* Plan badge — shows the authenticated user's plan tier */}
+                    {user?.plan && (
                         <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
-                            activeLeague.settings.plan === 'DIAMOND'
-                                ? 'border-purple-200 bg-purple-50 text-purple-700'
-                                : activeLeague.settings.plan === 'GOLD'
-                                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            user.plan === 'DIAMOND'
+                                ? 'border-purple-300 bg-purple-50 text-purple-700'
+                                : user.plan === 'GOLD'
+                                ? 'border-amber-300 bg-amber-50 text-amber-700'
                                 : 'border-slate-200 bg-slate-50 text-slate-500'
                         }`}>
-                            Plan {activeLeague.settings.plan}
+                            Plan {user.plan}
                         </span>
                     )}
                 </div>
@@ -1480,28 +1480,31 @@ const Dashboard: React.FC = () => {
                         {nextUnsaved && (
                             <button
                                 onClick={() => navigate('/predictions')}
-                                className="flex items-center gap-2 rounded-2xl bg-lime-400 px-4 py-2.5 text-sm font-black uppercase tracking-wide text-slate-950 hover:bg-lime-500 transition-all"
+                                title="Pronosticar"
+                                className="flex items-center gap-2 rounded-2xl bg-lime-400 px-3 py-2.5 sm:px-4 text-sm font-black uppercase tracking-wide text-slate-950 hover:bg-lime-500 transition-all"
                             >
                                 <Zap size={15} />
-                                Pronosticar
+                                <span className="hidden sm:inline">Pronosticar</span>
                             </button>
                         )}
                         {activeLeague?.code && (
                             <button
                                 onClick={() => setInviteOpen(true)}
-                                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black uppercase tracking-wide text-slate-700 hover:border-slate-300 transition-all"
+                                title="Invitar"
+                                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 text-sm font-black uppercase tracking-wide text-slate-700 hover:border-slate-300 transition-all"
                             >
                                 <Share2 size={15} />
-                                Invitar
+                                <span className="hidden sm:inline">Invitar</span>
                             </button>
                         )}
                         {isAdmin && (
                             <button
                                 onClick={() => setConfigOpen(true)}
-                                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black uppercase tracking-wide text-slate-700 hover:border-slate-300 transition-all"
+                                title="Configurar"
+                                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 text-sm font-black uppercase tracking-wide text-slate-700 hover:border-slate-300 transition-all"
                             >
                                 <Settings size={15} />
-                                Configurar
+                                <span className="hidden sm:inline">Configurar</span>
                             </button>
                         )}
                     </div>

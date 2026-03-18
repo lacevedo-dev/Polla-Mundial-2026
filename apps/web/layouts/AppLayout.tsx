@@ -92,7 +92,20 @@ const AppLayout: React.FC = () => {
                             <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
                             <div>
                                 <p className="text-sm font-bold truncate max-w-[120px]">{user?.name || 'Cargando...'}</p>
-                                <p className="text-xs text-slate-500 uppercase tracking-tighter">{user?.systemRole === 'SUPERADMIN' ? 'Super Admin' : user?.role === 'ADMIN' ? 'Administrador' : 'Participante'}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <p className="text-xs text-slate-500 uppercase tracking-tighter">{user?.systemRole === 'SUPERADMIN' ? 'Super Admin' : user?.role === 'ADMIN' ? 'Administrador' : 'Participante'}</p>
+                                    {user?.plan && (
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide ${
+                                            user.plan === 'DIAMOND'
+                                                ? 'bg-purple-500/20 text-purple-300'
+                                                : user.plan === 'GOLD'
+                                                ? 'bg-amber-500/20 text-amber-300'
+                                                : 'bg-slate-700 text-slate-400'
+                                        }`}>
+                                            {user.plan}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <button onClick={handleLogout} className="text-slate-400 hover:text-rose-400 transition-colors">
@@ -115,37 +128,105 @@ const AppLayout: React.FC = () => {
 
             {/* Mobile Menu Overlay */}
             {isMobileMenuOpen && (
-                <div className="fixed inset-0 bg-black z-40 p-6 md:hidden overflow-y-auto">
-                    <div className="flex justify-between items-center mb-8">
-                        <div className="flex items-center gap-2">
+                <div
+                    className="fixed inset-0 bg-slate-950/98 backdrop-blur-sm z-40 md:hidden flex flex-col"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Menú de navegación"
+                >
+                    {/* Top bar: logo + close */}
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
+                        <NavLink to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-white rounded flex items-center justify-center font-brand text-black text-xl font-black">26</div>
-                            <span className="font-brand text-xl text-white font-bold">POLLA<span className="text-lime-400">2026</span></span>
-                        </div>
-                        <button onClick={() => setIsMobileMenuOpen(false)} className="text-white"><X size={32} /></button>
+                            <span className="font-brand text-sm text-white">POLLA<span className="text-lime-400">2026</span></span>
+                        </NavLink>
+                        <button
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                            aria-label="Cerrar menú"
+                        >
+                            <X size={18} />
+                        </button>
                     </div>
-                    <nav className="space-y-4">
+
+                    {/* User profile card */}
+                    <div className="px-5 py-4 border-b border-slate-800 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <img
+                                src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}
+                                className="w-12 h-12 rounded-full ring-2 ring-lime-400 object-cover shrink-0"
+                                alt={user?.name || 'Avatar de usuario'}
+                            />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-white font-bold truncate">{user?.name || 'Cargando...'}</p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-xs text-slate-400">
+                                        {user?.systemRole === 'SUPERADMIN' ? 'Super Admin' : user?.role === 'ADMIN' ? 'Administrador' : 'Participante'}
+                                    </span>
+                                    {user?.plan && (
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wide ${
+                                            user.plan === 'DIAMOND' ? 'bg-purple-500/20 text-purple-300' :
+                                            user.plan === 'GOLD'    ? 'bg-amber-500/20 text-amber-300' :
+                                                                       'bg-slate-700 text-slate-400'
+                                        }`}>
+                                            {user.plan}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
+                                className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors shrink-0"
+                                aria-label="Cerrar sesión"
+                            >
+                                <LogOut size={16} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1" role="navigation" aria-label="Navegación principal">
+                        {isSuperAdmin() && (
+                            <NavLink
+                                to="/admin"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-400/10 text-amber-400 font-bold text-sm hover:bg-amber-400/20 transition-colors"
+                                aria-label="Panel de administración"
+                            >
+                                <Shield size={20} />
+                                <span>Panel Admin</span>
+                            </NavLink>
+                        )}
                         {navItems.map((item) => (
                             <NavLink
                                 key={item.to}
                                 to={item.to}
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className={({ isActive }) =>
-                                    `w-full flex items-center gap-4 text-2xl font-bold py-4 border-b border-slate-800 ${isActive ? 'text-lime-400' : 'text-white'
+                                    `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
+                                        isActive
+                                            ? 'bg-lime-400 text-slate-950'
+                                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                                     }`
                                 }
                             >
-                                <item.icon size={28} />
+                                <item.icon size={20} />
                                 <span>{item.label}</span>
                             </NavLink>
                         ))}
+                    </nav>
+
+                    {/* Bottom logout row */}
+                    <div className="px-4 pb-6 pt-3 border-t border-slate-800 shrink-0">
                         <button
-                            onClick={handleLogout}
-                            className="w-full flex items-center gap-4 text-2xl font-bold py-4 border-b border-slate-800 text-rose-400"
+                            onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-rose-400 hover:bg-rose-400/10 transition-colors"
+                            aria-label="Cerrar sesión"
                         >
-                            <LogOut size={28} />
+                            <LogOut size={18} />
                             <span>Cerrar Sesión</span>
                         </button>
-                    </nav>
+                    </div>
                 </div>
             )}
 
