@@ -29,6 +29,7 @@ model User {
   payments           Payment[]
   predictions        Prediction[]
   verificationTokens VerificationToken[]
+  aiUsageRecords     AiUsageRecord[]
 
   @@index([email])
   @@index([username])
@@ -139,10 +140,10 @@ model Team {
   id                String  @id @default(cuid())
   name              String  @unique
   code              String  @unique
-  shortCode         String? @db.VarChar(8)
-  apiFootballTeamId Int?    @unique
   group             String?
   flagUrl           String?
+  shortCode         String? @db.VarChar(8)
+  apiFootballTeamId Int?    @unique
   awayMatches       Match[] @relation("AwayTeam")
   homeMatches       Match[] @relation("HomeTeam")
 
@@ -150,7 +151,7 @@ model Team {
 }
 
 model Match {
-  id          String       @id @default(cuid())
+  id          String            @id @default(cuid())
   homeTeamId  String
   awayTeamId  String
   homeScore   Int?
@@ -160,16 +161,16 @@ model Match {
   matchNumber Int?
   venue       String?
   matchDate   DateTime
-  status      MatchStatus  @default(SCHEDULED)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  externalId  String?            @unique
+  status      MatchStatus       @default(SCHEDULED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  externalId  String?           @unique
   lastSyncAt  DateTime?
-  syncCount   Int                @default(0)
-  awayTeam    Team               @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  homeTeam    Team               @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  predictions Prediction[]
+  syncCount   Int               @default(0)
   syncLogs    FootballSyncLog[]
+  awayTeam    Team              @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homeTeam    Team              @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  predictions Prediction[]
 
   @@index([matchDate])
   @@index([status])
@@ -338,20 +339,20 @@ model DailySyncPlan {
 }
 
 model FootballSyncLog {
-  id             String         @id @default(cuid())
+  id             String        @id @default(cuid())
   type           SyncLogType
   status         SyncLogStatus
   matchId        String?
   externalId     String?
-  message        String         @db.Text
-  details        String?        @db.LongText
-  requestsUsed   Int            @default(0)
-  matchesUpdated Int            @default(0)
+  message        String        @db.Text
+  details        String?       @db.LongText
+  requestsUsed   Int           @default(0)
+  matchesUpdated Int           @default(0)
   duration       Int?
-  error          String?        @db.LongText
+  error          String?       @db.LongText
   triggeredBy    String?
-  createdAt      DateTime       @default(now())
-  match          Match?         @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  match          Match?        @relation(fields: [matchId], references: [id])
 
   @@index([type, status])
   @@index([createdAt])
@@ -378,15 +379,15 @@ model FootballSyncConfig {
 }
 
 model FootballSyncAlert {
-  id          String          @id @default(cuid())
-  type        SyncAlertType
-  severity    SyncAlertLevel
-  message     String          @db.Text
-  details     String?         @db.LongText
-  resolved    Boolean         @default(false)
-  resolvedBy  String?
-  resolvedAt  DateTime?
-  createdAt   DateTime        @default(now())
+  id         String         @id @default(cuid())
+  type       SyncAlertType
+  severity   SyncAlertLevel
+  message    String         @db.Text
+  details    String?        @db.LongText
+  resolved   Boolean        @default(false)
+  resolvedBy String?
+  resolvedAt DateTime?
+  createdAt  DateTime       @default(now())
 
   @@index([resolved, severity])
   @@index([createdAt])
@@ -571,4 +572,35 @@ enum SyncAlertLevel {
   WARNING
   ERROR
   CRITICAL
+}
+
+model AiUsageRecord {
+  id               String   @id @default(cuid())
+  userId           String
+  leagueId         String?
+  matchId          String?
+  feature          String
+  creditsUsed      Int      @default(1)
+  requestData      String?  @db.LongText
+  responseData     String?  @db.LongText
+  insightGenerated Boolean  @default(false)
+  clientInfo       String?  @db.Text
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([leagueId, createdAt(sort: Desc)])
+  @@index([feature, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+model UserAiCredits {
+  userId        String   @id
+  plan          Plan
+  totalCredits  Int
+  usedCredits   Int      @default(0)
+  lastResetAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([plan])
 }

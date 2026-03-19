@@ -20,6 +20,7 @@ import { AdminModule } from './admin/admin.module';
 import { ConfigModule } from './config/config.module';
 import { InsightsModule } from './insights/insights.module';
 import { FootballSyncModule } from './football-sync/football-sync.module';
+import { AiCreditsModule } from './ai-credits/ai-credits.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { FootballSyncModule } from './football-sync/football-sync.module';
     AdminModule,
     ConfigModule,
     InsightsModule,
+    AiCreditsModule,
     UsersModule,
     LeaguesModule,
     PredictionsModule,

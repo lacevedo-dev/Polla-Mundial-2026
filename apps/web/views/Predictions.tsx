@@ -27,6 +27,7 @@ import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useConfigStore } from '../stores/config.store';
 import { useAuthStore } from '../stores/auth.store';
+import { useAiCredits } from '../hooks/useAiCredits';
 
 type DraftMap = Record<string, { home: string; away: string }>;
 type PhaseFilter = 'ALL' | 'GROUP' | 'KNOCKOUT';
@@ -1404,6 +1405,7 @@ const Predictions: React.FC = () => {
     const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
     const getRemoteSiCredits = useConfigStore((state) => state.getSiCredits);
     const creditsResetAt = useConfigStore((state) => state.creditsResetAt);
+    const aiCredits = useAiCredits();
 
     const [drafts, setDrafts] = React.useState<DraftMap>({});
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -2024,8 +2026,8 @@ const Predictions: React.FC = () => {
                                                                 cachedInsights={cachedInsights}
                                                                 insightsLoading={insightsLoading}
                                                                 analysisMatchId={analysisMatchId}
-                                                                siCredits={siCredits}
-                                                                planCap={getRemoteSiCredits(resolvedPlan)}
+                                                                siCredits={aiCredits.usedCredits}
+                                                                planCap={aiCredits.totalCredits}
                                                                 onToggleExpand={() => {
                                                                     const newExpanded = new Set(expandedMatches);
                                                                     if (isExpanded) {
@@ -2060,7 +2062,8 @@ const Predictions: React.FC = () => {
                                                                         return;
                                                                     }
 
-                                                                    if (siCredits >= cap) {
+                                                                    // Verificar créditos disponibles
+                                                                    if (!aiCredits.hasCredits) {
                                                                         setInsightsLocked(true);
                                                                         setAnalysisMatchId(match.id);
                                                                         return;
@@ -2072,10 +2075,24 @@ const Predictions: React.FC = () => {
                                                                     try {
                                                                         await new Promise((resolve) => setTimeout(resolve, 1200));
                                                                         const generated = generateMatchInsights(match);
-                                                                        setInsightsData((prev) => ({ ...prev, [match.id]: generated }));
-                                                                        setCachedInsights(match.id, generated);
-                                                                        setSiCredits(siCredits + 1);
-                                                                        setInsightsCollapsed((prev) => ({ ...prev, [match.id]: true }));
+
+                                                                        // Consumir crédito en la API
+                                                                        const result = await aiCredits.consumeCredits({
+                                                                            leagueId: activeLeague?.id,
+                                                                            matchId: match.id,
+                                                                            feature: 'match_insights',
+                                                                            responseData: generated,
+                                                                            insightGenerated: true,
+                                                                            clientInfo: `Match: ${match.homeTeam} vs ${match.awayTeam}`,
+                                                                        });
+
+                                                                        if (result.success) {
+                                                                            setInsightsData((prev) => ({ ...prev, [match.id]: generated }));
+                                                                            setCachedInsights(match.id, generated);
+                                                                            setInsightsCollapsed((prev) => ({ ...prev, [match.id]: true }));
+                                                                        } else {
+                                                                            setInsightsError(result.error || 'No se pudo consumir el crédito');
+                                                                        }
                                                                     } catch {
                                                                         setInsightsError('Error al generar insights');
                                                                     } finally {
@@ -2289,8 +2306,8 @@ const Predictions: React.FC = () => {
                                                             <SmartInsightsPanel
                                                                 match={match}
                                                                 leaguePlan={resolvedPlan}
-                                                                planCap={getRemoteSiCredits(resolvedPlan)}
-                                                                siCredits={siCredits}
+                                                                planCap={aiCredits.totalCredits}
+                                                                siCredits={aiCredits.usedCredits}
                                                                 cachedData={cachedInsights}
                                                                 insightsLocked={insightsLocked}
                                                                 insightsLoading={insightsLoading}

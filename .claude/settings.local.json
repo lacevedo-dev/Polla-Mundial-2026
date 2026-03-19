@@ -31,7 +31,8 @@
       "Bash(npm run api:build)",
       "Bash(npx tsc --noEmit apps/web/views/Predictions.tsx)",
       "Bash(npx tsc --noEmit --skipLibCheck)",
-      "Bash(npm run web:build)"
+      "Bash(npm run web:build)",
+      "Bash(npx prisma migrate dev --name add_ai_usage_tracking --create-only)"
     ]
   }
 }
