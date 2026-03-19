@@ -439,6 +439,10 @@ interface CompactMatchRowProps {
     isSaving: boolean;
     isDirty: boolean;
     canEdit: boolean;
+    speedMode: boolean;
+    cachedInsights: object | null;
+    insightsLoading: boolean;
+    analysisMatchId: string | null;
     onToggleExpand: () => void;
     onDraftChange: (field: 'home' | 'away', value: string) => void;
     onSave: () => void;
@@ -446,6 +450,8 @@ interface CompactMatchRowProps {
     onAwayInputRef: (el: HTMLInputElement | null) => void;
     onHomeEnter: () => void;
     onAwayEnter: () => void;
+    onRequestInsights: () => void;
+    onApplySuggestedScore: (home: string, away: string) => void;
 }
 
 function CompactMatchRow({
@@ -455,6 +461,10 @@ function CompactMatchRow({
     isSaving,
     isDirty,
     canEdit,
+    speedMode,
+    cachedInsights,
+    insightsLoading,
+    analysisMatchId,
     onToggleExpand,
     onDraftChange,
     onSave,
@@ -462,7 +472,113 @@ function CompactMatchRow({
     onAwayInputRef,
     onHomeEnter,
     onAwayEnter,
+    onRequestInsights,
+    onApplySuggestedScore,
 }: CompactMatchRowProps) {
+    const [insightsLevel, setInsightsLevel] = React.useState<'none' | 'suggestions' | 'full'>('none');
+    // Si NO está en speed mode, mostrar vista expandida completa
+    if (!speedMode) {
+        return (
+            <div className="border-b border-slate-100 px-3 py-3 last:border-b-0">
+                <div className="space-y-2.5">
+                    {/* Header con hora y estado */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</span>
+                            <span className="text-[8px] font-black uppercase tracking-wider text-amber-500">
+                                {summarizeCloseTime(match.date)}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {match.saved && <CheckCircle2 className="h-4 w-4 text-lime-600" />}
+                            {isDirty && !isSaving && <div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />}
+                            {isSaving && <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-lime-600" />}
+                        </div>
+                    </div>
+
+                    {/* Equipos y marcadores (layout vertical mejorado) */}
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                        {/* Home team - vertical */}
+                        <div className="flex flex-col items-center gap-1">
+                            <img src={match.homeFlag} alt={match.homeTeamCode} className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm" />
+                            <span className="text-xs font-black uppercase text-slate-900">{match.homeTeamCode}</span>
+                        </div>
+
+                        {/* Score inputs */}
+                        {canEdit ? (
+                            <div className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-1.5 py-1 shadow-sm ring-1 ring-slate-200">
+                                <input
+                                    ref={onHomeInputRef}
+                                    type="tel"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={draft.home}
+                                    onChange={(e) => onDraftChange('home', e.target.value)}
+                                    placeholder="0"
+                                    className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
+                                />
+                                <span className="px-0.5 text-base font-black text-slate-300">-</span>
+                                <input
+                                    ref={onAwayInputRef}
+                                    type="tel"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={draft.away}
+                                    onChange={(e) => onDraftChange('away', e.target.value)}
+                                    placeholder="0"
+                                    className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <span className="text-sm font-black text-slate-900">{draft.home || '−'}</span>
+                                <span className="text-sm font-black text-slate-300">:</span>
+                                <span className="text-sm font-black text-slate-900">{draft.away || '−'}</span>
+                            </div>
+                        )}
+
+                        {/* Away team - vertical */}
+                        <div className="flex flex-col items-center gap-1">
+                            <img src={match.awayFlag} alt={match.awayTeamCode} className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm" />
+                            <span className="text-xs font-black uppercase text-slate-900">{match.awayTeamCode}</span>
+                        </div>
+                    </div>
+
+                    {/* Info y botón guardar */}
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1 text-[9px]">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold uppercase text-slate-500">
+                                {toDisplayPhase(match.phase)}
+                            </span>
+                            {match.group && (
+                                <span className="rounded-full bg-white px-2 py-0.5 font-bold uppercase text-slate-500 ring-1 ring-inset ring-slate-200">
+                                    G{match.group}
+                                </span>
+                            )}
+                        </div>
+                        {canEdit && (
+                            <button
+                                onClick={onSave}
+                                disabled={isSaving}
+                                className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all disabled:opacity-60 ${
+                                    isDirty || match.saved
+                                        ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
+                                        : 'border border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                                }`}
+                            >
+                                {isSaving
+                                    ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                                    : match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />
+                                }
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Speed mode: Vista ultra-compacta de una línea
     return (
         <div className="overflow-hidden border-b border-slate-100 last:border-b-0">
             {/* Compact row - one line */}
@@ -528,7 +644,7 @@ function CompactMatchRow({
                     <img src={match.awayFlag} alt={match.awayTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
                 </div>
 
-                {/* Status indicator */}
+                {/* Status indicator + IA button */}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
                     {match.saved && (
                         <CheckCircle2 className="h-4 w-4 text-lime-600" />
@@ -539,11 +655,37 @@ function CompactMatchRow({
                     {isSaving && (
                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-lime-600" />
                     )}
+
+                    {/* IA Button - aparece junto a los días */}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (!cachedInsights && !insightsLoading) {
+                                onRequestInsights();
+                            }
+                            setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
+                        }}
+                        className={`flex h-6 w-6 items-center justify-center rounded-lg transition-all ${
+                            cachedInsights
+                                ? 'bg-violet-100 text-violet-600'
+                                : insightsLoading && analysisMatchId === match.id
+                                ? 'bg-amber-100 text-amber-600'
+                                : 'bg-slate-100 text-slate-400 hover:bg-violet-50 hover:text-violet-600'
+                        }`}
+                    >
+                        {insightsLoading && analysisMatchId === match.id ? (
+                            <div className="h-3 w-3 animate-spin rounded-full border border-amber-600 border-t-transparent" />
+                        ) : (
+                            <Brain className="h-3 w-3" />
+                        )}
+                    </button>
+
                     <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
             </button>
 
-            {/* Expanded content - only on mobile when expanded */}
+            {/* Nivel 1: Info básica (cuando se expande) */}
             {isExpanded && (
                 <div className="animate-slideDown border-t border-slate-100 bg-slate-50 px-3 py-2 sm:hidden">
                     <div className="flex flex-wrap items-center gap-1 text-[9px]">
@@ -562,6 +704,143 @@ function CompactMatchRow({
                             </span>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Nivel 2: Smart Insights - Sugerencias (3 marcadores) */}
+            {insightsLevel !== 'none' && cachedInsights && (
+                <div className="animate-slideDown border-t border-slate-100 bg-gradient-to-b from-violet-50 to-white px-3 py-2.5 sm:hidden">
+                    {(() => {
+                        const ins = (cachedInsights ?? generateMatchInsights(match)) as InsightsPayload;
+                        const scoreLabels = ['SEGURA', 'IA MODEL', 'ARRIESGADA'] as const;
+                        const scoreStyles = [
+                            'bg-lime-100 text-lime-700 border-lime-200',
+                            'bg-violet-100 text-violet-700 border-violet-200',
+                            'bg-amber-100 text-amber-700 border-amber-200',
+                        ] as const;
+
+                        return (
+                            <>
+                                <div className="mb-2 flex items-center gap-1.5">
+                                    <Sparkles className="h-3 w-3 text-violet-500" />
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-violet-600">Sugerencias IA</span>
+                                    {cachedInsights && (
+                                        <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[7px] font-black uppercase text-purple-600">IA</span>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-1.5">
+                                    {ins.scores.map((score, idx) => {
+                                        const [h, a] = score.split('-');
+                                        const probs = [ins.homeWin, ins.draw, ins.awayWin];
+                                        return (
+                                            <button
+                                                key={score + idx}
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onApplySuggestedScore(h, a);
+                                                }}
+                                                className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 transition-all active:scale-95 ${scoreStyles[idx]}`}
+                                            >
+                                                <span className="text-[7px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
+                                                <span className="text-lg font-black leading-none">{score}</span>
+                                                <span className="text-[7px] font-bold opacity-70">{probs[idx]}%</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Botón "Ver más detalles" */}
+                                {insightsLevel === 'suggestions' && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setInsightsLevel('full');
+                                        }}
+                                        className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-violet-200 bg-white py-1.5 text-[9px] font-black uppercase tracking-wider text-violet-600 transition-colors hover:bg-violet-50"
+                                    >
+                                        <ChevronDown className="h-3 w-3" />
+                                        Ver análisis completo
+                                    </button>
+                                )}
+                            </>
+                        );
+                    })()}
+                </div>
+            )}
+
+            {/* Nivel 3: Análisis completo (racha, insight, etc.) */}
+            {insightsLevel === 'full' && cachedInsights && (
+                <div className="animate-slideDown border-t border-violet-100 bg-gradient-to-b from-violet-50 to-white px-3 py-2.5 sm:hidden">
+                    {(() => {
+                        const ins = (cachedInsights ?? generateMatchInsights(match)) as InsightsPayload;
+                        return (
+                            <>
+                                {/* Insight principal */}
+                                {ins.insight && (
+                                    <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-2 py-1.5">
+                                        <Sparkles className="mt-0.5 h-2.5 w-2.5 shrink-0 text-amber-500" />
+                                        <p className="text-[9px] font-medium leading-relaxed text-slate-700">"{ins.insight}"</p>
+                                    </div>
+                                )}
+
+                                {/* Probabilidades */}
+                                <div className="mb-2">
+                                    <div className="mb-1 flex justify-between text-[8px] font-bold uppercase">
+                                        <span className="text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                        <span className="text-slate-400">Empate</span>
+                                        <span className="text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                                    </div>
+                                    <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
+                                        <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
+                                        <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
+                                    </div>
+                                    <div className="mt-0.5 flex justify-between">
+                                        <span className="text-[8px] font-black text-slate-900">{ins.homeWin}%</span>
+                                        <span className="text-[8px] font-black text-slate-400">{ins.draw}%</span>
+                                        <span className="text-[8px] font-black text-slate-900">{ins.awayWin}%</span>
+                                    </div>
+                                </div>
+
+                                {/* Racha */}
+                                <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-2">
+                                    <div className="mb-1 flex items-center gap-1">
+                                        <BarChart3 className="h-2.5 w-2.5 text-indigo-500" />
+                                        <span className="text-[7px] font-black uppercase tracking-wider text-indigo-600">Últimos 5</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex gap-0.5">
+                                            {ins.homeForm.map((r, i) => (
+                                                <span key={i} className={`flex h-4 w-4 items-center justify-center rounded-full text-[7px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                            ))}
+                                        </div>
+                                        <span className="text-[8px] font-black text-indigo-600">VS</span>
+                                        <div className="flex gap-0.5">
+                                            {ins.awayForm.map((r, i) => (
+                                                <span key={i} className={`flex h-4 w-4 items-center justify-center rounded-full text-[7px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Botón "Ocultar detalles" */}
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setInsightsLevel('suggestions');
+                                    }}
+                                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-violet-200 bg-white py-1.5 text-[9px] font-black uppercase tracking-wider text-violet-600 transition-colors hover:bg-violet-50"
+                                >
+                                    <ChevronUp className="h-3 w-3" />
+                                    Ocultar detalles
+                                </button>
+                            </>
+                        );
+                    })()}
                 </div>
             )}
 
@@ -1440,6 +1719,10 @@ const Predictions: React.FC = () => {
                                                                 isSaving={isSaving}
                                                                 isDirty={isDirty}
                                                                 canEdit={canEdit}
+                                                                speedMode={speedEntryMode}
+                                                                cachedInsights={cachedInsights}
+                                                                insightsLoading={insightsLoading}
+                                                                analysisMatchId={analysisMatchId}
                                                                 onToggleExpand={() => {
                                                                     const newExpanded = new Set(expandedMatches);
                                                                     if (isExpanded) {
@@ -1462,6 +1745,44 @@ const Predictions: React.FC = () => {
                                                                 onAwayInputRef={(el) => (awayInputRefs.current[match.id] = el)}
                                                                 onHomeEnter={() => awayInputRefs.current[match.id]?.focus()}
                                                                 onAwayEnter={() => handleSpeedEntry(match.id)}
+                                                                onRequestInsights={async () => {
+                                                                    setInsightsError(null);
+                                                                    const leaguePlan = resolvedPlan;
+                                                                    const cap = getRemoteSiCredits(leaguePlan);
+                                                                    const cached = getCachedInsights(match.id) ?? insightsData[match.id];
+
+                                                                    if (cached) {
+                                                                        setInsightsCollapsed((prev) => ({ ...prev, [match.id]: prev[match.id] ?? true }));
+                                                                        setAnalysisMatchId(match.id);
+                                                                        return;
+                                                                    }
+
+                                                                    if (siCredits >= cap) {
+                                                                        setInsightsLocked(true);
+                                                                        setAnalysisMatchId(match.id);
+                                                                        return;
+                                                                    }
+
+                                                                    setInsightsLoading(true);
+                                                                    setAnalysisMatchId(match.id);
+
+                                                                    try {
+                                                                        await new Promise((resolve) => setTimeout(resolve, 1200));
+                                                                        const generated = generateMatchInsights(match);
+                                                                        setInsightsData((prev) => ({ ...prev, [match.id]: generated }));
+                                                                        setCachedInsights(match.id, generated);
+                                                                        setSiCredits(siCredits + 1);
+                                                                        setInsightsCollapsed((prev) => ({ ...prev, [match.id]: true }));
+                                                                    } catch {
+                                                                        setInsightsError('Error al generar insights');
+                                                                    } finally {
+                                                                        setInsightsLoading(false);
+                                                                    }
+                                                                }}
+                                                                onApplySuggestedScore={(home, away) => {
+                                                                    handleDraftChange(match.id, 'home', home);
+                                                                    handleDraftChange(match.id, 'away', away);
+                                                                }}
                                                             />
                                                         </div>
 
