@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { request } from '../api';
 
-interface AiUsageRecord {
+export interface AiUsageRecord {
     id: string;
     userId: string;
     leagueId: string | null;
@@ -9,6 +9,9 @@ interface AiUsageRecord {
     feature: string;
     creditsUsed: number;
     insightGenerated: boolean;
+    requestData?: string | null;
+    responseData?: string | null;
+    clientInfo?: string | null;
     createdAt: string;
     user: {
         id: string;
