@@ -24,7 +24,11 @@
       "Bash(npx tsc --noEmit src/football-sync/**/*.ts)",
       "Bash(npm run start:dev)",
       "Bash(curl -s http://localhost:3004/health/live)",
-      "Bash(npx tsc --noEmit src/views/admin/Football*.tsx src/types/football-sync.ts src/stores/football-sync.store.ts)"
+      "Bash(npx tsc --noEmit src/views/admin/Football*.tsx src/types/football-sync.ts src/stores/football-sync.store.ts)",
+      "Bash(npx tsc --noEmit apps/api/src/admin/admin.service.ts)",
+      "Bash(test -d apps/api/src/system-config)",
+      "Bash(npm run)",
+      "Bash(npm run api:build)"
     ]
   }
 }

@@ -46,10 +46,11 @@ export class AdminPlansController {
         for (const plan of ['FREE', 'GOLD', 'DIAMOND']) {
             const saved = configs.find((c) => c.key === `plan:${plan}`);
             const defaultPlan = PLAN_DEFAULTS[plan as keyof typeof PLAN_DEFAULTS];
+            const savedValue = (saved?.value ?? null) as Partial<typeof defaultPlan> | null;
 
             // Merge saved with defaults to ensure all required fields are present
             planConfigs[plan] = saved
-                ? { ...defaultPlan, ...saved.value, features: saved.value?.features || defaultPlan.features }
+                ? { ...defaultPlan, ...savedValue, features: savedValue?.features || defaultPlan.features }
                 : defaultPlan;
         }
 
