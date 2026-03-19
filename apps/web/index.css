@@ -1,6 +1,19 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+    /* Brand Colors */
+    --color-lime-400: #3EE93E;
+    --color-lime-500: #32D832;
+    --color-purple-500: #7B2CBF;
+    --color-purple-600: #6a25a6;
+    --color-rose-500: #E63946;
+    --color-cyan-400: #00B4D8;
+    --color-cyan-500: #0096B4;
+
+    /* Font Families */
+    --font-sans: 'Inter', sans-serif;
+    --font-brand: 'Montserrat', sans-serif;
+}
 
 body {
     background-color: #f8fafc;
