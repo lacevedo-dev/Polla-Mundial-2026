@@ -7,7 +7,7 @@ const PLAN_CREDITS: Record<Plan, number> = {
     DIAMOND: 100,
 };
 
-interface ConsumeCreditsParams {
+export interface ConsumeCreditsParams {
     userId: string;
     leagueId?: string;
     matchId?: string;
@@ -19,7 +19,7 @@ interface ConsumeCreditsParams {
     clientInfo?: string;
 }
 
-interface CreditSummary {
+export interface CreditSummary {
     totalCredits: number;
     usedCredits: number;
     remainingCredits: number;

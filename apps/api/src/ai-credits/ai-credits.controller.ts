@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Body, Query, Request, UseGuards, ParseIntPipe } from '@nestjs/common';
-import { AiCreditsService } from './ai-credits.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+import { AiCreditsService, CreditSummary } from './ai-credits.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { SystemRole } from '@prisma/client';
 
 @Controller('ai-credits')
@@ -15,7 +15,7 @@ export class AiCreditsController {
      * Obtiene el resumen de créditos del usuario autenticado
      */
     @Get('summary')
-    async getMySummary(@Request() req: any) {
+    async getMySummary(@Request() req: any): Promise<CreditSummary> {
         const userId = req.user.userId;
         return this.aiCreditsService.getUserCreditSummary(userId);
     }
@@ -64,7 +64,7 @@ export class AiCreditsController {
      * Resetea los créditos del usuario autenticado
      */
     @Post('reset')
-    async resetMyCredits(@Request() req: any) {
+    async resetMyCredits(@Request() req: any): Promise<CreditSummary> {
         const userId = req.user.userId;
         return this.aiCreditsService.resetUserCredits(userId);
     }
@@ -124,7 +124,7 @@ export class AiCreditsController {
     @Get('admin/user/:userId/summary')
     @UseGuards(RolesGuard)
     @Roles(SystemRole.ADMIN, SystemRole.SUPERADMIN)
-    async getUserSummary(@Query('userId') userId: string) {
+    async getUserSummary(@Query('userId') userId: string): Promise<CreditSummary> {
         return this.aiCreditsService.getUserCreditSummary(userId);
     }
 
@@ -135,7 +135,7 @@ export class AiCreditsController {
     @Post('admin/user/:userId/reset')
     @UseGuards(RolesGuard)
     @Roles(SystemRole.ADMIN, SystemRole.SUPERADMIN)
-    async resetUserCredits(@Query('userId') userId: string) {
+    async resetUserCredits(@Query('userId') userId: string): Promise<CreditSummary> {
         return this.aiCreditsService.resetUserCredits(userId);
     }
 }
