@@ -2026,7 +2026,7 @@ const Predictions: React.FC = () => {
                                                                 cachedInsights={cachedInsights}
                                                                 insightsLoading={insightsLoading}
                                                                 analysisMatchId={analysisMatchId}
-                                                                siCredits={aiCredits.usedCredits}
+                                                                siCredits={aiCredits.remainingCredits}
                                                                 planCap={aiCredits.totalCredits}
                                                                 onToggleExpand={() => {
                                                                     const newExpanded = new Set(expandedMatches);
@@ -2307,7 +2307,7 @@ const Predictions: React.FC = () => {
                                                                 match={match}
                                                                 leaguePlan={resolvedPlan}
                                                                 planCap={aiCredits.totalCredits}
-                                                                siCredits={aiCredits.usedCredits}
+                                                                siCredits={aiCredits.remainingCredits}
                                                                 cachedData={cachedInsights}
                                                                 insightsLocked={insightsLocked}
                                                                 insightsLoading={insightsLoading}
