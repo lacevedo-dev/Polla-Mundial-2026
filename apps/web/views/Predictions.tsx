@@ -236,7 +236,27 @@ function generateMatchInsights(match: MatchViewModel) {
     ];
     const smartPick =
         homeWin > awayWin + 10 ? match.homeTeam : awayWin > homeWin + 10 ? match.awayTeam : 'Empate';
-    return { homeWin, draw, awayWin, homeForm, awayForm, scores, smartPick };
+
+    // Generar insights personalizados
+    const insights = [
+        'Bloque medio y transiciones rápidas marcarán un duelo de márgenes cortos.',
+        'Predominio en la zona central podría definir el control del encuentro.',
+        'Presión alta y recuperación rápida serán claves en este enfrentamiento.',
+        'El juego aéreo y pelotas paradas pueden marcar la diferencia.',
+        'Velocidad en las bandas contra solidez defensiva será el contraste principal.',
+        'Experiencia en torneos internacionales favorece a uno de los equipos.',
+    ];
+    const insight = insights[h % insights.length];
+
+    const personalInsights = [
+        'Tu historial sugiere que valores la solidez defensiva en partidos equilibrados.',
+        'Históricamente has apostado por resultados conservadores en fases de grupos.',
+        'Tiendes a confiar en el favorito local cuando hay poca diferencia de nivel.',
+        'Tus pronósticos recientes muestran preferencia por marcadores bajos.',
+    ];
+    const personalInsight = personalInsights[h % personalInsights.length];
+
+    return { homeWin, draw, awayWin, homeForm, awayForm, scores, smartPick, insight, personalInsight };
 }
 
 function formatFriendlyDate(isoDate: string): string {
@@ -443,6 +463,8 @@ interface CompactMatchRowProps {
     cachedInsights: object | null;
     insightsLoading: boolean;
     analysisMatchId: string | null;
+    siCredits: number;
+    planCap: number;
     onToggleExpand: () => void;
     onDraftChange: (field: 'home' | 'away', value: string) => void;
     onSave: () => void;
@@ -452,6 +474,7 @@ interface CompactMatchRowProps {
     onAwayEnter: () => void;
     onRequestInsights: () => void;
     onApplySuggestedScore: (home: string, away: string) => void;
+    onCollapseOthers: () => void;
 }
 
 function CompactMatchRow({
@@ -465,6 +488,8 @@ function CompactMatchRow({
     cachedInsights,
     insightsLoading,
     analysisMatchId,
+    siCredits,
+    planCap,
     onToggleExpand,
     onDraftChange,
     onSave,
@@ -474,8 +499,10 @@ function CompactMatchRow({
     onAwayEnter,
     onRequestInsights,
     onApplySuggestedScore,
+    onCollapseOthers,
 }: CompactMatchRowProps) {
     const [insightsLevel, setInsightsLevel] = React.useState<'none' | 'suggestions' | 'full'>('none');
+    const hasBeenConsulted = cachedInsights !== null;
     // Si NO está en speed mode, mostrar vista expandida completa
     if (!speedMode) {
         return (
@@ -544,7 +571,7 @@ function CompactMatchRow({
                         </div>
                     </div>
 
-                    {/* Info y botón guardar */}
+                    {/* Info y botones de acción */}
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1 text-[9px]">
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold uppercase text-slate-500">
@@ -556,23 +583,193 @@ function CompactMatchRow({
                                 </span>
                             )}
                         </div>
-                        {canEdit && (
+                        <div className="flex items-center gap-1.5">
+                            {/* Botón IA */}
                             <button
-                                onClick={onSave}
-                                disabled={isSaving}
-                                className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all disabled:opacity-60 ${
-                                    isDirty || match.saved
-                                        ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
-                                        : 'border border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onCollapseOthers();
+                                    if (!cachedInsights && !insightsLoading) {
+                                        onRequestInsights();
+                                    }
+                                    setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
+                                }}
+                                className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                                    hasBeenConsulted
+                                        ? 'bg-violet-100 text-violet-600 ring-2 ring-violet-200'
+                                        : insightsLoading && analysisMatchId === match.id
+                                        ? 'bg-amber-100 text-amber-600'
+                                        : 'border border-slate-200 bg-white text-slate-400 hover:bg-violet-50 hover:text-violet-600'
                                 }`}
                             >
-                                {isSaving
-                                    ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
-                                    : match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />
-                                }
+                                {insightsLoading && analysisMatchId === match.id ? (
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+                                ) : (
+                                    <Brain className="h-4 w-4" />
+                                )}
                             </button>
-                        )}
+
+                            {/* Botón guardar */}
+                            {canEdit && (
+                                <button
+                                    onClick={onSave}
+                                    disabled={isSaving}
+                                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all disabled:opacity-60 ${
+                                        isDirty || match.saved
+                                            ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
+                                            : 'border border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {isSaving
+                                        ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                                        : match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />
+                                    }
+                                </button>
+                            )}
+                        </div>
                     </div>
+
+                    {/* Panel de insights para modo no compacto */}
+                    {insightsLevel !== 'none' && cachedInsights && (
+                        <div className="animate-slideDown mt-2 overflow-hidden rounded-xl border border-violet-100 bg-gradient-to-b from-violet-50 to-white">
+                            {/* Nivel 2: Sugerencias */}
+                            <div className="px-3 py-2.5">
+                                {(() => {
+                                    const ins = (cachedInsights ?? generateMatchInsights(match)) as InsightsPayload;
+                                    const scoreLabels = ['SEGURA', 'IA MODEL', 'ARRIESGADA'] as const;
+                                    const scoreStyles = [
+                                        'bg-lime-100 text-lime-700 border-lime-200',
+                                        'bg-violet-100 text-violet-700 border-violet-200',
+                                        'bg-amber-100 text-amber-700 border-amber-200',
+                                    ] as const;
+
+                                    return (
+                                        <>
+                                            <div className="mb-2 flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Sparkles className="h-3 w-3 text-violet-500" />
+                                                    <span className="text-[8px] font-black uppercase tracking-wider text-violet-600">Sugerencias IA</span>
+                                                    {hasBeenConsulted && (
+                                                        <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[7px] font-black uppercase text-purple-600">IA</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-1 text-[8px]">
+                                                    <span className="font-bold text-slate-500">{siCredits}/{planCap}</span>
+                                                    <span className="text-slate-400">créditos</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {ins.scores.map((score, idx) => {
+                                                    const [h, a] = score.split('-');
+                                                    const probs = [ins.homeWin, ins.draw, ins.awayWin];
+                                                    return (
+                                                        <button
+                                                            key={score + idx}
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onApplySuggestedScore(h, a);
+                                                            }}
+                                                            className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 transition-all active:scale-95 ${scoreStyles[idx]}`}
+                                                        >
+                                                            <span className="text-[7px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
+                                                            <span className="text-lg font-black leading-none">{score}</span>
+                                                            <span className="text-[7px] font-bold opacity-70">{probs[idx]}%</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {insightsLevel === 'suggestions' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setInsightsLevel('full');
+                                                    }}
+                                                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-violet-200 bg-white py-1.5 text-[9px] font-black uppercase tracking-wider text-violet-600 transition-colors hover:bg-violet-50"
+                                                >
+                                                    <ChevronDown className="h-3 w-3" />
+                                                    Ver análisis completo
+                                                </button>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Nivel 3: Análisis completo */}
+                            {insightsLevel === 'full' && (
+                                <div className="animate-slideDown border-t border-violet-100 px-3 py-2.5">
+                                    {(() => {
+                                        const ins = (cachedInsights ?? generateMatchInsights(match)) as InsightsPayload;
+                                        return (
+                                            <>
+                                                {ins.insight && (
+                                                    <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-2 py-1.5">
+                                                        <Sparkles className="mt-0.5 h-2.5 w-2.5 shrink-0 text-amber-500" />
+                                                        <p className="text-[9px] font-medium leading-relaxed text-slate-700">"{ins.insight}"</p>
+                                                    </div>
+                                                )}
+
+                                                <div className="mb-2">
+                                                    <div className="mb-1 flex justify-between text-[8px] font-bold uppercase">
+                                                        <span className="text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                                        <span className="text-slate-400">Empate</span>
+                                                        <span className="text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                                                    </div>
+                                                    <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                                                        <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
+                                                        <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
+                                                        <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
+                                                    </div>
+                                                    <div className="mt-0.5 flex justify-between">
+                                                        <span className="text-[8px] font-black text-slate-900">{ins.homeWin}%</span>
+                                                        <span className="text-[8px] font-black text-slate-400">{ins.draw}%</span>
+                                                        <span className="text-[8px] font-black text-slate-900">{ins.awayWin}%</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-2">
+                                                    <div className="mb-1 flex items-center gap-1">
+                                                        <BarChart3 className="h-2.5 w-2.5 text-indigo-500" />
+                                                        <span className="text-[7px] font-black uppercase tracking-wider text-indigo-600">Últimos 5</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex gap-0.5">
+                                                            {ins.homeForm.map((r, i) => (
+                                                                <span key={i} className={`flex h-4 w-4 items-center justify-center rounded-full text-[7px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                                            ))}
+                                                        </div>
+                                                        <span className="text-[8px] font-black text-indigo-600">VS</span>
+                                                        <div className="flex gap-0.5">
+                                                            {ins.awayForm.map((r, i) => (
+                                                                <span key={i} className={`flex h-4 w-4 items-center justify-center rounded-full text-[7px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setInsightsLevel('suggestions');
+                                                    }}
+                                                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-violet-200 bg-white py-1.5 text-[9px] font-black uppercase tracking-wider text-violet-600 transition-colors hover:bg-violet-50"
+                                                >
+                                                    <ChevronUp className="h-3 w-3" />
+                                                    Ocultar detalles
+                                                </button>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -661,14 +858,15 @@ function CompactMatchRow({
                         type="button"
                         onClick={(e) => {
                             e.stopPropagation();
+                            onCollapseOthers();
                             if (!cachedInsights && !insightsLoading) {
                                 onRequestInsights();
                             }
                             setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
                         }}
                         className={`flex h-6 w-6 items-center justify-center rounded-lg transition-all ${
-                            cachedInsights
-                                ? 'bg-violet-100 text-violet-600'
+                            hasBeenConsulted
+                                ? 'bg-violet-100 text-violet-600 ring-1 ring-violet-300'
                                 : insightsLoading && analysisMatchId === match.id
                                 ? 'bg-amber-100 text-amber-600'
                                 : 'bg-slate-100 text-slate-400 hover:bg-violet-50 hover:text-violet-600'
@@ -721,12 +919,18 @@ function CompactMatchRow({
 
                         return (
                             <>
-                                <div className="mb-2 flex items-center gap-1.5">
-                                    <Sparkles className="h-3 w-3 text-violet-500" />
-                                    <span className="text-[8px] font-black uppercase tracking-wider text-violet-600">Sugerencias IA</span>
-                                    {cachedInsights && (
-                                        <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[7px] font-black uppercase text-purple-600">IA</span>
-                                    )}
+                                <div className="mb-2 flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                        <Sparkles className="h-3 w-3 text-violet-500" />
+                                        <span className="text-[8px] font-black uppercase tracking-wider text-violet-600">Sugerencias IA</span>
+                                        {hasBeenConsulted && (
+                                            <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[7px] font-black uppercase text-purple-600">IA</span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-[8px]">
+                                        <span className="font-bold text-slate-500">{siCredits}/{planCap}</span>
+                                        <span className="text-slate-400">créditos</span>
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-1.5">
@@ -1216,6 +1420,8 @@ const Predictions: React.FC = () => {
     const [speedEntryMode, setSpeedEntryMode] = React.useState(false);
     const homeInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
     const awayInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+    const [searchExpanded, setSearchExpanded] = React.useState(false);
+    const [isScrolled, setIsScrolled] = React.useState(false);
 
     // Dirty detection: open matches whose draft differs from saved prediction
     const dirtyMatchIds = React.useMemo(() =>
@@ -1453,6 +1659,15 @@ const Predictions: React.FC = () => {
         return () => window.removeEventListener('beforeunload', handler);
     }, [hasDirtyChanges]);
 
+    // Scroll detection for sticky header
+    React.useEffect(() => {
+        const handleScroll = () => {
+            setIsScrolled(window.scrollY > 20);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     const handleTeamMove = (groupIndex: number, teamIndex: number, direction: 'up' | 'down') => {
         setGroups((previous) => {
             const nextGroups = structuredClone(previous);
@@ -1514,41 +1729,139 @@ const Predictions: React.FC = () => {
         <>
         <div className="min-h-screen bg-white pb-24">
             {/* ─── STICKY HEADER ─── */}
-            <div className="sticky top-0 z-10 border-b border-slate-100 bg-white">
-                <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-                    <button
-                        onClick={() => navigate('/my-leagues')}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h1 className="truncate text-sm font-black uppercase tracking-tight text-slate-900">
-                                {activeLeague?.name ?? 'Sin liga activa'}
-                            </h1>
-                            {activeLeague?.role === 'ADMIN' && (
-                                <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-lime-400">
-                                    Admin
-                                </span>
+            <div className={`sticky top-0 z-20 bg-white transition-shadow ${isScrolled ? 'shadow-md' : 'border-b border-slate-100'}`}>
+                {/* Top bar: Title + Back button */}
+                <div className="border-b border-slate-100 bg-white">
+                    <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+                        <button
+                            onClick={() => navigate('/my-leagues')}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h1 className="truncate text-sm font-black uppercase tracking-tight text-slate-900">
+                                    {activeLeague?.name ?? 'Sin liga activa'}
+                                </h1>
+                                {activeLeague?.role === 'ADMIN' && (
+                                    <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-lime-400">
+                                        Admin
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Sticky tabs: PARTIDOS / SIMULADOR */}
+                <div className="bg-white">
+                    <div className="mx-auto max-w-5xl px-4">
+                        <div className="flex items-center justify-between gap-3 py-2">
+                            {/* Tabs */}
+                            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 p-1">
+                                <button
+                                    onClick={() => setPredictionMode('matches')}
+                                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all sm:px-4 ${predictionMode === 'matches' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <LayoutGrid className="h-3 w-3" />
+                                    <span className="hidden sm:inline">Partidos</span>
+                                </button>
+                                <button
+                                    onClick={() => setPredictionMode('simulator')}
+                                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all sm:px-4 ${predictionMode === 'simulator' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <GitMerge className="h-3 w-3" />
+                                    <span className="hidden sm:inline">Simulador</span>
+                                </button>
+                            </div>
+
+                            {/* Search icon (mobile) / Full search (desktop) */}
+                            {predictionMode === 'matches' && (
+                                <div className="flex items-center gap-2">
+                                    {/* Mobile: search icon button */}
+                                    <button
+                                        onClick={() => setSearchExpanded(!searchExpanded)}
+                                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all sm:hidden ${searchExpanded ? 'border-lime-400 bg-lime-50 text-lime-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        <Search className="h-4 w-4" />
+                                    </button>
+
+                                    {/* Desktop: always visible */}
+                                    <div className="hidden items-center gap-2 sm:flex">
+                                        <label className="relative">
+                                            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                type="search"
+                                                value={searchTerm}
+                                                onChange={(event) => setSearchTerm(event.target.value)}
+                                                placeholder="Buscar equipo..."
+                                                className="w-48 rounded-xl border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-700 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-slate-200 p-1">
-                        <button
-                            onClick={() => setPredictionMode('matches')}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all ${predictionMode === 'matches' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            <LayoutGrid className="h-3 w-3" /> Partidos
-                        </button>
-                        <button
-                            onClick={() => setPredictionMode('simulator')}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all ${predictionMode === 'simulator' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            <GitMerge className="h-3 w-3" /> Simulador
-                        </button>
-                    </div>
                 </div>
+
+                {/* Mobile search expanded with filters */}
+                {searchExpanded && predictionMode === 'matches' && (
+                    <div className="animate-slideDown border-t border-slate-100 bg-slate-50 px-4 py-3 sm:hidden">
+                        <div className="space-y-2">
+                            {/* Search input */}
+                            <label className="relative block">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="search"
+                                    value={searchTerm}
+                                    onChange={(event) => setSearchTerm(event.target.value)}
+                                    placeholder="Buscar equipo..."
+                                    autoFocus
+                                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
+                                />
+                            </label>
+
+                            {/* Phase toggle */}
+                            <div className="flex overflow-hidden rounded-xl border border-slate-200">
+                                <button
+                                    onClick={() => setPhaseFilter(phaseFilter === 'KNOCKOUT' ? 'ALL' : 'GROUP')}
+                                    className={`flex flex-1 items-center justify-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500'}`}
+                                >
+                                    <Trophy className="h-3 w-3" /> Grupos
+                                </button>
+                                <button
+                                    onClick={() => setPhaseFilter('KNOCKOUT')}
+                                    className={`flex flex-1 items-center justify-center gap-1 border-l border-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500'}`}
+                                >
+                                    <GitMerge className="h-3 w-3" /> Fases
+                                </button>
+                            </div>
+
+                            {/* Group pills */}
+                            {phaseFilter !== 'KNOCKOUT' && availableGroups.length > 0 && (
+                                <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                                    <button
+                                        onClick={() => setActiveGroup('ALL')}
+                                        className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider transition-colors ${activeGroup === 'ALL' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
+                                    >
+                                        General
+                                    </button>
+                                    {availableGroups.map((group) => (
+                                        <button
+                                            key={group}
+                                            onClick={() => setActiveGroup(group)}
+                                            className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider transition-colors ${activeGroup === group ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
+                                        >
+                                            {group}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="mx-auto max-w-5xl space-y-4 px-4 py-4">
@@ -1562,62 +1875,53 @@ const Predictions: React.FC = () => {
 
                 {predictionMode === 'matches' ? (
                     <>
-                        {/* SPEED MODE TOGGLE - Mobile only */}
-                        <div className="flex items-center justify-between gap-2 sm:hidden">
-                            <span className="text-xs font-bold text-slate-600">Modo carga rápida</span>
-                            <button
-                                onClick={() => {
-                                    setSpeedEntryMode(!speedEntryMode);
-                                    if (!speedEntryMode) {
-                                        // Expande el primer partido abierto
-                                        const firstOpen = filteredMatches.find((m) => m.status === 'open' || m.status === 'live');
-                                        if (firstOpen) {
-                                            setExpandedMatches(new Set([firstOpen.id]));
-                                            setTimeout(() => homeInputRefs.current[firstOpen.id]?.focus(), 100);
+                        {/* SPEED MODE TOGGLE + Desktop filters */}
+                        <div className="flex items-center justify-between gap-3">
+                            {/* Speed mode toggle - Mobile only */}
+                            <div className="flex items-center gap-2 sm:hidden">
+                                <span className="text-xs font-bold text-slate-600">Modo rápido</span>
+                                <button
+                                    onClick={() => {
+                                        setSpeedEntryMode(!speedEntryMode);
+                                        if (!speedEntryMode) {
+                                            const firstOpen = filteredMatches.find((m) => m.status === 'open' || m.status === 'live');
+                                            if (firstOpen) {
+                                                setExpandedMatches(new Set([firstOpen.id]));
+                                                setTimeout(() => homeInputRefs.current[firstOpen.id]?.focus(), 100);
+                                            }
+                                        } else {
+                                            setExpandedMatches(new Set());
                                         }
-                                    } else {
-                                        setExpandedMatches(new Set());
-                                    }
-                                }}
-                                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${speedEntryMode ? 'bg-lime-400' : 'bg-slate-200'}`}
-                            >
-                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${speedEntryMode ? 'translate-x-6' : 'translate-x-1'}`} />
-                            </button>
-                        </div>
+                                    }}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${speedEntryMode ? 'bg-lime-400' : 'bg-slate-200'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${speedEntryMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
 
-                        {/* SEARCH + PHASE TOGGLE - Optimized for mobile */}
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                            {/* Search bar - full width on mobile */}
-                            <label className="relative flex-1">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 sm:left-3.5" />
-                                <input
-                                    type="search"
-                                    value={searchTerm}
-                                    onChange={(event) => setSearchTerm(event.target.value)}
-                                    placeholder="Buscar..."
-                                    className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 sm:rounded-2xl sm:py-2.5 sm:pl-10 sm:pr-4"
-                                />
-                            </label>
-                            {/* Phase toggle - compact on mobile */}
-                            <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 sm:rounded-2xl">
-                                <button
-                                    onClick={() => setPhaseFilter(phaseFilter === 'KNOCKOUT' ? 'ALL' : 'GROUP')}
-                                    className={`flex flex-1 items-center justify-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors sm:flex-initial sm:gap-1.5 sm:px-3.5 sm:py-2.5 ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    <Trophy className="h-3 w-3" /> <span className="hidden sm:inline">Grupos</span><span className="sm:hidden">G</span>
-                                </button>
-                                <button
-                                    onClick={() => setPhaseFilter('KNOCKOUT')}
-                                    className={`flex flex-1 items-center justify-center gap-1 border-l border-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors sm:flex-initial sm:gap-1.5 sm:px-3.5 sm:py-2.5 ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    <GitMerge className="h-3 w-3" /> <span className="hidden sm:inline">Fases</span><span className="sm:hidden">F</span>
-                                </button>
+                            {/* Desktop filters */}
+                            <div className="hidden items-center gap-3 sm:flex">
+                                {/* Phase toggle */}
+                                <div className="flex overflow-hidden rounded-2xl border border-slate-200">
+                                    <button
+                                        onClick={() => setPhaseFilter(phaseFilter === 'KNOCKOUT' ? 'ALL' : 'GROUP')}
+                                        className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        <Trophy className="h-3 w-3" /> Grupos
+                                    </button>
+                                    <button
+                                        onClick={() => setPhaseFilter('KNOCKOUT')}
+                                        className={`flex items-center gap-1.5 border-l border-slate-200 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        <GitMerge className="h-3 w-3" /> Fases
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        {/* GROUP PILLS */}
-                        {phaseFilter !== 'KNOCKOUT' && availableGroups.length > 0 ? (
-                            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                        {/* GROUP PILLS - Desktop only */}
+                        {phaseFilter !== 'KNOCKOUT' && availableGroups.length > 0 && (
+                            <div className="hidden gap-2 overflow-x-auto pb-1 sm:flex [scrollbar-width:none]">
                                 <button
                                     onClick={() => setActiveGroup('ALL')}
                                     className={`shrink-0 rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${activeGroup === 'ALL' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
@@ -1634,7 +1938,7 @@ const Predictions: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                        ) : null}
+                        )}
 
                         {/* NO LEAGUE */}
                         {!activeLeague && !isLoading ? (
@@ -1723,6 +2027,8 @@ const Predictions: React.FC = () => {
                                                                 cachedInsights={cachedInsights}
                                                                 insightsLoading={insightsLoading}
                                                                 analysisMatchId={analysisMatchId}
+                                                                siCredits={siCredits}
+                                                                planCap={getRemoteSiCredits(resolvedPlan)}
                                                                 onToggleExpand={() => {
                                                                     const newExpanded = new Set(expandedMatches);
                                                                     if (isExpanded) {
@@ -1782,6 +2088,10 @@ const Predictions: React.FC = () => {
                                                                 onApplySuggestedScore={(home, away) => {
                                                                     handleDraftChange(match.id, 'home', home);
                                                                     handleDraftChange(match.id, 'away', away);
+                                                                }}
+                                                                onCollapseOthers={() => {
+                                                                    // Colapsar todos los insights de otros partidos
+                                                                    setExpandedMatches(new Set([match.id]));
                                                                 }}
                                                             />
                                                         </div>
