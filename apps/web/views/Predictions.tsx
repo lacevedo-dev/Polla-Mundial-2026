@@ -305,34 +305,41 @@ function TeamIdentity({ name, code, flag, align = 'left' }: TeamIdentityProps) {
 
     return (
         <div className={`flex min-w-0 flex-1 items-center gap-2 ${isRight ? 'justify-end text-right' : 'justify-start text-left'}`}>
+            {/* Mobile: vertical layout (flag on top, code below) */}
+            <div className="flex flex-col items-center gap-1 sm:hidden" title={name}>
+                <img
+                    src={flag}
+                    alt={name}
+                    className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm"
+                />
+                <span className="text-xs font-black uppercase tracking-tight text-slate-900">{code}</span>
+            </div>
+
+            {/* Desktop: horizontal layout (original) */}
             {isRight ? (
-                <>
+                <div className="hidden min-w-0 items-center gap-2 sm:flex">
                     <div className="min-w-0">
-                        <span className="block text-sm font-black uppercase tracking-tight text-slate-900 sm:hidden">{code}</span>
-                        <span className="block truncate text-[10px] font-medium text-slate-400 sm:hidden">{name}</span>
-                        <span className="hidden truncate text-xs font-black uppercase text-slate-900 sm:block">{name}</span>
-                        <span className="hidden text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 sm:block">{code}</span>
+                        <span className="block truncate text-xs font-black uppercase text-slate-900">{name}</span>
+                        <span className="block text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{code}</span>
                     </div>
                     <img
                         src={flag}
                         alt={name}
-                        className="h-6 w-8 shrink-0 rounded-md border border-slate-200 object-cover sm:h-7 sm:w-10"
+                        className="h-7 w-10 shrink-0 rounded-md border border-slate-200 object-cover"
                     />
-                </>
+                </div>
             ) : (
-                <>
+                <div className="hidden min-w-0 items-center gap-2 sm:flex">
                     <img
                         src={flag}
                         alt={name}
-                        className="h-6 w-8 shrink-0 rounded-md border border-slate-200 object-cover sm:h-7 sm:w-10"
+                        className="h-7 w-10 shrink-0 rounded-md border border-slate-200 object-cover"
                     />
                     <div className="min-w-0">
-                        <span className="block text-sm font-black uppercase tracking-tight text-slate-900 sm:hidden">{code}</span>
-                        <span className="block truncate text-[10px] font-medium text-slate-400 sm:hidden">{name}</span>
-                        <span className="hidden truncate text-xs font-black uppercase text-slate-900 sm:block">{name}</span>
-                        <span className="hidden text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 sm:block">{code}</span>
+                        <span className="block truncate text-xs font-black uppercase text-slate-900">{name}</span>
+                        <span className="block text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{code}</span>
                     </div>
-                </>
+                </div>
             )}
         </div>
     );
@@ -351,18 +358,10 @@ function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = fa
     const label = `Marcador ${side} para ${teamName}`;
 
     return (
-        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm shadow-slate-100">
-            <button
-                type="button"
-                onClick={() => onAdjust(-1)}
-                disabled={disabled}
-                aria-label={`Disminuir ${label.toLowerCase()}`}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
-            >
-                −
-            </button>
+        <>
+            {/* Mobile: numeric input only (no +/- buttons) */}
             <input
-                type="number"
+                type="tel"
                 min={0}
                 max={99}
                 inputMode="numeric"
@@ -371,18 +370,44 @@ function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = fa
                 disabled={disabled}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
-                className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                placeholder="0"
+                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden"
             />
-            <button
-                type="button"
-                onClick={() => onAdjust(1)}
-                disabled={disabled}
-                aria-label={`Aumentar ${label.toLowerCase()}`}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
-            >
-                +
-            </button>
-        </div>
+
+            {/* Desktop: original layout with +/- buttons */}
+            <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm shadow-slate-100 sm:flex">
+                <button
+                    type="button"
+                    onClick={() => onAdjust(-1)}
+                    disabled={disabled}
+                    aria-label={`Disminuir ${label.toLowerCase()}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+                >
+                    −
+                </button>
+                <input
+                    type="number"
+                    min={0}
+                    max={99}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    aria-label={label}
+                    disabled={disabled}
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
+                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                />
+                <button
+                    type="button"
+                    onClick={() => onAdjust(1)}
+                    disabled={disabled}
+                    aria-label={`Aumentar ${label.toLowerCase()}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+                >
+                    +
+                </button>
+            </div>
+        </>
     );
 }
 
@@ -542,12 +567,12 @@ function SmartInsightsPanel({
     const awayTrend = calcTrend(ins.awayForm);
 
     return (
-        <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
+        <div className="mx-3 mb-2.5 overflow-hidden rounded-xl border border-slate-200 bg-white sm:mx-5 sm:mb-3 sm:rounded-2xl">
             <button
                 type="button"
                 aria-label={`${isCollapsed ? 'Ver detalle' : 'Ocultar detalle'} de Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
                 onClick={onToggleCollapsed}
-                className="flex w-full flex-col gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                className="flex w-full flex-col gap-2 border-b border-slate-100 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 sm:gap-3 sm:px-4 sm:py-3"
             >
                 <div className="flex items-center gap-2">
                     <Sparkles className="h-3.5 w-3.5 text-violet-500" />
@@ -1063,30 +1088,32 @@ const Predictions: React.FC = () => {
 
                 {predictionMode === 'matches' ? (
                     <>
-                        {/* SEARCH + PHASE TOGGLE */}
-                        <div className="flex items-center gap-3">
+                        {/* SEARCH + PHASE TOGGLE - Optimized for mobile */}
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                            {/* Search bar - full width on mobile */}
                             <label className="relative flex-1">
-                                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 sm:left-3.5" />
                                 <input
                                     type="search"
                                     value={searchTerm}
                                     onChange={(event) => setSearchTerm(event.target.value)}
-                                    placeholder="Buscar equipo..."
-                                    className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none focus:border-slate-300"
+                                    placeholder="Buscar..."
+                                    className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 sm:rounded-2xl sm:py-2.5 sm:pl-10 sm:pr-4"
                                 />
                             </label>
-                            <div className="flex shrink-0 overflow-hidden rounded-2xl border border-slate-200">
+                            {/* Phase toggle - compact on mobile */}
+                            <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 sm:rounded-2xl">
                                 <button
                                     onClick={() => setPhaseFilter(phaseFilter === 'KNOCKOUT' ? 'ALL' : 'GROUP')}
-                                    className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                                    className={`flex flex-1 items-center justify-center gap-1 px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors sm:flex-initial sm:gap-1.5 sm:px-3.5 sm:py-2.5 ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
                                 >
-                                    <Trophy className="h-3 w-3" /> Grupos
+                                    <Trophy className="h-3 w-3" /> <span className="hidden sm:inline">Grupos</span><span className="sm:hidden">G</span>
                                 </button>
                                 <button
                                     onClick={() => setPhaseFilter('KNOCKOUT')}
-                                    className={`flex items-center gap-1.5 border-l border-slate-200 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                                    className={`flex flex-1 items-center justify-center gap-1 border-l border-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-colors sm:flex-initial sm:gap-1.5 sm:px-3.5 sm:py-2.5 ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
                                 >
-                                    <GitMerge className="h-3 w-3" /> Fases
+                                    <GitMerge className="h-3 w-3" /> <span className="hidden sm:inline">Fases</span><span className="sm:hidden">F</span>
                                 </button>
                             </div>
                         </div>
@@ -1188,35 +1215,35 @@ const Predictions: React.FC = () => {
                                                         className={`border-l-4 transition-colors ${isNext ? 'border-l-lime-400 bg-lime-50/30' : 'border-l-transparent'}`}
                                                     >
                                                         {/* Main row */}
-                                                        <div className="space-y-3 px-4 py-3 sm:px-5">
-                                                            <div className="flex items-start justify-between gap-3">
-                                                                <div className="flex flex-wrap items-center gap-2">
-                                                                    <div>
-                                                                        <p className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</p>
-                                                                        <p className={`mt-0.5 text-[9px] font-black uppercase tracking-[0.18em] ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
+                                                        <div className="space-y-2.5 px-3 py-3 sm:space-y-3 sm:px-5">
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+                                                                    <div className="shrink-0">
+                                                                        <p className="text-xs font-black text-slate-900 sm:text-sm">{formatMatchTime(match.date)}</p>
+                                                                        <p className={`mt-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:text-[9px] sm:tracking-[0.18em] ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
                                                                             {summarizeCloseTime(match.date)}
                                                                         </p>
                                                                     </div>
-                                                                    <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getMatchStatusClasses(match.status)}`}>
+                                                                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em] ${getMatchStatusClasses(match.status)}`}>
                                                                         {getMatchStatusLabel(match.status)}
                                                                     </span>
                                                                     {isNext ? (
-                                                                        <span className="rounded-full border border-lime-200 bg-lime-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-lime-700">
+                                                                        <span className="shrink-0 rounded-full border border-lime-200 bg-lime-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-lime-700 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
                                                                             Siguiente
                                                                         </span>
                                                                     ) : null}
                                                                     {isDirty ? (
-                                                                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                                                        <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-amber-700 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
                                                                             Sin guardar
                                                                         </span>
                                                                     ) : null}
                                                                     {cachedInsights ? (
-                                                                        <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-violet-700">
-                                                                            IA lista
+                                                                        <span className="shrink-0 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-violet-700 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
+                                                                            IA
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
-                                                                <div className="flex shrink-0 items-center gap-2">
+                                                                <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                                                                     <button
                                                                         type="button"
                                                                         aria-label={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
@@ -1276,13 +1303,13 @@ const Predictions: React.FC = () => {
                                                                                 setInsightsLoading(false);
                                                                             }
                                                                         }}
-                                                                        className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-all ${
+                                                                        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all sm:h-10 sm:w-10 sm:rounded-2xl ${
                                                                             isAnalysisOpen
                                                                                 ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-200'
                                                                                 : 'border border-slate-200 bg-white text-slate-400 hover:bg-violet-50 hover:text-violet-600'
                                                                         }`}
                                                                     >
-                                                                        <Brain className="h-4 w-4" />
+                                                                        <Brain className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                                                     </button>
                                                                     {canEdit ? (
                                                                         <button
@@ -1291,7 +1318,7 @@ const Predictions: React.FC = () => {
                                                                             title={`Guardar pronóstico de ${match.homeTeam} vs ${match.awayTeam}`}
                                                                             onClick={() => handleSave(match.id)}
                                                                             disabled={isSaving}
-                                                                            className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-all disabled:opacity-60 ${
+                                                                            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all disabled:opacity-60 sm:h-10 sm:w-10 sm:rounded-2xl ${
                                                                                 isDirty || match.saved
                                                                                     ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
                                                                                     : 'border border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
@@ -1299,7 +1326,7 @@ const Predictions: React.FC = () => {
                                                                         >
                                                                             {isSaving
                                                                                 ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
-                                                                                : match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />
+                                                                                : match.saved ? <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Save className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                                                             }
                                                                         </button>
                                                                     ) : null}
@@ -1315,7 +1342,7 @@ const Predictions: React.FC = () => {
                                                                 />
 
                                                                 {canEdit ? (
-                                                                    <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+                                                                    <div className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-1.5 py-1 shadow-sm ring-1 ring-slate-200 sm:gap-2 sm:rounded-2xl sm:bg-slate-50 sm:px-2 sm:py-1.5 sm:shadow-none sm:ring-0 sm:border sm:border-slate-200">
                                                                         <ScoreControl
                                                                             teamName={match.homeTeam}
                                                                             side="local"
@@ -1323,7 +1350,7 @@ const Predictions: React.FC = () => {
                                                                             onChange={(value) => handleDraftChange(match.id, 'home', value)}
                                                                             onAdjust={(delta) => adjustScore('home', delta)}
                                                                         />
-                                                                        <span className="px-1 text-sm font-black text-slate-300">-</span>
+                                                                        <span className="px-0.5 text-base font-black text-slate-300 sm:px-1 sm:text-sm">-</span>
                                                                         <ScoreControl
                                                                             teamName={match.awayTeam}
                                                                             side="visitante"
@@ -1333,7 +1360,7 @@ const Predictions: React.FC = () => {
                                                                         />
                                                                     </div>
                                                                 ) : (
-                                                                    <span className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-500">
+                                                                    <span className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm font-black text-slate-500 sm:rounded-2xl sm:px-3 sm:py-2">
                                                                         {draft.home || '−'} : {draft.away || '−'}
                                                                     </span>
                                                                 )}
@@ -1345,29 +1372,32 @@ const Predictions: React.FC = () => {
                                                                 />
                                                             </div>
 
-                                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                                                <div className="flex flex-wrap items-center gap-1.5">
-                                                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                            <div className="flex flex-col gap-1.5 text-[9px] sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:text-[10px]">
+                                                                <div className="flex flex-wrap items-center gap-1">
+                                                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-slate-500 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
                                                                         {toDisplayPhase(match.phase)}
                                                                     </span>
                                                                     {match.group ? (
-                                                                        <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 ring-1 ring-inset ring-slate-200">
-                                                                            Grupo {match.group}
+                                                                        <span className="rounded-full bg-white px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-slate-500 ring-1 ring-inset ring-slate-200 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
+                                                                            G{match.group}
                                                                         </span>
                                                                     ) : null}
                                                                     {match.venue ? (
-                                                                        <span className="max-w-full truncate rounded-full bg-white px-2.5 py-1 text-[9px] font-medium text-slate-400 ring-1 ring-inset ring-slate-200 sm:max-w-[240px]">
+                                                                        <span className="hidden max-w-[180px] truncate rounded-full bg-white px-2.5 py-1 text-[9px] font-medium text-slate-400 ring-1 ring-inset ring-slate-200 sm:inline-block sm:max-w-[240px]">
                                                                             {match.venue}
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
-                                                                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                                                <div className="flex items-center gap-1 text-[9px] sm:text-[10px]">
                                                                     {match.saved ? (
                                                                         <span className="font-bold text-lime-600">
-                                                                            ✓ Guardado {match.prediction.home}−{match.prediction.away}
+                                                                            ✓ {match.prediction.home}−{match.prediction.away}
                                                                         </span>
                                                                     ) : (
-                                                                        <span className="text-slate-400">Completa y guarda para cerrar este partido.</span>
+                                                                        <>
+                                                                            <span className="text-slate-400 sm:hidden">Ingresa tu pronóstico</span>
+                                                                            <span className="hidden text-slate-400 sm:inline">Completa y guarda para cerrar este partido.</span>
+                                                                        </>
                                                                     )}
                                                                 </div>
                                                             </div>
