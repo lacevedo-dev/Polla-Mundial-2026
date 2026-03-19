@@ -2,7 +2,8 @@ import {
     Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -11,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CreateTeamDto {
     @IsString() name: string;
     @IsString() code: string;
+    @IsOptional() @IsString() @MaxLength(8) shortCode?: string;
+    @IsOptional() @Type(() => Number) @IsInt() @Min(1) apiFootballTeamId?: number;
     @IsOptional() @IsString() group?: string;
     @IsOptional() @IsString() flagUrl?: string;
 }
@@ -18,6 +21,8 @@ export class CreateTeamDto {
 export class UpdateTeamDto {
     @IsOptional() @IsString() name?: string;
     @IsOptional() @IsString() code?: string;
+    @IsOptional() @IsString() @MaxLength(8) shortCode?: string;
+    @IsOptional() @Type(() => Number) @IsInt() @Min(1) apiFootballTeamId?: number;
     @IsOptional() @IsString() group?: string;
     @IsOptional() @IsString() flagUrl?: string;
 }

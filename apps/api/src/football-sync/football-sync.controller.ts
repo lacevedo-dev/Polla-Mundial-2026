@@ -17,7 +17,10 @@ import { SyncPlanService } from './services/sync-plan.service';
 import { RateLimiterService } from './services/rate-limiter.service';
 import { MatchSyncService } from './services/match-sync.service';
 import { AdaptiveSyncScheduler } from './schedulers/adaptive-sync.scheduler';
-import { SyncUsageDto } from './dto/api-football.dto';
+import {
+  SyncUsageDto,
+  TeamCatalogBackfillResultDto,
+} from './dto/api-football.dto';
 import { IsString } from 'class-validator';
 
 class LinkMatchDto {
@@ -104,6 +107,20 @@ export class FootballSyncController {
     return {
       message: result.message,
       matchesUpdated: result.matchesUpdated,
+    };
+  }
+
+  /**
+   * Backfill canonical World Cup teams from curated catalog
+   */
+  @Post('backfill-teams')
+  @ApiOperation({ summary: 'Backfill World Cup teams with canonical API-Football metadata' })
+  async backfillTeams(): Promise<TeamCatalogBackfillResultDto & { message: string }> {
+    const result = await this.matchSync.backfillWorldCupTeams();
+
+    return {
+      message: 'World Cup team catalog backfill completed',
+      ...result,
     };
   }
 

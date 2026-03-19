@@ -136,13 +136,17 @@ model ScoringRule {
 }
 
 model Team {
-  id          String  @id @default(cuid())
-  name        String  @unique
-  code        String  @unique
-  group       String?
-  flagUrl     String?
-  awayMatches Match[] @relation("AwayTeam")
-  homeMatches Match[] @relation("HomeTeam")
+  id                String  @id @default(cuid())
+  name              String  @unique
+  code              String  @unique
+  shortCode         String? @db.VarChar(8)
+  apiFootballTeamId Int?    @unique
+  group             String?
+  flagUrl           String?
+  awayMatches       Match[] @relation("AwayTeam")
+  homeMatches       Match[] @relation("HomeTeam")
+
+  @@index([shortCode])
 }
 
 model Match {

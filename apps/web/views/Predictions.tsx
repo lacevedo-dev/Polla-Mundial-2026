@@ -267,6 +267,462 @@ function formatMatchTime(matchDate: string): string {
     }).format(date);
 }
 
+function getMatchStatusLabel(status: MatchViewModel['status']): string {
+    switch (status) {
+        case 'live':
+            return 'En vivo';
+        case 'finished':
+            return 'Finalizado';
+        case 'closed':
+            return 'Cerrado';
+        default:
+            return 'Abierto';
+    }
+}
+
+function getMatchStatusClasses(status: MatchViewModel['status']): string {
+    switch (status) {
+        case 'live':
+            return 'border-rose-200 bg-rose-50 text-rose-600';
+        case 'finished':
+            return 'border-slate-200 bg-slate-100 text-slate-600';
+        case 'closed':
+            return 'border-amber-200 bg-amber-50 text-amber-700';
+        default:
+            return 'border-lime-200 bg-lime-50 text-lime-700';
+    }
+}
+
+interface TeamIdentityProps {
+    name: string;
+    code: string;
+    flag: string;
+    align?: 'left' | 'right';
+}
+
+function TeamIdentity({ name, code, flag, align = 'left' }: TeamIdentityProps) {
+    const isRight = align === 'right';
+
+    return (
+        <div className={`flex min-w-0 flex-1 items-center gap-2 ${isRight ? 'justify-end text-right' : 'justify-start text-left'}`}>
+            {isRight ? (
+                <>
+                    <div className="min-w-0">
+                        <span className="block text-sm font-black uppercase tracking-tight text-slate-900 sm:hidden">{code}</span>
+                        <span className="block truncate text-[10px] font-medium text-slate-400 sm:hidden">{name}</span>
+                        <span className="hidden truncate text-xs font-black uppercase text-slate-900 sm:block">{name}</span>
+                        <span className="hidden text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 sm:block">{code}</span>
+                    </div>
+                    <img
+                        src={flag}
+                        alt={name}
+                        className="h-6 w-8 shrink-0 rounded-md border border-slate-200 object-cover sm:h-7 sm:w-10"
+                    />
+                </>
+            ) : (
+                <>
+                    <img
+                        src={flag}
+                        alt={name}
+                        className="h-6 w-8 shrink-0 rounded-md border border-slate-200 object-cover sm:h-7 sm:w-10"
+                    />
+                    <div className="min-w-0">
+                        <span className="block text-sm font-black uppercase tracking-tight text-slate-900 sm:hidden">{code}</span>
+                        <span className="block truncate text-[10px] font-medium text-slate-400 sm:hidden">{name}</span>
+                        <span className="hidden truncate text-xs font-black uppercase text-slate-900 sm:block">{name}</span>
+                        <span className="hidden text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 sm:block">{code}</span>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+interface ScoreControlProps {
+    teamName: string;
+    side: 'local' | 'visitante';
+    value: string;
+    onChange: (value: string) => void;
+    onAdjust: (delta: number) => void;
+    disabled?: boolean;
+}
+
+function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = false }: ScoreControlProps) {
+    const label = `Marcador ${side} para ${teamName}`;
+
+    return (
+        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm shadow-slate-100">
+            <button
+                type="button"
+                onClick={() => onAdjust(-1)}
+                disabled={disabled}
+                aria-label={`Disminuir ${label.toLowerCase()}`}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+            >
+                −
+            </button>
+            <input
+                type="number"
+                min={0}
+                max={99}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                aria-label={label}
+                disabled={disabled}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+            />
+            <button
+                type="button"
+                onClick={() => onAdjust(1)}
+                disabled={disabled}
+                aria-label={`Aumentar ${label.toLowerCase()}`}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+            >
+                +
+            </button>
+        </div>
+    );
+}
+
+type InsightsPayload = ReturnType<typeof generateMatchInsights> & {
+    insight?: string;
+    personalInsight?: string;
+};
+
+interface SmartInsightsPanelProps {
+    match: MatchViewModel;
+    leaguePlan: string;
+    planCap: number;
+    siCredits: number;
+    cachedData: object | null;
+    insightsLocked: boolean;
+    insightsLoading: boolean;
+    analysisMatchId: string | null;
+    insightsError: string | null;
+    isCollapsed: boolean;
+    onToggleCollapsed: () => void;
+    onApplySuggestedScore: (home: string, away: string) => void;
+    onUpgradePlan: (plan: 'gold' | 'diamond') => void;
+    onDismissLock: () => void;
+}
+
+function SmartInsightsPanel({
+    match,
+    leaguePlan,
+    planCap,
+    siCredits,
+    cachedData,
+    insightsLocked,
+    insightsLoading,
+    analysisMatchId,
+    insightsError,
+    isCollapsed,
+    onToggleCollapsed,
+    onApplySuggestedScore,
+    onUpgradePlan,
+    onDismissLock,
+}: SmartInsightsPanelProps) {
+    if (insightsLocked) {
+        const lockMessages: Record<string, { title: string; body: string; cta: string; ctaPlan: 'gold' | 'diamond' | null; sub: string }> = {
+            FREE: {
+                title: 'Has agotado tus créditos de prueba',
+                body: 'Mejora tu polla a plan GOLD o DIAMOND para más análisis IA.',
+                cta: 'Ver planes disponibles',
+                ctaPlan: 'gold',
+                sub: 'Plan GOLD · 30 análisis · Plan DIAMOND · 100 análisis',
+            },
+            GOLD: {
+                title: `Usaste los ${planCap} análisis de tu plan`,
+                body: 'Actualiza a DIAMOND para triplicar tus análisis disponibles.',
+                cta: 'Actualizar a DIAMOND',
+                ctaPlan: 'diamond',
+                sub: 'Plan DIAMOND · 100 análisis incluidos',
+            },
+            DIAMOND: {
+                title: `Usaste los ${planCap} análisis disponibles`,
+                body: 'Has alcanzado el límite del período actual. Los créditos se recargarán próximamente.',
+                cta: 'Entendido',
+                ctaPlan: null,
+                sub: 'Los créditos se recargan cada período',
+            },
+        };
+        const msg = lockMessages[leaguePlan] ?? lockMessages['FREE'];
+        return (
+            <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
+                    <span className="ml-auto rounded-full bg-rose-100 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-600">
+                        0/{planCap} créditos
+                    </span>
+                </div>
+                <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                        <Lock className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-black text-slate-900">{msg.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">{msg.body}</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => (msg.ctaPlan ? onUpgradePlan(msg.ctaPlan) : onDismissLock())}
+                            className="rounded-full bg-lime-400 px-5 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-lime-300"
+                        >
+                            {msg.cta}
+                        </button>
+                        <span className="text-[9px] text-slate-400">{msg.sub}</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (insightsLoading && analysisMatchId === match.id) {
+        return (
+            <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
+                </div>
+                <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-400" />
+                    <p className="text-xs font-bold text-slate-500">Analizando partido con IA...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (insightsError && !cachedData) {
+        console.warn('[SmartInsights] error:', insightsError);
+        return (
+            <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-amber-100 bg-white sm:mx-5">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+                    <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
+                </div>
+                <div className="flex flex-col items-center gap-3 px-6 py-6 text-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50">
+                        <Sparkles className="h-5 w-5 text-amber-400" />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-700">Análisis en procesamiento</p>
+                        <p className="mt-1 max-w-xs text-[10px] text-slate-400">
+                            El motor de IA está ocupado en este momento. Inténtalo de nuevo en unos segundos.
+                        </p>
+                        {insightsError && (
+                            <p className="mt-2 max-w-xs break-words font-mono text-[9px] text-rose-400">{insightsError}</p>
+                        )}
+                    </div>
+                    <p className="text-[9px] text-slate-400">Presiona el botón <span className="font-bold">IA</span> para reintentar · No se consumió crédito</p>
+                </div>
+            </div>
+        );
+    }
+
+    const ins = (cachedData ?? generateMatchInsights(match)) as InsightsPayload;
+    const scoreLabels = ['SEGURA', 'IA MODEL', 'ARRIESGADA'] as const;
+    const scoreStyles = [
+        'bg-lime-100 text-lime-700',
+        'bg-violet-100 text-violet-700',
+        'bg-amber-100 text-amber-700',
+    ] as const;
+    const planBadgeColor =
+        leaguePlan === 'DIAMOND' ? 'bg-cyan-100 text-cyan-700' :
+        leaguePlan === 'GOLD' ? 'bg-amber-100 text-amber-700' :
+        'bg-slate-100 text-slate-500';
+    const homeEff = Math.round((ins.homeForm.filter((r) => r === 'W').length / 5) * 100);
+    const awayEff = Math.round((ins.awayForm.filter((r) => r === 'W').length / 5) * 100);
+    const calcTrend = (form: Array<'W' | 'D' | 'L'>) =>
+        form.slice(3).filter((r) => r === 'W').length >= 1 ? 'up' : 'down';
+    const homeTrend = calcTrend(ins.homeForm);
+    const awayTrend = calcTrend(ins.awayForm);
+
+    return (
+        <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
+            <button
+                type="button"
+                aria-label={`${isCollapsed ? 'Ver detalle' : 'Ocultar detalle'} de Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
+                onClick={onToggleCollapsed}
+                className="flex w-full flex-col gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+            >
+                <div className="flex items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.22em] text-violet-600">Smart Insights • IA Powered</span>
+                    {cachedData && (
+                        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-600">IA</span>
+                    )}
+                    <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${planBadgeColor}`}>
+                        {siCredits}/{planCap} créditos
+                    </span>
+                    <span className="ml-auto flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        {isCollapsed ? 'Ver detalle' : 'Ocultar'}
+                        {isCollapsed
+                            ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                            : <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                        }
+                    </span>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {ins.scores.map((score, idx) => (
+                            <span
+                                key={`summary-${score}-${idx}`}
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${scoreStyles[idx]}`}
+                            >
+                                <span>{scoreLabels[idx]}</span>
+                                <span className="text-[11px] leading-none">{score}</span>
+                            </span>
+                        ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 font-black uppercase tracking-[0.18em] text-slate-500">
+                            Favorito {ins.smartPick}
+                        </span>
+                        <span className="text-slate-400">{ins.homeWin}% · {ins.draw}% · {ins.awayWin}%</span>
+                    </div>
+                </div>
+                <p className="line-clamp-2 text-[10px] font-medium leading-relaxed text-slate-500">
+                    {ins.personalInsight || ins.insight || 'Resumen táctico y de forma disponible para este partido.'}
+                </p>
+            </button>
+            {!isCollapsed && <>
+                <div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
+                    <div className="px-4 pb-4 pt-3">
+                        <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
+                            <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                            <span className="text-slate-400">Empate</span>
+                            <span className="font-black text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                        </div>
+                        <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
+                            <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
+                            <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
+                            <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
+                        </div>
+                        <div className="mt-1 flex justify-between">
+                            <span className="text-[10px] font-black text-slate-900">{ins.homeWin}%</span>
+                            <span className="text-[10px] font-black text-slate-400">{ins.draw}%</span>
+                            <span className="text-[10px] font-black text-slate-900">{ins.awayWin}%</span>
+                        </div>
+                        {ins.insight && (
+                            <div className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
+                                <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+                                <p className="text-[10px] font-medium leading-relaxed text-slate-700">"{ins.insight}"</p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="border-t border-slate-100 px-4 pb-4 pt-3 lg:border-t-0">
+                        <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Sugerencias automáticas</p>
+                        <div className="grid grid-cols-3 gap-2">
+                            {ins.scores.map((score, idx) => {
+                                const [h, a] = score.split('-');
+                                const probs = [ins.homeWin, ins.draw, ins.awayWin];
+                                return (
+                                    <button
+                                        key={score + idx}
+                                        type="button"
+                                        onClick={() => onApplySuggestedScore(h, a)}
+                                        className={`flex flex-col items-center gap-1 rounded-xl py-3 transition-all hover:scale-105 active:scale-95 ${scoreStyles[idx]}`}
+                                    >
+                                        <span className="text-[9px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
+                                        <span className="text-2xl font-black leading-none">{score}</span>
+                                        <span className="text-[9px] font-bold opacity-70">{probs[idx]}% Prob.</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+                <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                    <div className="mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <BarChart3 className="h-3.5 w-3.5 text-slate-400" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Análisis de Racha · Últimos 5</span>
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tendencia</span>
+                    </div>
+                    <div className="flex flex-col gap-2 lg:hidden">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span className="w-14 shrink-0 truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                                <div className="flex gap-0.5">
+                                    {ins.homeForm.map((r, i) => (
+                                        <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-0.5">
+                                {homeTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span className="w-14 shrink-0 truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                                <div className="flex gap-0.5">
+                                    {ins.awayForm.map((r, i) => (
+                                        <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-0.5">
+                                {awayTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                            <p className="text-[10px] font-semibold leading-relaxed text-indigo-800">
+                                {ins.personalInsight || ins.insight || 'Análisis de forma actual e historial reciente de ambos equipos.'}
+                            </p>
+                            <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
+                                Opción inteligente: <span className="text-indigo-600">{ins.smartPick}</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div className="hidden items-start gap-2 lg:flex">
+                        <div className="flex min-w-0 flex-col items-start gap-1">
+                            <span className="max-w-[72px] truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
+                            <span className="text-[9px] text-slate-400">{homeEff}% efic.</span>
+                            <div className="flex gap-0.5">
+                                {ins.homeForm.map((r, i) => (
+                                    <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-0.5">
+                                {homeTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                            </div>
+                        </div>
+                        <div className="flex min-h-[84px] flex-1 flex-col justify-between rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                            <p className="text-[10px] font-semibold leading-relaxed text-indigo-800">
+                                {ins.personalInsight || ins.insight || 'Análisis de forma actual e historial reciente de ambos equipos.'}
+                            </p>
+                            <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
+                                Opción inteligente: <span className="text-indigo-600">{ins.smartPick}</span>
+                            </p>
+                        </div>
+                        <div className="flex min-w-0 flex-col items-end gap-1">
+                            <span className="max-w-[72px] truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
+                            <span className="text-[9px] text-slate-400">{awayEff}% efic.</span>
+                            <div className="flex gap-0.5">
+                                {ins.awayForm.map((r, i) => (
+                                    <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
+                                ))}
+                            </div>
+                            <div className="flex items-center justify-end gap-0.5">
+                                {awayTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
+                                <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </>}
+        </div>
+    );
+}
 
 const Predictions: React.FC = () => {
     const navigate = useNavigate();
@@ -719,6 +1175,7 @@ const Predictions: React.FC = () => {
                                                 const isNext = nextMatchId === match.id;
                                                 const canEdit = match.status === 'open' || match.status === 'live';
                                                 const isDirty = dirtyMatchIds.includes(match.id);
+                                                const cachedInsights = insightsData[match.id] ?? getCachedInsights(match.id);
                                                 const adjustScore = (field: 'home' | 'away', delta: number) => {
                                                     const cur = draft[field];
                                                     const n = cur === '' ? Math.max(0, delta) : Math.max(0, Math.min(99, Number(cur) + delta));
@@ -731,466 +1188,213 @@ const Predictions: React.FC = () => {
                                                         className={`border-l-4 transition-colors ${isNext ? 'border-l-lime-400 bg-lime-50/30' : 'border-l-transparent'}`}
                                                     >
                                                         {/* Main row */}
-                                                        <div className="flex items-center gap-2 px-4 py-3 sm:gap-3 sm:px-5">
-                                                            {/* Time */}
-                                                            <div className="w-12 shrink-0">
-                                                                <p className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</p>
-                                                                <p className={`mt-0.5 text-[9px] font-black uppercase tracking-wide ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
-                                                                    {summarizeCloseTime(match.date)}
-                                                                </p>
-                                                            </div>
-
-                                                            {/* Home team */}
-                                                            <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-                                                                <span className="truncate text-right text-[11px] font-black uppercase text-slate-900 sm:text-xs">
-                                                                    {match.homeTeam}
-                                                                </span>
-                                                                <img
-                                                                    src={match.homeFlag}
-                                                                    alt={match.homeTeam}
-                                                                    className="h-5 w-7 shrink-0 rounded border border-slate-200 object-cover"
-                                                                />
-                                                            </div>
-
-                                                            {/* Score stepper */}
-                                                            {canEdit ? (
-                                                                <div className="flex shrink-0 items-center gap-1">
-                                                                    <button
-                                                                        onClick={() => adjustScore('home', -1)}
-                                                                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50"
-                                                                    >−</button>
-                                                                    <span className="w-5 text-center text-sm font-black text-slate-900">
-                                                                        {draft.home !== '' ? draft.home : '−'}
+                                                        <div className="space-y-3 px-4 py-3 sm:px-5">
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <div>
+                                                                        <p className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</p>
+                                                                        <p className={`mt-0.5 text-[9px] font-black uppercase tracking-[0.18em] ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
+                                                                            {summarizeCloseTime(match.date)}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getMatchStatusClasses(match.status)}`}>
+                                                                        {getMatchStatusLabel(match.status)}
                                                                     </span>
-                                                                    <button
-                                                                        onClick={() => adjustScore('home', 1)}
-                                                                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50"
-                                                                    >+</button>
-                                                                    <span className="mx-0.5 text-xs text-slate-300">:</span>
-                                                                    <button
-                                                                        onClick={() => adjustScore('away', -1)}
-                                                                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50"
-                                                                    >−</button>
-                                                                    <span className="w-5 text-center text-sm font-black text-slate-900">
-                                                                        {draft.away !== '' ? draft.away : '−'}
-                                                                    </span>
-                                                                    <button
-                                                                        onClick={() => adjustScore('away', 1)}
-                                                                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50"
-                                                                    >+</button>
+                                                                    {isNext ? (
+                                                                        <span className="rounded-full border border-lime-200 bg-lime-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-lime-700">
+                                                                            Siguiente
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {isDirty ? (
+                                                                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                                                            Sin guardar
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {cachedInsights ? (
+                                                                        <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-violet-700">
+                                                                            IA lista
+                                                                        </span>
+                                                                    ) : null}
                                                                 </div>
-                                                            ) : (
-                                                                <span className="shrink-0 text-sm font-black text-slate-400">
-                                                                    {draft.home || '−'} : {draft.away || '−'}
-                                                                </span>
-                                                            )}
-
-                                                            {/* Away team */}
-                                                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                                                <img
-                                                                    src={match.awayFlag}
-                                                                    alt={match.awayTeam}
-                                                                    className="h-5 w-7 shrink-0 rounded border border-slate-200 object-cover"
-                                                                />
-                                                                <span className="truncate text-left text-[11px] font-black uppercase text-slate-900 sm:text-xs">
-                                                                    {match.awayTeam}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Actions */}
-                                                            <div className="flex shrink-0 items-center gap-1.5">
-                                                                {/* Insights */}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={async () => {
-                                                                        // Close panel — unless retrying after an error
-                                                                        if (isAnalysisOpen && !(insightsError && analysisMatchId === match.id)) {
-                                                                            setAnalysisMatchId(null);
-                                                                            setInsightsLocked(false);
-                                                                            setInsightsError(null);
-                                                                            return;
-                                                                        }
-
-                                                                        // Clear any previous error before (re)fetching
-                                                                        setInsightsError(null);
-
-                                                                        const leaguePlan = resolvedPlan;
-                                                                        const cap = getRemoteSiCredits(leaguePlan);
-
-                                                                        // Check sessionStorage cache first — no credit consumed
-                                                                        const cached = getCachedInsights(match.id) ?? insightsData[match.id];
-                                                                        if (cached) {
-                                                                            setAnalysisMatchId(match.id);
-                                                                            setInsightsLocked(false);
-                                                                            return;
-                                                                        }
-
-                                                                        // No cache → check credits
-                                                                        if (siCredits === 0) {
-                                                                            setInsightsLocked(true);
-                                                                            setAnalysisMatchId(match.id);
-                                                                            return;
-                                                                        }
-
-                                                                        // Fetch from AI
-                                                                        setInsightsLocked(false);
-                                                                        setAnalysisMatchId(match.id);
-                                                                        setInsightsLoading(true);
-                                                                        try {
-                                                                            const { request: apiRequest } = await import('../api');
-                                                                            const result = await apiRequest<object>(
-                                                                                `/insights/match/${match.id}`,
-                                                                                {
-                                                                                    method: 'POST',
-                                                                                    body: JSON.stringify({
-                                                                                        homeTeam: match.homeTeam,
-                                                                                        awayTeam: match.awayTeam,
-                                                                                        phase: match.phase,
-                                                                                        group: match.group,
-                                                                                    }),
-                                                                                },
-                                                                            );
-                                                                            setCachedInsights(match.id, result);
-                                                                            setInsightsData((prev) => ({ ...prev, [match.id]: result }));
-                                                                            setSiCredits(consumeSiCredit(leaguePlan, cap));
-                                                                        } catch (err) {
-                                                                            // Show the real error — do NOT fall back to fake data or consume credits
-                                                                            const msg = err instanceof Error ? err.message : String(err);
-                                                                            setInsightsError(msg);
-                                                                        } finally {
-                                                                            setInsightsLoading(false);
-                                                                        }
-                                                                    }}
-                                                                    className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
-                                                                        isAnalysisOpen
-                                                                            ? 'bg-purple-100 text-purple-700 ring-2 ring-purple-200'
-                                                                            : 'border border-slate-200 text-slate-400 hover:bg-purple-50 hover:text-purple-600'
-                                                                    }`}
-                                                                >
-                                                                    <Brain className="h-4 w-4" />
-                                                                </button>
-
-                                                                {/* Save */}
-                                                                {canEdit ? (
+                                                                <div className="flex shrink-0 items-center gap-2">
                                                                     <button
-                                                                        onClick={() => handleSave(match.id)}
-                                                                        disabled={isSaving}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all disabled:opacity-60 ${
-                                                                            isDirty || match.saved
-                                                                                ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
-                                                                                : 'border border-slate-200 text-slate-400 hover:bg-slate-50'
+                                                                        type="button"
+                                                                        aria-label={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
+                                                                        title={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
+                                                                        onClick={async () => {
+                                                                            if (isAnalysisOpen && !(insightsError && analysisMatchId === match.id)) {
+                                                                                setAnalysisMatchId(null);
+                                                                                setInsightsLocked(false);
+                                                                                setInsightsError(null);
+                                                                                return;
+                                                                            }
+
+                                                                            setInsightsError(null);
+
+                                                                            const leaguePlan = resolvedPlan;
+                                                                            const cap = getRemoteSiCredits(leaguePlan);
+                                                                            const cached = getCachedInsights(match.id) ?? insightsData[match.id];
+                                                                            if (cached) {
+                                                                                setInsightsCollapsed((prev) => ({ ...prev, [match.id]: prev[match.id] ?? true }));
+                                                                                setAnalysisMatchId(match.id);
+                                                                                setInsightsLocked(false);
+                                                                                return;
+                                                                            }
+
+                                                                            if (siCredits === 0) {
+                                                                                setInsightsCollapsed((prev) => ({ ...prev, [match.id]: prev[match.id] ?? true }));
+                                                                                setInsightsLocked(true);
+                                                                                setAnalysisMatchId(match.id);
+                                                                                return;
+                                                                            }
+
+                                                                            setInsightsCollapsed((prev) => ({ ...prev, [match.id]: prev[match.id] ?? true }));
+                                                                            setInsightsLocked(false);
+                                                                            setAnalysisMatchId(match.id);
+                                                                            setInsightsLoading(true);
+                                                                            try {
+                                                                                const { request: apiRequest } = await import('../api');
+                                                                                const result = await apiRequest<object>(
+                                                                                    `/insights/match/${match.id}`,
+                                                                                    {
+                                                                                        method: 'POST',
+                                                                                        body: JSON.stringify({
+                                                                                            homeTeam: match.homeTeam,
+                                                                                            awayTeam: match.awayTeam,
+                                                                                            phase: match.phase,
+                                                                                            group: match.group,
+                                                                                        }),
+                                                                                    },
+                                                                                );
+                                                                                setCachedInsights(match.id, result);
+                                                                                setInsightsData((prev) => ({ ...prev, [match.id]: result }));
+                                                                                setSiCredits(consumeSiCredit(leaguePlan, cap));
+                                                                            } catch (err) {
+                                                                                const msg = err instanceof Error ? err.message : String(err);
+                                                                                setInsightsError(msg);
+                                                                            } finally {
+                                                                                setInsightsLoading(false);
+                                                                            }
+                                                                        }}
+                                                                        className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-all ${
+                                                                            isAnalysisOpen
+                                                                                ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-200'
+                                                                                : 'border border-slate-200 bg-white text-slate-400 hover:bg-violet-50 hover:text-violet-600'
                                                                         }`}
                                                                     >
-                                                                        {isSaving
-                                                                            ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
-                                                                            : match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />
-                                                                        }
+                                                                        <Brain className="h-4 w-4" />
                                                                     </button>
-                                                                ) : null}
+                                                                    {canEdit ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label={`Guardar pronóstico de ${match.homeTeam} vs ${match.awayTeam}`}
+                                                                            title={`Guardar pronóstico de ${match.homeTeam} vs ${match.awayTeam}`}
+                                                                            onClick={() => handleSave(match.id)}
+                                                                            disabled={isSaving}
+                                                                            className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-all disabled:opacity-60 ${
+                                                                                isDirty || match.saved
+                                                                                    ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
+                                                                                    : 'border border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                                                                            }`}
+                                                                        >
+                                                                            {isSaving
+                                                                                ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                                                                                : match.saved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />
+                                                                            }
+                                                                        </button>
+                                                                    ) : null}
+                                                                </div>
                                                             </div>
-                                                        </div>
 
-                                                        {/* Venue info */}
-                                                        <div className="flex items-center justify-between px-4 pb-3 sm:px-5">
-                                                            <p className="text-[10px] text-slate-400">
-                                                                {toDisplayPhase(match.phase)}
-                                                                {match.group ? ` • Grupo ${match.group}` : ''}
-                                                                {match.venue ? ` • ${match.venue}` : ''}
-                                                            </p>
-                                                            {match.saved ? (
-                                                                <span className="text-[10px] font-bold text-lime-600">
-                                                                    ✓ {match.prediction.home}−{match.prediction.away}
-                                                                </span>
-                                                            ) : null}
+                                                            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+                                                                <TeamIdentity
+                                                                    name={match.homeTeam}
+                                                                    code={match.homeTeamCode}
+                                                                    flag={match.homeFlag}
+                                                                    align="right"
+                                                                />
+
+                                                                {canEdit ? (
+                                                                    <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+                                                                        <ScoreControl
+                                                                            teamName={match.homeTeam}
+                                                                            side="local"
+                                                                            value={draft.home}
+                                                                            onChange={(value) => handleDraftChange(match.id, 'home', value)}
+                                                                            onAdjust={(delta) => adjustScore('home', delta)}
+                                                                        />
+                                                                        <span className="px-1 text-sm font-black text-slate-300">-</span>
+                                                                        <ScoreControl
+                                                                            teamName={match.awayTeam}
+                                                                            side="visitante"
+                                                                            value={draft.away}
+                                                                            onChange={(value) => handleDraftChange(match.id, 'away', value)}
+                                                                            onAdjust={(delta) => adjustScore('away', delta)}
+                                                                        />
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-500">
+                                                                        {draft.home || '−'} : {draft.away || '−'}
+                                                                    </span>
+                                                                )}
+
+                                                                <TeamIdentity
+                                                                    name={match.awayTeam}
+                                                                    code={match.awayTeamCode}
+                                                                    flag={match.awayFlag}
+                                                                />
+                                                            </div>
+
+                                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                                                        {toDisplayPhase(match.phase)}
+                                                                    </span>
+                                                                    {match.group ? (
+                                                                        <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 ring-1 ring-inset ring-slate-200">
+                                                                            Grupo {match.group}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {match.venue ? (
+                                                                        <span className="max-w-full truncate rounded-full bg-white px-2.5 py-1 text-[9px] font-medium text-slate-400 ring-1 ring-inset ring-slate-200 sm:max-w-[240px]">
+                                                                            {match.venue}
+                                                                        </span>
+                                                                    ) : null}
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                                                    {match.saved ? (
+                                                                        <span className="font-bold text-lime-600">
+                                                                            ✓ Guardado {match.prediction.home}−{match.prediction.away}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400">Completa y guarda para cerrar este partido.</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         </div>
 
                                                         {/* Insights panel */}
-                                                        {isAnalysisOpen ? (() => {
-                                                            const leaguePlan = resolvedPlan;
-                                                            const planCap = getRemoteSiCredits(leaguePlan);
-                                                            const cachedData = insightsData[match.id] ?? getCachedInsights(match.id) ?? null;
-
-                                                            // Lock screen — credits exhausted
-                                                            if (insightsLocked) {
-                                                                const lockMessages: Record<string, { title: string; body: string; cta: string; ctaPlan: 'gold' | 'diamond' | null; sub: string }> = {
-                                                                    FREE: {
-                                                                        title: 'Has agotado tus créditos de prueba',
-                                                                        body: 'Mejora tu polla a plan GOLD o DIAMOND para más análisis IA.',
-                                                                        cta: 'Ver planes disponibles',
-                                                                        ctaPlan: 'gold',
-                                                                        sub: 'Plan GOLD · 30 análisis · Plan DIAMOND · 100 análisis',
-                                                                    },
-                                                                    GOLD: {
-                                                                        title: `Usaste los ${planCap} análisis de tu plan`,
-                                                                        body: 'Actualiza a DIAMOND para triplicar tus análisis disponibles.',
-                                                                        cta: 'Actualizar a DIAMOND',
-                                                                        ctaPlan: 'diamond',
-                                                                        sub: 'Plan DIAMOND · 100 análisis incluidos',
-                                                                    },
-                                                                    DIAMOND: {
-                                                                        title: `Usaste los ${planCap} análisis disponibles`,
-                                                                        body: 'Has alcanzado el límite del período actual. Los créditos se recargarán próximamente.',
-                                                                        cta: 'Entendido',
-                                                                        ctaPlan: null,
-                                                                        sub: 'Los créditos se recargan cada período',
-                                                                    },
-                                                                };
-                                                                const msg = lockMessages[leaguePlan] ?? lockMessages['FREE'];
-                                                                return (
-                                                                    <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
-                                                                        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
-                                                                            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
-                                                                            <span className="ml-auto rounded-full bg-rose-100 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-600">
-                                                                                0/{planCap} créditos
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
-                                                                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
-                                                                                <Lock className="h-6 w-6 text-slate-400" />
-                                                                            </div>
-                                                                            <div>
-                                                                                <p className="text-sm font-black text-slate-900">{msg.title}</p>
-                                                                                <p className="mt-1 text-xs text-slate-500">{msg.body}</p>
-                                                                            </div>
-                                                                            <div className="flex flex-col items-center gap-2">
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => msg.ctaPlan
-                                                                                        ? navigate('/checkout', { state: { plan: msg.ctaPlan } })
-                                                                                        : setInsightsLocked(false)
-                                                                                    }
-                                                                                    className="rounded-full bg-lime-400 px-5 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-lime-300"
-                                                                                >
-                                                                                    {msg.cta}
-                                                                                </button>
-                                                                                <span className="text-[9px] text-slate-400">{msg.sub}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            }
-
-                                                            // Loading state
-                                                            if (insightsLoading && analysisMatchId === match.id) {
-                                                                return (
-                                                                    <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
-                                                                        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
-                                                                            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
-                                                                        </div>
-                                                                        <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
-                                                                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-400" />
-                                                                            <p className="text-xs font-bold text-slate-500">Analizando partido con IA...</p>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            }
-
-                                                            // Error state — friendly message for the user
-                                                            if (insightsError && !cachedData) {
-                                                                console.warn('[SmartInsights] error:', insightsError);
-                                                                return (
-                                                                    <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-amber-100 bg-white sm:mx-5">
-                                                                        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
-                                                                            <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                                                                            <span className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Smart Insights • IA Powered</span>
-                                                                        </div>
-                                                                        <div className="flex flex-col items-center gap-3 px-6 py-6 text-center">
-                                                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50">
-                                                                                <Sparkles className="h-5 w-5 text-amber-400" />
-                                                                            </div>
-                                                                            <div>
-                                                                                <p className="text-xs font-bold text-slate-700">Análisis en procesamiento</p>
-                                                                                <p className="mt-1 max-w-xs text-[10px] text-slate-400">
-                                                                                    El motor de IA está ocupado en este momento. Inténtalo de nuevo en unos segundos.
-                                                                                </p>
-                                                                                {insightsError && (
-                                                                                    <p className="mt-2 max-w-xs break-words font-mono text-[9px] text-rose-400">{insightsError}</p>
-                                                                                )}
-                                                                            </div>
-                                                                            <p className="text-[9px] text-slate-400">Presiona el botón <span className="font-bold">IA</span> para reintentar · No se consumió crédito</p>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            }
-
-                                                            // Full panel
-                                                            const ins = (cachedData ?? generateMatchInsights(match)) as ReturnType<typeof generateMatchInsights> & { insight?: string; personalInsight?: string };
-                                                            const scoreLabels = ['SEGURA', 'IA MODEL', 'ARRIESGADA'] as const;
-                                                            const scoreStyles = [
-                                                                'bg-lime-100 text-lime-700',
-                                                                'bg-violet-100 text-violet-700',
-                                                                'bg-amber-100 text-amber-700',
-                                                            ] as const;
-                                                            const planBadgeColor =
-                                                                leaguePlan === 'DIAMOND' ? 'bg-cyan-100 text-cyan-700' :
-                                                                leaguePlan === 'GOLD' ? 'bg-amber-100 text-amber-700' :
-                                                                'bg-slate-100 text-slate-500';
-                                                            const homeEff = Math.round((ins.homeForm.filter((r) => r === 'W').length / 5) * 100);
-                                                            const awayEff = Math.round((ins.awayForm.filter((r) => r === 'W').length / 5) * 100);
-                                                            const calcTrend = (form: Array<'W' | 'D' | 'L'>) =>
-                                                                form.slice(3).filter((r) => r === 'W').length >= 1 ? 'up' : 'down';
-                                                            const homeTrend = calcTrend(ins.homeForm);
-                                                            const awayTrend = calcTrend(ins.awayForm);
-
-                                                            return (
-                                                                <div className="mx-4 mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:mx-5">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setInsightsCollapsed((prev) => ({ ...prev, [match.id]: !prev[match.id] }))}
-                                                                        className="flex w-full items-center gap-2 border-b border-slate-100 px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                                                                    >
-                                                                        <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                                                                        <span className="text-[9px] font-black uppercase tracking-[0.22em] text-violet-600">Smart Insights • IA Powered</span>
-                                                                        {cachedData && (
-                                                                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-600">IA</span>
-                                                                        )}
-                                                                        <span className={`rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${planBadgeColor}`}>
-                                                                            {siCredits}/{planCap} créditos
-                                                                        </span>
-                                                                        <span className="ml-auto">
-                                                                            {insightsCollapsed[match.id]
-                                                                                ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                                                                                : <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
-                                                                            }
-                                                                        </span>
-                                                                    </button>
-                                                                    {!insightsCollapsed[match.id] && <><div className="lg:grid lg:grid-cols-[3fr_2fr] lg:divide-x lg:divide-slate-100">
-                                                                        <div className="px-4 pb-4 pt-3">
-                                                                            <div className="mb-1.5 flex justify-between text-[10px] font-bold uppercase">
-                                                                                <span className="font-black text-slate-900">{match.homeTeam.split(' ')[0]}</span>
-                                                                                <span className="text-slate-400">Empate</span>
-                                                                                <span className="font-black text-slate-900">{match.awayTeam.split(' ')[0]}</span>
-                                                                            </div>
-                                                                            <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
-                                                                                <div className="bg-slate-900 transition-all" style={{ width: `${ins.homeWin}%` }} />
-                                                                                <div className="bg-slate-300 transition-all" style={{ width: `${ins.draw}%` }} />
-                                                                                <div className="bg-lime-400 transition-all" style={{ width: `${ins.awayWin}%` }} />
-                                                                            </div>
-                                                                            <div className="mt-1 flex justify-between">
-                                                                                <span className="text-[10px] font-black text-slate-900">{ins.homeWin}%</span>
-                                                                                <span className="text-[10px] font-black text-slate-400">{ins.draw}%</span>
-                                                                                <span className="text-[10px] font-black text-slate-900">{ins.awayWin}%</span>
-                                                                            </div>
-                                                                            {ins.insight && (
-                                                                                <div className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
-                                                                                    <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
-                                                                                    <p className="text-[10px] font-medium leading-relaxed text-slate-700">"{ins.insight}"</p>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="border-t border-slate-100 px-4 pb-4 pt-3 lg:border-t-0">
-                                                                            <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Sugerencias automáticas</p>
-                                                                            <div className="grid grid-cols-3 gap-2">
-                                                                                {ins.scores.map((score, idx) => {
-                                                                                    const [h, a] = score.split('-');
-                                                                                    const probs = [ins.homeWin, ins.draw, ins.awayWin];
-                                                                                    return (
-                                                                                        <button
-                                                                                            key={score + idx}
-                                                                                            type="button"
-                                                                                            onClick={() => {
-                                                                                                handleDraftChange(match.id, 'home', h);
-                                                                                                handleDraftChange(match.id, 'away', a);
-                                                                                            }}
-                                                                                            className={`flex flex-col items-center gap-1 rounded-xl py-3 transition-all hover:scale-105 active:scale-95 ${scoreStyles[idx]}`}
-                                                                                        >
-                                                                                            <span className="text-[9px] font-black uppercase tracking-wider opacity-80">{scoreLabels[idx]}</span>
-                                                                                            <span className="text-2xl font-black leading-none">{score}</span>
-                                                                                            <span className="text-[9px] font-bold opacity-70">{probs[idx]}% Prob.</span>
-                                                                                        </button>
-                                                                                    );
-                                                                                })}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-                                                                        <div className="mb-3 flex items-center justify-between">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <BarChart3 className="h-3.5 w-3.5 text-slate-400" />
-                                                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Análisis de Racha · Últimos 5</span>
-                                                                            </div>
-                                                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tendencia</span>
-                                                                        </div>
-                                                                        <div className="flex flex-col gap-2 lg:hidden">
-                                                                            <div className="flex items-center justify-between gap-2">
-                                                                                <div className="flex min-w-0 items-center gap-2">
-                                                                                    <span className="w-14 shrink-0 truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
-                                                                                    <div className="flex gap-0.5">
-                                                                                        {ins.homeForm.map((r, i) => (
-                                                                                            <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
-                                                                                        ))}
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className="flex shrink-0 items-center gap-0.5">
-                                                                                    {homeTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
-                                                                                    <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="flex items-center justify-between gap-2">
-                                                                                <div className="flex min-w-0 items-center gap-2">
-                                                                                    <span className="w-14 shrink-0 truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
-                                                                                    <div className="flex gap-0.5">
-                                                                                        {ins.awayForm.map((r, i) => (
-                                                                                            <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
-                                                                                        ))}
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className="flex shrink-0 items-center gap-0.5">
-                                                                                    {awayTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
-                                                                                    <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
-                                                                                <p className="text-[10px] font-semibold leading-relaxed text-indigo-800">
-                                                                                    {ins.personalInsight || ins.insight || 'Análisis de forma actual e historial reciente de ambos equipos.'}
-                                                                                </p>
-                                                                                <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
-                                                                                    Opción inteligente: <span className="text-indigo-600">{ins.smartPick}</span>
-                                                                                </p>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="hidden items-start gap-2 lg:flex">
-                                                                            <div className="flex min-w-0 flex-col items-start gap-1">
-                                                                                <span className="max-w-[72px] truncate text-[10px] font-black uppercase text-slate-900">{match.homeTeam.split(' ')[0]}</span>
-                                                                                <span className="text-[9px] text-slate-400">{homeEff}% efic.</span>
-                                                                                <div className="flex gap-0.5">
-                                                                                    {ins.homeForm.map((r, i) => (
-                                                                                        <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
-                                                                                    ))}
-                                                                                </div>
-                                                                                <div className="flex items-center gap-0.5">
-                                                                                    {homeTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
-                                                                                    <span className={`text-[9px] font-black ${homeTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{homeTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="flex min-h-[84px] flex-1 flex-col justify-between rounded-xl border border-indigo-100 bg-indigo-50 p-3">
-                                                                                <p className="text-[10px] font-semibold leading-relaxed text-indigo-800">
-                                                                                    {ins.personalInsight || ins.insight || 'Análisis de forma actual e historial reciente de ambos equipos.'}
-                                                                                </p>
-                                                                                <p className="mt-2 text-[9px] font-black uppercase text-indigo-900">
-                                                                                    Opción inteligente: <span className="text-indigo-600">{ins.smartPick}</span>
-                                                                                </p>
-                                                                            </div>
-                                                                            <div className="flex min-w-0 flex-col items-end gap-1">
-                                                                                <span className="max-w-[72px] truncate text-[10px] font-black uppercase text-slate-900">{match.awayTeam.split(' ')[0]}</span>
-                                                                                <span className="text-[9px] text-slate-400">{awayEff}% efic.</span>
-                                                                                <div className="flex gap-0.5">
-                                                                                    {ins.awayForm.map((r, i) => (
-                                                                                        <span key={i} className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-black ${r === 'W' ? 'bg-lime-500 text-white' : r === 'D' ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white'}`}>{r}</span>
-                                                                                    ))}
-                                                                                </div>
-                                                                                <div className="flex items-center justify-end gap-0.5">
-                                                                                    {awayTrend === 'up' ? <ArrowUp className="h-3 w-3 text-lime-600" /> : <ArrowDown className="h-3 w-3 text-rose-500" />}
-                                                                                    <span className={`text-[9px] font-black ${awayTrend === 'up' ? 'text-lime-600' : 'text-rose-500'}`}>{awayTrend === 'up' ? 'SUBE' : 'BAJA'}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div></>}
-                                                                </div>
-                                                            );
-                                                        })() : null}
+                                                        {isAnalysisOpen ? (
+                                                            <SmartInsightsPanel
+                                                                match={match}
+                                                                leaguePlan={resolvedPlan}
+                                                                planCap={getRemoteSiCredits(resolvedPlan)}
+                                                                siCredits={siCredits}
+                                                                cachedData={cachedInsights}
+                                                                insightsLocked={insightsLocked}
+                                                                insightsLoading={insightsLoading}
+                                                                analysisMatchId={analysisMatchId}
+                                                                insightsError={insightsError}
+                                                                isCollapsed={Boolean(insightsCollapsed[match.id])}
+                                                                onToggleCollapsed={() => setInsightsCollapsed((prev) => ({ ...prev, [match.id]: !prev[match.id] }))}
+                                                                onApplySuggestedScore={(home, away) => {
+                                                                    handleDraftChange(match.id, 'home', home);
+                                                                    handleDraftChange(match.id, 'away', away);
+                                                                }}
+                                                                onUpgradePlan={(plan) => navigate('/checkout', { state: { plan } })}
+                                                                onDismissLock={() => setInsightsLocked(false)}
+                                                            />
+                                                        ) : null}
                                                     </div>
                                                 );
                                             })}

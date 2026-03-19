@@ -30,8 +30,8 @@ describe('usePredictionStore', () => {
                     matchDate: '2026-06-11T18:00:00.000Z',
                     status: 'SCHEDULED',
                     phase: 'GROUP',
-                    homeTeam: { name: 'Colombia', code: 'CO' },
-                    awayTeam: { name: 'Argentina', code: 'AR' },
+                    homeTeam: { name: 'Colombia', code: 'CO', shortCode: 'COL' },
+                    awayTeam: { name: 'Argentina', code: 'AR', shortCode: 'ARG' },
                 },
             ])
             .mockResolvedValueOnce([
@@ -51,6 +51,8 @@ describe('usePredictionStore', () => {
         expect(usePredictionStore.getState().matches).toEqual([
             expect.objectContaining({
                 id: 'match-1',
+                homeTeamCode: 'COL',
+                awayTeamCode: 'ARG',
                 prediction: { home: '2', away: '1' },
                 pointsEarned: 5,
                 saved: true,
@@ -81,6 +83,8 @@ describe('usePredictionStore', () => {
                     id: 'match-1',
                     homeTeam: 'Colombia',
                     awayTeam: 'Perú',
+                    homeTeamCode: 'COL',
+                    awayTeamCode: 'PER',
                     homeFlag: 'co.png',
                     awayFlag: 'pe.png',
                     date: '2026-06-11T18:00:00.000Z',
@@ -121,6 +125,8 @@ describe('usePredictionStore', () => {
                     id: 'match-2',
                     homeTeam: 'México',
                     awayTeam: 'USA',
+                    homeTeamCode: 'MEX',
+                    awayTeamCode: 'USA',
                     homeFlag: 'mx.png',
                     awayFlag: 'us.png',
                     date: '2026-06-15T22:00:00.000Z',

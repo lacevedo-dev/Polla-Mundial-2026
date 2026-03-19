@@ -4,8 +4,16 @@ import { PredictionsService } from '../../predictions/predictions.service';
 import { ApiFootballClient } from './api-football-client.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
-import { MatchStatus } from '@prisma/client';
-import { ApiFootballFixture } from '../dto/api-football.dto';
+import { MatchStatus, Prisma, Team } from '@prisma/client';
+import {
+  ApiFootballFixture,
+  ApiFootballFixtureTeam,
+  TeamCatalogBackfillResultDto,
+} from '../dto/api-football.dto';
+import {
+  WORLD_CUP_TEAM_CATALOG,
+  WORLD_CUP_TEAM_CATALOG_BY_API_ID,
+} from '../catalog/world-cup-team-catalog';
 
 @Injectable()
 export class MatchSyncService {
@@ -18,6 +26,71 @@ export class MatchSyncService {
     private readonly syncPlan: SyncPlanService,
     private readonly predictionsService: PredictionsService,
   ) {}
+
+  async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
+    const warnings: string[] = [];
+    let updated = 0;
+    let created = 0;
+    let skipped = 0;
+
+    const existingTeams = await this.prisma.team.findMany();
+
+    for (const entry of WORLD_CUP_TEAM_CATALOG) {
+      const normalizedEntryName = this.normalizeKey(entry.name);
+      const current = existingTeams.find(
+        (team) =>
+          team.code === entry.code ||
+          team.apiFootballTeamId === entry.apiFootballTeamId ||
+          this.normalizeKey(team.name) === normalizedEntryName,
+      );
+
+      if (current) {
+        await this.prisma.team.update({
+          where: { id: current.id },
+          data: {
+            name: entry.name,
+            code: entry.code,
+            shortCode: entry.shortCode,
+            apiFootballTeamId: entry.apiFootballTeamId,
+            flagUrl: entry.flagUrl,
+            group: entry.group,
+          },
+        });
+        updated++;
+        continue;
+      }
+
+      await this.prisma.team.create({
+        data: {
+          name: entry.name,
+          code: entry.code,
+          shortCode: entry.shortCode,
+          apiFootballTeamId: entry.apiFootballTeamId,
+          flagUrl: entry.flagUrl,
+          group: entry.group,
+        },
+      });
+      created++;
+    }
+
+    for (const team of existingTeams) {
+      const matched = WORLD_CUP_TEAM_CATALOG.some(
+        (entry) =>
+          entry.code === team.code ||
+          entry.apiFootballTeamId === team.apiFootballTeamId ||
+          this.normalizeKey(entry.name) === this.normalizeKey(team.name),
+      );
+
+      if (!matched) {
+        skipped++;
+        warnings.push(
+          `Equipo fuera del catálogo curado no modificado: ${team.name} (${team.code})`,
+        );
+      }
+    }
+
+    return { updated, created, skipped, warnings };
+  }
 
   /**
    * Sync all matches for today
@@ -152,6 +225,10 @@ export class MatchSyncService {
       // Find match by external ID
       const match = await this.prisma.match.findUnique({
         where: { externalId: fixture.fixture.id.toString() },
+        include: {
+          homeTeam: true,
+          awayTeam: true,
+        },
       });
 
       if (!match) {
@@ -163,6 +240,18 @@ export class MatchSyncService {
 
       // Map API-Football status to our status
       const status = this.mapFixtureStatus(fixture.fixture.status.short);
+      const homeTeamId = await this.reconcileFixtureTeam(
+        match.homeTeam,
+        fixture.teams.home,
+        'home',
+        fixture.fixture.id,
+      );
+      const awayTeamId = await this.reconcileFixtureTeam(
+        match.awayTeam,
+        fixture.teams.away,
+        'away',
+        fixture.fixture.id,
+      );
 
       // Check if scores changed
       const scoreChanged =
@@ -173,6 +262,8 @@ export class MatchSyncService {
       await this.prisma.match.update({
         where: { id: match.id },
         data: {
+          ...(homeTeamId !== match.homeTeamId ? { homeTeamId } : {}),
+          ...(awayTeamId !== match.awayTeamId ? { awayTeamId } : {}),
           homeScore: fixture.goals.home,
           awayScore: fixture.goals.away,
           status,
@@ -198,6 +289,97 @@ export class MatchSyncService {
       );
       return false;
     }
+  }
+
+  private async reconcileFixtureTeam(
+    currentTeam: Team,
+    fixtureTeam: ApiFootballFixtureTeam,
+    side: 'home' | 'away',
+    fixtureId: number,
+  ): Promise<string> {
+    const canonical = WORLD_CUP_TEAM_CATALOG_BY_API_ID.get(fixtureTeam.id);
+    const directMatch = await this.prisma.team.findUnique({
+      where: { apiFootballTeamId: fixtureTeam.id },
+    });
+
+    if (directMatch) {
+      await this.refreshTeamDisplayFields(directMatch.id, fixtureTeam, canonical);
+
+      if (directMatch.id !== currentTeam.id) {
+        this.logger.warn(
+          `Fixture ${fixtureId} ${side} team remapped from ${currentTeam.name} to ${directMatch.name} using apiFootballTeamId=${fixtureTeam.id}`,
+        );
+      }
+
+      return directMatch.id;
+    }
+
+    if (canonical && this.matchesCanonicalTeam(currentTeam, canonical)) {
+      await this.prisma.team.update({
+        where: { id: currentTeam.id },
+        data: {
+          apiFootballTeamId: canonical.apiFootballTeamId,
+          shortCode: canonical.shortCode,
+          flagUrl: fixtureTeam.logo || canonical.flagUrl,
+          code: canonical.code,
+          name: canonical.name,
+          group: canonical.group,
+        },
+      });
+      return currentTeam.id;
+    }
+
+    if (currentTeam.apiFootballTeamId === fixtureTeam.id) {
+      await this.refreshTeamDisplayFields(currentTeam.id, fixtureTeam, canonical);
+      return currentTeam.id;
+    }
+
+    this.logger.warn(
+      `Fixture ${fixtureId} ${side} team could not be reconciled safely. Local=${currentTeam.name} (${currentTeam.code}) upstream=${fixtureTeam.name} (${fixtureTeam.id})`,
+    );
+    return currentTeam.id;
+  }
+
+  private async refreshTeamDisplayFields(
+    teamId: string,
+    fixtureTeam: ApiFootballFixtureTeam,
+    canonical?: (typeof WORLD_CUP_TEAM_CATALOG)[number],
+  ): Promise<void> {
+    const data: Prisma.TeamUpdateInput = {
+      apiFootballTeamId: fixtureTeam.id,
+      flagUrl: fixtureTeam.logo,
+    };
+
+    if (canonical) {
+      data.shortCode = canonical.shortCode;
+      data.code = canonical.code;
+      data.group = canonical.group;
+      data.name = canonical.name;
+    }
+
+    await this.prisma.team.update({
+      where: { id: teamId },
+      data,
+    });
+  }
+
+  private matchesCanonicalTeam(
+    team: Team,
+    canonical: (typeof WORLD_CUP_TEAM_CATALOG)[number],
+  ): boolean {
+    return (
+      team.code === canonical.code ||
+      this.normalizeKey(team.name) === this.normalizeKey(canonical.name)
+    );
+  }
+
+  private normalizeKey(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
 
   /**

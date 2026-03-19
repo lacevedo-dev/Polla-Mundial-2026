@@ -10,14 +10,18 @@ export interface MatchResponse {
     homeScore?: number | null;
     awayScore?: number | null;
     homeTeam: {
+        id?: string;
         name: string;
         flagUrl?: string | null;
         code?: string | null;
+        shortCode?: string | null;
     };
     awayTeam: {
+        id?: string;
         name: string;
         flagUrl?: string | null;
         code?: string | null;
+        shortCode?: string | null;
     };
 }
 
@@ -41,6 +45,8 @@ export interface MatchViewModel {
     id: string;
     homeTeam: string;
     awayTeam: string;
+    homeTeamCode: string;
+    awayTeamCode: string;
     homeFlag: string;
     awayFlag: string;
     date: string;
@@ -92,6 +98,34 @@ function toDisplayDate(matchDate: string): string {
     return matchDate.includes('T') ? matchDate.split('T')[0] : matchDate;
 }
 
+function resolveTeamCompactCode(
+    shortCode?: string | null,
+    code?: string | null,
+    name?: string | null,
+): string {
+    if (shortCode?.trim()) {
+        return shortCode.trim().toUpperCase();
+    }
+
+    if (code?.trim()) {
+        return code.trim().toUpperCase();
+    }
+
+    const fallback = (name ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9 ]/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((token) => token[0])
+        .join('')
+        .slice(0, 3)
+        .toUpperCase();
+
+    return fallback || 'TBD';
+}
+
 function resolveFlagUrl(flagUrl?: string | null, code?: string | null): string {
     if (flagUrl) {
         return flagUrl;
@@ -119,6 +153,16 @@ export function toMatchViewModel(
         id: match.id,
         homeTeam: match.homeTeam.name,
         awayTeam: match.awayTeam.name,
+        homeTeamCode: resolveTeamCompactCode(
+            match.homeTeam.shortCode,
+            match.homeTeam.code,
+            match.homeTeam.name,
+        ),
+        awayTeamCode: resolveTeamCompactCode(
+            match.awayTeam.shortCode,
+            match.awayTeam.code,
+            match.awayTeam.name,
+        ),
         homeFlag: resolveFlagUrl(match.homeTeam.flagUrl, match.homeTeam.code),
         awayFlag: resolveFlagUrl(match.awayTeam.flagUrl, match.awayTeam.code),
         date: match.matchDate,

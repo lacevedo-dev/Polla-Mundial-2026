@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatchDto, UpdateMatchScoreDto } from './dto/match.dto';
 import { MatchStatus } from '@prisma/client';
 import { PredictionsService } from '../predictions/predictions.service';
+import { matchWithTeamsSelect, toMatchResponse } from './match-response.util';
 
 @Injectable()
 export class MatchesService {
@@ -12,44 +13,39 @@ export class MatchesService {
     ) { }
 
     async create(createMatchDto: CreateMatchDto) {
-        return this.prisma.match.create({
+        const match = await this.prisma.match.create({
             data: {
                 ...createMatchDto,
                 status: MatchStatus.SCHEDULED,
             },
-            include: {
-                homeTeam: true,
-                awayTeam: true,
-            },
+            select: matchWithTeamsSelect,
         });
+
+        return toMatchResponse(match);
     }
 
     async findAll() {
-        return this.prisma.match.findMany({
-            include: {
-                homeTeam: true,
-                awayTeam: true,
-            },
+        const matches = await this.prisma.match.findMany({
+            select: matchWithTeamsSelect,
             orderBy: {
                 matchDate: 'asc',
             },
         });
+
+        return matches.map(toMatchResponse);
     }
 
     async findOne(id: string) {
         const match = await this.prisma.match.findUnique({
             where: { id },
-            include: {
-                homeTeam: true,
-                awayTeam: true,
-            },
+            select: matchWithTeamsSelect,
         });
 
         if (!match) {
             throw new NotFoundException(`Match with ID ${id} not found`);
         }
 
-        return match;
+        return toMatchResponse(match);
     }
 
     async updateScore(id: string, updateScoreDto: UpdateMatchScoreDto) {
@@ -62,24 +58,24 @@ export class MatchesService {
                 awayScore: updateScoreDto.awayScore,
                 status: MatchStatus.FINISHED,
             },
+            select: matchWithTeamsSelect,
         });
 
         // Disparar cálculo de puntos
         await this.predictionsService.calculateMatchPoints(id);
 
-        return updatedMatch;
+        return toMatchResponse(updatedMatch);
     }
 
     async findByPhase(phase: any) {
-        return this.prisma.match.findMany({
+        const matches = await this.prisma.match.findMany({
             where: { phase },
-            include: {
-                homeTeam: true,
-                awayTeam: true,
-            },
+            select: matchWithTeamsSelect,
             orderBy: {
                 matchDate: 'asc',
             },
         });
+
+        return matches.map(toMatchResponse);
     }
 }

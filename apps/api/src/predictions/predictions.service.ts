@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePredictionDto } from './dto/prediction.dto';
 import { MemberStatus, Phase, ScoringType } from '@prisma/client';
+import { matchTeamSelect } from '../matches/match-response.util';
 
 type ScoringRuleLike = {
     ruleType: ScoringType | string;
@@ -99,8 +100,12 @@ export class PredictionsService {
             include: {
                 match: {
                     include: {
-                        homeTeam: true,
-                        awayTeam: true,
+                        homeTeam: {
+                            select: matchTeamSelect,
+                        },
+                        awayTeam: {
+                            select: matchTeamSelect,
+                        },
                     },
                 },
             },

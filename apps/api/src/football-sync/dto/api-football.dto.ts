@@ -1,3 +1,10 @@
+export interface ApiFootballFixtureTeam {
+  id: number;
+  name: string;
+  logo: string;
+  winner: boolean | null;
+}
+
 export interface ApiFootballFixture {
   fixture: {
     id: number;
@@ -30,18 +37,8 @@ export interface ApiFootballFixture {
     round: string;
   };
   teams: {
-    home: {
-      id: number;
-      name: string;
-      logo: string;
-      winner: boolean | null;
-    };
-    away: {
-      id: number;
-      name: string;
-      logo: string;
-      winner: boolean | null;
-    };
+    home: ApiFootballFixtureTeam;
+    away: ApiFootballFixtureTeam;
   };
   goals: {
     home: number | null;
@@ -116,6 +113,13 @@ export interface SyncUsageDto {
     margin: number;
     confidence: 'low' | 'medium' | 'high';
   };
+}
+
+export interface TeamCatalogBackfillResultDto {
+  updated: number;
+  created: number;
+  skipped: number;
+  warnings: string[];
 }
 
 // === DTOs DE MONITOREO ===
