@@ -20,6 +20,7 @@ import {
     Search,
     Sparkles,
     Trophy,
+    Zap,
 } from 'lucide-react';
 import { useNavigate, useBlocker } from 'react-router-dom';
 import { useLeagueStore } from '../stores/league.store';
@@ -1730,22 +1731,22 @@ const Predictions: React.FC = () => {
         <div className="min-h-screen bg-white pb-24">
             {/* ─── STICKY HEADER ─── */}
             <div className={`sticky top-0 z-20 bg-white transition-shadow ${isScrolled ? 'shadow-md' : 'border-b border-slate-100'}`}>
-                {/* Top bar: Title + Back button */}
+                {/* Top bar: ALWAYS VISIBLE - Title + Back button */}
                 <div className="border-b border-slate-100 bg-white">
-                    <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+                    <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5 sm:py-3">
                         <button
                             onClick={() => navigate('/my-leagues')}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 sm:h-9 sm:w-9"
                         >
-                            <ArrowLeft className="h-4 w-4" />
+                            <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </button>
                         <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <h1 className="truncate text-sm font-black uppercase tracking-tight text-slate-900">
+                                <h1 className="truncate text-xs font-black uppercase tracking-tight text-slate-900 sm:text-sm">
                                     {activeLeague?.name ?? 'Sin liga activa'}
                                 </h1>
                                 {activeLeague?.role === 'ADMIN' && (
-                                    <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-lime-400">
+                                    <span className="shrink-0 rounded-lg bg-slate-900 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-lime-400 sm:px-2 sm:text-[9px]">
                                         Admin
                                     </span>
                                 )}
@@ -1754,37 +1755,59 @@ const Predictions: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Sticky tabs: PARTIDOS / SIMULADOR */}
+                {/* Sticky tabs: PARTIDOS / SIMULADOR + Speed Mode + Search */}
                 <div className="bg-white">
                     <div className="mx-auto max-w-5xl px-4">
-                        <div className="flex items-center justify-between gap-3 py-2">
-                            {/* Tabs */}
-                            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 p-1">
+                        <div className="flex items-center justify-between gap-2 py-2">
+                            {/* Left: Tabs */}
+                            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 p-0.5 sm:p-1">
                                 <button
                                     onClick={() => setPredictionMode('matches')}
-                                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all sm:px-4 ${predictionMode === 'matches' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all sm:gap-1.5 sm:px-4 ${predictionMode === 'matches' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
                                     <LayoutGrid className="h-3 w-3" />
                                     <span className="hidden sm:inline">Partidos</span>
                                 </button>
                                 <button
                                     onClick={() => setPredictionMode('simulator')}
-                                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all sm:px-4 ${predictionMode === 'simulator' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all sm:gap-1.5 sm:px-4 ${predictionMode === 'simulator' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
                                     <GitMerge className="h-3 w-3" />
                                     <span className="hidden sm:inline">Simulador</span>
                                 </button>
                             </div>
 
-                            {/* Search icon (mobile) / Full search (desktop) */}
+                            {/* Center: Speed Mode Toggle (Mobile only, when in matches mode) */}
+                            {predictionMode === 'matches' && (
+                                <button
+                                    onClick={() => {
+                                        setSpeedEntryMode(!speedEntryMode);
+                                        if (!speedEntryMode) {
+                                            const firstOpen = filteredMatches.find((m) => m.status === 'open' || m.status === 'live');
+                                            if (firstOpen) {
+                                                setExpandedMatches(new Set([firstOpen.id]));
+                                                setTimeout(() => homeInputRefs.current[firstOpen.id]?.focus(), 100);
+                                            }
+                                        } else {
+                                            setExpandedMatches(new Set());
+                                        }
+                                    }}
+                                    className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider transition-all sm:hidden ${speedEntryMode ? 'border-lime-400 bg-lime-50 text-lime-700' : 'border-slate-200 bg-white text-slate-500'}`}
+                                >
+                                    <Zap className={`h-3 w-3 ${speedEntryMode ? 'text-lime-600' : 'text-slate-400'}`} />
+                                    {speedEntryMode ? 'Rápido' : 'Normal'}
+                                </button>
+                            )}
+
+                            {/* Right: Search */}
                             {predictionMode === 'matches' && (
                                 <div className="flex items-center gap-2">
                                     {/* Mobile: search icon button */}
                                     <button
                                         onClick={() => setSearchExpanded(!searchExpanded)}
-                                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all sm:hidden ${searchExpanded ? 'border-lime-400 bg-lime-50 text-lime-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                                        className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all sm:hidden ${searchExpanded ? 'border-lime-400 bg-lime-50 text-lime-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
                                     >
-                                        <Search className="h-4 w-4" />
+                                        <Search className="h-3.5 w-3.5" />
                                     </button>
 
                                     {/* Desktop: always visible */}
@@ -1875,47 +1898,21 @@ const Predictions: React.FC = () => {
 
                 {predictionMode === 'matches' ? (
                     <>
-                        {/* SPEED MODE TOGGLE + Desktop filters */}
-                        <div className="flex items-center justify-between gap-3">
-                            {/* Speed mode toggle - Mobile only */}
-                            <div className="flex items-center gap-2 sm:hidden">
-                                <span className="text-xs font-bold text-slate-600">Modo rápido</span>
+                        {/* Desktop filters only */}
+                        <div className="hidden items-center justify-between gap-3 sm:flex">
+                            <div className="flex overflow-hidden rounded-2xl border border-slate-200">
                                 <button
-                                    onClick={() => {
-                                        setSpeedEntryMode(!speedEntryMode);
-                                        if (!speedEntryMode) {
-                                            const firstOpen = filteredMatches.find((m) => m.status === 'open' || m.status === 'live');
-                                            if (firstOpen) {
-                                                setExpandedMatches(new Set([firstOpen.id]));
-                                                setTimeout(() => homeInputRefs.current[firstOpen.id]?.focus(), 100);
-                                            }
-                                        } else {
-                                            setExpandedMatches(new Set());
-                                        }
-                                    }}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${speedEntryMode ? 'bg-lime-400' : 'bg-slate-200'}`}
+                                    onClick={() => setPhaseFilter(phaseFilter === 'KNOCKOUT' ? 'ALL' : 'GROUP')}
+                                    className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
                                 >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${speedEntryMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    <Trophy className="h-3 w-3" /> Grupos
                                 </button>
-                            </div>
-
-                            {/* Desktop filters */}
-                            <div className="hidden items-center gap-3 sm:flex">
-                                {/* Phase toggle */}
-                                <div className="flex overflow-hidden rounded-2xl border border-slate-200">
-                                    <button
-                                        onClick={() => setPhaseFilter(phaseFilter === 'KNOCKOUT' ? 'ALL' : 'GROUP')}
-                                        className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter !== 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                                    >
-                                        <Trophy className="h-3 w-3" /> Grupos
-                                    </button>
-                                    <button
-                                        onClick={() => setPhaseFilter('KNOCKOUT')}
-                                        className={`flex items-center gap-1.5 border-l border-slate-200 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                                    >
-                                        <GitMerge className="h-3 w-3" /> Fases
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => setPhaseFilter('KNOCKOUT')}
+                                    className={`flex items-center gap-1.5 border-l border-slate-200 px-3.5 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${phaseFilter === 'KNOCKOUT' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                                >
+                                    <GitMerge className="h-3 w-3" /> Fases
+                                </button>
                             </div>
                         </div>
 
