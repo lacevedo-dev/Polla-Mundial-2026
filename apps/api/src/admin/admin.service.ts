@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeSystemConfigRecord, serializeSystemConfigValue } from '../system-config/system-config.util';
 
 @Injectable()
 export class AdminService {
@@ -39,18 +40,22 @@ export class AdminService {
     }
 
     async getSystemConfig(key: string) {
-        return this.prisma.systemConfig.findUnique({ where: { key } });
+        const record = await this.prisma.systemConfig.findUnique({ where: { key } });
+        return normalizeSystemConfigRecord(record);
     }
 
     async setSystemConfig(key: string, value: any) {
-        return this.prisma.systemConfig.upsert({
+        const record = await this.prisma.systemConfig.upsert({
             where: { key },
-            create: { key, value },
-            update: { value },
+            create: { key, value: serializeSystemConfigValue(value) },
+            update: { value: serializeSystemConfigValue(value) },
         });
+
+        return normalizeSystemConfigRecord(record);
     }
 
     async getAllSystemConfigs() {
-        return this.prisma.systemConfig.findMany();
+        const configs = await this.prisma.systemConfig.findMany();
+        return configs.map((config) => normalizeSystemConfigRecord(config)!);
     }
 }

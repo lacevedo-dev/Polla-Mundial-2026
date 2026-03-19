@@ -103,7 +103,8 @@ const AdminSettings: React.FC = () => {
 
     const [aiSaveError, setAiSaveError] = React.useState<string | null>(null);
 
-    const handleSaveAi = async () => {
+    const handleSaveAi = async (event?: React.FormEvent<HTMLFormElement>) => {
+        event?.preventDefault();
         if (aiConfig.apiKeys.length === 0) {
             setAiSaveError('Agrega al menos una API key antes de guardar.');
             setAiStatus('error');
@@ -268,7 +269,7 @@ const AdminSettings: React.FC = () => {
                 {aiLoading ? (
                     <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
                 ) : (
-                    <div className="space-y-4">
+                    <form className="space-y-4" onSubmit={handleSaveAi}>
                         {/* Provider + Model row */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
@@ -367,6 +368,7 @@ const AdminSettings: React.FC = () => {
                                     <div className="relative flex-1">
                                         <input
                                             type={showNewKey ? 'text' : 'password'}
+                                            name="ai-api-key"
                                             value={newKeyInput}
                                             onChange={(e) => setNewKeyInput(e.target.value)}
                                             onKeyDown={(e) => {
@@ -379,6 +381,7 @@ const AdminSettings: React.FC = () => {
                                             }}
                                             placeholder={aiConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
                                             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-9 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                            autoComplete="new-password"
                                             autoFocus
                                         />
                                         <button
@@ -452,14 +455,14 @@ const AdminSettings: React.FC = () => {
                         </div>
 
                         <button
-                            onClick={handleSaveAi}
+                            type="submit"
                             disabled={aiSaving}
                             className="flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-amber-300 disabled:opacity-50"
                         >
                             <Save size={14} />
                             {aiSaving ? 'Guardando...' : 'Guardar configuración IA'}
                         </button>
-                    </div>
+                    </form>
                 )}
             </div>
 

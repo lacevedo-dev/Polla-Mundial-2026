@@ -21,12 +21,6 @@ export class LeaguesController {
         return this.leaguesService.findAllByUserId(userId);
     }
 
-    @Get(':id')
-    async getLeagueDetails(@Request() req, @Param('id') leagueId: string) {
-        const userId = req.user.userId;
-        return this.leaguesService.getLeagueDetails(userId, leagueId);
-    }
-
     @HttpCode(HttpStatus.OK)
     @Post('join')
     async joinLeague(@Request() req, @Body('code') code: string) {
@@ -54,6 +48,12 @@ export class LeaguesController {
     @Post('invitations/:id/decline')
     async declineInvitation(@Request() req, @Param('id') invitationId: string) {
         return this.leaguesService.declineInvitation(invitationId);
+    }
+
+    @Get(':id')
+    async getLeagueDetails(@Request() req, @Param('id') leagueId: string) {
+        const userId = req.user.userId;
+        return this.leaguesService.getLeagueDetails(userId, leagueId);
     }
 
     @Patch(':id')

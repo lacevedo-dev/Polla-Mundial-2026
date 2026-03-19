@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseSystemConfigValue } from '../system-config/system-config.util';
 
 const PLAN_DEFAULTS: Record<string, { siCredits: number; price: number; features: string[]; maxParticipants: number }> = {
     FREE:    { siCredits: 3,   price: 0,     features: ['Hasta 10 Jugadores', 'Marcadores en Vivo', 'Ads Limitados', 'Soporte Básico'],                                               maxParticipants: 10 },
@@ -29,7 +30,7 @@ export class ConfigController {
 
         for (const plan of ['FREE', 'GOLD', 'DIAMOND']) {
             const saved = configs.find((c) => c.key === `plan:${plan}`);
-            const planData = saved?.value as any;
+            const planData = parseSystemConfigValue<any>(saved?.value);
             const defaults = PLAN_DEFAULTS[plan];
             result[plan] = {
                 siCredits:       typeof planData?.siCredits === 'number'       ? planData.siCredits       : defaults.siCredits,
@@ -40,7 +41,7 @@ export class ConfigController {
         }
 
         const resetRecord = configs.find((c) => c.key === 'si_credits_reset');
-        const creditsResetAt = (resetRecord?.value as any)?.resetAt as string | null ?? null;
+        const creditsResetAt = (parseSystemConfigValue<any>(resetRecord?.value)?.resetAt as string | null | undefined) ?? null;
 
         return { ...result, _meta: { creditsResetAt } };
     }

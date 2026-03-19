@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseSystemConfigValue, serializeSystemConfigValue } from '../system-config/system-config.util';
 
 export interface MatchInsightsResult {
     homeWin: number;
@@ -50,7 +51,7 @@ export class InsightsService {
     async getAiConfig(): Promise<AiConfig | null> {
         const record = await this.prisma.systemConfig.findUnique({ where: { key: 'ai_config' } });
         if (!record) return null;
-        const value = record.value as any;
+        const value = parseSystemConfigValue<any>(record.value);
 
         // Support legacy single apiKey and new apiKeys array
         const apiKeys: string[] = Array.isArray(value.apiKeys)
@@ -145,10 +146,10 @@ export class InsightsService {
         try {
             const record = await this.prisma.systemConfig.findUnique({ where: { key: 'ai_config' } });
             if (!record) return;
-            const value = record.value as any;
+            const value = parseSystemConfigValue<any>(record.value);
             await this.prisma.systemConfig.update({
                 where: { key: 'ai_config' },
-                data: { value: { ...value, activeKeyIndex: newIndex } as object },
+                data: { value: serializeSystemConfigValue({ ...value, activeKeyIndex: newIndex }) },
             });
         } catch { /* non-critical */ }
     }

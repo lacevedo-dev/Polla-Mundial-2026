@@ -10,7 +10,10 @@ const PlanCard: React.FC<{
     onSave: (planName: string, config: PlanConfig) => void;
     isSaving: boolean;
 }> = ({ planName, config, onSave, isSaving }) => {
-    const [local, setLocal] = React.useState<PlanConfig>({ ...config });
+    const [local, setLocal] = React.useState<PlanConfig>({
+        ...config,
+        features: config.features || [] // Garantizar que features siempre sea un array
+    });
     const [isDirty, setIsDirty] = React.useState(false);
     const [newFeature, setNewFeature] = React.useState('');
 

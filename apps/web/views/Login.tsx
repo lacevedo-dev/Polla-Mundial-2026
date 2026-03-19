@@ -102,7 +102,9 @@ const Login: React.FC = () => {
             <div className="space-y-2">
               <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Correo Electrónico</label>
               <EmailAutocompleteInput
+                name="email"
                 placeholder="tu@email.com"
+                autoComplete="username"
                 required
                 disabled={isLoading}
                 value={email}
@@ -116,7 +118,9 @@ const Login: React.FC = () => {
               </div>
               <Input
                 type="password"
+                name="password"
                 placeholder="••••••••"
+                autoComplete="current-password"
                 required
                 disabled={isLoading}
                 value={password}

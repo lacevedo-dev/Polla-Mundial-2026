@@ -9,6 +9,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseSystemConfigValue } from '../system-config/system-config.util';
 
 @Controller('auth')
 export class AuthController {
@@ -73,7 +74,7 @@ export class AuthController {
         const { passwordHash, ...result } = user;
         // Attach per-user credit reset timestamp if present
         const creditResetsRecord = await this.prisma.systemConfig.findUnique({ where: { key: 'user_credit_resets' } });
-        const creditResetAt = (creditResetsRecord?.value as any)?.[user.id] ?? null;
+        const creditResetAt = parseSystemConfigValue<Record<string, string> | null>(creditResetsRecord?.value)?.[user.id] ?? null;
         return { ...result, creditResetAt };
     }
 }
