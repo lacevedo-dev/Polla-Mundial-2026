@@ -352,15 +352,18 @@ interface ScoreControlProps {
     onChange: (value: string) => void;
     onAdjust: (delta: number) => void;
     disabled?: boolean;
+    onEnter?: () => void;
+    inputRef?: React.RefObject<HTMLInputElement> | ((el: HTMLInputElement | null) => void);
 }
 
-function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = false }: ScoreControlProps) {
+function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = false, onEnter, inputRef }: ScoreControlProps) {
     const label = `Marcador ${side} para ${teamName}`;
 
     return (
         <>
             {/* Mobile: numeric input only (no +/- buttons) */}
             <input
+                ref={inputRef}
                 type="tel"
                 min={0}
                 max={99}
@@ -369,7 +372,20 @@ function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = fa
                 aria-label={label}
                 disabled={disabled}
                 value={value}
-                onChange={(event) => onChange(event.target.value)}
+                onChange={(event) => {
+                    const newValue = event.target.value;
+                    onChange(newValue);
+                    // Auto-advance cuando ingresa un número válido
+                    if (newValue && /^\d+$/.test(newValue) && onEnter) {
+                        setTimeout(() => onEnter(), 150);
+                    }
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' && onEnter) {
+                        event.preventDefault();
+                        onEnter();
+                    }
+                }}
                 placeholder="0"
                 className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden"
             />
@@ -415,6 +431,147 @@ type InsightsPayload = ReturnType<typeof generateMatchInsights> & {
     insight?: string;
     personalInsight?: string;
 };
+
+interface CompactMatchRowProps {
+    match: MatchViewModel;
+    draft: { home: string; away: string };
+    isExpanded: boolean;
+    isSaving: boolean;
+    isDirty: boolean;
+    canEdit: boolean;
+    onToggleExpand: () => void;
+    onDraftChange: (field: 'home' | 'away', value: string) => void;
+    onSave: () => void;
+    onHomeInputRef: (el: HTMLInputElement | null) => void;
+    onAwayInputRef: (el: HTMLInputElement | null) => void;
+    onHomeEnter: () => void;
+    onAwayEnter: () => void;
+}
+
+function CompactMatchRow({
+    match,
+    draft,
+    isExpanded,
+    isSaving,
+    isDirty,
+    canEdit,
+    onToggleExpand,
+    onDraftChange,
+    onSave,
+    onHomeInputRef,
+    onAwayInputRef,
+    onHomeEnter,
+    onAwayEnter,
+}: CompactMatchRowProps) {
+    return (
+        <div className="overflow-hidden border-b border-slate-100 last:border-b-0">
+            {/* Compact row - one line */}
+            <button
+                type="button"
+                onClick={onToggleExpand}
+                className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-slate-50 active:bg-slate-100 sm:hidden"
+            >
+                <span className="shrink-0 text-[10px] font-black text-slate-500">{formatMatchTime(match.date)}</span>
+
+                {/* Home team */}
+                <div className="flex min-w-0 items-center gap-1">
+                    <img src={match.homeFlag} alt={match.homeTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
+                    <span className="text-[10px] font-black uppercase text-slate-900">{match.homeTeamCode}</span>
+                </div>
+
+                {/* Score or inputs */}
+                {canEdit && isExpanded ? (
+                    <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <input
+                            ref={onHomeInputRef}
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={draft.home}
+                            onChange={(e) => {
+                                onDraftChange('home', e.target.value);
+                                if (e.target.value && /^\d+$/.test(e.target.value)) {
+                                    setTimeout(() => onHomeEnter(), 150);
+                                }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
+                        />
+                        <span className="text-xs font-black text-slate-300">-</span>
+                        <input
+                            ref={onAwayInputRef}
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={draft.away}
+                            onChange={(e) => {
+                                onDraftChange('away', e.target.value);
+                                if (e.target.value && /^\d+$/.test(e.target.value)) {
+                                    setTimeout(() => onAwayEnter(), 150);
+                                }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
+                        />
+                    </div>
+                ) : (
+                    <div className="flex shrink-0 items-center gap-1">
+                        <span className="text-xs font-black text-slate-900">{draft.home || '-'}</span>
+                        <span className="text-xs font-black text-slate-300">-</span>
+                        <span className="text-xs font-black text-slate-900">{draft.away || '-'}</span>
+                    </div>
+                )}
+
+                {/* Away team */}
+                <div className="flex min-w-0 items-center gap-1">
+                    <span className="text-[10px] font-black uppercase text-slate-900">{match.awayTeamCode}</span>
+                    <img src={match.awayFlag} alt={match.awayTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
+                </div>
+
+                {/* Status indicator */}
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {match.saved && (
+                        <CheckCircle2 className="h-4 w-4 text-lime-600" />
+                    )}
+                    {isDirty && !isSaving && (
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                    )}
+                    {isSaving && (
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-lime-600" />
+                    )}
+                    <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                </div>
+            </button>
+
+            {/* Expanded content - only on mobile when expanded */}
+            {isExpanded && (
+                <div className="animate-slideDown border-t border-slate-100 bg-slate-50 px-3 py-2 sm:hidden">
+                    <div className="flex flex-wrap items-center gap-1 text-[9px]">
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 font-bold uppercase text-slate-600">
+                            {toDisplayPhase(match.phase)}
+                        </span>
+                        {match.group && (
+                            <span className="rounded-full bg-white px-2 py-0.5 font-bold uppercase text-slate-500">
+                                Grupo {match.group}
+                            </span>
+                        )}
+                        <span className="text-slate-400">• {summarizeCloseTime(match.date)}</span>
+                        {match.saved && (
+                            <span className="ml-auto font-bold text-lime-600">
+                                ✓ {match.prediction.home}-{match.prediction.away}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Desktop: original full layout */}
+            <div className="hidden sm:block">
+                {/* Your existing desktop match card code */}
+            </div>
+        </div>
+    );
+}
 
 interface SmartInsightsPanelProps {
     match: MatchViewModel;
@@ -776,6 +933,10 @@ const Predictions: React.FC = () => {
     const [insightsError, setInsightsError] = React.useState<string | null>(null);
     const [insightsCollapsed, setInsightsCollapsed] = React.useState<Record<string, boolean>>({});
     const [isSavingAll, setIsSavingAll] = React.useState(false);
+    const [expandedMatches, setExpandedMatches] = React.useState<Set<string>>(new Set());
+    const [speedEntryMode, setSpeedEntryMode] = React.useState(false);
+    const homeInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+    const awayInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
 
     // Dirty detection: open matches whose draft differs from saved prediction
     const dirtyMatchIds = React.useMemo(() =>
@@ -1036,6 +1197,40 @@ const Predictions: React.FC = () => {
         });
     };
 
+    // Helper for auto-advance in speed entry mode
+    const getNextOpenMatch = (currentMatchId: string) => {
+        const currentIndex = filteredMatches.findIndex((m) => m.id === currentMatchId);
+        if (currentIndex === -1) return null;
+
+        for (let i = currentIndex + 1; i < filteredMatches.length; i++) {
+            const m = filteredMatches[i];
+            if (m.status === 'open' || m.status === 'live') return m;
+        }
+        return null;
+    };
+
+    const handleSpeedEntry = async (matchId: string) => {
+        const draft = drafts[matchId];
+        if (!draft || draft.home === '' || draft.away === '') return;
+
+        // Auto-save
+        await handleSave(matchId);
+
+        // Trigger haptic feedback if supported
+        if ('vibrate' in navigator) {
+            navigator.vibrate(50);
+        }
+
+        // Find and focus next match
+        const nextMatch = getNextOpenMatch(matchId);
+        if (nextMatch && speedEntryMode) {
+            setExpandedMatches(new Set([nextMatch.id]));
+            setTimeout(() => {
+                homeInputRefs.current[nextMatch.id]?.focus();
+            }, 250);
+        }
+    };
+
     return (
         <>
         <div className="min-h-screen bg-white pb-24">
@@ -1088,6 +1283,29 @@ const Predictions: React.FC = () => {
 
                 {predictionMode === 'matches' ? (
                     <>
+                        {/* SPEED MODE TOGGLE - Mobile only */}
+                        <div className="flex items-center justify-between gap-2 sm:hidden">
+                            <span className="text-xs font-bold text-slate-600">Modo carga rápida</span>
+                            <button
+                                onClick={() => {
+                                    setSpeedEntryMode(!speedEntryMode);
+                                    if (!speedEntryMode) {
+                                        // Expande el primer partido abierto
+                                        const firstOpen = filteredMatches.find((m) => m.status === 'open' || m.status === 'live');
+                                        if (firstOpen) {
+                                            setExpandedMatches(new Set([firstOpen.id]));
+                                            setTimeout(() => homeInputRefs.current[firstOpen.id]?.focus(), 100);
+                                        }
+                                    } else {
+                                        setExpandedMatches(new Set());
+                                    }
+                                }}
+                                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${speedEntryMode ? 'bg-lime-400' : 'bg-slate-200'}`}
+                            >
+                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${speedEntryMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+
                         {/* SEARCH + PHASE TOGGLE - Optimized for mobile */}
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                             {/* Search bar - full width on mobile */}
@@ -1209,11 +1427,46 @@ const Predictions: React.FC = () => {
                                                     handleDraftChange(match.id, field, String(n));
                                                 };
 
+                                                const isExpanded = expandedMatches.has(match.id);
+
                                                 return (
-                                                    <div
-                                                        key={match.id}
-                                                        className={`border-l-4 transition-colors ${isNext ? 'border-l-lime-400 bg-lime-50/30' : 'border-l-transparent'}`}
-                                                    >
+                                                    <React.Fragment key={match.id}>
+                                                        {/* Mobile: Compact row */}
+                                                        <div className="sm:hidden">
+                                                            <CompactMatchRow
+                                                                match={match}
+                                                                draft={draft}
+                                                                isExpanded={isExpanded}
+                                                                isSaving={isSaving}
+                                                                isDirty={isDirty}
+                                                                canEdit={canEdit}
+                                                                onToggleExpand={() => {
+                                                                    const newExpanded = new Set(expandedMatches);
+                                                                    if (isExpanded) {
+                                                                        newExpanded.delete(match.id);
+                                                                    } else {
+                                                                        if (!speedEntryMode) {
+                                                                            newExpanded.add(match.id);
+                                                                        } else {
+                                                                            // En speed mode, solo uno expandido
+                                                                            newExpanded.clear();
+                                                                            newExpanded.add(match.id);
+                                                                            setTimeout(() => homeInputRefs.current[match.id]?.focus(), 100);
+                                                                        }
+                                                                    }
+                                                                    setExpandedMatches(newExpanded);
+                                                                }}
+                                                                onDraftChange={handleDraftChange.bind(null, match.id)}
+                                                                onSave={() => handleSave(match.id)}
+                                                                onHomeInputRef={(el) => (homeInputRefs.current[match.id] = el)}
+                                                                onAwayInputRef={(el) => (awayInputRefs.current[match.id] = el)}
+                                                                onHomeEnter={() => awayInputRefs.current[match.id]?.focus()}
+                                                                onAwayEnter={() => handleSpeedEntry(match.id)}
+                                                            />
+                                                        </div>
+
+                                                        {/* Desktop: Full card */}
+                                                        <div className={`hidden border-l-4 transition-colors sm:block ${isNext ? 'border-l-lime-400 bg-lime-50/30' : 'border-l-transparent'}`}>
                                                         {/* Main row */}
                                                         <div className="space-y-2.5 px-3 py-3 sm:space-y-3 sm:px-5">
                                                             <div className="flex items-start justify-between gap-2">
@@ -1425,7 +1678,8 @@ const Predictions: React.FC = () => {
                                                                 onDismissLock={() => setInsightsLocked(false)}
                                                             />
                                                         ) : null}
-                                                    </div>
+                                                        </div>
+                                                    </React.Fragment>
                                                 );
                                             })}
                                         </div>
