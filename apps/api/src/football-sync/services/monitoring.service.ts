@@ -129,8 +129,8 @@ export class MonitoringService {
   async getSyncHistory(
     filter: SyncHistoryFilterDto,
   ): Promise<SyncHistoryResponseDto> {
-    const page = filter.page ?? 1;
-    const limit = filter.limit ?? 20;
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: any = {};
