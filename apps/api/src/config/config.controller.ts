@@ -29,7 +29,7 @@ export class ConfigController {
 
         for (const plan of ['FREE', 'GOLD', 'DIAMOND']) {
             const saved = configs.find((c) => c.key === `plan:${plan}`);
-            const planData = saved?.value as Record<string, unknown> | null;
+            const planData = saved?.value as any;
             const defaults = PLAN_DEFAULTS[plan];
             result[plan] = {
                 siCredits:       typeof planData?.siCredits === 'number'       ? planData.siCredits       : defaults.siCredits,
@@ -40,7 +40,7 @@ export class ConfigController {
         }
 
         const resetRecord = configs.find((c) => c.key === 'si_credits_reset');
-        const creditsResetAt = (resetRecord?.value as Record<string, unknown> | null)?.resetAt as string | null ?? null;
+        const creditsResetAt = (resetRecord?.value as any)?.resetAt as string | null ?? null;
 
         return { ...result, _meta: { creditsResetAt } };
     }

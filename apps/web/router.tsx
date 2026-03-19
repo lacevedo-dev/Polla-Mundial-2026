@@ -17,6 +17,11 @@ const AdminPlans = React.lazy(() => import('./views/admin/AdminPlans'));
 const AdminAffiliations = React.lazy(() => import('./views/admin/AdminAffiliations'));
 const AdminPredictions = React.lazy(() => import('./views/admin/AdminPredictions'));
 const AdminSettings = React.lazy(() => import('./views/admin/AdminSettings'));
+const FootballSyncDashboard = React.lazy(() => import('./views/admin/FootballSyncDashboard'));
+const FootballSyncConfig = React.lazy(() => import('./views/admin/FootballSyncConfig'));
+const FootballSyncHistory = React.lazy(() => import('./views/admin/FootballSyncHistory'));
+const FootballSyncAlerts = React.lazy(() => import('./views/admin/FootballSyncAlerts'));
+const FootballSyncStats = React.lazy(() => import('./views/admin/FootballSyncStats'));
 
 // Vistas públicas - static imports (critical path)
 import Landing from './views/Landing';
@@ -83,6 +88,11 @@ const adminRoutes: RouteObject[] = [
     { path: '/admin/affiliations', element: <Suspense fallback={<LoadingFallback />}><AdminAffiliations /></Suspense> },
     { path: '/admin/predictions', element: <Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense> },
     { path: '/admin/settings', element: <Suspense fallback={<LoadingFallback />}><AdminSettings /></Suspense> },
+    { path: '/admin/football-sync', element: <Suspense fallback={<LoadingFallback />}><FootballSyncDashboard /></Suspense> },
+    { path: '/admin/football-sync/config', element: <Suspense fallback={<LoadingFallback />}><FootballSyncConfig /></Suspense> },
+    { path: '/admin/football-sync/history', element: <Suspense fallback={<LoadingFallback />}><FootballSyncHistory /></Suspense> },
+    { path: '/admin/football-sync/alerts', element: <Suspense fallback={<LoadingFallback />}><FootballSyncAlerts /></Suspense> },
+    { path: '/admin/football-sync/stats', element: <Suspense fallback={<LoadingFallback />}><FootballSyncStats /></Suspense> },
 ];
 
 export { resolveDevelopmentSurfaceFlags } from './runtime-flags';

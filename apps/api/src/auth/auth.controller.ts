@@ -73,7 +73,7 @@ export class AuthController {
         const { passwordHash, ...result } = user;
         // Attach per-user credit reset timestamp if present
         const creditResetsRecord = await this.prisma.systemConfig.findUnique({ where: { key: 'user_credit_resets' } });
-        const creditResetAt = (creditResetsRecord?.value as Record<string, string> | null)?.[user.id] ?? null;
+        const creditResetAt = (creditResetsRecord?.value as any)?.[user.id] ?? null;
         return { ...result, creditResetAt };
     }
 }

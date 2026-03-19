@@ -26,7 +26,7 @@ export class AdminSettingsController {
                 systemPrompt: '',
             };
         }
-        const value = record.value as Record<string, unknown>;
+        const value = record.value as any;
 
         // Support legacy single apiKey and new apiKeys array
         const rawKeys: string[] = Array.isArray(value.apiKeys)
@@ -69,7 +69,7 @@ export class AdminSettingsController {
         systemPrompt: string;
     }) {
         const existing = await this.adminService.getSystemConfig('ai_config');
-        const existingValue = existing?.value as Record<string, unknown> | null;
+        const existingValue = existing?.value as any;
 
         // Load existing unmasked keys for resolution
         const existingKeys: string[] = Array.isArray(existingValue?.apiKeys)

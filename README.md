@@ -106,6 +106,14 @@ When shipping scoring or schema-sensitive changes, deploy in this order:
    - If any checklist step is missed during a release incident, treat it as a process defect.
    - Update this checklist before the next deployment window.
 
+## Football Sync: Sincronización Automática con API-Football
+
+Integración con API-Football para actualización automática de resultados con optimización adaptativa (límite 100 requests/día).
+
+**Setup**: Obtener API key en https://www.api-football.com/ y configurar `API_FOOTBALL_KEY` en `apps/api/.env`
+
+**Documentación**: Ver [`docs/FOOTBALL_SYNC.md`](./docs/FOOTBALL_SYNC.md) para guía completa
+
 ## API 502 Incident Response (Runbook)
 
 When production API endpoints return `502`, execute this triage checklist before closing the incident:

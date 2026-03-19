@@ -50,7 +50,7 @@ export class InsightsService {
     async getAiConfig(): Promise<AiConfig | null> {
         const record = await this.prisma.systemConfig.findUnique({ where: { key: 'ai_config' } });
         if (!record) return null;
-        const value = record.value as Record<string, unknown>;
+        const value = record.value as any;
 
         // Support legacy single apiKey and new apiKeys array
         const apiKeys: string[] = Array.isArray(value.apiKeys)
@@ -145,7 +145,7 @@ export class InsightsService {
         try {
             const record = await this.prisma.systemConfig.findUnique({ where: { key: 'ai_config' } });
             if (!record) return;
-            const value = record.value as Record<string, unknown>;
+            const value = record.value as any;
             await this.prisma.systemConfig.update({
                 where: { key: 'ai_config' },
                 data: { value: { ...value, activeKeyIndex: newIndex } as object },

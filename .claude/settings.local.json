@@ -7,7 +7,24 @@
       "mcp__engram__mem_context",
       "mcp__engram__mem_search",
       "mcp__engram__mem_get_observation",
-      "Read(//c/Users/lacev/.claude/**)"
+      "Read(//c/Users/lacev/.claude/**)",
+      "Bash(npm cache clean --force)",
+      "Bash(npm install)",
+      "Bash(npm install @nestjs/axios @nestjs/schedule @nestjs/config axios)",
+      "Bash(npm install --legacy-peer-deps)",
+      "Bash(npx prisma migrate dev --name add_football_sync_tables --skip-generate)",
+      "Bash(npx prisma migrate dev --name add_football_sync_tables --create-only)",
+      "Bash(npx prisma generate)",
+      "Bash(npm run build)",
+      "Bash(npx tsc --noEmit services/*.ts)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(test -d node_modules/@nestjs/axios)",
+      "Bash(test -f apps/api/.env)",
+      "Bash(npx prisma db pull)",
+      "Bash(npx tsc --noEmit src/football-sync/**/*.ts)",
+      "Bash(npm run start:dev)",
+      "Bash(curl -s http://localhost:3004/health/live)",
+      "Bash(npx tsc --noEmit src/views/admin/Football*.tsx src/types/football-sync.ts src/stores/football-sync.store.ts)"
     ]
   }
 }

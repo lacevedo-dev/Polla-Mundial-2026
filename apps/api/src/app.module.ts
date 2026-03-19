@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -18,9 +19,14 @@ import { HealthModule } from './health/health.module';
 import { AdminModule } from './admin/admin.module';
 import { ConfigModule } from './config/config.module';
 import { InsightsModule } from './insights/insights.module';
+import { FootballSyncModule } from './football-sync/football-sync.module';
 
 @Module({
   imports: [
+    NestConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
@@ -40,6 +46,7 @@ import { InsightsModule } from './insights/insights.module';
     PrismaModule,
     CommonModule,
     HealthModule,
+    FootballSyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],
