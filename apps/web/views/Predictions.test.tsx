@@ -86,16 +86,35 @@ describe('Predictions view', () => {
         fetchMyLeaguesMock.mockResolvedValue(undefined);
         fetchLeagueMatchesMock.mockResolvedValue(undefined);
         savePredictionMock.mockResolvedValue(undefined);
-        requestMock.mockResolvedValue({
-            homeWin: 52,
-            draw: 23,
-            awayWin: 25,
-            homeForm: ['W', 'W', 'D', 'L', 'W'],
-            awayForm: ['L', 'D', 'L', 'W', 'L'],
-            scores: ['2-0', '1-1', '2-1'],
-            smartPick: 'Colombia',
-            insight: 'Colombia se hace fuerte en casa y llega con mejor forma reciente.',
-            personalInsight: 'La presión alta favorece al local en el primer tiempo.',
+        requestMock.mockImplementation(async (url: string) => {
+            if (url === '/ai-credits/summary') {
+                return {
+                    totalCredits: 3,
+                    usedCredits: 0,
+                    remainingCredits: 3,
+                    plan: 'FREE',
+                    lastResetAt: '2026-03-19T00:00:00.000Z',
+                };
+            }
+
+            if (url === '/ai-credits/consume') {
+                return {
+                    success: true,
+                    remainingCredits: 2,
+                };
+            }
+
+            return {
+                homeWin: 52,
+                draw: 23,
+                awayWin: 25,
+                homeForm: ['W', 'W', 'D', 'L', 'W'],
+                awayForm: ['L', 'D', 'L', 'W', 'L'],
+                scores: ['2-0', '1-1', '2-1'],
+                smartPick: 'Colombia',
+                insight: 'Colombia se hace fuerte en casa y llega con mejor forma reciente.',
+                personalInsight: 'La presión alta favorece al local en el primer tiempo.',
+            };
         });
     });
 
@@ -151,5 +170,23 @@ describe('Predictions view', () => {
 
         await user.click(screen.getByRole('button', { name: /Ver detalle de Smart Insights para Colombia vs México/i }));
         expect(screen.getByText(/Sugerencias automáticas/i)).toBeInTheDocument();
+    });
+
+    it('registers and consumes an AI credit when fetching match insights', async () => {
+        const user = userEvent.setup();
+        renderWithRouter();
+
+        await waitFor(() => expect(fetchLeagueMatchesMock).toHaveBeenCalled());
+        await user.click(screen.getByRole('button', { name: /Ver Smart Insights para Colombia vs/i }));
+
+        await waitFor(() =>
+            expect(requestMock).toHaveBeenCalledWith(
+                '/ai-credits/consume',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: expect.stringContaining('"feature":"match_insights"'),
+                }),
+            ),
+        );
     });
 });

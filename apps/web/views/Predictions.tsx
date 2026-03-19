@@ -25,7 +25,6 @@ import {
 import { useNavigate, useBlocker } from 'react-router-dom';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
-import { useConfigStore } from '../stores/config.store';
 import { useAuthStore } from '../stores/auth.store';
 import { useAiCredits } from '../hooks/useAiCredits';
 
@@ -122,65 +121,6 @@ function summarizeCloseTime(matchDate: string): string {
 
     const totalMinutes = Math.max(1, Math.floor(diffMs / (1000 * 60)));
     return `${totalMinutes}m`;
-}
-
-// Smart Insights credit caps — fallback values used before config loads from /config/plans.
-// The admin configures actual values via the Admin Panel → Planes.
-const SI_PLAN_CREDITS_FALLBACK: Record<string, number> = {
-    FREE: 3,
-    GOLD: 30,
-    DIAMOND: 100,
-};
-
-function getSiCreditKey(plan: string): string {
-    return `polla_si_credits_${plan.toUpperCase()}`;
-}
-
-function getSiCredits(plan: string, cap: number): number {
-    try {
-        const stored = localStorage.getItem(getSiCreditKey(plan));
-        if (stored === null) return cap;
-        try {
-            const parsed = JSON.parse(stored) as { credits: number; cap: number };
-            if (parsed && typeof parsed === 'object' && 'cap' in parsed) {
-                // If admin changed the cap, reset credits to the new cap
-                if (parsed.cap !== cap) return cap;
-                return Number.isNaN(parsed.credits) ? cap : Math.max(0, parsed.credits);
-            }
-        } catch { /* fall through to legacy parse */ }
-        // Legacy: plain number stored
-        const n = Number.parseInt(stored, 10);
-        return Number.isNaN(n) ? cap : Math.max(0, n);
-    } catch {
-        return cap;
-    }
-}
-
-function consumeSiCredit(plan: string, cap: number): number {
-    try {
-        const next = Math.max(0, getSiCredits(plan, cap) - 1);
-        localStorage.setItem(getSiCreditKey(plan), JSON.stringify({ credits: next, cap, storedAt: new Date().toISOString() }));
-        return next;
-    } catch {
-        return 0;
-    }
-}
-
-function clearSiCreditsIfReset(plan: string, globalResetAt: string | null, userResetAt?: string | null): void {
-    // Use the most recent of the two reset timestamps (global vs per-user)
-    const resetAt = globalResetAt && userResetAt
-        ? (userResetAt > globalResetAt ? userResetAt : globalResetAt)
-        : (userResetAt ?? globalResetAt);
-    if (!resetAt) return;
-    try {
-        const stored = localStorage.getItem(getSiCreditKey(plan));
-        if (!stored) return;
-        const parsed = JSON.parse(stored) as { storedAt?: string };
-        const storedAt = parsed.storedAt ?? '1970-01-01T00:00:00.000Z';
-        if (resetAt > storedAt) {
-            localStorage.removeItem(getSiCreditKey(plan));
-        }
-    } catch { /* ignore */ }
 }
 
 // Persistent cache for AI insights — avoids re-fetching and re-consuming credits.
@@ -1403,8 +1343,6 @@ const Predictions: React.FC = () => {
     const fetchLeagueMatches = usePredictionStore((state) => state.fetchLeagueMatches);
     const savePrediction = usePredictionStore((state) => state.savePrediction);
     const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
-    const getRemoteSiCredits = useConfigStore((state) => state.getSiCredits);
-    const creditsResetAt = useConfigStore((state) => state.creditsResetAt);
     const aiCredits = useAiCredits();
 
     const [drafts, setDrafts] = React.useState<DraftMap>({});
@@ -1443,11 +1381,6 @@ const Predictions: React.FC = () => {
         (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase(),
     [user?.plan, activeLeague?.settings?.plan]);
 
-    const [siCredits, setSiCredits] = React.useState<number>(() => {
-        const plan = (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase();
-        const cap = SI_PLAN_CREDITS_FALLBACK[plan] ?? SI_PLAN_CREDITS_FALLBACK['FREE'];
-        return getSiCredits(plan, cap);
-    });
     const [predictionMode, setPredictionMode] = React.useState<'matches' | 'simulator'>('matches');
     const [simulatorTab, setSimulatorTab] = React.useState<'groups' | 'bracket'>('groups');
     const [activeGroup, setActiveGroup] = React.useState<string>('ALL');
@@ -1480,15 +1413,6 @@ const Predictions: React.FC = () => {
     React.useEffect(() => {
         setDrafts(buildDrafts(matches));
     }, [matches]);
-
-    // Sync credits when user plan, active league, remote config, or reset changes
-    React.useEffect(() => {
-        clearSiCreditsIfReset(resolvedPlan, creditsResetAt, user?.creditResetAt);
-        const cap = getRemoteSiCredits(resolvedPlan);
-        setSiCredits(getSiCredits(resolvedPlan, cap));
-        setAnalysisMatchId(null);
-        setInsightsLocked(false);
-    }, [resolvedPlan, getRemoteSiCredits, creditsResetAt, user?.creditResetAt]);
 
     const filteredMatches = React.useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -2052,8 +1976,6 @@ const Predictions: React.FC = () => {
                                                                 onAwayEnter={() => handleSpeedEntry(match.id)}
                                                                 onRequestInsights={async () => {
                                                                     setInsightsError(null);
-                                                                    const leaguePlan = resolvedPlan;
-                                                                    const cap = getRemoteSiCredits(leaguePlan);
                                                                     const cached = getCachedInsights(match.id) ?? insightsData[match.id];
 
                                                                     if (cached) {
@@ -2156,8 +2078,6 @@ const Predictions: React.FC = () => {
 
                                                                             setInsightsError(null);
 
-                                                                            const leaguePlan = resolvedPlan;
-                                                                            const cap = getRemoteSiCredits(leaguePlan);
                                                                             const cached = getCachedInsights(match.id) ?? insightsData[match.id];
                                                                             if (cached) {
                                                                                 setInsightsCollapsed((prev) => ({ ...prev, [match.id]: prev[match.id] ?? true }));
@@ -2166,7 +2086,7 @@ const Predictions: React.FC = () => {
                                                                                 return;
                                                                             }
 
-                                                                            if (siCredits === 0) {
+                                                                            if (!aiCredits.hasCredits) {
                                                                                 setInsightsCollapsed((prev) => ({ ...prev, [match.id]: prev[match.id] ?? true }));
                                                                                 setInsightsLocked(true);
                                                                                 setAnalysisMatchId(match.id);
@@ -2191,9 +2111,28 @@ const Predictions: React.FC = () => {
                                                                                         }),
                                                                                     },
                                                                                 );
+
+                                                                                const creditResult = await aiCredits.consumeCredits({
+                                                                                    leagueId: activeLeague?.id,
+                                                                                    matchId: match.id,
+                                                                                    feature: 'match_insights',
+                                                                                    requestData: {
+                                                                                        homeTeam: match.homeTeam,
+                                                                                        awayTeam: match.awayTeam,
+                                                                                        phase: match.phase,
+                                                                                        group: match.group,
+                                                                                    },
+                                                                                    responseData: result,
+                                                                                    insightGenerated: true,
+                                                                                    clientInfo: `Match: ${match.homeTeam} vs ${match.awayTeam}`,
+                                                                                });
+
+                                                                                if (!creditResult.success) {
+                                                                                    throw new Error(creditResult.error || 'No se pudo registrar el consumo del crédito');
+                                                                                }
+
                                                                                 setCachedInsights(match.id, result);
                                                                                 setInsightsData((prev) => ({ ...prev, [match.id]: result }));
-                                                                                setSiCredits(consumeSiCredit(leaguePlan, cap));
                                                                             } catch (err) {
                                                                                 const msg = err instanceof Error ? err.message : String(err);
                                                                                 setInsightsError(msg);
