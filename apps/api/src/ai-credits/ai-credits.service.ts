@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaClient, Plan } from '@prisma/client';
+import { Plan } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 const PLAN_CREDITS: Record<Plan, number> = {
     FREE: 3,
@@ -29,7 +30,7 @@ export interface CreditSummary {
 
 @Injectable()
 export class AiCreditsService {
-    constructor(private readonly prisma: PrismaClient) {}
+    constructor(private readonly prisma: PrismaService) {}
 
     /**
      * Obtiene el resumen de créditos de un usuario

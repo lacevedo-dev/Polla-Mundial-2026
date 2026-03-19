@@ -1,17 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AiCreditsController } from './ai-credits.controller';
 import { AiCreditsService } from './ai-credits.service';
-import { PrismaClient } from '@prisma/client';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
+    imports: [PrismaModule],
     controllers: [AiCreditsController],
-    providers: [
-        AiCreditsService,
-        {
-            provide: PrismaClient,
-            useValue: new PrismaClient(),
-        },
-    ],
+    providers: [AiCreditsService],
     exports: [AiCreditsService],
 })
 export class AiCreditsModule {}
