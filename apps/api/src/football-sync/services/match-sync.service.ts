@@ -8,6 +8,7 @@ import { MatchStatus, Prisma, Team } from '@prisma/client';
 import {
   ApiFootballFixture,
   ApiFootballFixtureTeam,
+  MatchLinkCandidateDto,
   TeamCatalogBackfillResultDto,
 } from '../dto/api-football.dto';
 import {
@@ -434,6 +435,40 @@ export class MatchSyncService {
     this.logger.log(`Linked match ${matchId} to fixture ${externalId}`);
   }
 
+  async findLinkCandidates(matchId: string): Promise<MatchLinkCandidateDto[]> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+      },
+    });
+
+    if (!match) {
+      throw new Error('Partido no encontrado');
+    }
+
+    if (!(await this.rateLimiter.canMakeRequest())) {
+      throw new Error('No hay requests disponibles para consultar candidatos');
+    }
+
+    const matchDate = match.matchDate.toISOString().split('T')[0];
+    const response = await this.apiClient.getFixturesByDate(matchDate);
+
+    await this.rateLimiter.logRequest(
+      '/fixtures',
+      { date: matchDate, source: 'match-link-candidates', matchId },
+      200,
+      response.results,
+    );
+
+    return response.response
+      .map((fixture) => this.scoreFixtureCandidate(match, fixture))
+      .filter((candidate) => candidate.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 8);
+  }
+
   /**
    * Sync a specific match by ID
    */
@@ -477,5 +512,72 @@ export class MatchSyncService {
       this.logger.error(`Failed to sync match ${matchId}: ${error.message}`);
       return false;
     }
+  }
+
+  private scoreFixtureCandidate(
+    match: {
+      id: string;
+      matchDate: Date;
+      homeTeam: Team;
+      awayTeam: Team;
+    },
+    fixture: ApiFootballFixture,
+  ): MatchLinkCandidateDto {
+    let score = 0;
+    const reasons: string[] = [];
+
+    if (match.homeTeam.apiFootballTeamId === fixture.teams.home.id) {
+      score += 60;
+      reasons.push('Equipo local coincide por apiFootballTeamId');
+    } else if (
+      this.normalizeKey(match.homeTeam.name) ===
+      this.normalizeKey(fixture.teams.home.name)
+    ) {
+      score += 35;
+      reasons.push('Equipo local coincide por nombre');
+    }
+
+    if (match.awayTeam.apiFootballTeamId === fixture.teams.away.id) {
+      score += 60;
+      reasons.push('Equipo visitante coincide por apiFootballTeamId');
+    } else if (
+      this.normalizeKey(match.awayTeam.name) ===
+      this.normalizeKey(fixture.teams.away.name)
+    ) {
+      score += 35;
+      reasons.push('Equipo visitante coincide por nombre');
+    }
+
+    const localKickoff = match.matchDate.getTime();
+    const fixtureKickoff = new Date(fixture.fixture.date).getTime();
+    const diffMinutes = Math.abs(localKickoff - fixtureKickoff) / (1000 * 60);
+
+    if (diffMinutes <= 30) {
+      score += 20;
+      reasons.push('Hora de inicio muy cercana');
+    } else if (diffMinutes <= 120) {
+      score += 10;
+      reasons.push('Hora de inicio razonablemente cercana');
+    } else if (diffMinutes <= 360) {
+      score += 5;
+      reasons.push('Mismo día con ventana horaria compatible');
+    }
+
+    const confidence: 'high' | 'medium' | 'low' =
+      score >= 120 ? 'high' : score >= 70 ? 'medium' : 'low';
+
+    return {
+      fixtureId: fixture.fixture.id.toString(),
+      kickoff: fixture.fixture.date,
+      status: fixture.fixture.status.long,
+      leagueName: fixture.league.name,
+      round: fixture.league.round,
+      venue: fixture.fixture.venue.name ?? undefined,
+      homeTeam: fixture.teams.home.name,
+      awayTeam: fixture.teams.away.name,
+      confidence,
+      score,
+      reasons,
+    };
   }
 }

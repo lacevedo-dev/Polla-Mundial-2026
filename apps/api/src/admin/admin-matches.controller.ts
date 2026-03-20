@@ -8,6 +8,7 @@ import { IsOptional, IsEnum, IsString, IsNumber, IsDateString } from 'class-vali
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { MatchesService } from '../matches/matches.service';
 
@@ -34,6 +35,8 @@ export class AdminUpdateMatchDto {
     @IsOptional() @IsEnum(MatchStatus) status?: MatchStatus;
     @IsOptional() @IsString() venue?: string;
     @IsOptional() @IsString() group?: string;
+    @IsOptional() @IsString() externalId?: string;
+    @IsOptional() @IsString() linkSource?: 'manual' | 'suggested';
 }
 
 @ApiTags('admin')
@@ -47,6 +50,15 @@ export class AdminMatchesController {
         private readonly matchesService: MatchesService,
     ) {}
 
+    private parseAuditDetail(detail?: string | null) {
+        if (!detail) return null;
+        try {
+            return JSON.parse(detail);
+        } catch {
+            return null;
+        }
+    }
+
     @Get()
     @ApiOperation({ summary: 'List all matches' })
     async findAll(
@@ -54,25 +66,116 @@ export class AdminMatchesController {
         @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
         @Query('phase') phase?: Phase,
         @Query('status') status?: MatchStatus,
+        @Query('linked') linked?: string,
+        @Query('risk') risk?: 'blocked' | 'failing' | 'healthy',
+        @Query('linkSource') linkSource?: 'manual' | 'suggested',
     ) {
         const skip = (page - 1) * limit;
+        const linkSourceMatchIds = linkSource
+            ? Array.from(new Set(
+                (await this.prisma.auditLog.findMany({
+                    where: {
+                        action: 'MATCH_EXTERNAL_LINK_UPDATED',
+                        detail: {
+                            contains: `"linkSource":"${linkSource}"`,
+                        },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    select: { detail: true },
+                }))
+                    .map((audit) => this.parseAuditDetail(audit.detail)?.matchId as string | undefined)
+                    .filter(Boolean),
+            ))
+            : null;
+
         const where: any = {
             ...(phase && { phase }),
             ...(status && { status }),
+            ...(linked === 'true' ? { NOT: { externalId: null } } : {}),
+            ...(linked === 'false' ? { externalId: null } : {}),
+            ...(risk === 'blocked' ? { externalId: null } : {}),
+            ...(risk === 'failing' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'FAILED' } } } : {}),
+            ...(risk === 'healthy' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'SUCCESS' } } } : {}),
+            ...(linkSource ? { id: { in: linkSourceMatchIds?.length ? linkSourceMatchIds : ['__none__'] } } : {}),
         };
 
-        const [data, total] = await Promise.all([
+        const [data, total, summaryMatches] = await Promise.all([
             this.prisma.match.findMany({
                 where,
                 skip,
                 take: limit,
                 orderBy: { matchDate: 'asc' },
-                include: { homeTeam: true, awayTeam: true },
+                include: {
+                    homeTeam: true,
+                    awayTeam: true,
+                    syncLogs: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                    },
+                },
             }),
             this.prisma.match.count({ where }),
+            this.prisma.match.findMany({
+                where,
+                select: {
+                    id: true,
+                    externalId: true,
+                    syncLogs: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        select: { status: true },
+                    },
+                },
+            }),
         ]);
 
-        return { data, total, page, limit };
+        const latestLinkAudits = data.length
+            ? await this.prisma.auditLog.findMany({
+                where: {
+                    action: 'MATCH_EXTERNAL_LINK_UPDATED',
+                    OR: data.map((match) => ({
+                        detail: {
+                            contains: `"matchId":"${match.id}"`,
+                        },
+                    })),
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { detail: true, createdAt: true },
+            })
+            : [];
+
+        const latestLinkSourceByMatch = new Map<string, 'manual' | 'suggested'>();
+        for (const audit of latestLinkAudits) {
+            const detail = this.parseAuditDetail(audit.detail);
+            if (!detail?.matchId || latestLinkSourceByMatch.has(detail.matchId)) continue;
+            if (detail?.linkSource === 'manual' || detail?.linkSource === 'suggested') {
+                latestLinkSourceByMatch.set(detail.matchId, detail.linkSource);
+            }
+        }
+
+        const summary = summaryMatches.reduce((acc, match) => {
+            const latestStatus = match.syncLogs[0]?.status ?? null;
+            if (!match.externalId) acc.blocked += 1;
+            else if (latestStatus === 'FAILED') acc.failing += 1;
+            else if (latestStatus === 'SUCCESS') acc.healthy += 1;
+            else acc.pending += 1;
+            return acc;
+        }, { blocked: 0, failing: 0, healthy: 0, pending: 0 });
+
+        return {
+            data: data.map(({ syncLogs, ...match }) => ({
+                ...match,
+                lastSyncStatus: syncLogs[0]?.status ?? null,
+                lastSyncMessage: syncLogs[0]?.message ?? null,
+                lastSyncError: syncLogs[0]?.error ?? null,
+                lastSyncTriggeredBy: syncLogs[0]?.triggeredBy ?? null,
+                currentLinkSource: latestLinkSourceByMatch.get(match.id) ?? null,
+            })),
+            total,
+            summary,
+            page,
+            limit,
+        };
     }
 
     @Post()
@@ -83,14 +186,49 @@ export class AdminMatchesController {
 
     @Patch(':id')
     @ApiOperation({ summary: 'Update match details' })
-    async update(@Param('id') id: string, @Body() dto: AdminUpdateMatchDto) {
+    async update(@Param('id') id: string, @Body() dto: AdminUpdateMatchDto, @CurrentUser() user: { id?: string }) {
         const match = await this.prisma.match.findUnique({ where: { id } });
         if (!match) throw new NotFoundException('Partido no encontrado');
-        return this.prisma.match.update({
+        const data = {
+            ...dto,
+            ...(dto.externalId !== undefined ? { externalId: dto.externalId.trim() || null } : {}),
+        };
+        const updatedMatch = await this.prisma.match.update({
             where: { id },
-            data: dto as any,
-            include: { homeTeam: true, awayTeam: true },
+            data: data as any,
+            include: {
+                homeTeam: true,
+                awayTeam: true,
+                syncLogs: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+            },
         });
+
+        if (dto.externalId !== undefined && match.externalId !== updatedMatch.externalId && user?.id) {
+            await this.prisma.auditLog.create({
+                data: {
+                    userId: user.id,
+                    action: updatedMatch.externalId ? 'MATCH_EXTERNAL_LINK_UPDATED' : 'MATCH_EXTERNAL_LINK_REMOVED',
+                    detail: JSON.stringify({
+                        matchId: id,
+                        previousExternalId: match.externalId,
+                        externalId: updatedMatch.externalId,
+                        linkSource: dto.linkSource ?? 'manual',
+                    }),
+                },
+            });
+        }
+
+        const { syncLogs, ...matchWithoutLogs } = updatedMatch;
+        return {
+            ...matchWithoutLogs,
+            lastSyncStatus: syncLogs[0]?.status ?? null,
+            lastSyncMessage: syncLogs[0]?.message ?? null,
+            lastSyncError: syncLogs[0]?.error ?? null,
+            lastSyncTriggeredBy: syncLogs[0]?.triggeredBy ?? null,
+        };
     }
 
     @Patch(':id/score')
@@ -121,5 +259,53 @@ export class AdminMatchesController {
             },
             orderBy: { submittedAt: 'desc' },
         });
+    }
+
+    @Get(':id/sync-history')
+    @ApiOperation({ summary: 'Get sync and link history for a match' })
+    async getMatchSyncHistory(@Param('id') id: string) {
+        const match = await this.prisma.match.findUnique({ where: { id } });
+        if (!match) throw new NotFoundException('Partido no encontrado');
+
+        const [syncLogs, auditLogs] = await Promise.all([
+            this.prisma.footballSyncLog.findMany({
+                where: { matchId: id },
+                orderBy: { createdAt: 'desc' },
+                take: 8,
+            }),
+            this.prisma.auditLog.findMany({
+                where: {
+                    action: {
+                        in: ['MATCH_EXTERNAL_LINK_UPDATED', 'MATCH_EXTERNAL_LINK_REMOVED'],
+                    },
+                    detail: {
+                        contains: `"matchId":"${id}"`,
+                    },
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 5,
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                        },
+                    },
+                },
+            }),
+        ]);
+
+        return {
+            syncLogs,
+            linkAudit: auditLogs.map((audit) => ({
+                id: audit.id,
+                action: audit.action,
+                detail: audit.detail,
+                detailData: this.parseAuditDetail(audit.detail),
+                createdAt: audit.createdAt,
+                user: audit.user,
+            })),
+        };
     }
 }

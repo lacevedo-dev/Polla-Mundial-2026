@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { request } from '../api';
+import type { FootballMatchLinkCandidate } from '../types/football-sync';
 
 export interface AdminTeam {
     id: string;
@@ -19,8 +20,51 @@ export interface AdminMatch {
     status: string;
     homeScore?: number;
     awayScore?: number;
+    externalId?: string | null;
+    lastSyncAt?: string | null;
+    syncCount?: number;
+    lastSyncStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'SKIPPED' | null;
+    lastSyncMessage?: string | null;
+    lastSyncError?: string | null;
+    lastSyncTriggeredBy?: string | null;
+    currentLinkSource?: 'manual' | 'suggested' | null;
     homeTeam: AdminTeam;
     awayTeam: AdminTeam;
+}
+
+export interface AdminMatchesSummary {
+    blocked: number;
+    failing: number;
+    healthy: number;
+    pending: number;
+}
+
+export interface AdminMatchSyncLog {
+    id: string;
+    status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'SKIPPED';
+    type: string;
+    message: string;
+    error?: string | null;
+    triggeredBy?: string | null;
+    createdAt: string;
+}
+
+export interface AdminMatchLinkAudit {
+    id: string;
+    action: string;
+    detail?: string | null;
+    detailData?: {
+        matchId?: string;
+        previousExternalId?: string | null;
+        externalId?: string | null;
+        linkSource?: 'manual' | 'suggested';
+    } | null;
+    createdAt: string;
+    user?: {
+        id: string;
+        name: string;
+        email: string;
+    } | null;
 }
 
 interface MatchesFilters {
@@ -28,12 +72,16 @@ interface MatchesFilters {
     limit: number;
     phase?: string;
     status?: string;
+    linked?: 'true' | 'false';
+    risk?: 'blocked' | 'failing' | 'healthy';
+    linkSource?: 'manual' | 'suggested';
 }
 
 interface AdminMatchesState {
     matches: AdminMatch[];
     teams: AdminTeam[];
     total: number;
+    summary: AdminMatchesSummary;
     filters: MatchesFilters;
     isLoading: boolean;
     isSaving: boolean;
@@ -44,6 +92,9 @@ interface AdminMatchesState {
     createMatch: (data: Partial<AdminMatch>) => Promise<void>;
     updateMatch: (id: string, data: Partial<AdminMatch>) => Promise<void>;
     updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
+    syncMatch: (id: string) => Promise<void>;
+    fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
+    fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
     deleteMatch: (id: string) => Promise<void>;
     createTeam: (data: Partial<AdminTeam>) => Promise<void>;
     updateTeam: (id: string, data: Partial<AdminTeam>) => Promise<void>;
@@ -54,6 +105,7 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
     matches: [],
     teams: [],
     total: 0,
+    summary: { blocked: 0, failing: 0, healthy: 0, pending: 0 },
     filters: { page: 1, limit: 50 },
     isLoading: false,
     isSaving: false,
@@ -66,11 +118,14 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
             limit: String(filters.limit),
             ...(filters.phase && { phase: filters.phase }),
             ...(filters.status && { status: filters.status }),
+            ...(filters.linked && { linked: filters.linked }),
+            ...(filters.risk && { risk: filters.risk }),
+            ...(filters.linkSource && { linkSource: filters.linkSource }),
         });
         set({ isLoading: true, error: null });
         try {
-            const response = await request<{ data: AdminMatch[]; total: number }>(`/admin/matches?${params}`);
-            set({ matches: response.data, total: response.total, isLoading: false });
+            const response = await request<{ data: AdminMatch[]; total: number; summary: AdminMatchesSummary }>(`/admin/matches?${params}`);
+            set({ matches: response.data, total: response.total, summary: response.summary, isLoading: false });
         } catch (error) {
             set({ isLoading: false, error: error instanceof Error ? error.message : 'Error' });
         }
@@ -127,6 +182,44 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
                 matches: state.matches.map((m) => (m.id === id ? { ...m, ...updated, homeScore, awayScore, status: 'FINISHED' } : m)),
                 isSaving: false,
             }));
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    syncMatch: async (id) => {
+        set({ isSaving: true });
+        try {
+            await request(`/admin/football/sync-match/${id}`, {
+                method: 'POST',
+            });
+            await get().fetchMatches();
+            set({ isSaving: false });
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    fetchLinkCandidates: async (id) => {
+        set({ isSaving: true, error: null });
+        try {
+            const candidates = await request<FootballMatchLinkCandidate[]>(`/admin/football/match/${id}/candidates`);
+            set({ isSaving: false });
+            return candidates;
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    fetchMatchHistory: async (id) => {
+        set({ isSaving: true, error: null });
+        try {
+            const history = await request<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>(`/admin/matches/${id}/sync-history`);
+            set({ isSaving: false });
+            return history;
         } catch (error) {
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;

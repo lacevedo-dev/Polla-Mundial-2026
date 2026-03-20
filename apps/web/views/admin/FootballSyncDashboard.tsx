@@ -1,295 +1,686 @@
-import React, { useEffect } from 'react';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, Clock, Database, TrendingUp, Zap, Settings, History, Bell, BarChart3 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Link2,
+  Loader2,
+  Pause,
+  Play,
+  RefreshCw,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Siren,
+  Sparkles,
+  TimerReset,
+} from 'lucide-react';
 import { useFootballSyncStore } from '../../stores/football-sync.store';
-import AdminStatCard from '../../components/admin/AdminStatCard';
-import { SyncStatusColors, AlertSeverityColors } from '../../types/football-sync';
+import type { FootballMatchLinkCandidate } from '../../types/football-sync';
+
+type DashboardTab = 'overview' | 'actions' | 'activity';
+type ActionState = 'force' | 'toggle' | 'backfill' | null;
+type LinkModalState = { matchId: string; title: string };
+
+const tabs: Array<{ id: DashboardTab; label: string; description: string }> = [
+  { id: 'overview', label: 'Resumen', description: 'Estado general, checklist y bloqueos' },
+  { id: 'actions', label: 'Acciones', description: 'Flujo completo y accesos r·pidos' },
+  { id: 'activity', label: 'Actividad', description: '⁄ltimos eventos y alertas activas' },
+];
+
+const confidenceStyles: Record<FootballMatchLinkCandidate['confidence'], string> = {
+  high: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  medium: 'border-amber-200 bg-amber-50 text-amber-700',
+  low: 'border-slate-200 bg-slate-50 text-slate-600',
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return 'Sin registro';
+  return new Date(value).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const formatRelativeCountdown = (seconds: number) => {
+  if (seconds <= 0) return 'Disponible ahora';
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes === 0) return `${remainingSeconds}s`;
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
+const compactNumber = (value: number) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(value);
 
 const FootballSyncDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { dashboard, isLoading, error, fetchDashboard } = useFootballSyncStore();
+  const {
+    dashboard,
+    config,
+    isLoading,
+    error,
+    fetchDashboard,
+    fetchConfig,
+    forceSync,
+    pauseSync,
+    resumeSync,
+    backfillTeams,
+    fetchLinkCandidates,
+    linkMatch,
+    syncMatch,
+  } = useFootballSyncStore();
+
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [actionState, setActionState] = useState<ActionState>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [linkModal, setLinkModal] = useState<LinkModalState | null>(null);
+  const [candidateState, setCandidateState] = useState({
+    isLoading: false,
+    isSubmitting: false,
+    candidates: [] as FootballMatchLinkCandidate[],
+    selectedExternalId: '',
+    manualExternalId: '',
+    error: null as string | null,
+  });
 
   useEffect(() => {
     fetchDashboard();
-    const interval = setInterval(fetchDashboard, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [fetchDashboard]);
+    fetchConfig();
+  }, [fetchDashboard, fetchConfig]);
+
+  const autoSyncEnabled = config?.autoSyncEnabled ?? dashboard?.readiness.autoSyncEnabled ?? false;
+  const requestsPercentage = dashboard?.todayStats.requestsPercentage ?? 0;
+
+  const readinessItems = useMemo(() => {
+    if (!dashboard) return [];
+
+    return [
+      {
+        label: 'API key configurada',
+        description: dashboard.readiness.apiKeyConfigured
+          ? 'El backend puede consultar API-Football.'
+          : 'Configura API_FOOTBALL_KEY para habilitar la sincronizaciÛn.',
+        ok: dashboard.readiness.apiKeyConfigured,
+      },
+      {
+        label: 'Sistema habilitado',
+        description: dashboard.status.isEnabled
+          ? 'El mÛdulo est· activo y puede ejecutar procesos.'
+          : 'El mÛdulo est· deshabilitado globalmente.',
+        ok: dashboard.status.isEnabled,
+      },
+      {
+        label: 'SincronizaciÛn autom·tica',
+        description: autoSyncEnabled
+          ? 'El scheduler puede ejecutar sincronizaciones programadas.'
+          : 'La sincronizaciÛn autom·tica est· pausada.',
+        ok: autoSyncEnabled,
+      },
+      {
+        label: 'Partidos vinculados hoy',
+        description:
+          dashboard.readiness.todayMatchesTotal > 0
+            ? `${dashboard.readiness.linkedMatchesToday} de ${dashboard.readiness.todayMatchesTotal} partidos ya tienen externalId.`
+            : 'No hay partidos locales programados para hoy.',
+        ok: dashboard.readiness.todayMatchesTotal === 0 || dashboard.readiness.unlinkedMatchesToday === 0,
+      },
+      {
+        label: 'Requests disponibles',
+        description: `${dashboard.readiness.requestsRemaining} disponibles de ${dashboard.todayStats.requestsLimit}.`,
+        ok: dashboard.readiness.requestsRemaining > 0,
+      },
+    ];
+  }, [autoSyncEnabled, dashboard]);
+
+  const metricCards = useMemo(() => {
+    if (!dashboard) return [];
+
+    return [
+      {
+        label: 'Estado',
+        value: dashboard.status.isEnabled ? 'Activo' : 'Pausado',
+        helper: dashboard.status.isEmergencyMode ? 'Modo emergencia' : 'OperaciÛn normal',
+      },
+      {
+        label: 'Requests hoy',
+        value: `${compactNumber(dashboard.todayStats.requestsUsed)} / ${compactNumber(dashboard.todayStats.requestsLimit)}`,
+        helper: `${Math.round(requestsPercentage)}% consumido`,
+      },
+      {
+        label: 'Partidos actualizados',
+        value: compactNumber(dashboard.todayStats.matchesSynced),
+        helper: `${dashboard.todayStats.successfulSyncs} sync OK ∑ ${dashboard.todayStats.failedSyncs} con fallo`,
+      },
+      {
+        label: 'PrÛximo intento',
+        value: formatRelativeCountdown(dashboard.status.nextSyncIn),
+        helper: `⁄ltimo sync: ${formatDateTime(dashboard.status.lastSyncAt)}`,
+      },
+    ];
+  }, [dashboard, requestsPercentage]);
+  const runDashboardAction = async (action: ActionState, callback: () => Promise<void>, successMessage: string) => {
+    try {
+      setActionState(action);
+      setActionFeedback(null);
+      await callback();
+      setActionFeedback({ type: 'success', message: successMessage });
+      await Promise.all([fetchDashboard(), fetchConfig()]);
+    } catch (actionError: any) {
+      setActionFeedback({ type: 'error', message: actionError?.message || 'No se pudo completar la acciÛn.' });
+    } finally {
+      setActionState(null);
+    }
+  };
+
+  const resetLinkFlow = () => {
+    setLinkModal(null);
+    setCandidateState({
+      isLoading: false,
+      isSubmitting: false,
+      candidates: [],
+      selectedExternalId: '',
+      manualExternalId: '',
+      error: null,
+    });
+  };
+
+  const openLinkFlow = async (match: { id: string; homeTeam: string; awayTeam: string }) => {
+    setLinkModal({ matchId: match.id, title: `${match.homeTeam} vs ${match.awayTeam}` });
+    setCandidateState({
+      isLoading: true,
+      isSubmitting: false,
+      candidates: [],
+      selectedExternalId: '',
+      manualExternalId: '',
+      error: null,
+    });
+
+    try {
+      const candidates = await fetchLinkCandidates(match.id);
+      setCandidateState({
+        isLoading: false,
+        isSubmitting: false,
+        candidates,
+        selectedExternalId: candidates[0]?.fixtureId ?? '',
+        manualExternalId: '',
+        error: null,
+      });
+    } catch (lookupError: any) {
+      setCandidateState({
+        isLoading: false,
+        isSubmitting: false,
+        candidates: [],
+        selectedExternalId: '',
+        manualExternalId: '',
+        error: lookupError?.message || 'No se pudieron cargar los candidatos.',
+      });
+    }
+  };
+
+  const handleLinkAndSync = async () => {
+    if (!linkModal) return;
+
+    const externalId = candidateState.manualExternalId.trim() || candidateState.selectedExternalId;
+    if (!externalId) {
+      setCandidateState((current) => ({ ...current, error: 'Selecciona un fixture o ingresa un fixture ID manual.' }));
+      return;
+    }
+
+    try {
+      setCandidateState((current) => ({ ...current, isSubmitting: true, error: null }));
+      await linkMatch(linkModal.matchId, externalId);
+
+      try {
+        await syncMatch(linkModal.matchId);
+        setActionFeedback({ type: 'success', message: `Partido vinculado y sincronizado con fixture ${externalId}.` });
+      } catch (syncError: any) {
+        setActionFeedback({
+          type: 'error',
+          message: syncError?.message || `El partido quedÛ vinculado al fixture ${externalId}, pero la sincronizaciÛn inicial fallÛ.`,
+        });
+      }
+
+      await Promise.all([fetchDashboard(), fetchConfig()]);
+      resetLinkFlow();
+    } catch (linkError: any) {
+      setCandidateState((current) => ({
+        ...current,
+        isSubmitting: false,
+        error: linkError?.message || 'No se pudo vincular el partido seleccionado.',
+      }));
+    }
+  };
 
   if (isLoading && !dashboard) {
     return (
-      <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 bg-slate-200 rounded-[1.75rem] animate-pulse" />
-          ))}
-        </div>
+      <div className="space-y-4 animate-pulse">
+        {[...Array(5)].map((_, index) => (
+          <div key={index} className="h-28 rounded-[1.75rem] bg-slate-200/70" />
+        ))}
       </div>
     );
   }
-
-  if (error) {
-    return (
-      <div className="rounded-[1.75rem] border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        <p className="font-bold">Error al cargar dashboard</p>
-        <p className="text-sm mt-1">{error}</p>
-        <button onClick={fetchDashboard} className="mt-3 text-sm font-bold underline">
-          Reintentar
-        </button>
-      </div>
-    );
-  }
-
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
-
-  const formatNextSync = (seconds: number) => {
-    if (seconds <= 0) return 'Ahora';
-    if (seconds < 60) return `${seconds}s`;
-    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  };
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">
-            Football Sync
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">Monitoreo de sincronizaci√≥n con API-Football</p>
-        </div>
+    <>
+      <div className="space-y-4 pb-6 sm:space-y-5 lg:space-y-6">
+        <header className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-lime-600">Football Sync</p>
+                <h1 className="font-brand text-2xl font-black uppercase tracking-tight text-slate-950 sm:text-3xl">
+                  Centro operativo API-Football
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+                  Este mÛdulo consulta API-Football, sincroniza marcadores, detecta partidos en vivo, actualiza resultados locales y recalcula
+                  puntos cuando un partido termina.
+                </p>
+              </div>
 
-        {/* Status Badge */}
-        <div className={`px-4 py-2 rounded-full text-xs font-bold w-fit ${
-          dashboard?.status.isEmergencyMode
-            ? 'bg-rose-100 text-rose-700 border border-rose-200'
-            : dashboard?.status.isEnabled
-              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-              : 'bg-slate-100 text-slate-600 border border-slate-200'
-        }`}>
-          {dashboard?.status.isEmergencyMode ? 'üö® EMERGENCIA' : dashboard?.status.isEnabled ? '‚úì Activo' : '‚è∏ Pausado'}
-        </div>
-      </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {metricCards.map((metric) => (
+                  <div key={metric.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{metric.label}</p>
+                    <p className="mt-1 text-lg font-black leading-tight text-slate-950 sm:text-xl">{metric.value}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{metric.helper}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-      {/* Quick Navigation */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <button
-          onClick={() => navigate('/admin/football-sync/config')}
-          className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-[1.75rem] hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-medium text-slate-700"
-        >
-          <Settings className="w-4 h-4" />
-          <span>Configuraci√≥n</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/admin/football-sync/history')}
-          className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-[1.75rem] hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-medium text-slate-700"
-        >
-          <History className="w-4 h-4" />
-          <span>Historial</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/admin/football-sync/alerts')}
-          className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-[1.75rem] hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-medium text-slate-700"
-        >
-          <Bell className="w-4 h-4" />
-          <span>Alertas</span>
-          {dashboard && dashboard.activeAlerts.length > 0 && (
-            <span className="px-2 py-0.5 bg-rose-600 text-white text-xs rounded-full font-bold">
-              {dashboard.activeAlerts.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => navigate('/admin/football-sync/stats')}
-          className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-[1.75rem] hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-medium text-slate-700"
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Estad√≠sticas</span>
-        </button>
-      </div>
-
-      {/* Main Stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <AdminStatCard
-          label="Requests Hoy"
-          value={`${dashboard?.todayStats.requestsUsed ?? 0}/${dashboard?.todayStats.requestsLimit ?? 100}`}
-          icon={Database}
-          trend={`${dashboard?.todayStats.requestsPercentage.toFixed(0) ?? 0}% usado`}
-          color={
-            (dashboard?.todayStats.requestsPercentage ?? 0) > 90
-              ? 'rose'
-              : (dashboard?.todayStats.requestsPercentage ?? 0) > 75
-                ? 'amber'
-                : 'lime'
-          }
-        />
-
-        <AdminStatCard
-          label="Partidos Sync"
-          value={dashboard?.todayStats.matchesSynced.toString() ?? '0'}
-          icon={Activity}
-          trend="Hoy"
-          color="blue"
-        />
-
-        <AdminStatCard
-          label="Tasa de √âxito"
-          value={`${dashboard?.todayStats.successfulSyncs ?? 0}/${
-            (dashboard?.todayStats.successfulSyncs ?? 0) + (dashboard?.todayStats.failedSyncs ?? 0)
-          }`}
-          icon={TrendingUp}
-          trend={`${dashboard?.todayStats.failedSyncs ?? 0} fallos`}
-          color={
-            (dashboard?.todayStats.failedSyncs ?? 0) > 0 ? 'amber' : 'lime'
-          }
-        />
-
-        <AdminStatCard
-          label="Pr√≥xima Sync"
-          value={formatNextSync(dashboard?.status.nextSyncIn ?? 0)}
-          icon={Clock}
-          trend={`‚ö° ${formatDuration(dashboard?.todayStats.averageDuration ?? 0)} prom.`}
-          color="purple"
-        />
-      </div>
-
-      {/* Alertas Activas - Mobile Optimized */}
-      {dashboard && dashboard.activeAlerts.length > 0 && (
-        <div className="rounded-[1.75rem] border border-amber-200 bg-amber-50 overflow-hidden">
-          <div className="p-4 border-b border-amber-200 bg-amber-100/50">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-700" />
-              <h2 className="font-bold text-amber-900">
-                {dashboard.activeAlerts.length} Alerta{dashboard.activeAlerts.length > 1 ? 's' : ''} Activa{dashboard.activeAlerts.length > 1 ? 's' : ''}
-              </h2>
+            <div className="grid grid-cols-2 gap-3 sm:w-auto sm:grid-cols-2 xl:min-w-[280px]">
+              <button
+                type="button"
+                onClick={() => runDashboardAction('force', forceSync, 'Se ejecutÛ una sincronizaciÛn manual.')}
+                disabled={actionState !== null}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-lime-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-lime-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {actionState === 'force' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Sync ahora
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/football-sync/config')}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                <Settings2 className="h-4 w-4" />
+                Configurar
+              </button>
             </div>
           </div>
 
-          <div className="divide-y divide-amber-200">
-            {dashboard.activeAlerts.slice(0, 5).map((alert) => (
-              <div key={alert.id} className="p-4 hover:bg-amber-100/30 transition-colors">
-                <div className="flex items-start gap-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                    AlertSeverityColors[alert.severity] || 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {alert.severity}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">
-                      {alert.message}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {new Date(alert.createdAt).toLocaleString('es-CO', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {dashboard.activeAlerts.length > 5 && (
-            <div className="p-3 bg-amber-100/30 text-center">
-              <a href="/admin/football-sync/alerts" className="text-xs font-bold text-amber-700 hover:underline">
-                Ver todas las alertas ({dashboard.activeAlerts.length})
-              </a>
+          {(error || actionFeedback) && (
+            <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${actionFeedback?.type === 'error' || error ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+              {error || actionFeedback?.message}
             </div>
           )}
-        </div>
-      )}
+        </header>
 
-      {/* Recent Logs - Mobile Optimized */}
-      <div className="rounded-[1.75rem] border border-slate-200 bg-white overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-slate-50">
-          <h2 className="font-bold text-slate-900">Sincronizaciones Recientes</h2>
-          <p className="text-xs text-slate-500 mt-0.5">√öltimas 10 operaciones</p>
-        </div>
-
-        <div className="divide-y divide-slate-200">
-          {dashboard?.recentLogs.slice(0, 10).map((log) => (
-            <div key={log.id} className="p-4 hover:bg-slate-50 transition-colors">
-              <div className="flex items-start gap-3">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  SyncStatusColors[log.status] || 'bg-slate-100 text-slate-600'
-                }`}>
-                  {log.status}
-                </span>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900">
-                    {log.message}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-slate-500">
-                    <span>{log.type.replace(/_/g, ' ')}</span>
-                    {log.matchesUpdated > 0 && (
-                      <span>‚Ä¢ {log.matchesUpdated} partidos</span>
-                    )}
-                    {log.requestsUsed > 0 && (
-                      <span>‚Ä¢ {log.requestsUsed} req</span>
-                    )}
-                    {log.duration && (
-                      <span>‚Ä¢ {formatDuration(log.duration)}</span>
-                    )}
+        <section className="rounded-[1.75rem] border border-slate-200 bg-white p-2 shadow-sm sm:p-3">
+          <div role="tablist" aria-label="Secciones de Football Sync" className="grid grid-cols-3 gap-2">
+            {tabs.map((tab) => {
+              const selected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  id={`football-sync-tab-${tab.id}`}
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`football-sync-panel-${tab.id}`}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`rounded-2xl px-3 py-3 text-left transition sm:px-4 ${selected ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
+                >
+                  <span className="block text-sm font-black">{tab.label}</span>
+                  <span className={`mt-1 block text-xs leading-5 ${selected ? 'text-slate-200' : 'text-slate-500'}`}>{tab.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+        {dashboard && (
+          <>
+            {activeTab === 'overview' && (
+              <section id="football-sync-panel-overview" role="tabpanel" aria-labelledby="football-sync-tab-overview" className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="h-5 w-5 text-lime-600" />
+                    <div>
+                      <h2 className="text-lg font-black text-slate-950">QuÈ hace este mÛdulo</h2>
+                      <p className="text-sm text-slate-500">Explica claramente quÈ puede ejecutar hoy y quÈ est· bloqueando la operaciÛn.</p>
+                    </div>
                   </div>
 
-                  <p className="text-xs text-slate-400 mt-1">
-                    {new Date(log.createdAt).toLocaleString('es-CO', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-bold text-slate-800">SincronizaciÛn inteligente</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">Consulta fixtures del dÌa, detecta cambios y actualiza resultados solo cuando hay eventos relevantes o ventanas programadas.</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-bold text-slate-800">Recalculo autom·tico</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">Cuando el partido finaliza, el sistema actualiza el marcador local y recalcula los puntos de las predicciones relacionadas.</p>
+                    </div>
+                  </div>
 
-              {log.error && (
-                <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded-lg">
-                  <p className="text-xs text-rose-700 font-mono truncate">{log.error}</p>
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="h-5 w-5 text-slate-900" />
+                      <div>
+                        <h3 className="text-base font-black text-slate-950">Checklist operativo</h3>
+                        <p className="text-sm text-slate-500">Verifica en segundos si el mÛdulo est· listo para operar.</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {readinessItems.map((item) => (
+                        <div key={item.label} className={`rounded-2xl border px-4 py-3 ${item.ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                          <div className="flex items-start gap-3">
+                            {item.ok ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />}
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                              <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+
+                <aside className="space-y-4">
+                  <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <Siren className="h-5 w-5 text-rose-600" />
+                      <div>
+                        <h2 className="text-lg font-black text-slate-950">Bloqueos operativos</h2>
+                        <p className="text-sm text-slate-500">Motivos por los que el sync puede no ejecutar nada.</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {dashboard.readiness.blockers.length > 0 ? dashboard.readiness.blockers.map((blocker) => (
+                        <div key={blocker} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{blocker}</div>
+                      )) : (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">No hay bloqueos activos. El mÛdulo est· listo para sincronizar.</div>
+                      )}
+                    </div>
+                  </article>
+
+                  <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <Clock3 className="h-5 w-5 text-blue-600" />
+                      <div>
+                        <h2 className="text-lg font-black text-slate-950">Cobertura de hoy</h2>
+                        <p className="text-sm text-slate-500">Cu·ntos partidos pueden sincronizarse realmente.</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
+                          <span>Partidos vinculados</span>
+                          <span>{dashboard.readiness.linkedMatchesToday} / {dashboard.readiness.todayMatchesTotal}</span>
+                        </div>
+                        <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-lime-500 transition-all" style={{ width: `${dashboard.readiness.todayMatchesTotal > 0 ? (dashboard.readiness.linkedMatchesToday / dashboard.readiness.todayMatchesTotal) * 100 : 0}%` }} />
+                        </div>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Sin vincular</dt>
+                          <dd className="mt-1 text-xl font-black text-slate-950">{dashboard.readiness.unlinkedMatchesToday}</dd>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Requests restantes</dt>
+                          <dd className="mt-1 text-xl font-black text-slate-950">{dashboard.readiness.requestsRemaining}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </article>
+                </aside>
+              </section>
+            )}
+
+            {activeTab === 'actions' && (
+              <section id="football-sync-panel-actions" role="tabpanel" aria-labelledby="football-sync-tab-actions" className="grid gap-4 xl:grid-cols-[1fr_0.95fr]">
+                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-slate-950">Acciones r·pidas</h2>
+                      <p className="text-sm text-slate-500">Define lÌmites, activa o pausa el mÛdulo y ejecuta tareas de preparaciÛn sin salir de esta pantalla.</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Flujo completo</span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <button type="button" onClick={() => runDashboardAction('force', forceSync, 'Se lanzÛ una sincronizaciÛn manual.')} disabled={actionState !== null} className="rounded-2xl border border-lime-200 bg-lime-50 p-4 text-left transition hover:bg-lime-100 disabled:opacity-60">
+                      <div className="flex items-center gap-3">
+                        {actionState === 'force' ? <Loader2 className="h-5 w-5 animate-spin text-lime-700" /> : <RefreshCw className="h-5 w-5 text-lime-700" />}
+                        <div>
+                          <p className="text-sm font-black text-slate-950">Ejecutar sync ahora</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">Fuerza una verificaciÛn inmediata del plan, partidos del dÌa y estado actual.</p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button type="button" onClick={() => runDashboardAction('toggle', autoSyncEnabled ? pauseSync : resumeSync, autoSyncEnabled ? 'La sincronizaciÛn autom·tica quedÛ pausada.' : 'La sincronizaciÛn autom·tica quedÛ reanudada.')} disabled={actionState !== null} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition hover:bg-amber-100 disabled:opacity-60">
+                      <div className="flex items-center gap-3">
+                        {actionState === 'toggle' ? <Loader2 className="h-5 w-5 animate-spin text-amber-700" /> : autoSyncEnabled ? <Pause className="h-5 w-5 text-amber-700" /> : <Play className="h-5 w-5 text-amber-700" />}
+                        <div>
+                          <p className="text-sm font-black text-slate-950">{autoSyncEnabled ? 'Pausar auto sync' : 'Reanudar auto sync'}</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">{autoSyncEnabled ? 'Detiene los procesos autom·ticos sin deshabilitar el mÛdulo completo.' : 'Vuelve a permitir que el scheduler ejecute sincronizaciones programadas.'}</p>
+                        </div>
+                      </div>
+                    </button>
+                    <button type="button" onClick={() => runDashboardAction('backfill', backfillTeams, 'Se ejecutÛ el backfill del cat·logo de equipos.')} disabled={actionState !== null} className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-left transition hover:bg-cyan-100 disabled:opacity-60">
+                      <div className="flex items-center gap-3">
+                        {actionState === 'backfill' ? <Loader2 className="h-5 w-5 animate-spin text-cyan-700" /> : <TimerReset className="h-5 w-5 text-cyan-700" />}
+                        <div>
+                          <p className="text-sm font-black text-slate-950">Backfill de equipos</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">Crea o actualiza el cat·logo local para facilitar el vÌnculo entre partidos y fixtures.</p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button type="button" onClick={() => navigate('/admin/football-sync/config')} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100">
+                      <div className="flex items-center gap-3">
+                        <Settings2 className="h-5 w-5 text-slate-700" />
+                        <div>
+                          <p className="text-sm font-black text-slate-950">ConfiguraciÛn avanzada</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">Ajusta lÌmites diarios, intervalos, alertas y reglas del scheduler.</p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </article>
+
+                <div className="space-y-4">
+                  <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <Link2 className="h-5 w-5 text-violet-600" />
+                      <div>
+                        <h2 className="text-lg font-black text-slate-950">Partidos pendientes por vincular</h2>
+                        <p className="text-sm text-slate-500">Desde aquÌ puedes buscar fixture, vincularlo y lanzar la primera sincronizaciÛn.</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {dashboard.readiness.unlinkedMatchesPreview.length > 0 ? dashboard.readiness.unlinkedMatchesPreview.map((match) => (
+                        <div key={match.id} className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-black text-slate-950">{match.homeTeam} vs {match.awayTeam}</p>
+                              <p className="mt-1 text-sm text-slate-600">{formatDateTime(match.matchDate)} ∑ ID local: {match.id}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => openLinkFlow(match)} className="inline-flex items-center gap-1 rounded-full border border-violet-300 bg-white px-3 py-1.5 text-xs font-bold text-violet-700 transition hover:bg-violet-100">
+                                <Search className="h-3.5 w-3.5" />
+                                Buscar fixture
+                              </button>
+                              <button type="button" onClick={() => navigate('/admin/matches')} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100">
+                                Ir a partidos
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">No hay partidos pendientes por vincular para hoy.</div>
+                      )}
+                    </div>
+                  </article>
+
+                  <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <h2 className="text-lg font-black text-slate-950">Accesos r·pidos</h2>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {[
+                        { label: 'Historial', description: 'Revisa ejecuciones anteriores y resultados del sync.', path: '/admin/football-sync/history' },
+                        { label: 'Alertas', description: 'Abre errores, warnings y eventos por resolver.', path: '/admin/football-sync/alerts' },
+                        { label: 'EstadÌsticas', description: 'Consulta frecuencia, rendimiento y consumo acumulado.', path: '/admin/football-sync/stats' },
+                        { label: 'ConfiguraciÛn', description: 'Modifica intervalos, lÌmites y notificaciones.', path: '/admin/football-sync/config' },
+                      ].map((item) => (
+                        <button key={item.label} type="button" onClick={() => navigate(item.path)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100">
+                          <p className="text-sm font-black text-slate-950">{item.label}</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </article>
                 </div>
+              </section>
+            )}
+
+            {activeTab === 'activity' && (
+              <section id="football-sync-panel-activity" role="tabpanel" aria-labelledby="football-sync-tab-activity" className="grid gap-4 xl:grid-cols-2">
+                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-slate-950">⁄ltimas sincronizaciones</h2>
+                      <p className="text-sm text-slate-500">Actividad reciente registrada en el backend.</p>
+                    </div>
+                    <button type="button" onClick={() => navigate('/admin/football-sync/history')} className="text-sm font-bold text-lime-700 hover:text-lime-800">Ver historial</button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {dashboard.recentLogs.length > 0 ? dashboard.recentLogs.slice(0, 5).map((log) => (
+                      <div key={log.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-black text-slate-950">{log.message}</p>
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${log.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-700' : log.status === 'FAILED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{log.status}</span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{log.type} ∑ {formatDateTime(log.createdAt)}</p>
+                        <p className="mt-2 text-xs text-slate-500">Requests: {log.requestsUsed} ∑ Partidos: {log.matchesUpdated}</p>
+                      </div>
+                    )) : <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">A˙n no hay logs recientes para mostrar.</div>}
+                  </div>
+                </article>
+                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-slate-950">Alertas activas</h2>
+                      <p className="text-sm text-slate-500">Eventos que requieren revisiÛn operativa.</p>
+                    </div>
+                    <button type="button" onClick={() => navigate('/admin/football-sync/alerts')} className="text-sm font-bold text-lime-700 hover:text-lime-800">Ver alertas</button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {dashboard.activeAlerts.length > 0 ? dashboard.activeAlerts.slice(0, 5).map((alert) => (
+                      <div key={alert.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-black text-slate-950">{alert.message}</p>
+                          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">{alert.severity}</span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{formatDateTime(alert.createdAt)}</p>
+                      </div>
+                    )) : <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">No hay alertas activas en este momento.</div>}
+                  </div>
+                </article>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+
+      <DialogPrimitive.Root open={!!linkModal} onOpenChange={(open) => !open && resetLinkFlow()}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+          <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] bg-white p-4 shadow-2xl sm:p-6">
+            <DialogPrimitive.Title className="text-xl font-black text-slate-950">Vincular partido con API-Football</DialogPrimitive.Title>
+            <DialogPrimitive.Description className="mt-1 text-sm text-slate-500">
+              {linkModal ? `Busca un fixture candidato para ${linkModal.title} y ejecuta el vÌnculo completo.` : 'Busca un fixture candidato.'}
+            </DialogPrimitive.Description>
+
+            <div className="mt-5 space-y-4">
+              {candidateState.error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{candidateState.error}</div>}
+
+              {candidateState.isLoading ? (
+                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Consultando fixtures candidatos en API-Football...
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">Fixtures candidatos</h3>
+                    <div className="mt-3 space-y-3">
+                      {candidateState.candidates.length > 0 ? candidateState.candidates.map((candidate) => (
+                        <label key={candidate.fixtureId} className={`block cursor-pointer rounded-2xl border p-4 transition ${candidateState.selectedExternalId === candidate.fixtureId ? 'border-slate-900 bg-slate-950 text-white' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}>
+                          <input
+                            type="radio"
+                            name="fixture-candidate"
+                            className="sr-only"
+                            checked={candidateState.selectedExternalId === candidate.fixtureId}
+                            onChange={() => setCandidateState((current) => ({ ...current, selectedExternalId: candidate.fixtureId, manualExternalId: '', error: null }))}
+                          />
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-black">{candidate.homeTeam} vs {candidate.awayTeam}</p>
+                              <p className={`mt-1 text-sm ${candidateState.selectedExternalId === candidate.fixtureId ? 'text-slate-200' : 'text-slate-600'}`}>
+                                {formatDateTime(candidate.kickoff)} ∑ {candidate.leagueName}{candidate.round ? ` ∑ ${candidate.round}` : ''}
+                              </p>
+                              <p className={`mt-1 text-xs ${candidateState.selectedExternalId === candidate.fixtureId ? 'text-slate-300' : 'text-slate-500'}`}>
+                                Fixture ID: {candidate.fixtureId}{candidate.venue ? ` ∑ ${candidate.venue}` : ''}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {candidate.reasons.map((reason) => (
+                                  <span key={`${candidate.fixtureId}-${reason}`} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${candidateState.selectedExternalId === candidate.fixtureId ? 'bg-white/10 text-white' : 'bg-white text-slate-600'}`}>
+                                    {reason}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <span className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] ${candidateState.selectedExternalId === candidate.fixtureId ? 'border-white/20 bg-white/10 text-white' : confidenceStyles[candidate.confidence]}`}>
+                              {candidate.confidence}
+                            </span>
+                          </div>
+                        </label>
+                      )) : <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">No encontramos candidatos claros para este partido. Puedes ingresar el fixture ID manualmente.</div>}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <label className="text-sm font-black text-slate-900">Fixture ID manual</label>
+                    <p className="mt-1 text-sm text-slate-500">⁄salo si ya conoces el fixture ID correcto y quieres completar el vÌnculo igual.</p>
+                    <input
+                      value={candidateState.manualExternalId}
+                      onChange={(event) => setCandidateState((current) => ({ ...current, manualExternalId: event.target.value, selectedExternalId: '', error: null }))}
+                      placeholder="Ej: 123456"
+                      className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none transition focus:border-lime-500 focus:ring-2 focus:ring-lime-200"
+                    />
+                  </div>
+                </>
               )}
             </div>
-          ))}
-        </div>
 
-        <div className="p-3 bg-slate-50 text-center border-t border-slate-200">
-          <a href="/admin/football-sync/history" className="text-xs font-bold text-slate-700 hover:underline">
-            Ver historial completo
-          </a>
-        </div>
-      </div>
-
-      {/* Quick Actions - Mobile Optimized */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <a
-          href="/admin/football-sync/config"
-          className="p-4 rounded-[1.75rem] border-2 border-slate-200 bg-white hover:border-lime-500 hover:bg-lime-50 transition-all text-center"
-        >
-          <Zap className="w-6 h-6 mx-auto mb-2 text-slate-700" />
-          <p className="font-bold text-sm text-slate-900">Configuraci√≥n</p>
-          <p className="text-xs text-slate-500 mt-1">Ajustar par√°metros</p>
-        </a>
-
-        <a
-          href="/admin/football-sync/stats"
-          className="p-4 rounded-[1.75rem] border-2 border-slate-200 bg-white hover:border-lime-500 hover:bg-lime-50 transition-all text-center"
-        >
-          <TrendingUp className="w-6 h-6 mx-auto mb-2 text-slate-700" />
-          <p className="font-bold text-sm text-slate-900">Estad√≠sticas</p>
-          <p className="text-xs text-slate-500 mt-1">Ver m√©tricas</p>
-        </a>
-      </div>
-    </div>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={resetLinkFlow} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Cancelar</button>
+              <button type="button" onClick={handleLinkAndSync} disabled={candidateState.isLoading || candidateState.isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-lime-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-lime-700 disabled:cursor-not-allowed disabled:opacity-60">
+                {candidateState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                Vincular y sincronizar
+              </button>
+            </div>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+    </>
   );
 };
 

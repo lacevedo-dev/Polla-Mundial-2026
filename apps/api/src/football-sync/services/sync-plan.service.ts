@@ -188,7 +188,7 @@ export class SyncPlanService {
   /**
    * Get today's matches statistics
    */
-  private async getMatchesToday(): Promise<{
+  async getMatchesToday(): Promise<{
     total: number;
     scheduled: number;
     live: number;

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ApiFootballClient } from './api-football-client.service';
 import {
   FootballSyncLogDto,
   FootballSyncAlertDto,
@@ -21,7 +22,10 @@ import {
 export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly apiFootballClient: ApiFootballClient,
+  ) {}
 
   /**
    * Obtener dashboard de monitoreo con métricas en tiempo real
@@ -47,6 +51,8 @@ export class MonitoringService {
         createdAt: { gte: today },
       },
     });
+    const requestsLimit = config?.dailyRequestLimit ?? 100;
+    const requestsRemaining = Math.max(0, requestsLimit - requestsUsed);
 
     const successfulSyncs = todayLogs.filter(
       (log) => log.status === SyncLogStatus.SUCCESS,
@@ -67,6 +73,79 @@ export class MonitoringService {
       durations.length > 0
         ? durations.reduce((a, b) => a + b, 0) / durations.length
         : 0;
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [todayMatchesTotal, linkedMatchesToday, unlinkedMatchesToday, unlinkedMatchesPreview] = await Promise.all([
+      this.prisma.match.count({
+        where: {
+          matchDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
+      }),
+      this.prisma.match.count({
+        where: {
+          matchDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+          NOT: {
+            externalId: null,
+          },
+        },
+      }),
+      this.prisma.match.count({
+        where: {
+          matchDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+          externalId: null,
+        },
+      }),
+      this.prisma.match.findMany({
+        where: {
+          matchDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+          externalId: null,
+        },
+        include: {
+          homeTeam: true,
+          awayTeam: true,
+        },
+        orderBy: {
+          matchDate: 'asc',
+        },
+        take: 5,
+      }),
+    ]);
+
+    const blockers: string[] = [];
+    const apiKeyConfigured = this.apiFootballClient.isConfigured();
+    const autoSyncEnabled = (config?.enabled ?? true) && (config?.autoSyncEnabled ?? true);
+
+    if (!apiKeyConfigured) {
+      blockers.push('Falta configurar API_FOOTBALL_KEY en el backend.');
+    }
+    if (!(config?.enabled ?? true)) {
+      blockers.push('El sistema Football Sync está deshabilitado globalmente.');
+    }
+    if (!(config?.autoSyncEnabled ?? true)) {
+      blockers.push('La sincronización automática está pausada desde configuración.');
+    }
+    if (requestsRemaining <= 0) {
+      blockers.push('La cuota diaria de requests ya se agotó.');
+    }
+    if (todayMatchesTotal > 0 && linkedMatchesToday === 0) {
+      blockers.push('Los partidos de hoy no tienen externalId vinculado a API-Football.');
+    } else if (unlinkedMatchesToday > 0) {
+      blockers.push(`${unlinkedMatchesToday} partido(s) de hoy siguen sin vincular a fixture externo.`);
+    }
 
     // Logs recientes (últimos 10)
     const recentLogs = await this.prisma.footballSyncLog.findMany({
@@ -108,10 +187,25 @@ export class MonitoringService {
         lastSyncAt: plan?.lastSyncAt?.toISOString(),
         nextSyncIn: await this.getSecondsUntilNextSync(plan?.lastSyncAt),
       },
+      readiness: {
+        apiKeyConfigured,
+        autoSyncEnabled,
+        requestsRemaining,
+        todayMatchesTotal,
+        linkedMatchesToday,
+        unlinkedMatchesToday,
+        blockers,
+        unlinkedMatchesPreview: unlinkedMatchesPreview.map((match) => ({
+          id: match.id,
+          homeTeam: match.homeTeam.name,
+          awayTeam: match.awayTeam.name,
+          matchDate: match.matchDate.toISOString(),
+        })),
+      },
       todayStats: {
         requestsUsed,
-        requestsLimit: config?.dailyRequestLimit ?? 100,
-        requestsPercentage: (requestsUsed / (config?.dailyRequestLimit ?? 100)) * 100,
+        requestsLimit,
+        requestsPercentage: (requestsUsed / requestsLimit) * 100,
         matchesSynced,
         successfulSyncs,
         failedSyncs,

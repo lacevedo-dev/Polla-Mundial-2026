@@ -9,6 +9,7 @@ import type {
   FootballSyncConfig,
   UpdateConfig,
   SyncStats,
+  FootballMatchLinkCandidate,
 } from '../types/football-sync';
 
 interface FootballSyncStore {
@@ -38,6 +39,10 @@ interface FootballSyncStore {
   pauseSync: () => Promise<void>;
   resumeSync: () => Promise<void>;
   forceSync: () => Promise<void>;
+  backfillTeams: () => Promise<void>;
+  fetchLinkCandidates: (matchId: string) => Promise<FootballMatchLinkCandidate[]>;
+  linkMatch: (matchId: string, externalId: string) => Promise<void>;
+  syncMatch: (matchId: string) => Promise<void>;
 
   clearError: () => void;
 }
@@ -296,6 +301,82 @@ export const useFootballSyncStore = create<FootballSyncStore>((set, get) => ({
       set({
         error: error.message || 'Error al forzar sincronización',
         isLoading: false
+      });
+      throw error;
+    }
+  },
+
+  backfillTeams: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      await request('/admin/football/backfill-teams', {
+        method: 'POST',
+      });
+
+      await Promise.all([
+        get().fetchDashboard(),
+        get().fetchConfig(),
+      ]);
+
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || 'Error al ejecutar backfill de equipos',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  fetchLinkCandidates: async (matchId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const candidates = await request<FootballMatchLinkCandidate[]>(
+        `/admin/football/match/${matchId}/candidates`
+      );
+      set({ isLoading: false });
+      return candidates;
+    } catch (error: any) {
+      set({
+        error: error.message || 'Error al buscar fixtures candidatos',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  linkMatch: async (matchId: string, externalId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await request(`/admin/football/match/${matchId}/link`, {
+        method: 'PATCH',
+        body: JSON.stringify({ externalId }),
+      });
+
+      await get().fetchDashboard();
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || 'Error al vincular el partido con API-Football',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  syncMatch: async (matchId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await request(`/admin/football/sync-match/${matchId}`, {
+        method: 'POST',
+      });
+
+      await get().fetchDashboard();
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || 'Error al sincronizar el partido vinculado',
+        isLoading: false,
       });
       throw error;
     }

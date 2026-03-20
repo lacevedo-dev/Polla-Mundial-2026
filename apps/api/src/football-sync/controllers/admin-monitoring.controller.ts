@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -15,6 +16,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { SystemRole } from '@prisma/client';
 import { MonitoringService } from '../services/monitoring.service';
 import { ConfigService } from '../services/config.service';
+import { AdaptiveSyncScheduler } from '../schedulers/adaptive-sync.scheduler';
 import type {
   MonitoringDashboardDto,
   SyncHistoryFilterDto,
@@ -37,6 +39,7 @@ export class AdminMonitoringController {
   constructor(
     private readonly monitoring: MonitoringService,
     private readonly config: ConfigService,
+    private readonly scheduler: AdaptiveSyncScheduler,
   ) {}
 
   // === DASHBOARD Y MÉTRICAS ===
@@ -182,10 +185,16 @@ export class AdminMonitoringController {
       'Ejecuta una sincronización inmediata ignorando los límites de requests. Usar solo en emergencias. Solo disponible para superadministradores.',
   })
   async forceSync(@CurrentUser() user: any): Promise<{ message: string }> {
-    // TODO: Implementar lógica de sincronización forzada
+    const result = await this.scheduler.triggerManualSync();
+
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+
     return {
-      message:
-        'Sincronización forzada iniciada. Revisa el dashboard para ver el resultado.',
+      message: result.matchesUpdated !== undefined
+        ? `Sincronización ejecutada. ${result.matchesUpdated} partido(s) actualizado(s).`
+        : result.message,
     };
   }
 

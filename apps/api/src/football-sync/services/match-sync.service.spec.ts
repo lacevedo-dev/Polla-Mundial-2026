@@ -187,4 +187,106 @@ describe('MatchSyncService', () => {
       }),
     });
   });
+
+  it('returns ranked fixture candidates for an unlinked match', async () => {
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-lookup',
+      matchDate: new Date('2026-06-15T20:00:00.000Z'),
+      homeTeam: {
+        id: 'team-eng',
+        name: 'Inglaterra',
+        code: 'ENG',
+        apiFootballTeamId: 10,
+      },
+      awayTeam: {
+        id: 'team-fra',
+        name: 'Francia',
+        code: 'FRA',
+        apiFootballTeamId: 2,
+      },
+    });
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 2,
+      response: [
+        {
+          fixture: {
+            id: 555,
+            date: '2026-06-15T20:15:00.000Z',
+            venue: { name: 'Metropolitano', city: 'Bogotá', id: 1 },
+            status: { long: 'Not Started', short: 'NS', elapsed: null },
+          },
+          league: {
+            id: 1,
+            name: 'World Cup',
+            country: 'World',
+            logo: '',
+            flag: null,
+            season: 2026,
+            round: 'Group Stage',
+          },
+          teams: {
+            home: { id: 10, name: 'England', logo: '', winner: null },
+            away: { id: 2, name: 'France', logo: '', winner: null },
+          },
+          goals: { home: null, away: null },
+          score: {
+            halftime: { home: null, away: null },
+            fulltime: { home: null, away: null },
+            extratime: { home: null, away: null },
+            penalty: { home: null, away: null },
+          },
+        },
+        {
+          fixture: {
+            id: 777,
+            date: '2026-06-15T23:30:00.000Z',
+            venue: { name: 'Otro estadio', city: 'Medellín', id: 2 },
+            status: { long: 'Not Started', short: 'NS', elapsed: null },
+          },
+          league: {
+            id: 1,
+            name: 'World Cup',
+            country: 'World',
+            logo: '',
+            flag: null,
+            season: 2026,
+            round: 'Group Stage',
+          },
+          teams: {
+            home: { id: 999, name: 'Brazil', logo: '', winner: null },
+            away: { id: 888, name: 'Argentina', logo: '', winner: null },
+          },
+          goals: { home: null, away: null },
+          score: {
+            halftime: { home: null, away: null },
+            fulltime: { home: null, away: null },
+            extratime: { home: null, away: null },
+            penalty: { home: null, away: null },
+          },
+        },
+      ],
+    });
+
+    const result = await service.findLinkCandidates('match-lookup');
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        fixtureId: '555',
+        confidence: 'high',
+        homeTeam: 'England',
+        awayTeam: 'France',
+      }),
+    );
+    expect(result[0].reasons.length).toBeGreaterThan(0);
+    expect(mockRateLimiterService.logRequest).toHaveBeenCalledWith(
+      '/fixtures',
+      expect.objectContaining({
+        source: 'match-link-candidates',
+        matchId: 'match-lookup',
+      }),
+      200,
+      2,
+    );
+  });
 });

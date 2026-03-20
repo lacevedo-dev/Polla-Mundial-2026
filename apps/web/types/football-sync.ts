@@ -51,12 +51,41 @@ export interface FootballSyncAlert {
   createdAt: string;
 }
 
+export interface FootballMatchLinkCandidate {
+  fixtureId: string;
+  kickoff: string;
+  status: string;
+  leagueName: string;
+  round?: string;
+  venue?: string;
+  homeTeam: string;
+  awayTeam: string;
+  confidence: 'high' | 'medium' | 'low';
+  score: number;
+  reasons: string[];
+}
+
 export interface MonitoringDashboard {
   status: {
     isEnabled: boolean;
     isEmergencyMode: boolean;
     lastSyncAt?: string;
     nextSyncIn: number;
+  };
+  readiness: {
+    apiKeyConfigured: boolean;
+    autoSyncEnabled: boolean;
+    requestsRemaining: number;
+    todayMatchesTotal: number;
+    linkedMatchesToday: number;
+    unlinkedMatchesToday: number;
+    blockers: string[];
+    unlinkedMatchesPreview: Array<{
+      id: string;
+      homeTeam: string;
+      awayTeam: string;
+      matchDate: string;
+    }>;
   };
   todayStats: {
     requestsUsed: number;

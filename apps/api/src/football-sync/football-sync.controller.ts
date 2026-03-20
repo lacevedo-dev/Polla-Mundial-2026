@@ -19,6 +19,7 @@ import { MatchSyncService } from './services/match-sync.service';
 import { AdaptiveSyncScheduler } from './schedulers/adaptive-sync.scheduler';
 import {
   SyncUsageDto,
+  MatchLinkCandidateDto,
   TeamCatalogBackfillResultDto,
 } from './dto/api-football.dto';
 import { IsString } from 'class-validator';
@@ -48,6 +49,7 @@ export class FootballSyncController {
   @ApiOperation({ summary: 'Get API-Football usage and sync plan for today' })
   async getUsage(): Promise<SyncUsageDto> {
     const plan = await this.syncPlan.calculateDailyPlan();
+    const matches = await this.syncPlan.getMatchesToday();
     const used = await this.rateLimiter.getUsedRequestsToday();
     const available = await this.rateLimiter.getAvailableRequests();
     const limit = this.rateLimiter.getDailyLimit();
@@ -67,10 +69,10 @@ export class FootballSyncController {
     return {
       today: plan.date,
       matches: {
-        scheduled: 0, // Would need separate query
-        live: 0, // Would need separate query
-        finished: 0, // Would need separate query
-        total: plan.totalMatches,
+        scheduled: matches.scheduled,
+        live: matches.live,
+        finished: matches.finished,
+        total: matches.total,
       },
       requests: {
         used,
@@ -165,6 +167,23 @@ export class FootballSyncController {
     } catch (error) {
       throw new HttpException(
         `Failed to link match: ${error.message}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get('match/:matchId/candidates')
+  @ApiOperation({
+    summary: 'Get candidate fixtures from API-Football to link a local match',
+  })
+  async getLinkCandidates(
+    @Param('matchId') matchId: string,
+  ): Promise<MatchLinkCandidateDto[]> {
+    try {
+      return await this.matchSync.findLinkCandidates(matchId);
+    } catch (error) {
+      throw new HttpException(
+        `Failed to get fixture candidates: ${error.message}`,
         HttpStatus.BAD_REQUEST,
       );
     }

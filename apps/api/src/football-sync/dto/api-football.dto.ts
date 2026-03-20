@@ -122,6 +122,20 @@ export interface TeamCatalogBackfillResultDto {
   warnings: string[];
 }
 
+export interface MatchLinkCandidateDto {
+  fixtureId: string;
+  kickoff: string;
+  status: string;
+  leagueName: string;
+  round?: string;
+  venue?: string;
+  homeTeam: string;
+  awayTeam: string;
+  confidence: 'high' | 'medium' | 'low';
+  score: number;
+  reasons: string[];
+}
+
 // === DTOs DE MONITOREO ===
 
 export interface FootballSyncLogDto {
@@ -181,6 +195,21 @@ export interface MonitoringDashboardDto {
     isEmergencyMode: boolean;
     lastSyncAt?: string;
     nextSyncIn: number;
+  };
+  readiness: {
+    apiKeyConfigured: boolean;
+    autoSyncEnabled: boolean;
+    requestsRemaining: number;
+    todayMatchesTotal: number;
+    linkedMatchesToday: number;
+    unlinkedMatchesToday: number;
+    blockers: string[];
+    unlinkedMatchesPreview: Array<{
+      id: string;
+      homeTeam: string;
+      awayTeam: string;
+      matchDate: string;
+    }>;
   };
   todayStats: {
     requestsUsed: number;
