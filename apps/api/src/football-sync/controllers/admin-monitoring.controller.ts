@@ -17,11 +17,13 @@ import { SystemRole } from '@prisma/client';
 import { MonitoringService } from '../services/monitoring.service';
 import { ConfigService } from '../services/config.service';
 import { AdaptiveSyncScheduler } from '../schedulers/adaptive-sync.scheduler';
+import {
+  SyncHistoryFilterDto,
+  AlertsFilterDto,
+} from '../dto/api-football.dto';
 import type {
   MonitoringDashboardDto,
-  SyncHistoryFilterDto,
   SyncHistoryResponseDto,
-  AlertsFilterDto,
   AlertsResponseDto,
   SyncStatsDto,
   FootballSyncConfigDto,
