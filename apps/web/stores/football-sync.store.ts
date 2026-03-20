@@ -291,11 +291,6 @@ export const useFootballSyncStore = create<FootballSyncStore>((set, get) => ({
         method: 'POST',
       });
 
-      // Refresh dashboard after a short delay to show updated stats
-      setTimeout(() => {
-        get().fetchDashboard();
-      }, 2000);
-
       set({ isLoading: false });
     } catch (error: any) {
       set({

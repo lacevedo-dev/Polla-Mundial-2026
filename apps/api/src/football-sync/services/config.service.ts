@@ -203,6 +203,14 @@ export class ConfigService {
   }
 
   /**
+   * Verificar si la sincronización en horas pico está habilitada
+   */
+  async isPeakHoursSyncEnabled(): Promise<boolean> {
+    const config = await this.getConfig();
+    return config.enabled && config.autoSyncEnabled && config.peakHoursSyncEnabled;
+  }
+
+  /**
    * Obtener límite diario de requests
    */
   async getDailyLimit(): Promise<number> {

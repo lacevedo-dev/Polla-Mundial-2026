@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { SyncLogType } from '@prisma/client';
 import { SyncPlanService } from '../services/sync-plan.service';
 import { MatchSyncService } from '../services/match-sync.service';
+import { ConfigService as FootballConfigService } from '../services/config.service';
 
 @Injectable()
 export class AdaptiveSyncScheduler {
@@ -11,6 +13,7 @@ export class AdaptiveSyncScheduler {
   constructor(
     private readonly syncPlan: SyncPlanService,
     private readonly matchSync: MatchSyncService,
+    private readonly footballConfigService: FootballConfigService,
   ) {}
 
   /**
@@ -22,6 +25,11 @@ export class AdaptiveSyncScheduler {
     // Prevent concurrent syncs
     if (this.isSyncing) {
       this.logger.debug('Sync already in progress, skipping tick');
+      return;
+    }
+
+    if (!(await this.footballConfigService.isAutoSyncEnabled())) {
+      this.logger.debug('Auto sync disabled, skipping adaptive tick');
       return;
     }
 
@@ -60,6 +68,11 @@ export class AdaptiveSyncScheduler {
    */
   @Cron('0 2 * * *') // 2 AM daily
   async syncYesterdayResults() {
+    if (!(await this.footballConfigService.isAutoSyncEnabled())) {
+      this.logger.debug('Auto sync disabled, skipping yesterday sync');
+      return;
+    }
+
     try {
       this.logger.log('Running yesterday results sync');
 
@@ -79,6 +92,11 @@ export class AdaptiveSyncScheduler {
   async peakHoursSync() {
     // Prevent concurrent syncs
     if (this.isSyncing) {
+      return;
+    }
+
+    if (!(await this.footballConfigService.isPeakHoursSyncEnabled())) {
+      this.logger.debug('Peak-hours sync disabled, skipping peak-hours tick');
       return;
     }
 
@@ -102,7 +120,11 @@ export class AdaptiveSyncScheduler {
     this.isSyncing = true;
 
     try {
-      const result = await this.matchSync.syncTodayMatches();
+      const result = await this.matchSync.syncTodayMatchesForTrigger({
+        logType: SyncLogType.CRON_SYNC,
+        summaryLabel: 'Cron sync',
+        triggeredBy: 'scheduler',
+      });
 
       if (result.success) {
         this.logger.log(
@@ -134,6 +156,13 @@ export class AdaptiveSyncScheduler {
     }
 
     try {
+      if (!(await this.footballConfigService.isEnabled())) {
+        return {
+          success: false,
+          message: 'Football Sync is disabled',
+        };
+      }
+
       const plan = await this.syncPlan.calculateDailyPlan();
 
       if (plan.requestBudget <= 0) {
@@ -146,7 +175,11 @@ export class AdaptiveSyncScheduler {
       this.logger.log('Manual sync triggered');
       this.isSyncing = true;
 
-      const result = await this.matchSync.syncTodayMatches();
+      const result = await this.matchSync.syncTodayMatchesForTrigger({
+        logType: SyncLogType.MANUAL_SYNC,
+        summaryLabel: 'Manual sync',
+        triggeredBy: 'manual',
+      });
 
       return {
         success: result.success,

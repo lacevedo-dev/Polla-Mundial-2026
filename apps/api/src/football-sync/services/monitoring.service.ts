@@ -21,6 +21,7 @@ import {
 @Injectable()
 export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
+  private readonly alertDedupWindowMs = 15 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -183,9 +184,14 @@ export class MonitoringService {
     return {
       status: {
         isEnabled: config?.enabled ?? true,
-        isEmergencyMode: (plan?.requestsBudget ?? 100) < 10,
+        isEmergencyMode:
+          (plan?.requestsBudget ?? requestsLimit) <
+          (config?.emergencyModeThreshold ?? 10),
         lastSyncAt: plan?.lastSyncAt?.toISOString(),
-        nextSyncIn: await this.getSecondsUntilNextSync(plan?.lastSyncAt),
+        nextSyncIn: await this.getSecondsUntilNextSync(
+          plan?.lastSyncAt,
+          plan?.intervalMinutes,
+        ),
       },
       readiness: {
         apiKeyConfigured,
@@ -478,6 +484,30 @@ export class MonitoringService {
     message: string;
     details?: string;
   }): Promise<void> {
+    const dedupThreshold = new Date(Date.now() - this.alertDedupWindowMs);
+    const existingAlert = await this.prisma.footballSyncAlert.findFirst({
+      where: {
+        type: data.type,
+        severity: data.severity,
+        message: data.message,
+        details: data.details,
+        resolved: false,
+        createdAt: {
+          gte: dedupThreshold,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (existingAlert) {
+      this.logger.debug(
+        `Skipping duplicate alert: [${data.severity}] ${data.type} - ${data.message}`,
+      );
+      return;
+    }
+
     await this.prisma.footballSyncAlert.create({
       data: {
         type: data.type,
@@ -516,11 +546,15 @@ export class MonitoringService {
     });
   }
 
-  private async getSecondsUntilNextSync(lastSyncAt: Date | null | undefined): Promise<number> {
+  private async getSecondsUntilNextSync(
+    lastSyncAt: Date | null | undefined,
+    intervalMinutes?: number | null,
+  ): Promise<number> {
     if (!lastSyncAt) return 0;
 
     const config = await this.getConfig();
-    const intervalMs = (config?.minSyncInterval ?? 5) * 60 * 1000;
+    const intervalMs =
+      (intervalMinutes ?? config?.minSyncInterval ?? 5) * 60 * 1000;
     const elapsed = Date.now() - lastSyncAt.getTime();
     const remaining = intervalMs - elapsed;
 

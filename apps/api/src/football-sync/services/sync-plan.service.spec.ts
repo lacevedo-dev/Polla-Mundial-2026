@@ -4,12 +4,11 @@ import { SyncPlanService } from './sync-plan.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MatchStatus, SyncStrategy } from '@prisma/client';
+import { ConfigService as FootballConfigService } from './config.service';
 
 describe('SyncPlanService', () => {
   let service: SyncPlanService;
   let prismaService: PrismaService;
-  let rateLimiter: RateLimiterService;
-
   const mockPrismaService = {
     dailySyncPlan: {
       findUnique: jest.fn(),
@@ -29,11 +28,12 @@ describe('SyncPlanService', () => {
   };
 
   const mockConfigService = {
-    get: jest.fn((key: string, defaultValue?: any) => {
-      if (key === 'MIN_SYNC_INTERVAL_MINUTES') return 5;
-      if (key === 'MAX_SYNC_INTERVAL_MINUTES') return 30;
-      return defaultValue;
-    }),
+    get: jest.fn((_: string, defaultValue?: any) => defaultValue),
+  };
+
+  const mockFootballConfigService = {
+    getSyncIntervals: jest.fn().mockResolvedValue({ min: 5, max: 30 }),
+    isAutoSyncEnabled: jest.fn().mockResolvedValue(true),
   };
 
   beforeEach(async () => {
@@ -52,16 +52,21 @@ describe('SyncPlanService', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: FootballConfigService,
+          useValue: mockFootballConfigService,
+        },
       ],
     }).compile();
 
     service = module.get<SyncPlanService>(SyncPlanService);
     prismaService = module.get<PrismaService>(PrismaService);
-    rateLimiter = module.get<RateLimiterService>(RateLimiterService);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    mockFootballConfigService.getSyncIntervals.mockResolvedValue({ min: 5, max: 30 });
+    mockFootballConfigService.isAutoSyncEnabled.mockResolvedValue(true);
   });
 
   it('should be defined', () => {
@@ -165,6 +170,14 @@ describe('SyncPlanService', () => {
   });
 
   describe('shouldSyncNow', () => {
+    it('should return false when auto sync is disabled', async () => {
+      mockFootballConfigService.isAutoSyncEnabled.mockResolvedValue(false);
+
+      const result = await service.shouldSyncNow();
+
+      expect(result).toBe(false);
+    });
+
     it('should return false when no live matches', async () => {
       mockPrismaService.dailySyncPlan.findUnique.mockResolvedValue(null);
       mockPrismaService.match.groupBy.mockResolvedValue([

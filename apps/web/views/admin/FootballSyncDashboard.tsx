@@ -28,8 +28,8 @@ type LinkModalState = { matchId: string; title: string };
 
 const tabs: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: 'overview', label: 'Resumen', description: 'Estado general, checklist y bloqueos' },
-  { id: 'actions', label: 'Acciones', description: 'Flujo completo y accesos rápidos' },
-  { id: 'activity', label: 'Actividad', description: 'Últimos eventos y alertas activas' },
+  { id: 'actions', label: 'Acciones', description: 'Flujo completo y accesos rÃ¡pidos' },
+  { id: 'activity', label: 'Actividad', description: 'Ãšltimos eventos y alertas activas' },
 ];
 
 const confidenceStyles: Record<FootballMatchLinkCandidate['confidence'], string> = {
@@ -52,6 +52,7 @@ const formatRelativeCountdown = (seconds: number) => {
 };
 
 const compactNumber = (value: number) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(value);
+const DASHBOARD_REFRESH_INTERVAL_MS = 30_000;
 
 const FootballSyncDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -87,6 +88,13 @@ const FootballSyncDashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboard();
     fetchConfig();
+
+    const intervalId = window.setInterval(() => {
+      fetchDashboard();
+      fetchConfig();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
   }, [fetchDashboard, fetchConfig]);
 
   const autoSyncEnabled = config?.autoSyncEnabled ?? dashboard?.readiness.autoSyncEnabled ?? false;
@@ -100,21 +108,21 @@ const FootballSyncDashboard: React.FC = () => {
         label: 'API key configurada',
         description: dashboard.readiness.apiKeyConfigured
           ? 'El backend puede consultar API-Football.'
-          : 'Configura API_FOOTBALL_KEY para habilitar la sincronización.',
+          : 'Configura API_FOOTBALL_KEY para habilitar la sincronizaciÃ³n.',
         ok: dashboard.readiness.apiKeyConfigured,
       },
       {
         label: 'Sistema habilitado',
         description: dashboard.status.isEnabled
-          ? 'El módulo está activo y puede ejecutar procesos.'
-          : 'El módulo está deshabilitado globalmente.',
+          ? 'El mÃ³dulo estÃ¡ activo y puede ejecutar procesos.'
+          : 'El mÃ³dulo estÃ¡ deshabilitado globalmente.',
         ok: dashboard.status.isEnabled,
       },
       {
-        label: 'Sincronización automática',
+        label: 'SincronizaciÃ³n automÃ¡tica',
         description: autoSyncEnabled
           ? 'El scheduler puede ejecutar sincronizaciones programadas.'
-          : 'La sincronización automática está pausada.',
+          : 'La sincronizaciÃ³n automÃ¡tica estÃ¡ pausada.',
         ok: autoSyncEnabled,
       },
       {
@@ -140,7 +148,7 @@ const FootballSyncDashboard: React.FC = () => {
       {
         label: 'Estado',
         value: dashboard.status.isEnabled ? 'Activo' : 'Pausado',
-        helper: dashboard.status.isEmergencyMode ? 'Modo emergencia' : 'Operación normal',
+        helper: dashboard.status.isEmergencyMode ? 'Modo emergencia' : 'OperaciÃ³n normal',
       },
       {
         label: 'Requests hoy',
@@ -150,12 +158,12 @@ const FootballSyncDashboard: React.FC = () => {
       {
         label: 'Partidos actualizados',
         value: compactNumber(dashboard.todayStats.matchesSynced),
-        helper: `${dashboard.todayStats.successfulSyncs} sync OK · ${dashboard.todayStats.failedSyncs} con fallo`,
+        helper: `${dashboard.todayStats.successfulSyncs} sync OK Â· ${dashboard.todayStats.failedSyncs} con fallo`,
       },
       {
-        label: 'Próximo intento',
+        label: 'PrÃ³ximo intento',
         value: formatRelativeCountdown(dashboard.status.nextSyncIn),
-        helper: `Último sync: ${formatDateTime(dashboard.status.lastSyncAt)}`,
+        helper: `Ãšltimo sync: ${formatDateTime(dashboard.status.lastSyncAt)}`,
       },
     ];
   }, [dashboard, requestsPercentage]);
@@ -167,7 +175,7 @@ const FootballSyncDashboard: React.FC = () => {
       setActionFeedback({ type: 'success', message: successMessage });
       await Promise.all([fetchDashboard(), fetchConfig()]);
     } catch (actionError: any) {
-      setActionFeedback({ type: 'error', message: actionError?.message || 'No se pudo completar la acción.' });
+      setActionFeedback({ type: 'error', message: actionError?.message || 'No se pudo completar la acciÃ³n.' });
     } finally {
       setActionState(null);
     }
@@ -237,7 +245,7 @@ const FootballSyncDashboard: React.FC = () => {
       } catch (syncError: any) {
         setActionFeedback({
           type: 'error',
-          message: syncError?.message || `El partido quedó vinculado al fixture ${externalId}, pero la sincronización inicial falló.`,
+          message: syncError?.message || `El partido quedÃ³ vinculado al fixture ${externalId}, pero la sincronizaciÃ³n inicial fallÃ³.`,
         });
       }
 
@@ -274,7 +282,7 @@ const FootballSyncDashboard: React.FC = () => {
                   Centro operativo API-Football
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-                  Este módulo consulta API-Football, sincroniza marcadores, detecta partidos en vivo, actualiza resultados locales y recalcula
+                  Este mÃ³dulo consulta API-Football, sincroniza marcadores, detecta partidos en vivo, actualiza resultados locales y recalcula
                   puntos cuando un partido termina.
                 </p>
               </div>
@@ -293,7 +301,7 @@ const FootballSyncDashboard: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 sm:w-auto sm:grid-cols-2 xl:min-w-[280px]">
               <button
                 type="button"
-                onClick={() => runDashboardAction('force', forceSync, 'Se ejecutó una sincronización manual.')}
+                onClick={() => runDashboardAction('force', forceSync, 'Se ejecutÃ³ una sincronizaciÃ³n manual.')}
                 disabled={actionState !== null}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-lime-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-lime-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -348,18 +356,18 @@ const FootballSyncDashboard: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <Sparkles className="h-5 w-5 text-lime-600" />
                     <div>
-                      <h2 className="text-lg font-black text-slate-950">Qué hace este módulo</h2>
-                      <p className="text-sm text-slate-500">Explica claramente qué puede ejecutar hoy y qué está bloqueando la operación.</p>
+                      <h2 className="text-lg font-black text-slate-950">QuÃ© hace este mÃ³dulo</h2>
+                      <p className="text-sm text-slate-500">Explica claramente quÃ© puede ejecutar hoy y quÃ© estÃ¡ bloqueando la operaciÃ³n.</p>
                     </div>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-bold text-slate-800">Sincronización inteligente</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">Consulta fixtures del día, detecta cambios y actualiza resultados solo cuando hay eventos relevantes o ventanas programadas.</p>
+                      <p className="text-sm font-bold text-slate-800">SincronizaciÃ³n inteligente</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">Consulta fixtures del dÃ­a, detecta cambios y actualiza resultados solo cuando hay eventos relevantes o ventanas programadas.</p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-bold text-slate-800">Recalculo automático</p>
+                      <p className="text-sm font-bold text-slate-800">Recalculo automÃ¡tico</p>
                       <p className="mt-2 text-sm leading-6 text-slate-600">Cuando el partido finaliza, el sistema actualiza el marcador local y recalcula los puntos de las predicciones relacionadas.</p>
                     </div>
                   </div>
@@ -369,7 +377,7 @@ const FootballSyncDashboard: React.FC = () => {
                       <ShieldCheck className="h-5 w-5 text-slate-900" />
                       <div>
                         <h3 className="text-base font-black text-slate-950">Checklist operativo</h3>
-                        <p className="text-sm text-slate-500">Verifica en segundos si el módulo está listo para operar.</p>
+                        <p className="text-sm text-slate-500">Verifica en segundos si el mÃ³dulo estÃ¡ listo para operar.</p>
                       </div>
                     </div>
 
@@ -402,7 +410,7 @@ const FootballSyncDashboard: React.FC = () => {
                       {dashboard.readiness.blockers.length > 0 ? dashboard.readiness.blockers.map((blocker) => (
                         <div key={blocker} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{blocker}</div>
                       )) : (
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">No hay bloqueos activos. El módulo está listo para sincronizar.</div>
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">No hay bloqueos activos. El mÃ³dulo estÃ¡ listo para sincronizar.</div>
                       )}
                     </div>
                   </article>
@@ -412,7 +420,7 @@ const FootballSyncDashboard: React.FC = () => {
                       <Clock3 className="h-5 w-5 text-blue-600" />
                       <div>
                         <h2 className="text-lg font-black text-slate-950">Cobertura de hoy</h2>
-                        <p className="text-sm text-slate-500">Cuántos partidos pueden sincronizarse realmente.</p>
+                        <p className="text-sm text-slate-500">CuÃ¡ntos partidos pueden sincronizarse realmente.</p>
                       </div>
                     </div>
                     <div className="mt-4 space-y-4">
@@ -446,38 +454,38 @@ const FootballSyncDashboard: React.FC = () => {
                 <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-black text-slate-950">Acciones rápidas</h2>
-                      <p className="text-sm text-slate-500">Define límites, activa o pausa el módulo y ejecuta tareas de preparación sin salir de esta pantalla.</p>
+                      <h2 className="text-lg font-black text-slate-950">Acciones rÃ¡pidas</h2>
+                      <p className="text-sm text-slate-500">Define lÃ­mites, activa o pausa el mÃ³dulo y ejecuta tareas de preparaciÃ³n sin salir de esta pantalla.</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Flujo completo</span>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <button type="button" onClick={() => runDashboardAction('force', forceSync, 'Se lanzó una sincronización manual.')} disabled={actionState !== null} className="rounded-2xl border border-lime-200 bg-lime-50 p-4 text-left transition hover:bg-lime-100 disabled:opacity-60">
+                    <button type="button" onClick={() => runDashboardAction('force', forceSync, 'Se lanzÃ³ una sincronizaciÃ³n manual.')} disabled={actionState !== null} className="rounded-2xl border border-lime-200 bg-lime-50 p-4 text-left transition hover:bg-lime-100 disabled:opacity-60">
                       <div className="flex items-center gap-3">
                         {actionState === 'force' ? <Loader2 className="h-5 w-5 animate-spin text-lime-700" /> : <RefreshCw className="h-5 w-5 text-lime-700" />}
                         <div>
                           <p className="text-sm font-black text-slate-950">Ejecutar sync ahora</p>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">Fuerza una verificación inmediata del plan, partidos del día y estado actual.</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">Fuerza una verificaciÃ³n inmediata del plan, partidos del dÃ­a y estado actual.</p>
                         </div>
                       </div>
                     </button>
 
-                    <button type="button" onClick={() => runDashboardAction('toggle', autoSyncEnabled ? pauseSync : resumeSync, autoSyncEnabled ? 'La sincronización automática quedó pausada.' : 'La sincronización automática quedó reanudada.')} disabled={actionState !== null} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition hover:bg-amber-100 disabled:opacity-60">
+                    <button type="button" onClick={() => runDashboardAction('toggle', autoSyncEnabled ? pauseSync : resumeSync, autoSyncEnabled ? 'La sincronizaciÃ³n automÃ¡tica quedÃ³ pausada.' : 'La sincronizaciÃ³n automÃ¡tica quedÃ³ reanudada.')} disabled={actionState !== null} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition hover:bg-amber-100 disabled:opacity-60">
                       <div className="flex items-center gap-3">
                         {actionState === 'toggle' ? <Loader2 className="h-5 w-5 animate-spin text-amber-700" /> : autoSyncEnabled ? <Pause className="h-5 w-5 text-amber-700" /> : <Play className="h-5 w-5 text-amber-700" />}
                         <div>
                           <p className="text-sm font-black text-slate-950">{autoSyncEnabled ? 'Pausar auto sync' : 'Reanudar auto sync'}</p>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">{autoSyncEnabled ? 'Detiene los procesos automáticos sin deshabilitar el módulo completo.' : 'Vuelve a permitir que el scheduler ejecute sincronizaciones programadas.'}</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">{autoSyncEnabled ? 'Detiene los procesos automÃ¡ticos sin deshabilitar el mÃ³dulo completo.' : 'Vuelve a permitir que el scheduler ejecute sincronizaciones programadas.'}</p>
                         </div>
                       </div>
                     </button>
-                    <button type="button" onClick={() => runDashboardAction('backfill', backfillTeams, 'Se ejecutó el backfill del catálogo de equipos.')} disabled={actionState !== null} className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-left transition hover:bg-cyan-100 disabled:opacity-60">
+                    <button type="button" onClick={() => runDashboardAction('backfill', backfillTeams, 'Se ejecutÃ³ el backfill del catÃ¡logo de equipos.')} disabled={actionState !== null} className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-left transition hover:bg-cyan-100 disabled:opacity-60">
                       <div className="flex items-center gap-3">
                         {actionState === 'backfill' ? <Loader2 className="h-5 w-5 animate-spin text-cyan-700" /> : <TimerReset className="h-5 w-5 text-cyan-700" />}
                         <div>
                           <p className="text-sm font-black text-slate-950">Backfill de equipos</p>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">Crea o actualiza el catálogo local para facilitar el vínculo entre partidos y fixtures.</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">Crea o actualiza el catÃ¡logo local para facilitar el vÃ­nculo entre partidos y fixtures.</p>
                         </div>
                       </div>
                     </button>
@@ -486,8 +494,8 @@ const FootballSyncDashboard: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <Settings2 className="h-5 w-5 text-slate-700" />
                         <div>
-                          <p className="text-sm font-black text-slate-950">Configuración avanzada</p>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">Ajusta límites diarios, intervalos, alertas y reglas del scheduler.</p>
+                          <p className="text-sm font-black text-slate-950">ConfiguraciÃ³n avanzada</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">Ajusta lÃ­mites diarios, intervalos, alertas y reglas del scheduler.</p>
                         </div>
                       </div>
                     </button>
@@ -500,7 +508,7 @@ const FootballSyncDashboard: React.FC = () => {
                       <Link2 className="h-5 w-5 text-violet-600" />
                       <div>
                         <h2 className="text-lg font-black text-slate-950">Partidos pendientes por vincular</h2>
-                        <p className="text-sm text-slate-500">Desde aquí puedes buscar fixture, vincularlo y lanzar la primera sincronización.</p>
+                        <p className="text-sm text-slate-500">Desde aquÃ­ puedes buscar fixture, vincularlo y lanzar la primera sincronizaciÃ³n.</p>
                       </div>
                     </div>
 
@@ -510,7 +518,7 @@ const FootballSyncDashboard: React.FC = () => {
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="text-sm font-black text-slate-950">{match.homeTeam} vs {match.awayTeam}</p>
-                              <p className="mt-1 text-sm text-slate-600">{formatDateTime(match.matchDate)} · ID local: {match.id}</p>
+                              <p className="mt-1 text-sm text-slate-600">{formatDateTime(match.matchDate)} Â· ID local: {match.id}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <button type="button" onClick={() => openLinkFlow(match)} className="inline-flex items-center gap-1 rounded-full border border-violet-300 bg-white px-3 py-1.5 text-xs font-bold text-violet-700 transition hover:bg-violet-100">
@@ -531,13 +539,13 @@ const FootballSyncDashboard: React.FC = () => {
                   </article>
 
                   <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                    <h2 className="text-lg font-black text-slate-950">Accesos rápidos</h2>
+                    <h2 className="text-lg font-black text-slate-950">Accesos rÃ¡pidos</h2>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       {[
                         { label: 'Historial', description: 'Revisa ejecuciones anteriores y resultados del sync.', path: '/admin/football-sync/history' },
                         { label: 'Alertas', description: 'Abre errores, warnings y eventos por resolver.', path: '/admin/football-sync/alerts' },
-                        { label: 'Estadísticas', description: 'Consulta frecuencia, rendimiento y consumo acumulado.', path: '/admin/football-sync/stats' },
-                        { label: 'Configuración', description: 'Modifica intervalos, límites y notificaciones.', path: '/admin/football-sync/config' },
+                        { label: 'EstadÃ­sticas', description: 'Consulta frecuencia, rendimiento y consumo acumulado.', path: '/admin/football-sync/stats' },
+                        { label: 'ConfiguraciÃ³n', description: 'Modifica intervalos, lÃ­mites y notificaciones.', path: '/admin/football-sync/config' },
                       ].map((item) => (
                         <button key={item.label} type="button" onClick={() => navigate(item.path)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100">
                           <p className="text-sm font-black text-slate-950">{item.label}</p>
@@ -555,7 +563,7 @@ const FootballSyncDashboard: React.FC = () => {
                 <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-black text-slate-950">Últimas sincronizaciones</h2>
+                      <h2 className="text-lg font-black text-slate-950">Ãšltimas sincronizaciones</h2>
                       <p className="text-sm text-slate-500">Actividad reciente registrada en el backend.</p>
                     </div>
                     <button type="button" onClick={() => navigate('/admin/football-sync/history')} className="text-sm font-bold text-lime-700 hover:text-lime-800">Ver historial</button>
@@ -567,17 +575,17 @@ const FootballSyncDashboard: React.FC = () => {
                           <p className="text-sm font-black text-slate-950">{log.message}</p>
                           <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${log.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-700' : log.status === 'FAILED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{log.status}</span>
                         </div>
-                        <p className="mt-1 text-sm text-slate-600">{log.type} · {formatDateTime(log.createdAt)}</p>
-                        <p className="mt-2 text-xs text-slate-500">Requests: {log.requestsUsed} · Partidos: {log.matchesUpdated}</p>
+                        <p className="mt-1 text-sm text-slate-600">{log.type} Â· {formatDateTime(log.createdAt)}</p>
+                        <p className="mt-2 text-xs text-slate-500">Requests: {log.requestsUsed} Â· Partidos: {log.matchesUpdated}</p>
                       </div>
-                    )) : <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">Aún no hay logs recientes para mostrar.</div>}
+                    )) : <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">AÃºn no hay logs recientes para mostrar.</div>}
                   </div>
                 </article>
                 <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h2 className="text-lg font-black text-slate-950">Alertas activas</h2>
-                      <p className="text-sm text-slate-500">Eventos que requieren revisión operativa.</p>
+                      <p className="text-sm text-slate-500">Eventos que requieren revisiÃ³n operativa.</p>
                     </div>
                     <button type="button" onClick={() => navigate('/admin/football-sync/alerts')} className="text-sm font-bold text-lime-700 hover:text-lime-800">Ver alertas</button>
                   </div>
@@ -605,7 +613,7 @@ const FootballSyncDashboard: React.FC = () => {
           <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] bg-white p-4 shadow-2xl sm:p-6">
             <DialogPrimitive.Title className="text-xl font-black text-slate-950">Vincular partido con API-Football</DialogPrimitive.Title>
             <DialogPrimitive.Description className="mt-1 text-sm text-slate-500">
-              {linkModal ? `Busca un fixture candidato para ${linkModal.title} y ejecuta el vínculo completo.` : 'Busca un fixture candidato.'}
+              {linkModal ? `Busca un fixture candidato para ${linkModal.title} y ejecuta el vÃ­nculo completo.` : 'Busca un fixture candidato.'}
             </DialogPrimitive.Description>
 
             <div className="mt-5 space-y-4">
@@ -634,10 +642,10 @@ const FootballSyncDashboard: React.FC = () => {
                             <div>
                               <p className="text-sm font-black">{candidate.homeTeam} vs {candidate.awayTeam}</p>
                               <p className={`mt-1 text-sm ${candidateState.selectedExternalId === candidate.fixtureId ? 'text-slate-200' : 'text-slate-600'}`}>
-                                {formatDateTime(candidate.kickoff)} · {candidate.leagueName}{candidate.round ? ` · ${candidate.round}` : ''}
+                                {formatDateTime(candidate.kickoff)} Â· {candidate.leagueName}{candidate.round ? ` Â· ${candidate.round}` : ''}
                               </p>
                               <p className={`mt-1 text-xs ${candidateState.selectedExternalId === candidate.fixtureId ? 'text-slate-300' : 'text-slate-500'}`}>
-                                Fixture ID: {candidate.fixtureId}{candidate.venue ? ` · ${candidate.venue}` : ''}
+                                Fixture ID: {candidate.fixtureId}{candidate.venue ? ` Â· ${candidate.venue}` : ''}
                               </p>
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {candidate.reasons.map((reason) => (
@@ -658,7 +666,7 @@ const FootballSyncDashboard: React.FC = () => {
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <label className="text-sm font-black text-slate-900">Fixture ID manual</label>
-                    <p className="mt-1 text-sm text-slate-500">Úsalo si ya conoces el fixture ID correcto y quieres completar el vínculo igual.</p>
+                    <p className="mt-1 text-sm text-slate-500">Ãšsalo si ya conoces el fixture ID correcto y quieres completar el vÃ­nculo igual.</p>
                     <input
                       value={candidateState.manualExternalId}
                       onChange={(event) => setCandidateState((current) => ({ ...current, manualExternalId: event.target.value, selectedExternalId: '', error: null }))}

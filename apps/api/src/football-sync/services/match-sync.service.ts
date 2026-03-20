@@ -4,7 +4,16 @@ import { PredictionsService } from '../../predictions/predictions.service';
 import { ApiFootballClient } from './api-football-client.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
-import { MatchStatus, Prisma, Team } from '@prisma/client';
+import { MonitoringService } from './monitoring.service';
+import {
+  MatchStatus,
+  Prisma,
+  SyncAlertLevel,
+  SyncAlertType,
+  SyncLogStatus,
+  SyncLogType,
+  Team,
+} from '@prisma/client';
 import {
   ApiFootballFixture,
   ApiFootballFixtureTeam,
@@ -26,6 +35,7 @@ export class MatchSyncService {
     private readonly rateLimiter: RateLimiterService,
     private readonly syncPlan: SyncPlanService,
     private readonly predictionsService: PredictionsService,
+    private readonly monitoring: MonitoringService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -101,10 +111,53 @@ export class MatchSyncService {
     matchesUpdated: number;
     error?: string;
   }> {
+    return this.runTodaySync({
+      logType: SyncLogType.AUTO_SYNC,
+      summaryLabel: 'Automatic sync',
+    });
+  }
+
+  async syncTodayMatchesForTrigger(options: {
+    logType: SyncLogType;
+    triggeredBy?: string;
+    summaryLabel: string;
+  }): Promise<{
+    success: boolean;
+    matchesUpdated: number;
+    error?: string;
+  }> {
+    return this.runTodaySync(options);
+  }
+
+  private async runTodaySync(options: {
+    logType: SyncLogType;
+    triggeredBy?: string;
+    summaryLabel: string;
+  }): Promise<{
+    success: boolean;
+    matchesUpdated: number;
+    error?: string;
+  }> {
+    const startedAt = Date.now();
+
     try {
       // Check rate limit
       if (!(await this.rateLimiter.canMakeRequest())) {
         this.logger.warn('Rate limit reached, skipping sync');
+        await this.monitoring.createLog({
+          type: options.logType,
+          status: SyncLogStatus.SKIPPED,
+          message: `${options.summaryLabel} skipped because no requests are available`,
+          requestsUsed: 0,
+          matchesUpdated: 0,
+          duration: Date.now() - startedAt,
+          triggeredBy: options.triggeredBy,
+        });
+        await this.monitoring.createAlert({
+          type: SyncAlertType.RATE_LIMIT_EXCEEDED,
+          severity: SyncAlertLevel.WARNING,
+          message: 'Football Sync no pudo ejecutarse porque no quedan requests disponibles.',
+        });
         return {
           success: false,
           matchesUpdated: 0,
@@ -142,12 +195,53 @@ export class MatchSyncService {
         `Sync completed: ${updatedCount} matches updated from ${response.results} fixtures`,
       );
 
+      await this.monitoring.createLog({
+        type: options.logType,
+        status: SyncLogStatus.SUCCESS,
+        message: `${options.summaryLabel} completed successfully`,
+        requestsUsed: 1,
+        matchesUpdated: updatedCount,
+        duration: Date.now() - startedAt,
+        details: JSON.stringify({
+          fixturesFetched: response.results,
+          date: today,
+        }),
+        triggeredBy: options.triggeredBy,
+      });
+
+      if (response.results > 0 && updatedCount === 0) {
+        await this.monitoring.createAlert({
+          type: SyncAlertType.NO_MATCHES_UPDATED,
+          severity: SyncAlertLevel.INFO,
+          message: 'Football Sync consultó fixtures, pero no encontró partidos locales para actualizar.',
+          details: JSON.stringify({
+            fixturesFetched: response.results,
+            date: today,
+          }),
+        });
+      }
+
       return {
         success: true,
         matchesUpdated: updatedCount,
       };
     } catch (error) {
       this.logger.error(`Sync failed: ${error.message}`, error.stack);
+      await this.monitoring.createLog({
+        type: options.logType,
+        status: SyncLogStatus.FAILED,
+        message: `${options.summaryLabel} failed`,
+        requestsUsed: 0,
+        matchesUpdated: 0,
+        duration: Date.now() - startedAt,
+        error: error.message,
+        triggeredBy: options.triggeredBy,
+      });
+      await this.monitoring.createAlert({
+        type: SyncAlertType.SYNC_FAILURE,
+        severity: SyncAlertLevel.ERROR,
+        message: `Football Sync falló: ${error.message}`,
+      });
       return {
         success: false,
         matchesUpdated: 0,
@@ -164,10 +258,19 @@ export class MatchSyncService {
     matchesUpdated: number;
     error?: string;
   }> {
+    const startedAt = Date.now();
     try {
       // Check rate limit
       if (!(await this.rateLimiter.canMakeRequest())) {
         this.logger.warn('Rate limit reached, skipping live sync');
+        await this.monitoring.createLog({
+          type: SyncLogType.AUTO_SYNC,
+          status: SyncLogStatus.SKIPPED,
+          message: 'Live sync skipped because no requests are available',
+          requestsUsed: 0,
+          matchesUpdated: 0,
+          duration: Date.now() - startedAt,
+        });
         return {
           success: false,
           matchesUpdated: 0,
@@ -202,12 +305,34 @@ export class MatchSyncService {
         `Live sync completed: ${updatedCount} matches updated from ${response.results} live fixtures`,
       );
 
+      await this.monitoring.createLog({
+        type: SyncLogType.AUTO_SYNC,
+        status: SyncLogStatus.SUCCESS,
+        message: 'Live sync completed successfully',
+        requestsUsed: 1,
+        matchesUpdated: updatedCount,
+        duration: Date.now() - startedAt,
+        details: JSON.stringify({
+          fixturesFetched: response.results,
+          live: true,
+        }),
+      });
+
       return {
         success: true,
         matchesUpdated: updatedCount,
       };
     } catch (error) {
       this.logger.error(`Live sync failed: ${error.message}`, error.stack);
+      await this.monitoring.createLog({
+        type: SyncLogType.AUTO_SYNC,
+        status: SyncLogStatus.FAILED,
+        message: 'Live sync failed',
+        requestsUsed: 0,
+        matchesUpdated: 0,
+        duration: Date.now() - startedAt,
+        error: error.message,
+      });
       return {
         success: false,
         matchesUpdated: 0,
@@ -473,6 +598,7 @@ export class MatchSyncService {
    * Sync a specific match by ID
    */
   async syncMatchById(matchId: string): Promise<boolean> {
+    const startedAt = Date.now();
     try {
       const match = await this.prisma.match.findUnique({
         where: { id: matchId },
@@ -480,12 +606,31 @@ export class MatchSyncService {
 
       if (!match || !match.externalId) {
         this.logger.warn(`Match ${matchId} not found or has no external ID`);
+        await this.monitoring.createLog({
+          type: SyncLogType.MATCH_SYNC,
+          status: SyncLogStatus.SKIPPED,
+          matchId,
+          message: 'Match sync skipped because the match has no external fixture link',
+          requestsUsed: 0,
+          matchesUpdated: 0,
+          duration: Date.now() - startedAt,
+        });
         return false;
       }
 
       // Check rate limit
       if (!(await this.rateLimiter.canMakeRequest())) {
         this.logger.warn('Rate limit reached, cannot sync match');
+        await this.monitoring.createLog({
+          type: SyncLogType.MATCH_SYNC,
+          status: SyncLogStatus.SKIPPED,
+          matchId,
+          externalId: match.externalId,
+          message: 'Match sync skipped because no requests are available',
+          requestsUsed: 0,
+          matchesUpdated: 0,
+          duration: Date.now() - startedAt,
+        });
         return false;
       }
 
@@ -504,12 +649,50 @@ export class MatchSyncService {
 
       // Update match
       if (response.results > 0) {
-        return await this.updateMatchFromFixture(response.response[0]);
+        const updated = await this.updateMatchFromFixture(response.response[0]);
+        await this.monitoring.createLog({
+          type: SyncLogType.MATCH_SYNC,
+          status: updated ? SyncLogStatus.SUCCESS : SyncLogStatus.FAILED,
+          matchId,
+          externalId: match.externalId,
+          message: updated
+            ? 'Match sync completed successfully'
+            : 'Match sync could not update the linked fixture',
+          requestsUsed: 1,
+          matchesUpdated: updated ? 1 : 0,
+          duration: Date.now() - startedAt,
+        });
+        return updated;
       }
 
+      await this.monitoring.createLog({
+        type: SyncLogType.MATCH_SYNC,
+        status: SyncLogStatus.FAILED,
+        matchId,
+        externalId: match.externalId,
+        message: 'Match sync did not find a fixture for the linked external ID',
+        requestsUsed: 1,
+        matchesUpdated: 0,
+        duration: Date.now() - startedAt,
+      });
       return false;
     } catch (error) {
       this.logger.error(`Failed to sync match ${matchId}: ${error.message}`);
+      await this.monitoring.createLog({
+        type: SyncLogType.MATCH_SYNC,
+        status: SyncLogStatus.FAILED,
+        matchId,
+        message: 'Match sync failed with an exception',
+        requestsUsed: 0,
+        matchesUpdated: 0,
+        duration: Date.now() - startedAt,
+        error: error.message,
+      });
+      await this.monitoring.createAlert({
+        type: SyncAlertType.SYNC_FAILURE,
+        severity: SyncAlertLevel.ERROR,
+        message: `La sincronización del partido ${matchId} falló: ${error.message}`,
+      });
       return false;
     }
   }

@@ -52,7 +52,7 @@ export class FootballSyncController {
     const matches = await this.syncPlan.getMatchesToday();
     const used = await this.rateLimiter.getUsedRequestsToday();
     const available = await this.rateLimiter.getAvailableRequests();
-    const limit = this.rateLimiter.getDailyLimit();
+    const limit = await this.rateLimiter.getDailyLimit();
 
     // Calculate forecast confidence
     const usageRatio = used / limit;

@@ -41,6 +41,7 @@ vi.mock('../../stores/football-sync.store', () => ({
 describe('FootballSyncDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     storeState = {
       dashboard: {
         status: {
@@ -80,7 +81,7 @@ describe('FootballSyncDashboard', () => {
             id: 'log-1',
             type: 'MANUAL_SYNC',
             status: 'SUCCESS',
-            message: 'Sincronización manual ejecutada',
+            message: 'SincronizaciÃ³n manual ejecutada',
             requestsUsed: 2,
             matchesUpdated: 3,
             createdAt: '2026-03-19T16:00:00.000Z',
@@ -121,11 +122,24 @@ describe('FootballSyncDashboard', () => {
   it('renders overview content with explanatory copy and operational checklist', () => {
     render(<FootballSyncDashboard />);
 
-    expect(screen.getByText(/qué hace este módulo/i)).toBeInTheDocument();
+    expect(screen.getByText(/quÃ© hace este mÃ³dulo/i)).toBeInTheDocument();
     expect(screen.getByText(/Checklist operativo/i)).toBeInTheDocument();
     expect(screen.getByText(/Sistema habilitado/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Sincronización automática/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/SincronizaciÃ³n automÃ¡tica/i).length).toBeGreaterThan(0);
   }, 15000);
+
+  it('refreshes dashboard and config on the polling interval', async () => {
+    vi.useFakeTimers();
+    render(<FootballSyncDashboard />);
+
+    expect(fetchDashboardMock).toHaveBeenCalledTimes(1);
+    expect(fetchConfigMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30000);
+
+    expect(fetchDashboardMock).toHaveBeenCalledTimes(2);
+    expect(fetchConfigMock).toHaveBeenCalledTimes(2);
+  });
 
   it('completes the link flow from pending match to sync action', async () => {
     const user = userEvent.setup();
@@ -152,6 +166,6 @@ describe('FootballSyncDashboard', () => {
 
     await user.click(screen.getByRole('tab', { name: /Actividad/i }));
     expect(screen.getAllByText(/Alertas activas/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Últimas sincronizaciones/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ãšltimas sincronizaciones/i)).toBeInTheDocument();
   }, 15000);
 });

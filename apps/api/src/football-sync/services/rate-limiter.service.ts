@@ -1,17 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConfigService as FootballConfigService } from './config.service';
 
 @Injectable()
 export class RateLimiterService {
   private readonly logger = new Logger(RateLimiterService.name);
-  private readonly dailyLimit: number;
+  private readonly fallbackDailyLimit: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly footballConfigService: FootballConfigService,
   ) {
-    this.dailyLimit = parseInt(
+    this.fallbackDailyLimit = parseInt(
       this.configService.get<string>('API_FOOTBALL_DAILY_LIMIT', '100'),
       10,
     );
@@ -22,11 +24,12 @@ export class RateLimiterService {
    */
   async canMakeRequest(): Promise<boolean> {
     const usedToday = await this.getUsedRequestsToday();
-    const canProceed = usedToday < this.dailyLimit;
+    const dailyLimit = await this.getDailyLimit();
+    const canProceed = usedToday < dailyLimit;
 
     if (!canProceed) {
       this.logger.warn(
-        `Daily limit reached: ${usedToday}/${this.dailyLimit} requests used`,
+        `Daily limit reached: ${usedToday}/${dailyLimit} requests used`,
       );
     }
 
@@ -55,7 +58,8 @@ export class RateLimiterService {
    */
   async getAvailableRequests(): Promise<number> {
     const used = await this.getUsedRequestsToday();
-    return Math.max(0, this.dailyLimit - used);
+    const dailyLimit = await this.getDailyLimit();
+    return Math.max(0, dailyLimit - used);
   }
 
   /**
@@ -78,18 +82,19 @@ export class RateLimiterService {
       });
 
       const usedToday = await this.getUsedRequestsToday();
+      const dailyLimit = await this.getDailyLimit();
       this.logger.log(
-        `Request logged: ${endpoint} (${usedToday}/${this.dailyLimit} used today)`,
+        `Request logged: ${endpoint} (${usedToday}/${dailyLimit} used today)`,
       );
 
       // Warning thresholds
-      if (usedToday >= this.dailyLimit * 0.95) {
+      if (usedToday >= dailyLimit * 0.95) {
         this.logger.warn(
-          `CRITICAL: 95% of daily limit consumed (${usedToday}/${this.dailyLimit})`,
+          `CRITICAL: 95% of daily limit consumed (${usedToday}/${dailyLimit})`,
         );
-      } else if (usedToday >= this.dailyLimit * 0.8) {
+      } else if (usedToday >= dailyLimit * 0.8) {
         this.logger.warn(
-          `WARNING: 80% of daily limit consumed (${usedToday}/${this.dailyLimit})`,
+          `WARNING: 80% of daily limit consumed (${usedToday}/${dailyLimit})`,
         );
       }
     } catch (error) {
@@ -118,8 +123,19 @@ export class RateLimiterService {
   /**
    * Get daily limit
    */
-  getDailyLimit(): number {
-    return this.dailyLimit;
+  async getDailyLimit(): Promise<number> {
+    try {
+      const persistedLimit = await this.footballConfigService.getDailyLimit();
+      if (persistedLimit > 0) {
+        return persistedLimit;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Falling back to env daily limit: ${error.message}`,
+      );
+    }
+
+    return this.fallbackDailyLimit;
   }
 
   /**
@@ -127,7 +143,8 @@ export class RateLimiterService {
    */
   async getUsagePercentage(): Promise<number> {
     const used = await this.getUsedRequestsToday();
-    return Math.round((used / this.dailyLimit) * 100);
+    const dailyLimit = await this.getDailyLimit();
+    return Math.round((used / dailyLimit) * 100);
   }
 
   /**

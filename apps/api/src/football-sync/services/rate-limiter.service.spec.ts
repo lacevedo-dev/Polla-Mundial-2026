@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { RateLimiterService } from './rate-limiter.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConfigService as FootballConfigService } from './config.service';
 
 describe('RateLimiterService', () => {
   let service: RateLimiterService;
@@ -22,6 +23,10 @@ describe('RateLimiterService', () => {
     }),
   };
 
+  const mockFootballConfigService = {
+    getDailyLimit: jest.fn().mockResolvedValue(100),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -34,6 +39,10 @@ describe('RateLimiterService', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: FootballConfigService,
+          useValue: mockFootballConfigService,
+        },
       ],
     }).compile();
 
@@ -43,6 +52,7 @@ describe('RateLimiterService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    mockFootballConfigService.getDailyLimit.mockResolvedValue(100);
   });
 
   it('should be defined', () => {
@@ -130,9 +140,17 @@ describe('RateLimiterService', () => {
   });
 
   describe('getDailyLimit', () => {
-    it('should return configured daily limit', () => {
-      const limit = service.getDailyLimit();
+    it('should return configured daily limit', async () => {
+      const limit = await service.getDailyLimit();
       expect(limit).toBe(100);
+    });
+
+    it('prefers persisted football sync config over env fallback', async () => {
+      mockFootballConfigService.getDailyLimit.mockResolvedValue(150);
+
+      const limit = await service.getDailyLimit();
+
+      expect(limit).toBe(150);
     });
   });
 

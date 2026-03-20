@@ -4,28 +4,19 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { MatchStatus, SyncStrategy } from '@prisma/client';
 import { DailySyncPlanDto } from '../dto/api-football.dto';
+import { ConfigService as FootballConfigService } from './config.service';
 
 @Injectable()
 export class SyncPlanService {
   private readonly logger = new Logger(SyncPlanService.name);
-  private readonly minInterval: number;
-  private readonly maxInterval: number;
   private readonly avgMatchDuration = 120; // minutes
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly rateLimiter: RateLimiterService,
     private readonly configService: ConfigService,
-  ) {
-    this.minInterval = parseInt(
-      this.configService.get<string>('MIN_SYNC_INTERVAL_MINUTES', '5'),
-      10,
-    );
-    this.maxInterval = parseInt(
-      this.configService.get<string>('MAX_SYNC_INTERVAL_MINUTES', '30'),
-      10,
-    );
-  }
+    private readonly footballConfigService: FootballConfigService,
+  ) {}
 
   /**
    * Calculate optimal daily sync plan based on today's matches
@@ -42,6 +33,7 @@ export class SyncPlanService {
     const matches = await this.getMatchesToday();
     const usedRequests = await this.rateLimiter.getUsedRequestsToday();
     const available = await this.rateLimiter.getAvailableRequests();
+    const { minInterval, maxInterval } = await this.getIntervalBounds();
 
     // Calculate optimal interval
     const { intervalMinutes, strategy, estimatedTotal } =
@@ -50,6 +42,8 @@ export class SyncPlanService {
         matches.live,
         available,
         usedRequests,
+        minInterval,
+        maxInterval,
       );
 
     // Update or create plan
@@ -78,7 +72,10 @@ export class SyncPlanService {
     }
 
     // Calculate next sync time
-    const nextSyncIn = await this.getSecondsUntilNextSync(plan.lastSyncAt);
+    const nextSyncIn = this.getSecondsUntilNextSync(
+      plan.lastSyncAt,
+      intervalMinutes,
+    );
 
     return {
       date: today,
@@ -101,6 +98,8 @@ export class SyncPlanService {
     liveMatches: number,
     availableRequests: number,
     usedRequests: number,
+    minInterval: number,
+    maxInterval: number,
   ): {
     intervalMinutes: number;
     strategy: SyncStrategy;
@@ -109,7 +108,7 @@ export class SyncPlanService {
     // No matches = no sync needed
     if (totalMatches === 0) {
       return {
-        intervalMinutes: this.maxInterval,
+        intervalMinutes: maxInterval,
         strategy: SyncStrategy.BALANCED,
         estimatedTotal: usedRequests,
       };
@@ -119,7 +118,7 @@ export class SyncPlanService {
     if (availableRequests <= 5) {
       this.logger.warn(`EMERGENCY MODE: Only ${availableRequests} requests left`);
       return {
-        intervalMinutes: this.maxInterval,
+        intervalMinutes: maxInterval,
         strategy: SyncStrategy.EMERGENCY,
         estimatedTotal: usedRequests + Math.min(availableRequests, 5),
       };
@@ -137,7 +136,7 @@ export class SyncPlanService {
       // Aggressive: lots of requests per match
       if (requestsPerLiveMatch >= 20) {
         const interval = Math.max(
-          this.minInterval,
+          minInterval,
           Math.ceil(this.avgMatchDuration / requestsPerLiveMatch),
         );
         return {
@@ -150,7 +149,7 @@ export class SyncPlanService {
       // Balanced: moderate requests per match
       if (requestsPerLiveMatch >= 10) {
         const interval = Math.max(
-          this.minInterval,
+          minInterval,
           Math.ceil(this.avgMatchDuration / requestsPerLiveMatch),
         );
         return {
@@ -162,7 +161,7 @@ export class SyncPlanService {
 
       // Conservative: few requests per match
       const interval = Math.min(
-        this.maxInterval,
+        maxInterval,
         Math.ceil(this.avgMatchDuration / Math.max(5, requestsPerLiveMatch)),
       );
       return {
@@ -174,8 +173,8 @@ export class SyncPlanService {
 
     // No live matches, use balanced approach
     const interval = Math.max(
-      this.minInterval,
-      Math.min(this.maxInterval, requestsPerMatch * 2),
+      minInterval,
+      Math.min(maxInterval, requestsPerMatch * 2),
     );
 
     return {
@@ -264,6 +263,11 @@ export class SyncPlanService {
    * Check if sync should happen now based on plan
    */
   async shouldSyncNow(): Promise<boolean> {
+    if (!(await this.footballConfigService.isAutoSyncEnabled())) {
+      this.logger.debug('Auto sync is disabled by configuration');
+      return false;
+    }
+
     const plan = await this.calculateDailyPlan();
 
     // No live matches = no sync needed
@@ -294,19 +298,43 @@ export class SyncPlanService {
   /**
    * Calculate seconds until next sync
    */
-  private async getSecondsUntilNextSync(
+  private getSecondsUntilNextSync(
     lastSyncAt: Date | null,
-  ): Promise<number> {
+    intervalMinutes: number,
+  ): number {
     if (!lastSyncAt) {
       return 0; // Sync immediately if never synced
     }
 
-    const plan = await this.calculateDailyPlan();
-    const intervalMs = plan.intervalMinutes * 60 * 1000;
+    const intervalMs = intervalMinutes * 60 * 1000;
     const elapsed = Date.now() - lastSyncAt.getTime();
     const remaining = intervalMs - elapsed;
 
     return Math.max(0, Math.ceil(remaining / 1000));
+  }
+
+  private async getIntervalBounds(): Promise<{
+    minInterval: number;
+    maxInterval: number;
+  }> {
+    try {
+      const intervals = await this.footballConfigService.getSyncIntervals();
+      return {
+        minInterval: intervals.min,
+        maxInterval: intervals.max,
+      };
+    } catch (error) {
+      return {
+        minInterval: parseInt(
+          this.configService.get<string>('MIN_SYNC_INTERVAL_MINUTES', '5'),
+          10,
+        ),
+        maxInterval: parseInt(
+          this.configService.get<string>('MAX_SYNC_INTERVAL_MINUTES', '30'),
+          10,
+        ),
+      };
+    }
   }
 
   /**

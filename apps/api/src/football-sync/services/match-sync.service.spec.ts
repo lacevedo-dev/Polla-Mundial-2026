@@ -6,6 +6,7 @@ import { ApiFootballClient } from './api-football-client.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
 import { MatchSyncService } from './match-sync.service';
+import { MonitoringService } from './monitoring.service';
 
 describe('MatchSyncService', () => {
   let service: MatchSyncService;
@@ -43,6 +44,11 @@ describe('MatchSyncService', () => {
     calculateMatchPoints: jest.fn(),
   };
 
+  const mockMonitoringService = {
+    createLog: jest.fn(),
+    createAlert: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,6 +58,7 @@ describe('MatchSyncService', () => {
         { provide: RateLimiterService, useValue: mockRateLimiterService },
         { provide: SyncPlanService, useValue: mockSyncPlanService },
         { provide: PredictionsService, useValue: mockPredictionsService },
+        { provide: MonitoringService, useValue: mockMonitoringService },
       ],
     }).compile();
 
@@ -60,6 +67,127 @@ describe('MatchSyncService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('creates a success monitoring log after syncing today matches', async () => {
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: {
+            id: 999,
+            status: { short: 'LIVE' },
+          },
+          teams: {
+            home: {
+              id: 10,
+              name: 'England',
+              logo: 'https://media.api-sports.io/football/teams/10.png',
+              winner: null,
+            },
+            away: {
+              id: 2,
+              name: 'France',
+              logo: 'https://media.api-sports.io/football/teams/2.png',
+              winner: null,
+            },
+          },
+          goals: {
+            home: 1,
+            away: 0,
+          },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-1',
+      externalId: '999',
+      homeTeamId: 'legacy-home',
+      awayTeamId: 'team-fra',
+      homeScore: null,
+      awayScore: null,
+      homeTeam: {
+        id: 'legacy-home',
+        name: 'Gran Bretaña',
+        code: 'GBR',
+        shortCode: null,
+        apiFootballTeamId: null,
+        flagUrl: null,
+        group: 'C',
+      },
+      awayTeam: {
+        id: 'team-fra',
+        name: 'Francia',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 2,
+        flagUrl: 'https://media.api-sports.io/football/teams/2.png',
+        group: 'B',
+      },
+    });
+    mockPrismaService.team.findUnique
+      .mockResolvedValueOnce({
+        id: 'team-eng',
+        name: 'Inglaterra',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 10,
+        flagUrl: 'https://media.api-sports.io/football/teams/10.png',
+        group: 'C',
+      })
+      .mockResolvedValueOnce({
+        id: 'team-fra',
+        name: 'Francia',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 2,
+        flagUrl: 'https://media.api-sports.io/football/teams/2.png',
+        group: 'B',
+      });
+    mockPrismaService.team.update.mockResolvedValue({});
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-1',
+      status: MatchStatus.LIVE,
+    });
+
+    await service.syncTodayMatchesForTrigger({
+      logType: 'MANUAL_SYNC' as any,
+      summaryLabel: 'Manual sync',
+      triggeredBy: 'manual',
+    });
+
+    expect(mockMonitoringService.createLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'MANUAL_SYNC',
+        status: 'SUCCESS',
+        matchesUpdated: 1,
+        requestsUsed: 1,
+      }),
+    );
+  });
+
+  it('creates skip log and rate-limit alert when today sync cannot run', async () => {
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(false);
+
+    const result = await service.syncTodayMatchesForTrigger({
+      logType: 'CRON_SYNC' as any,
+      summaryLabel: 'Cron sync',
+      triggeredBy: 'scheduler',
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockMonitoringService.createLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'CRON_SYNC',
+        status: 'SKIPPED',
+      }),
+    );
+    expect(mockMonitoringService.createAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'RATE_LIMIT_EXCEEDED',
+      }),
+    );
   });
 
   it('backfills existing teams with canonical API-Football metadata', async () => {

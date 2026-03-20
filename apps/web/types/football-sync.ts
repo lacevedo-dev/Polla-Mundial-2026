@@ -235,3 +235,9 @@ export const AlertTypeLabels: Record<string, string> = {
   EMERGENCY_MODE: 'Modo de Emergencia',
   NO_MATCHES_UPDATED: 'Sin Partidos Actualizados',
 };
+
+export const SyncHistoryTypeOptions = [
+  { value: 'AUTO_SYNC', label: 'Automática' },
+  { value: 'MANUAL_SYNC', label: 'Manual' },
+  { value: 'MATCH_SYNC', label: 'Partido único' },
+] as const;
