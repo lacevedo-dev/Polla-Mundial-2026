@@ -79,4 +79,28 @@ describe('MonitoringService', () => {
 
     expect(mockPrismaService.footballSyncAlert.create).not.toHaveBeenCalled();
   });
+
+  it('normalizes resolved=false query filters before querying Prisma alerts', async () => {
+    mockPrismaService.footballSyncAlert.findMany.mockResolvedValue([]);
+    mockPrismaService.footballSyncAlert.count.mockResolvedValue(0);
+
+    await service.getAlerts({
+      page: 1,
+      limit: 20,
+      resolved: 'false' as unknown as boolean,
+    });
+
+    expect(mockPrismaService.footballSyncAlert.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          resolved: false,
+        }),
+      }),
+    );
+    expect(mockPrismaService.footballSyncAlert.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        resolved: false,
+      }),
+    });
+  });
 });

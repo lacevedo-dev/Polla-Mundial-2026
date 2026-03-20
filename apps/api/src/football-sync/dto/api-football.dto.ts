@@ -1,3 +1,6 @@
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+
 export interface ApiFootballFixtureTeam {
   id: number;
   name: string;
@@ -229,13 +232,37 @@ export interface MonitoringDashboardDto {
   };
 }
 
-export interface SyncHistoryFilterDto {
+export class SyncHistoryFilterDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @IsString()
   type?: string;
+
+  @IsOptional()
+  @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsString()
   matchId?: string;
+
+  @IsOptional()
+  @IsString()
   startDate?: string;
+
+  @IsOptional()
+  @IsString()
   endDate?: string;
 }
 
@@ -256,13 +283,46 @@ export interface SyncHistoryResponseDto {
   };
 }
 
-export interface AlertsFilterDto {
+export class AlertsFilterDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @IsString()
   type?: string;
+
+  @IsOptional()
+  @IsString()
   severity?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) =>
+    value === '' || value === undefined || value === null
+      ? undefined
+      : value === true || value === 'true'
+        ? true
+        : value === false || value === 'false'
+          ? false
+          : value,
+  )
   resolved?: boolean;
+
+  @IsOptional()
+  @IsString()
   startDate?: string;
+
+  @IsOptional()
+  @IsString()
   endDate?: string;
 }
 

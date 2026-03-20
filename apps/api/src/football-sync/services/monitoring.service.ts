@@ -308,11 +308,15 @@ export class MonitoringService {
    * Obtener alertas con filtros y paginación
    */
   async getAlerts(filter: AlertsFilterDto): Promise<AlertsResponseDto> {
-    const page = filter.page ?? 1;
-    const limit = filter.limit ?? 20;
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 20;
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    const resolved =
+      typeof filter.resolved === 'string'
+        ? filter.resolved === 'true'
+        : filter.resolved;
 
     if (filter.type) {
       where.type = filter.type as SyncAlertType;
@@ -320,8 +324,8 @@ export class MonitoringService {
     if (filter.severity) {
       where.severity = filter.severity as SyncAlertLevel;
     }
-    if (filter.resolved !== undefined) {
-      where.resolved = filter.resolved;
+    if (resolved !== undefined) {
+      where.resolved = resolved;
     }
     if (filter.startDate || filter.endDate) {
       where.createdAt = {};
