@@ -27,6 +27,7 @@ model User {
   notifications      Notification[]
   orders             Order[]
   payments           Payment[]
+  participationObligations ParticipationObligation[]
   predictions        Prediction[]
   verificationTokens VerificationToken[]
   aiUsageRecords     AiUsageRecord[]
@@ -70,6 +71,7 @@ model League {
   invitations            Invitation[]
   members                LeagueMember[]
   payments               Payment[]
+  participationObligations ParticipationObligation[]
   predictions            Prediction[]
   distributions          PrizeDistribution[]
   scoringRules           ScoringRule[]
@@ -168,6 +170,7 @@ model Match {
   lastSyncAt  DateTime?
   syncCount   Int               @default(0)
   syncLogs    FootballSyncLog[]
+  participationObligations ParticipationObligation[]
   awayTeam    Team              @relation("AwayTeam", fields: [awayTeamId], references: [id])
   homeTeam    Team              @relation("HomeTeam", fields: [homeTeamId], references: [id])
   predictions Prediction[]
@@ -272,6 +275,41 @@ model Notification {
 
   @@index([userId, read])
   @@index([sentAt])
+}
+
+model ParticipationObligation {
+  id                String               @id @default(cuid())
+  userId            String
+  leagueId          String
+  matchId           String?
+  category          ParticipationCategory
+  referenceId       String?
+  referenceLabel    String
+  source            ParticipationSource  @default(PREDICTION)
+  unitAmount        Int
+  multiplier        Int                  @default(1)
+  totalAmount       Int
+  currency          Currency             @default(COP)
+  status            ParticipationStatus  @default(PENDING_PAYMENT)
+  deadlineAt        DateTime
+  orderId           String?
+  paymentId         String?
+  reminder30SentAt  DateTime?
+  reminder10SentAt  DateTime?
+  paidAt            DateTime?
+  expiredAt         DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  league            League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  match             Match?               @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([leagueId, category, status])
+  @@index([deadlineAt, status])
+  @@index([matchId])
+  @@index([orderId])
 }
 
 model Order {
@@ -437,9 +475,32 @@ enum MemberRole {
 
 enum MemberStatus {
   PENDING
+  PENDING_PAYMENT
   ACTIVE
   REJECTED
   BANNED
+}
+
+enum ParticipationCategory {
+  PRINCIPAL
+  MATCH
+  GROUP
+  ROUND
+  PHASE
+}
+
+enum ParticipationSource {
+  PREDICTION
+  INVITATION
+  ADMIN
+  SYSTEM
+}
+
+enum ParticipationStatus {
+  PENDING_PAYMENT
+  PAID
+  EXPIRED
+  CANCELLED
 }
 
 enum MatchStatus {

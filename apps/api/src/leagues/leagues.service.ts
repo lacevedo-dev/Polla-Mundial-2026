@@ -1,13 +1,17 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Plan } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { ParticipationService } from '../participation/participation.service';
 
 @Injectable()
 export class LeaguesService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly participationService: ParticipationService,
+    ) { }
 
     private static readonly DEFAULT_SCORING_RULES = [
         { ruleType: ScoringType.EXACT_SCORE, points: 5, description: 'Marcador exacto' },
@@ -16,14 +20,13 @@ export class LeaguesService {
     ] as const;
 
     private generateUniqueCode(): string {
-        return randomBytes(3).toString('hex').toUpperCase(); // Ej: F4A13B
+        return randomBytes(3).toString('hex').toUpperCase();
     }
 
     async create(userId: string, createLeagueDto: CreateLeagueDto) {
         let code = this.generateUniqueCode();
         let isCodeUnique = false;
 
-        // Verificar unicidad del código
         while (!isCodeUnique) {
             const existing = await this.prisma.league.findUnique({ where: { code } });
             if (!existing) {
@@ -33,7 +36,6 @@ export class LeaguesService {
             }
         }
 
-        // Inherit plan from creator if not explicitly provided
         let leaguePlan = createLeagueDto.plan;
         if (!leaguePlan) {
             const creator = await this.prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
@@ -107,7 +109,7 @@ export class LeaguesService {
                 members: {
                     some: {
                         userId,
-                        status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING] },
+                        status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING, MemberStatus.PENDING_PAYMENT] },
                     },
                 },
             },
@@ -150,7 +152,6 @@ export class LeaguesService {
             throw new NotFoundException('La liga solicitada no existe');
         }
 
-        // Verificar si el usuario es miembro de la liga
         const isMember = league.members.some((m) => m.userId === userId);
         if (!isMember) {
             throw new BadRequestException('No tienes acceso a esta liga');
@@ -162,7 +163,7 @@ export class LeaguesService {
     async findPublicLeagues(userId: string) {
         const joinedIds = (
             await this.prisma.leagueMember.findMany({
-                where: { userId, status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING] } },
+                where: { userId, status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING, MemberStatus.PENDING_PAYMENT] } },
                 select: { leagueId: true },
             })
         ).map((m) => m.leagueId);
@@ -193,7 +194,7 @@ export class LeaguesService {
                 OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
             },
             include: {
-                league: { select: { id: true, name: true, privacy: true } },
+                league: { select: { id: true, name: true, privacy: true, includeBaseFee: true, baseFee: true } },
                 inviter: { select: { id: true, name: true } },
             },
             orderBy: { createdAt: 'desc' },
@@ -203,21 +204,54 @@ export class LeaguesService {
     async acceptInvitation(userId: string, invitationId: string) {
         const invitation = await this.prisma.invitation.findUnique({
             where: { id: invitationId },
-            include: { league: { select: { id: true, code: true, maxParticipants: true, privacy: true, _count: { select: { members: { where: { status: MemberStatus.ACTIVE } } } } } } },
+            include: {
+                league: {
+                    select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        maxParticipants: true,
+                        privacy: true,
+                        includeBaseFee: true,
+                        baseFee: true,
+                        _count: { select: { members: { where: { status: MemberStatus.ACTIVE } } } },
+                    },
+                },
+            },
         });
         if (!invitation || invitation.status !== InviteStatus.SENT) {
             throw new NotFoundException('Invitación no encontrada o ya procesada');
         }
 
+        const requiresPayment = invitation.league.includeBaseFee && (invitation.league.baseFee ?? 0) > 0;
         const existing = await this.prisma.leagueMember.findUnique({
             where: { userId_leagueId: { userId, leagueId: invitation.leagueId } },
         });
+
         if (!existing) {
             if (invitation.league.maxParticipants && invitation.league._count.members >= invitation.league.maxParticipants) {
                 throw new BadRequestException('La liga ya alcanzó su límite de participantes');
             }
             await this.prisma.leagueMember.create({
-                data: { userId, leagueId: invitation.leagueId, role: MemberRole.PLAYER, status: MemberStatus.ACTIVE },
+                data: {
+                    userId,
+                    leagueId: invitation.leagueId,
+                    role: MemberRole.PLAYER,
+                    status: requiresPayment ? MemberStatus.PENDING_PAYMENT : MemberStatus.ACTIVE,
+                },
+            });
+        } else if (requiresPayment && existing.status !== MemberStatus.ACTIVE) {
+            await this.prisma.leagueMember.update({
+                where: { userId_leagueId: { userId, leagueId: invitation.leagueId } },
+                data: { status: MemberStatus.PENDING_PAYMENT },
+            });
+        }
+
+        if (requiresPayment) {
+            await this.participationService.createPrincipalObligationForInvitation({
+                userId,
+                leagueId: invitation.leagueId,
+                deadlineAt: invitation.expiresAt,
             });
         }
 
@@ -226,7 +260,11 @@ export class LeaguesService {
             data: { status: InviteStatus.ACCEPTED },
         });
 
-        return { ok: true, leagueId: invitation.leagueId };
+        return {
+            ok: true,
+            leagueId: invitation.leagueId,
+            status: requiresPayment ? MemberStatus.PENDING_PAYMENT : MemberStatus.ACTIVE,
+        };
     }
 
     async declineInvitation(invitationId: string) {
@@ -258,7 +296,6 @@ export class LeaguesService {
             throw new BadRequestException('La liga ya alcanzó su límite de participantes');
         }
 
-        // Comprobar si ya es miembro
         const existingMember = await this.prisma.leagueMember.findUnique({
             where: {
                 userId_leagueId: { userId, leagueId: league.id },
@@ -269,7 +306,6 @@ export class LeaguesService {
             throw new BadRequestException('Ya eres miembro (o tienes una solicitud pendiente) en esta liga');
         }
 
-        // Únete a la liga
         const newMember = await this.prisma.leagueMember.create({
             data: {
                 userId,

@@ -21,6 +21,7 @@ import { ConfigModule } from './config/config.module';
 import { InsightsModule } from './insights/insights.module';
 import { FootballSyncModule } from './football-sync/football-sync.module';
 import { AiCreditsModule } from './ai-credits/ai-credits.module';
+import { ParticipationModule } from './participation/participation.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { AiCreditsModule } from './ai-credits/ai-credits.module';
     CommonModule,
     HealthModule,
     FootballSyncModule,
+    ParticipationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

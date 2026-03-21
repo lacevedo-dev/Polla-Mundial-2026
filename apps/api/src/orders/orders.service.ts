@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
 
@@ -6,7 +6,17 @@ export class CreateOrderDto {
   userId: string;
   amount: number;
   currency: string;
-  items: Array<{ type: string; id: string; quantity: number }>;
+  items: Array<{
+    type: string;
+    id: string;
+    quantity: number;
+    price?: number;
+    name?: string;
+    category?: string;
+    obligationId?: string;
+    leagueId?: string;
+    referenceId?: string;
+  }>;
 }
 
 @Injectable()
@@ -19,7 +29,17 @@ export class OrdersService {
     userId: string,
     amount: number,
     currency: string,
-    items: Array<{ type: string; id: string; quantity: number }>,
+    items: Array<{
+      type: string;
+      id: string;
+      quantity: number;
+      price?: number;
+      name?: string;
+      category?: string;
+      obligationId?: string;
+      leagueId?: string;
+      referenceId?: string;
+    }>,
   ) {
     try {
       const order = await this.prisma.order.create({

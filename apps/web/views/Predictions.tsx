@@ -12,6 +12,7 @@ import {
     ChevronDown,
     ChevronRight,
     ChevronUp,
+    Coins,
     GitMerge,
     LayoutGrid,
     Lock,
@@ -23,10 +24,17 @@ import {
     Zap,
 } from 'lucide-react';
 import { useNavigate, useBlocker } from 'react-router-dom';
+import { request } from '../api';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useAuthStore } from '../stores/auth.store';
 import { useAiCredits } from '../hooks/useAiCredits';
+import {
+    ParticipationCategoryLabels,
+    ParticipationStatusColors,
+    type ParticipationCategoryOption,
+    type ParticipationSummaryBar,
+} from '../types/participation';
 
 type DraftMap = Record<string, { home: string; away: string }>;
 type PhaseFilter = 'ALL' | 'GROUP' | 'KNOCKOUT';
@@ -121,6 +129,22 @@ function summarizeCloseTime(matchDate: string): string {
 
     const totalMinutes = Math.max(1, Math.floor(diffMs / (1000 * 60)));
     return `${totalMinutes}m`;
+}
+
+function participationKey(category: string, referenceId?: string): string {
+    return `${category}:${referenceId ?? 'ROOT'}`;
+}
+
+function formatCurrency(value: number, currency: string): string {
+    try {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency,
+            maximumFractionDigits: 0,
+        }).format(value);
+    } catch {
+        return `${currency} ${value.toLocaleString('es-CO')}`;
+    }
 }
 
 // Persistent cache for AI insights — avoids re-fetching and re-consuming credits.
@@ -1363,6 +1387,13 @@ const Predictions: React.FC = () => {
     const awayInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
     const [searchExpanded, setSearchExpanded] = React.useState(false);
     const [isScrolled, setIsScrolled] = React.useState(false);
+    const [activeParticipationMatchId, setActiveParticipationMatchId] = React.useState<string | null>(null);
+    const [participationOptionsByMatch, setParticipationOptionsByMatch] = React.useState<Record<string, ParticipationCategoryOption[]>>({});
+    const [participationDrafts, setParticipationDrafts] = React.useState<Record<string, Record<string, 1 | 2 | 3>>>({});
+    const [participationLoadingByMatch, setParticipationLoadingByMatch] = React.useState<Record<string, boolean>>({});
+    const [participationSavingMatchId, setParticipationSavingMatchId] = React.useState<string | null>(null);
+    const [participationSummary, setParticipationSummary] = React.useState<ParticipationSummaryBar | null>(null);
+    const [participationCheckoutLoading, setParticipationCheckoutLoading] = React.useState(false);
 
     // Dirty detection: open matches whose draft differs from saved prediction
     const dirtyMatchIds = React.useMemo(() =>
@@ -1401,18 +1432,96 @@ const Predictions: React.FC = () => {
         if (!activeLeague?.id) {
             resetLeagueData();
             setDrafts({});
+            setParticipationSummary(null);
+            setParticipationOptionsByMatch({});
+            setParticipationDrafts({});
+            setActiveParticipationMatchId(null);
             return;
         }
 
         setError(null);
-        void fetchLeagueMatches(activeLeague.id).catch((nextError) => {
-            setError(nextError instanceof Error ? nextError.message : 'No fue posible cargar los partidos.');
-        });
-    }, [activeLeague?.id, fetchLeagueMatches, resetLeagueData]);
+        void Promise.all([
+            fetchLeagueMatches(activeLeague.id),
+            request<ParticipationSummaryBar>(`/participation/summary?leagueId=${activeLeague.id}`).catch(
+                () => null,
+            ),
+        ])
+            .then(async ([loadedMatches, summary]) => {
+                setParticipationSummary(summary);
+
+                const sourceMatches =
+                    loadedMatches && loadedMatches.length > 0 ? loadedMatches : matches;
+                const openMatches = sourceMatches.filter(
+                    (match) => match.status === 'open' || match.status === 'live',
+                );
+
+                const optionEntries = await Promise.all(
+                    openMatches.map(async (match) => {
+                        try {
+                            const options = await request<ParticipationCategoryOption[]>(
+                                `/participation/options?leagueId=${activeLeague.id}&matchId=${match.id}`,
+                            );
+                            return [match.id, options] as const;
+                        } catch {
+                            return [match.id, []] as const;
+                        }
+                    }),
+                );
+
+                setParticipationOptionsByMatch(Object.fromEntries(optionEntries));
+                setParticipationDrafts(
+                    Object.fromEntries(
+                        optionEntries.map(([matchId, options]) => [
+                            matchId,
+                            Object.fromEntries(
+                                options.map((option) => [
+                                    participationKey(option.category, option.referenceId),
+                                    (option.multiplier ?? 1) as 1 | 2 | 3,
+                                ]),
+                            ),
+                        ]),
+                    ),
+                );
+            })
+            .catch((nextError) => {
+                setError(nextError instanceof Error ? nextError.message : 'No fue posible cargar los partidos.');
+            });
+    }, [activeLeague?.id, fetchLeagueMatches, matches, resetLeagueData]);
 
     React.useEffect(() => {
         setDrafts(buildDrafts(matches));
     }, [matches]);
+
+    const loadParticipationOptions = React.useCallback(
+        async (matchId: string) => {
+            if (!activeLeague?.id) {
+                return [] as ParticipationCategoryOption[];
+            }
+
+            setParticipationLoadingByMatch((current) => ({ ...current, [matchId]: true }));
+            try {
+                const options = await request<ParticipationCategoryOption[]>(
+                    `/participation/options?leagueId=${activeLeague.id}&matchId=${matchId}`,
+                );
+
+                setParticipationOptionsByMatch((current) => ({ ...current, [matchId]: options }));
+                setParticipationDrafts((current) => ({
+                    ...current,
+                    [matchId]: Object.fromEntries(
+                        options.map((option) => [
+                            participationKey(option.category, option.referenceId),
+                            (option.multiplier ?? 1) as 1 | 2 | 3,
+                        ]),
+                    ),
+                }));
+
+                return options;
+            } finally {
+                setParticipationLoadingByMatch((current) => ({ ...current, [matchId]: false }));
+            }
+        },
+        [activeLeague?.id],
+    );
 
     const filteredMatches = React.useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -1572,6 +1681,166 @@ const Predictions: React.FC = () => {
         setIsSavingAll(false);
         if (failed > 0) {
             setError(`${failed} pronóstico(s) no pudieron guardarse. Inténtalo de nuevo.`);
+        }
+    };
+
+    const handleToggleParticipation = async (matchId: string) => {
+        if (activeParticipationMatchId === matchId) {
+            setActiveParticipationMatchId(null);
+            return;
+        }
+
+        setActiveParticipationMatchId(matchId);
+        if (!participationOptionsByMatch[matchId]) {
+            try {
+                await loadParticipationOptions(matchId);
+            } catch (nextError) {
+                setError(
+                    nextError instanceof Error
+                        ? nextError.message
+                        : 'No fue posible cargar las participaciones.',
+                );
+            }
+        }
+    };
+
+    const handleParticipationMultiplierChange = (
+        matchId: string,
+        category: string,
+        referenceId: string | undefined,
+        multiplier: 1 | 2 | 3,
+    ) => {
+        const key = participationKey(category, referenceId);
+        setParticipationDrafts((current) => ({
+            ...current,
+            [matchId]: {
+                ...(current[matchId] ?? {}),
+                [key]: multiplier,
+            },
+        }));
+    };
+
+    const handleParticipationSave = async (matchId: string) => {
+        if (!activeLeague?.id) {
+            return;
+        }
+
+        const options = participationOptionsByMatch[matchId] ?? [];
+        if (options.length === 0) {
+            return;
+        }
+
+        setParticipationSavingMatchId(matchId);
+        setError(null);
+
+        try {
+            await request<ParticipationSummaryBar>('/participation/selections', {
+                method: 'POST',
+                body: JSON.stringify({
+                    leagueId: activeLeague.id,
+                    matchId,
+                    selections: options.map((option) => ({
+                        category: option.category,
+                        referenceId: option.referenceId,
+                        multiplier:
+                            participationDrafts[matchId]?.[
+                                participationKey(option.category, option.referenceId)
+                            ] ?? 1,
+                    })),
+                }),
+            });
+
+            const [summary, refreshedOptions] = await Promise.all([
+                request<ParticipationSummaryBar>(
+                    `/participation/summary?leagueId=${activeLeague.id}`,
+                ),
+                loadParticipationOptions(matchId),
+            ]);
+
+            setParticipationSummary(summary);
+            setParticipationOptionsByMatch((current) => ({
+                ...current,
+                [matchId]: refreshedOptions,
+            }));
+        } catch (nextError) {
+            setError(
+                nextError instanceof Error
+                    ? nextError.message
+                    : 'No fue posible guardar la participación.',
+            );
+        } finally {
+            setParticipationSavingMatchId(null);
+        }
+    };
+
+    const handleParticipationCheckout = async () => {
+        if (!activeLeague?.id || !participationSummary || participationSummary.itemCount === 0) {
+            return;
+        }
+
+        const obligationIds = participationSummary.items
+            .filter((item) => item.status === 'PENDING_PAYMENT')
+            .map((item) => item.id);
+
+        if (obligationIds.length === 0) {
+            setError('No hay participaciones pendientes para enviar a checkout.');
+            return;
+        }
+
+        setParticipationCheckoutLoading(true);
+        setError(null);
+
+        try {
+            const prepared = await request<{
+                leagueId: string;
+                currency: string;
+                totalAmount: number;
+                items: Array<{
+                    type: string;
+                    id: string;
+                    quantity: number;
+                    price: number;
+                    name: string;
+                    category?: string;
+                    obligationId?: string;
+                    leagueId?: string;
+                    referenceId?: string;
+                }>;
+            }>('/participation/checkout/prepare', {
+                method: 'POST',
+                body: JSON.stringify({
+                    leagueId: activeLeague.id,
+                    obligationIds,
+                }),
+            });
+
+            const checkout = await request<{ redirectUrl?: string; url?: string }>(
+                '/payments/checkout-session',
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        items: prepared.items,
+                        currency: prepared.currency,
+                        successUrl: `${window.location.origin}/predictions?participationPaid=true`,
+                        cancelUrl: `${window.location.origin}/predictions`,
+                    }),
+                },
+            );
+
+            const redirectUrl = checkout.redirectUrl ?? checkout.url;
+            if (!redirectUrl) {
+                throw new Error('No se recibió URL de checkout.');
+            }
+
+            window.location.href = redirectUrl;
+        } catch (nextError) {
+            setError(
+                nextError instanceof Error
+                    ? nextError.message
+                    : 'No fue posible iniciar el checkout de participaciones.',
+            );
+        } finally {
+            setParticipationCheckoutLoading(false);
         }
     };
 
@@ -1814,6 +2083,35 @@ const Predictions: React.FC = () => {
             </div>
 
             <div className="mx-auto max-w-5xl space-y-4 px-4 py-4">
+                {predictionMode === 'matches' && participationSummary && participationSummary.itemCount > 0 ? (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                Resumen de participaciones
+                            </p>
+                            <p className="text-base font-black text-slate-900">
+                                {formatCurrency(participationSummary.totalPending, participationSummary.currency)}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                                {participationSummary.itemCount} ítem{participationSummary.itemCount !== 1 ? 's' : ''} pendiente{participationSummary.itemCount !== 1 ? 's' : ''}
+                            </p>
+                        </div>
+                        {participationSummary.hasPrincipalPending ? (
+                            <span className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-rose-700">
+                                Principal pendiente
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            onClick={() => void handleParticipationCheckout()}
+                            disabled={participationCheckoutLoading}
+                            className="rounded-2xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800 disabled:opacity-60"
+                        >
+                            {participationCheckoutLoading ? 'Abriendo pago...' : 'Pagar ahora'}
+                        </button>
+                    </div>
+                ) : null}
+
                 {/* ERROR */}
                 {error ? (
                     <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -1927,6 +2225,8 @@ const Predictions: React.FC = () => {
                                                 const canEdit = match.status === 'open' || match.status === 'live';
                                                 const isDirty = dirtyMatchIds.includes(match.id);
                                                 const cachedInsights = insightsData[match.id] ?? getCachedInsights(match.id);
+                                                const hasParticipationOptions =
+                                                    (participationOptionsByMatch[match.id]?.length ?? 0) > 0;
                                                 const adjustScore = (field: 'home' | 'away', delta: number) => {
                                                     const cur = draft[field];
                                                     const n = cur === '' ? Math.max(0, delta) : Math.max(0, Math.min(99, Number(cur) + delta));
@@ -2064,6 +2364,21 @@ const Predictions: React.FC = () => {
                                                                     ) : null}
                                                                 </div>
                                                                 <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                                                                    {hasParticipationOptions ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label={`Ver participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
+                                                                            title={`Ver participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
+                                                                            onClick={() => void handleToggleParticipation(match.id)}
+                                                                            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all sm:h-10 sm:w-10 sm:rounded-2xl ${
+                                                                                activeParticipationMatchId === match.id
+                                                                                    ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-200'
+                                                                                    : 'border border-slate-200 bg-white text-slate-400 hover:bg-amber-50 hover:text-amber-600'
+                                                                            }`}
+                                                                        >
+                                                                            <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                                                        </button>
+                                                                    ) : null}
                                                                     <button
                                                                         type="button"
                                                                         aria-label={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
@@ -2208,6 +2523,135 @@ const Predictions: React.FC = () => {
                                                                     flag={match.awayFlag}
                                                                 />
                                                             </div>
+
+                                                            {activeParticipationMatchId === match.id ? (
+                                                                <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
+                                                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                                                        <div>
+                                                                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                                                                Participaciones
+                                                                            </p>
+                                                                            <p className="text-xs text-slate-500">
+                                                                                Selecciona categorías y multiplicadores sin salir de la quiniela.
+                                                                            </p>
+                                                                        </div>
+                                                                        {participationLoadingByMatch[match.id] ? (
+                                                                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
+                                                                        ) : null}
+                                                                    </div>
+
+                                                                    <div className="space-y-2">
+                                                                        {(participationOptionsByMatch[match.id] ?? []).length > 0 ? (
+                                                                            (participationOptionsByMatch[match.id] ?? []).map((option) => {
+                                                                                const optionKey = participationKey(option.category, option.referenceId);
+                                                                                const selectedMultiplier =
+                                                                                    participationDrafts[match.id]?.[optionKey] ?? (option.multiplier ?? 1);
+
+                                                                                return (
+                                                                                    <div
+                                                                                        key={optionKey}
+                                                                                        className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm"
+                                                                                    >
+                                                                                        <div className="flex items-start justify-between gap-3">
+                                                                                            <div className="min-w-0">
+                                                                                                <p className="truncate text-sm font-black text-slate-900">
+                                                                                                    {option.referenceLabel}
+                                                                                                </p>
+                                                                                                <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                                                                                                    {ParticipationCategoryLabels[option.category]}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                            <span
+                                                                                                className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${ParticipationStatusColors[option.status ?? 'UNSELECTED']}`}
+                                                                                            >
+                                                                                                {option.status === 'PENDING_PAYMENT'
+                                                                                                    ? 'Pendiente'
+                                                                                                    : option.status === 'PAID'
+                                                                                                      ? 'Pagado'
+                                                                                                      : option.status === 'EXPIRED'
+                                                                                                        ? 'Vencido'
+                                                                                                        : option.status === 'CANCELLED'
+                                                                                                          ? 'Cancelado'
+                                                                                                          : 'Nuevo'}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="mt-3 flex items-center justify-between gap-3">
+                                                                                            <div>
+                                                                                                <p className="text-sm font-black text-slate-900">
+                                                                                                    {formatCurrency(option.unitAmount, option.currency)}
+                                                                                                </p>
+                                                                                                <p className="text-xs text-slate-500">
+                                                                                                    {option.deadlineAt
+                                                                                                        ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
+                                                                                                        : 'Disponible'}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                                                                                {[1, 2, 3].map((multiplier) => (
+                                                                                                    <button
+                                                                                                        key={multiplier}
+                                                                                                        type="button"
+                                                                                                        aria-pressed={selectedMultiplier === multiplier}
+                                                                                                        onClick={() =>
+                                                                                                            handleParticipationMultiplierChange(
+                                                                                                                match.id,
+                                                                                                                option.category,
+                                                                                                                option.referenceId,
+                                                                                                                multiplier as 1 | 2 | 3,
+                                                                                                            )
+                                                                                                        }
+                                                                                                        className={`rounded-lg px-2.5 py-1 text-[11px] font-black ${
+                                                                                                            selectedMultiplier === multiplier
+                                                                                                                ? 'bg-amber-400 text-slate-900'
+                                                                                                                : 'text-slate-500 hover:bg-white'
+                                                                                                        }`}
+                                                                                                    >
+                                                                                                        x{multiplier}
+                                                                                                    </button>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })
+                                                                        ) : !participationLoadingByMatch[match.id] ? (
+                                                                            <div className="rounded-2xl border border-dashed border-amber-200 bg-white px-4 py-5 text-center text-sm text-slate-500">
+                                                                                No hay categorías pagas habilitadas para este partido.
+                                                                            </div>
+                                                                        ) : null}
+
+                                                                        {(participationOptionsByMatch[match.id] ?? []).length > 0 ? (
+                                                                            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3 shadow-sm">
+                                                                                <div>
+                                                                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                                                                        Total selección
+                                                                                    </p>
+                                                                                    <p className="text-lg font-black text-slate-900">
+                                                                                        {formatCurrency(
+                                                                                            (participationOptionsByMatch[match.id] ?? []).reduce((sum, option) => {
+                                                                                                const multiplier =
+                                                                                                    participationDrafts[match.id]?.[
+                                                                                                        participationKey(option.category, option.referenceId)
+                                                                                                    ] ?? (option.multiplier ?? 1);
+                                                                                                return sum + option.unitAmount * multiplier;
+                                                                                            }, 0),
+                                                                                            participationOptionsByMatch[match.id]?.[0]?.currency ?? 'COP',
+                                                                                        )}
+                                                                                    </p>
+                                                                                </div>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => void handleParticipationSave(match.id)}
+                                                                                    disabled={participationSavingMatchId === match.id}
+                                                                                    className="rounded-2xl bg-amber-400 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-60"
+                                                                                >
+                                                                                    {participationSavingMatchId === match.id ? 'Guardando...' : 'Guardar participación'}
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </div>
+                                                            ) : null}
 
                                                             <div className="flex flex-col gap-1.5 text-[9px] sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:text-[10px]">
                                                                 <div className="flex flex-wrap items-center gap-1">

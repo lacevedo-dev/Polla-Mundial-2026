@@ -1,4 +1,4 @@
-import { CreatePaymentDto } from './dto/payment.dto';
+﻿import { CreatePaymentDto } from './dto/payment.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentStatus } from '@prisma/client';
 import { BoldService } from './bold.service';
@@ -18,7 +18,6 @@ export class PaymentsService {
     ) { }
 
     async createPaymentSession(userId: string, createPaymentDto: CreatePaymentDto) {
-        // 1. Registrar el intento de pago en nuestra DB
         const payment = await this.prisma.payment.create({
             data: {
                 userId,
@@ -31,7 +30,6 @@ export class PaymentsService {
             },
         });
 
-        // 2. Generar Link con BOLD
         const boldSession = await this.boldService.createPaymentLink({
             amount: createPaymentDto.amount,
             description: `Pago para liga: ${createPaymentDto.leagueId}`,
@@ -40,13 +38,9 @@ export class PaymentsService {
             redirectUrl: `${process.env.APP_URL}/payments/status/${payment.id}`,
         });
 
-        // 3. Guardar el ID de transacción de Bold (opcional, para referencia)
         await this.prisma.payment.update({
             where: { id: payment.id },
-            data: {
-                // Podríamos guardar boldOrderId en un campo de referencia si el esquema lo tuviera
-                // Por ahora, solo retornamos el link
-            }
+            data: {},
         });
 
         return {
@@ -62,7 +56,7 @@ export class PaymentsService {
             throw new Error('Firma de webhook inválida');
         }
 
-        const { order_id, status } = payload; // Asumiendo estructura de Bold
+        const { order_id, status } = payload;
 
         const payment = await this.prisma.payment.findUnique({
             where: { id: order_id }
@@ -79,11 +73,10 @@ export class PaymentsService {
             data: { status: newStatus as any }
         });
 
-        // Si el pago es exitoso, activar la membresía
         if (newStatus === 'CONFIRMED') {
             await this.prisma.leagueMember.updateMany({
                 where: { userId: payment.userId, leagueId: payment.leagueId },
-                data: { status: 'ACTIVE' as any } // O usar enum MemberStatus.ACTIVE
+                data: { status: 'ACTIVE' as any }
             });
         }
 
@@ -104,19 +97,27 @@ export class PaymentsService {
 
     async createStripeCheckoutSession(
         userId: string,
-        items: Array<{ type: string; id: string; quantity: number; price: number; name: string }>,
+        items: Array<{
+            type: string;
+            id: string;
+            quantity: number;
+            price: number;
+            name: string;
+            category?: string;
+            obligationId?: string;
+            leagueId?: string;
+            referenceId?: string;
+        }>,
         currency: string = 'USD',
         successUrl: string,
         cancelUrl: string,
     ) {
         try {
-            // Calculate total amount
             const totalAmount = items.reduce(
                 (sum, item) => sum + item.price * item.quantity,
                 0,
             );
 
-            // Create order in database
             const order = await this.ordersService.createOrder(
                 userId,
                 totalAmount,
@@ -125,10 +126,15 @@ export class PaymentsService {
                     type: item.type,
                     id: item.id,
                     quantity: item.quantity,
+                    price: item.price,
+                    name: item.name,
+                    category: item.category,
+                    obligationId: item.obligationId,
+                    leagueId: item.leagueId,
+                    referenceId: item.referenceId,
                 })),
             );
 
-            // Create Stripe checkout session
             const stripeItems = items.map(item => ({
                 name: item.name,
                 amount: item.price,
@@ -146,7 +152,6 @@ export class PaymentsService {
                 },
             );
 
-            // Update order with Stripe session ID
             await this.ordersService.updateOrderWithStripeSession(
                 order.id,
                 session.sessionId,

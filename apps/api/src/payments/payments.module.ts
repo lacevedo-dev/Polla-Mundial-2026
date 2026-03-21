@@ -1,4 +1,4 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+﻿import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -7,9 +7,10 @@ import { StripeService } from './stripe.service';
 import { WebhookHandler } from './webhook.handler';
 import { OrdersModule } from '../orders/orders.module';
 import { StripeWebhookMiddleware } from './stripe-webhook.middleware';
+import { ParticipationModule } from '../participation/participation.module';
 
 @Module({
-    imports: [PrismaModule, OrdersModule],
+    imports: [PrismaModule, OrdersModule, ParticipationModule],
     providers: [PaymentsService, BoldService, StripeService, WebhookHandler],
     controllers: [PaymentsController],
     exports: [PaymentsService, StripeService, WebhookHandler],

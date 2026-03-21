@@ -1,14 +1,14 @@
-import { IsNotEmpty, IsString, IsNumber, IsArray, ValidateNested, IsOptional, Min } from 'class-validator';
+﻿import { IsNotEmpty, IsString, IsNumber, IsArray, ValidateNested, IsOptional, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CheckoutItemDto {
   @IsNotEmpty()
   @IsString()
-  type: string; // e.g., 'BASE_FEE', 'STAGE_FEE'
+  type: string;
 
   @IsNotEmpty()
   @IsString()
-  id: string; // e.g., league ID, stage fee ID
+  id: string;
 
   @IsNotEmpty()
   @IsNumber()
@@ -18,11 +18,27 @@ export class CheckoutItemDto {
   @IsNotEmpty()
   @IsNumber()
   @Min(0.01)
-  price: number; // Price per unit
+  price: number;
 
   @IsNotEmpty()
   @IsString()
-  name: string; // Display name
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  obligationId?: string;
+
+  @IsOptional()
+  @IsString()
+  leagueId?: string;
+
+  @IsOptional()
+  @IsString()
+  referenceId?: string;
 }
 
 export class CreateCheckoutSessionDto {

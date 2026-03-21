@@ -1,4 +1,4 @@
-jest.mock('../prisma/prisma.service', () => ({
+﻿jest.mock('../prisma/prisma.service', () => ({
     PrismaService: class PrismaService { },
 }));
 
@@ -6,16 +6,22 @@ import { MemberRole, MemberStatus } from '@prisma/client';
 import { LeaguesService } from './leagues.service';
 
 describe('LeaguesService', () => {
-    const createService = (prismaMock: any) => new LeaguesService(prismaMock as any);
+    const createService = (prismaMock: any, participationMock: any = { createPrincipalObligationForInvitation: jest.fn() }) =>
+        new LeaguesService(prismaMock as any, participationMock as any);
 
     it('creates league with default scoring rules', async () => {
         const prismaMock = {
+            user: {
+                findUnique: jest.fn().mockResolvedValue({ plan: 'FREE' }),
+            },
             league: {
                 findUnique: jest.fn().mockResolvedValue(null),
                 create: jest.fn().mockResolvedValue({
                     id: 'league-1',
                     members: [],
                     scoringRules: [],
+                    stageFees: [],
+                    distributions: [],
                 }),
             },
         };
@@ -40,28 +46,54 @@ describe('LeaguesService', () => {
         expect(createArgs.include).toEqual({
             members: true,
             scoringRules: true,
+            stageFees: true,
+            distributions: true,
         });
     });
 
-    it('does not modify existing leagues when creating a new one', async () => {
+    it('creates pending-payment membership and principal obligation for paid invitations', async () => {
+        const participationMock = { createPrincipalObligationForInvitation: jest.fn().mockResolvedValue({}) };
         const prismaMock = {
-            league: {
-                findUnique: jest.fn().mockResolvedValue(null),
-                create: jest.fn().mockResolvedValue({
-                    id: 'league-2',
-                    members: [],
-                    scoringRules: [],
+            invitation: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: 'inv-1',
+                    leagueId: 'league-1',
+                    status: 'SENT',
+                    expiresAt: new Date('2026-06-01T00:00:00.000Z'),
+                    league: {
+                        id: 'league-1',
+                        name: 'Liga Premium',
+                        includeBaseFee: true,
+                        baseFee: 25000,
+                        maxParticipants: 20,
+                        _count: { members: 3 },
+                    },
                 }),
-                updateMany: jest.fn(),
+                update: jest.fn().mockResolvedValue({}),
+            },
+            leagueMember: {
+                findUnique: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue({}),
                 update: jest.fn(),
             },
         };
 
-        const service = createService(prismaMock);
-        await service.create('user-2', { name: 'Liga Nueva' } as any);
+        const service = createService(prismaMock, participationMock);
+        const result = await service.acceptInvitation('user-9', 'inv-1');
 
-        expect(prismaMock.league.create).toHaveBeenCalledTimes(1);
-        expect(prismaMock.league.updateMany).not.toHaveBeenCalled();
-        expect(prismaMock.league.update).not.toHaveBeenCalled();
+        expect(prismaMock.leagueMember.create).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-9',
+                leagueId: 'league-1',
+                role: MemberRole.PLAYER,
+                status: MemberStatus.PENDING_PAYMENT,
+            },
+        });
+        expect(participationMock.createPrincipalObligationForInvitation).toHaveBeenCalledWith({
+            userId: 'user-9',
+            leagueId: 'league-1',
+            deadlineAt: new Date('2026-06-01T00:00:00.000Z'),
+        });
+        expect(result.status).toBe(MemberStatus.PENDING_PAYMENT);
     });
 });

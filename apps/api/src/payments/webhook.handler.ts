@@ -1,21 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 import { OrdersService } from '../orders/orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
+import { ParticipationService } from '../participation/participation.service';
 
 @Injectable()
 export class WebhookHandler {
   private readonly logger = new Logger(WebhookHandler.name);
-  private processedEventIds = new Set<string>(); // Simple in-memory deduplication
+  private processedEventIds = new Set<string>();
 
   constructor(
     private readonly ordersService: OrdersService,
     private readonly prisma: PrismaService,
+    private readonly participationService: ParticipationService,
   ) {}
 
   async handleEvent(event: Stripe.Event) {
-    // Check for idempotency (avoid processing same event twice)
     if (this.processedEventIds.has(event.id)) {
       this.logger.log(`Event ${event.id} already processed, skipping`);
       return { received: true, cached: true };
@@ -88,6 +89,11 @@ export class WebhookHandler {
         );
       }
 
+      await this.participationService.activatePaidObligationsForOrder(
+        orderId,
+        typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
+      );
+
       this.logger.log(
         `Checkout session completed for order ${orderId}: ${session.id}`,
       );
@@ -119,6 +125,11 @@ export class WebhookHandler {
       );
 
       await this.ordersService.updateOrderWithStripePaymentIntent(
+        orderId,
+        paymentIntent.id,
+      );
+
+      await this.participationService.activatePaidObligationsForOrder(
         orderId,
         paymentIntent.id,
       );
@@ -171,7 +182,6 @@ export class WebhookHandler {
     }
 
     try {
-      // Find order by stripe payment intent id
       const order = await this.prisma.order.findFirst({
         where: { stripePaymentIntentId: paymentIntentId },
       });
