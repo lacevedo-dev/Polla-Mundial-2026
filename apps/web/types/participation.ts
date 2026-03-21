@@ -66,6 +66,11 @@ export interface ParticipationSummaryBar {
   items: ParticipationSummaryItem[];
 }
 
+export interface ParticipationOptionsBatch {
+  summary: ParticipationSummaryBar;
+  optionsByMatch: Record<string, ParticipationCategoryOption[]>;
+}
+
 export const ParticipationStatusColors: Record<ParticipationStatus, string> = {
   UNSELECTED: 'bg-slate-100 text-slate-500 border-slate-200',
   PENDING_PAYMENT: 'bg-rose-100 text-rose-700 border-rose-200',

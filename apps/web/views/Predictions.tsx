@@ -33,6 +33,7 @@ import {
     ParticipationCategoryLabels,
     ParticipationStatusColors,
     type ParticipationCategoryOption,
+    type ParticipationOptionsBatch,
     type ParticipationSummaryBar,
 } from '../types/participation';
 
@@ -141,6 +142,39 @@ function isParticipationDefaultSelected(option: ParticipationCategoryOption): bo
     }
 
     return option.status === 'PENDING_PAYMENT' || option.status === 'PAID';
+}
+
+function buildParticipationDraftState(
+    optionsByMatch: Record<string, ParticipationCategoryOption[]>,
+): Record<string, Record<string, 1 | 2 | 3>> {
+    return Object.fromEntries(
+        Object.entries(optionsByMatch).map(([matchId, options]) => [
+            matchId,
+            Object.fromEntries(
+                options.map((option) => [
+                    participationKey(option.category, option.referenceId),
+                    (option.multiplier ?? 1) as 1 | 2 | 3,
+                ]),
+            ),
+        ]),
+    );
+}
+
+function buildParticipationEnabledState(
+    optionsByMatch: Record<string, ParticipationCategoryOption[]>,
+    current: Record<string, Record<string, boolean>> = {},
+): Record<string, Record<string, boolean>> {
+    return Object.fromEntries(
+        Object.entries(optionsByMatch).map(([matchId, options]) => [
+            matchId,
+            Object.fromEntries(
+                options.map((option) => {
+                    const key = participationKey(option.category, option.referenceId);
+                    return [key, current[matchId]?.[key] ?? isParticipationDefaultSelected(option)];
+                }),
+            ),
+        ]),
+    );
 }
 
 function formatCurrency(value: number, currency: string): string {
@@ -1404,6 +1438,18 @@ const Predictions: React.FC = () => {
     const [participationSummary, setParticipationSummary] = React.useState<ParticipationSummaryBar | null>(null);
     const [participationCheckoutLoading, setParticipationCheckoutLoading] = React.useState(false);
 
+    const applyParticipationBatch = React.useCallback(
+        (batch: ParticipationOptionsBatch | null) => {
+            setParticipationSummary(batch?.summary ?? null);
+            setParticipationOptionsByMatch(batch?.optionsByMatch ?? {});
+            setParticipationDrafts(buildParticipationDraftState(batch?.optionsByMatch ?? {}));
+            setParticipationEnabledByMatch((current) =>
+                buildParticipationEnabledState(batch?.optionsByMatch ?? {}, current),
+            );
+        },
+        [],
+    );
+
     // Dirty detection: open matches whose draft differs from saved prediction
     const dirtyMatchIds = React.useMemo(() =>
         matches
@@ -1452,61 +1498,16 @@ const Predictions: React.FC = () => {
         setError(null);
         void fetchLeagueMatches(activeLeague.id)
             .then(async (loadedMatches) => {
-                const summary = await request<ParticipationSummaryBar>(
-                    `/participation/summary?leagueId=${activeLeague.id}`,
+                void loadedMatches;
+                const batch = await request<ParticipationOptionsBatch>(
+                    `/participation/options-batch?leagueId=${activeLeague.id}`,
                 ).catch(() => null);
-                setParticipationSummary(summary);
-
-                const sourceMatches = Array.isArray(loadedMatches) ? loadedMatches : [];
-                const openMatches = sourceMatches.filter(
-                    (match) => match.status === 'open' || match.status === 'live',
-                );
-
-                const optionEntries: Array<readonly [string, ParticipationCategoryOption[]]> = [];
-
-                for (const match of openMatches) {
-                    try {
-                        const options = await request<ParticipationCategoryOption[]>(
-                            `/participation/options?leagueId=${activeLeague.id}&matchId=${match.id}`,
-                        );
-                        optionEntries.push([match.id, options] as const);
-                    } catch {
-                        optionEntries.push([match.id, []] as const);
-                    }
-                }
-
-                setParticipationOptionsByMatch(Object.fromEntries(optionEntries));
-                setParticipationDrafts(
-                    Object.fromEntries(
-                        optionEntries.map(([matchId, options]) => [
-                            matchId,
-                            Object.fromEntries(
-                                options.map((option) => [
-                                    participationKey(option.category, option.referenceId),
-                                    (option.multiplier ?? 1) as 1 | 2 | 3,
-                                ]),
-                            ),
-                        ]),
-                    ),
-                );
-                setParticipationEnabledByMatch(
-                    Object.fromEntries(
-                        optionEntries.map(([matchId, options]) => [
-                            matchId,
-                            Object.fromEntries(
-                                options.map((option) => [
-                                    participationKey(option.category, option.referenceId),
-                                    isParticipationDefaultSelected(option),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                );
+                applyParticipationBatch(batch);
             })
             .catch((nextError) => {
                 setError(nextError instanceof Error ? nextError.message : 'No fue posible cargar los partidos.');
             });
-    }, [activeLeague?.id, fetchLeagueMatches, resetLeagueData]);
+    }, [activeLeague?.id, applyParticipationBatch, fetchLeagueMatches, resetLeagueData]);
 
     React.useEffect(() => {
         setDrafts(buildDrafts(matches));
@@ -1527,22 +1528,11 @@ const Predictions: React.FC = () => {
                 setParticipationOptionsByMatch((current) => ({ ...current, [matchId]: options }));
                 setParticipationDrafts((current) => ({
                     ...current,
-                    [matchId]: Object.fromEntries(
-                        options.map((option) => [
-                            participationKey(option.category, option.referenceId),
-                            (option.multiplier ?? 1) as 1 | 2 | 3,
-                        ]),
-                    ),
+                    [matchId]: buildParticipationDraftState({ [matchId]: options })[matchId],
                 }));
                 setParticipationEnabledByMatch((current) => ({
                     ...current,
-                    [matchId]: Object.fromEntries(
-                        options.map((option) => [
-                            participationKey(option.category, option.referenceId),
-                            current[matchId]?.[participationKey(option.category, option.referenceId)] ??
-                                isParticipationDefaultSelected(option),
-                        ]),
-                    ),
+                    [matchId]: buildParticipationEnabledState({ [matchId]: options }, current)[matchId],
                 }));
 
                 return options;
@@ -1803,16 +1793,10 @@ const Predictions: React.FC = () => {
                 }),
             });
 
-            const summary = await request<ParticipationSummaryBar>(
-                `/participation/summary?leagueId=${activeLeague.id}`,
+            const batch = await request<ParticipationOptionsBatch>(
+                `/participation/options-batch?leagueId=${activeLeague.id}`,
             );
-            const refreshedOptions = await loadParticipationOptions(matchId);
-
-            setParticipationSummary(summary);
-            setParticipationOptionsByMatch((current) => ({
-                ...current,
-                [matchId]: refreshedOptions,
-            }));
+            applyParticipationBatch(batch);
         } catch (nextError) {
             setError(
                 nextError instanceof Error

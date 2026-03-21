@@ -38,6 +38,11 @@ export class ParticipationController {
     );
   }
 
+  @Get('options-batch')
+  async getOptionsBatch(@Request() req, @Query('leagueId') leagueId: string) {
+    return this.participationService.getBatchOptions(req.user.userId, leagueId);
+  }
+
   @Post('checkout/prepare')
   async prepareCheckout(
     @Request() req,

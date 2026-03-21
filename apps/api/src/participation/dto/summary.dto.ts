@@ -28,3 +28,19 @@ export interface ParticipationSummaryDto {
   hasPrincipalPending: boolean;
   items: ParticipationSummaryItemDto[];
 }
+
+export interface ParticipationBatchOptionsDto {
+  summary: ParticipationSummaryDto;
+  optionsByMatch: Record<string, Array<{
+    category: string;
+    categoryLabel: string;
+    referenceId?: string;
+    referenceLabel: string;
+    unitAmount: number;
+    currency: string;
+    deadlineAt?: string;
+    enabled: boolean;
+    status?: 'UNSELECTED' | 'PENDING_PAYMENT' | 'PAID' | 'EXPIRED' | 'CANCELLED';
+    multiplier?: 1 | 2 | 3;
+  }>>;
+}

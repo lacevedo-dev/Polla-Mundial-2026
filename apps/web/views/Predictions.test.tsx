@@ -111,6 +111,72 @@ describe('Predictions view', () => {
                 };
             }
 
+            if (url.startsWith('/participation/options-batch')) {
+                return {
+                    summary: {
+                        totalPending: 15000,
+                        currency: 'COP',
+                        itemCount: 1,
+                        hasPrincipalPending: true,
+                        items: [
+                            {
+                                id: 'obl-1',
+                                category: 'PRINCIPAL',
+                                categoryLabel: 'Polla principal',
+                                referenceId: 'league-1',
+                                referenceLabel: 'Liga Uno',
+                                status: 'PENDING_PAYMENT',
+                                unitAmount: 15000,
+                                multiplier: 1,
+                                subtotal: 15000,
+                                currency: 'COP',
+                                deadlineAt: '2026-06-11T17:45:00.000Z',
+                            },
+                        ],
+                    },
+                    optionsByMatch: {
+                        'match-1': [
+                            {
+                                category: 'PRINCIPAL',
+                                categoryLabel: 'Polla principal',
+                                referenceId: 'league-1',
+                                referenceLabel: 'Liga Uno',
+                                unitAmount: 15000,
+                                currency: 'COP',
+                                deadlineAt: '2026-06-11T17:45:00.000Z',
+                                enabled: true,
+                                status: 'UNSELECTED',
+                                multiplier: 1,
+                            },
+                            {
+                                category: 'MATCH',
+                                categoryLabel: 'Por partido',
+                                referenceId: 'match-1',
+                                referenceLabel: 'Colombia vs México',
+                                unitAmount: 5000,
+                                currency: 'COP',
+                                deadlineAt: '2026-06-11T17:45:00.000Z',
+                                enabled: true,
+                                status: 'UNSELECTED',
+                                multiplier: 1,
+                            },
+                            {
+                                category: 'PHASE',
+                                categoryLabel: 'Por fase',
+                                referenceId: 'GROUP',
+                                referenceLabel: 'Grupos',
+                                unitAmount: 7000,
+                                currency: 'COP',
+                                deadlineAt: '2026-06-11T17:45:00.000Z',
+                                enabled: true,
+                                status: 'UNSELECTED',
+                                multiplier: 1,
+                            },
+                        ],
+                    },
+                };
+            }
+
             if (url.startsWith('/participation/options')) {
                 return [
                     {
@@ -254,7 +320,9 @@ describe('Predictions view', () => {
         });
         await user.click(participationButton);
 
-        await waitFor(() => expect(requestMock).toHaveBeenCalledWith('/participation/options?leagueId=league-1&matchId=match-1'));
+        await waitFor(() =>
+            expect(requestMock).toHaveBeenCalledWith('/participation/options-batch?leagueId=league-1'),
+        );
         expect(screen.getAllByText(/Participaciones/i).length).toBeGreaterThan(0);
         expect(screen.getAllByText(/Liga Uno/i).length).toBeGreaterThan(0);
         expect(screen.getByText(/Colombia vs México/i)).toBeInTheDocument();
@@ -314,6 +382,21 @@ describe('Predictions view', () => {
 
             if (url.startsWith('/participation/options')) {
                 return [];
+            }
+
+            if (url.startsWith('/participation/options-batch')) {
+                return {
+                    summary: {
+                        totalPending: 0,
+                        currency: 'COP',
+                        itemCount: 0,
+                        hasPrincipalPending: false,
+                        items: [],
+                    },
+                    optionsByMatch: {
+                        'match-1': [],
+                    },
+                };
             }
 
             if (url === '/ai-credits/summary') {

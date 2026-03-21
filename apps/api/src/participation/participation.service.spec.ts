@@ -162,4 +162,65 @@ describe('ParticipationService', () => {
     expect(result).toEqual({ updated: 1, membershipsActivated: 1 });
     expect(notificationsMock.createInAppNotification).toHaveBeenCalled();
   });
+
+  it('returns batch participation options and summary for open league matches', async () => {
+    const prismaMock = {
+      leagueMember: {
+        findUnique: jest.fn().mockResolvedValue({ status: MemberStatus.ACTIVE }),
+      },
+      league: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'league-1',
+          name: 'Liga test',
+          includeBaseFee: true,
+          baseFee: 15000,
+          includeStageFees: true,
+          closePredictionMinutes: 15,
+          currency: 'COP',
+          stageFees: [{ type: 'MATCH', amount: 5000, label: 'Partido' }],
+          distributions: [],
+        }),
+      },
+      match: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'match-1',
+            phase: 'GROUP',
+            group: 'A',
+            matchDate: new Date('2026-06-01T18:00:00.000Z'),
+            homeTeam: { name: 'Colombia' },
+            awayTeam: { name: 'Brasil' },
+          },
+        ]),
+      },
+      participationObligation: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'obl-1',
+            category: 'PRINCIPAL',
+            referenceId: 'league-1',
+            referenceLabel: 'Liga test',
+            status: ParticipationStatus.PENDING_PAYMENT,
+            unitAmount: 15000,
+            multiplier: 1,
+            totalAmount: 15000,
+            currency: 'COP',
+            deadlineAt: new Date('2026-06-01T17:45:00.000Z'),
+            createdAt: new Date('2026-05-01T00:00:00.000Z'),
+          },
+        ]),
+      },
+    };
+
+    const service = createService(prismaMock);
+    const result = await service.getBatchOptions('user-1', 'league-1');
+
+    expect(result.summary.totalPending).toBe(15000);
+    expect(result.optionsByMatch['match-1']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: 'PRINCIPAL' }),
+        expect.objectContaining({ category: 'MATCH', referenceId: 'match-1' }),
+      ]),
+    );
+  });
 });

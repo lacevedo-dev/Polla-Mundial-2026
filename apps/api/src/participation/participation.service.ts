@@ -6,6 +6,7 @@
 } from '@nestjs/common';
 import {
   MemberStatus,
+  MatchStatus,
   NotificationType,
   ParticipationCategory,
   ParticipationSource,
@@ -195,34 +196,67 @@ export class ParticipationService {
       orderBy: [{ status: 'asc' }, { deadlineAt: 'asc' }, { createdAt: 'desc' }],
     });
 
-    const items = obligations.map((item) => ({
-      id: item.id,
-      category: item.category,
-      categoryLabel: this.getCategoryLabel(item.category),
-      referenceId: item.referenceId ?? undefined,
-      referenceLabel: item.referenceLabel,
-      status: item.status,
-      unitAmount: item.unitAmount,
-      multiplier: Math.min(Math.max(item.multiplier, 1), 3) as 1 | 2 | 3,
-      subtotal: item.totalAmount,
-      currency: item.currency,
-      deadlineAt: item.deadlineAt.toISOString(),
-    }));
+    return this.buildParticipationSummary(obligations);
+  }
 
-    const totalPending = obligations
-      .filter((item) => item.status === ParticipationStatus.PENDING_PAYMENT)
-      .reduce((sum, item) => sum + item.totalAmount, 0);
+  async getBatchOptions(userId: string, leagueId: string) {
+    await this.assertMembership(userId, leagueId);
+
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      include: {
+        stageFees: {
+          where: { active: true },
+          orderBy: [{ type: 'asc' }, { amount: 'asc' }],
+        },
+        distributions: {
+          where: { active: true },
+          orderBy: { position: 'asc' },
+        },
+      },
+    });
+
+    if (!league) {
+      throw new NotFoundException('Liga no encontrada');
+    }
+
+    const matches = await this.prisma.match.findMany({
+      where: {
+        status: {
+          in: [MatchStatus.SCHEDULED, MatchStatus.LIVE],
+        },
+      },
+      include: {
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+      },
+      orderBy: { matchDate: 'asc' },
+    });
+
+    const obligations = await this.prisma.participationObligation.findMany({
+      where: {
+        userId,
+        leagueId,
+        status: {
+          in: [
+            ParticipationStatus.PENDING_PAYMENT,
+            ParticipationStatus.PAID,
+            ParticipationStatus.EXPIRED,
+            ParticipationStatus.CANCELLED,
+          ],
+        },
+      },
+      orderBy: [{ status: 'asc' }, { deadlineAt: 'asc' }, { createdAt: 'desc' }],
+    });
 
     return {
-      totalPending,
-      currency: obligations[0]?.currency ?? 'COP',
-      itemCount: obligations.length,
-      hasPrincipalPending: obligations.some(
-        (item) =>
-          item.category === ParticipationCategory.PRINCIPAL &&
-          item.status === ParticipationStatus.PENDING_PAYMENT,
+      summary: this.buildParticipationSummary(obligations),
+      optionsByMatch: Object.fromEntries(
+        matches.map((match) => [
+          match.id,
+          this.buildOptionsFromContext({ league, match }, obligations),
+        ]),
       ),
-      items,
     };
   }
 
@@ -615,5 +649,48 @@ export class ParticipationService {
       .replace(/\p{Diacritic}/gu, '')
       .trim()
       .toUpperCase();
+  }
+
+  private buildParticipationSummary(obligations: Array<{
+    id: string;
+    category: ParticipationCategory;
+    referenceId?: string | null;
+    referenceLabel: string;
+    status: ParticipationStatus;
+    unitAmount: number;
+    multiplier: number;
+    totalAmount: number;
+    currency: string;
+    deadlineAt: Date;
+  }>): ParticipationSummaryDto {
+    const items = obligations.map((item) => ({
+      id: item.id,
+      category: item.category,
+      categoryLabel: this.getCategoryLabel(item.category),
+      referenceId: item.referenceId ?? undefined,
+      referenceLabel: item.referenceLabel,
+      status: item.status,
+      unitAmount: item.unitAmount,
+      multiplier: Math.min(Math.max(item.multiplier, 1), 3) as 1 | 2 | 3,
+      subtotal: item.totalAmount,
+      currency: item.currency,
+      deadlineAt: item.deadlineAt.toISOString(),
+    }));
+
+    const totalPending = obligations
+      .filter((item) => item.status === ParticipationStatus.PENDING_PAYMENT)
+      .reduce((sum, item) => sum + item.totalAmount, 0);
+
+    return {
+      totalPending,
+      currency: obligations[0]?.currency ?? 'COP',
+      itemCount: obligations.length,
+      hasPrincipalPending: obligations.some(
+        (item) =>
+          item.category === ParticipationCategory.PRINCIPAL &&
+          item.status === ParticipationStatus.PENDING_PAYMENT,
+      ),
+      items,
+    };
   }
 }
