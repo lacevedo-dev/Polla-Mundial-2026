@@ -26,6 +26,13 @@ function sortMatchesByDate(matches: MatchViewModel[]): MatchViewModel[] {
     return [...matches].sort((left, right) => left.date.localeCompare(right.date));
 }
 
+function mergeAndSortMatches(
+    matches: MatchResponse[],
+    predictions: LeaguePredictionResponse[],
+): MatchViewModel[] {
+    return sortMatchesByDate(mergeLeaguePredictions(matches, predictions));
+}
+
 export const usePredictionStore = create<PredictionState>((set) => ({
     matches: [],
     leaderboard: [],
@@ -35,17 +42,23 @@ export const usePredictionStore = create<PredictionState>((set) => ({
         set({ isLoading: true });
         try {
             const matches = await request<MatchResponse[]>('/matches');
-            const predictions = await request<LeaguePredictionResponse[]>(
-                `/predictions/league/${leagueId}`,
-            );
-
-            const mergedMatches = sortMatchesByDate(mergeLeaguePredictions(matches, predictions));
+            const baseMatches = mergeAndSortMatches(matches, []);
             set({
-                matches: mergedMatches,
+                matches: baseMatches,
                 isLoading: false,
             });
 
-            return mergedMatches;
+            void request<LeaguePredictionResponse[]>(`/predictions/league/${leagueId}`)
+                .then((predictions) => {
+                    set({
+                        matches: mergeAndSortMatches(matches, predictions),
+                    });
+                })
+                .catch((error) => {
+                    console.warn('[prediction.store] league predictions could not be loaded', error);
+                });
+
+            return baseMatches;
         } catch (error) {
             set({ isLoading: false });
             throw error;
