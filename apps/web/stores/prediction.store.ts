@@ -34,10 +34,10 @@ export const usePredictionStore = create<PredictionState>((set) => ({
     fetchLeagueMatches: async (leagueId) => {
         set({ isLoading: true });
         try {
-            const [matches, predictions] = await Promise.all([
-                request<MatchResponse[]>('/matches'),
-                request<LeaguePredictionResponse[]>(`/predictions/league/${leagueId}`),
-            ]);
+            const matches = await request<MatchResponse[]>('/matches');
+            const predictions = await request<LeaguePredictionResponse[]>(
+                `/predictions/league/${leagueId}`,
+            );
 
             const mergedMatches = sortMatchesByDate(mergeLeaguePredictions(matches, predictions));
             set({
