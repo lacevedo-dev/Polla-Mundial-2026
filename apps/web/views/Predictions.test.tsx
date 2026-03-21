@@ -84,7 +84,7 @@ describe('Predictions view', () => {
             resetLeagueData: resetLeagueDataMock,
         };
         fetchMyLeaguesMock.mockResolvedValue(undefined);
-        fetchLeagueMatchesMock.mockResolvedValue(undefined);
+        fetchLeagueMatchesMock.mockResolvedValue(predictionState.matches);
         savePredictionMock.mockResolvedValue(undefined);
         requestMock.mockImplementation(async (url: string) => {
             if (url.startsWith('/participation/summary')) {

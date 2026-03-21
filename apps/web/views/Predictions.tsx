@@ -1447,8 +1447,7 @@ const Predictions: React.FC = () => {
                 ).catch(() => null);
                 setParticipationSummary(summary);
 
-                const sourceMatches =
-                    loadedMatches && loadedMatches.length > 0 ? loadedMatches : matches;
+                const sourceMatches = Array.isArray(loadedMatches) ? loadedMatches : [];
                 const openMatches = sourceMatches.filter(
                     (match) => match.status === 'open' || match.status === 'live',
                 );
@@ -1484,7 +1483,7 @@ const Predictions: React.FC = () => {
             .catch((nextError) => {
                 setError(nextError instanceof Error ? nextError.message : 'No fue posible cargar los partidos.');
             });
-    }, [activeLeague?.id, fetchLeagueMatches, matches, resetLeagueData]);
+    }, [activeLeague?.id, fetchLeagueMatches, resetLeagueData]);
 
     React.useEffect(() => {
         setDrafts(buildDrafts(matches));
