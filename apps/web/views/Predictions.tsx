@@ -1440,13 +1440,11 @@ const Predictions: React.FC = () => {
         }
 
         setError(null);
-        void Promise.all([
-            fetchLeagueMatches(activeLeague.id),
-            request<ParticipationSummaryBar>(`/participation/summary?leagueId=${activeLeague.id}`).catch(
-                () => null,
-            ),
-        ])
-            .then(async ([loadedMatches, summary]) => {
+        void fetchLeagueMatches(activeLeague.id)
+            .then(async (loadedMatches) => {
+                const summary = await request<ParticipationSummaryBar>(
+                    `/participation/summary?leagueId=${activeLeague.id}`,
+                ).catch(() => null);
                 setParticipationSummary(summary);
 
                 const sourceMatches =
@@ -1455,18 +1453,18 @@ const Predictions: React.FC = () => {
                     (match) => match.status === 'open' || match.status === 'live',
                 );
 
-                const optionEntries = await Promise.all(
-                    openMatches.map(async (match) => {
-                        try {
-                            const options = await request<ParticipationCategoryOption[]>(
-                                `/participation/options?leagueId=${activeLeague.id}&matchId=${match.id}`,
-                            );
-                            return [match.id, options] as const;
-                        } catch {
-                            return [match.id, []] as const;
-                        }
-                    }),
-                );
+                const optionEntries: Array<readonly [string, ParticipationCategoryOption[]]> = [];
+
+                for (const match of openMatches) {
+                    try {
+                        const options = await request<ParticipationCategoryOption[]>(
+                            `/participation/options?leagueId=${activeLeague.id}&matchId=${match.id}`,
+                        );
+                        optionEntries.push([match.id, options] as const);
+                    } catch {
+                        optionEntries.push([match.id, []] as const);
+                    }
+                }
 
                 setParticipationOptionsByMatch(Object.fromEntries(optionEntries));
                 setParticipationDrafts(
@@ -1750,12 +1748,10 @@ const Predictions: React.FC = () => {
                 }),
             });
 
-            const [summary, refreshedOptions] = await Promise.all([
-                request<ParticipationSummaryBar>(
-                    `/participation/summary?leagueId=${activeLeague.id}`,
-                ),
-                loadParticipationOptions(matchId),
-            ]);
+            const summary = await request<ParticipationSummaryBar>(
+                `/participation/summary?leagueId=${activeLeague.id}`,
+            );
+            const refreshedOptions = await loadParticipationOptions(matchId);
 
             setParticipationSummary(summary);
             setParticipationOptionsByMatch((current) => ({

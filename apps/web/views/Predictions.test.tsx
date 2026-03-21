@@ -325,7 +325,8 @@ describe('Predictions view', () => {
         renderWithRouter();
 
         await waitFor(() => expect(fetchLeagueMatchesMock).toHaveBeenCalled());
-        await user.click(screen.getByRole('button', { name: /Pagar ahora/i }));
+        const payNowButton = await screen.findByRole('button', { name: /Pagar ahora/i });
+        await user.click(payNowButton);
 
         await waitFor(() =>
             expect(requestMock).toHaveBeenCalledWith(

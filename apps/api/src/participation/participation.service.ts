@@ -410,30 +410,29 @@ export class ParticipationService {
   private async loadContext(userId: string, leagueId: string, matchId?: string) {
     await this.assertMembership(userId, leagueId);
 
-    const [league, match] = await Promise.all([
-      this.prisma.league.findUnique({
-        where: { id: leagueId },
-        include: {
-          stageFees: {
-            where: { active: true },
-            orderBy: [{ type: 'asc' }, { amount: 'asc' }],
-          },
-          distributions: {
-            where: { active: true },
-            orderBy: { position: 'asc' },
-          },
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      include: {
+        stageFees: {
+          where: { active: true },
+          orderBy: [{ type: 'asc' }, { amount: 'asc' }],
         },
-      }),
-      matchId
-        ? this.prisma.match.findUnique({
-            where: { id: matchId },
-            include: {
-              homeTeam: { select: { name: true } },
-              awayTeam: { select: { name: true } },
-            },
-          })
-        : Promise.resolve(null),
-    ]);
+        distributions: {
+          where: { active: true },
+          orderBy: { position: 'asc' },
+        },
+      },
+    });
+
+    const match = matchId
+      ? await this.prisma.match.findUnique({
+          where: { id: matchId },
+          include: {
+            homeTeam: { select: { name: true } },
+            awayTeam: { select: { name: true } },
+          },
+        })
+      : null;
 
     if (!league) {
       throw new NotFoundException('Liga no encontrada');
