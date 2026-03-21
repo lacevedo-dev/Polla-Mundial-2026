@@ -144,6 +144,14 @@ function isParticipationDefaultSelected(option: ParticipationCategoryOption): bo
     return option.status === 'PENDING_PAYMENT' || option.status === 'PAID';
 }
 
+function getParticipationStatusLabel(status?: ParticipationCategoryOption['status']): string {
+    if (status === 'PENDING_PAYMENT') return 'Pendiente';
+    if (status === 'PAID') return 'Pagado';
+    if (status === 'EXPIRED') return 'Vencido';
+    if (status === 'CANCELLED') return 'Cancelado';
+    return 'Nuevo';
+}
+
 function buildParticipationDraftState(
     optionsByMatch: Record<string, ParticipationCategoryOption[]>,
 ): Record<string, Record<string, 1 | 2 | 3>> {
@@ -2260,8 +2268,26 @@ const Predictions: React.FC = () => {
                                                 const canEdit = match.status === 'open' || match.status === 'live';
                                                 const isDirty = dirtyMatchIds.includes(match.id);
                                                 const cachedInsights = insightsData[match.id] ?? getCachedInsights(match.id);
-                                                const hasParticipationOptions =
-                                                    (participationOptionsByMatch[match.id]?.length ?? 0) > 0;
+                                                const matchParticipationOptions = participationOptionsByMatch[match.id] ?? [];
+                                                const principalParticipationOption =
+                                                    matchParticipationOptions.find((option) => option.category === 'PRINCIPAL');
+                                                const optionalParticipationOptions = matchParticipationOptions.filter(
+                                                    (option) => option.category !== 'PRINCIPAL',
+                                                );
+                                                const hasParticipationOptions = matchParticipationOptions.length > 0;
+                                                const selectedParticipationTotal = matchParticipationOptions.reduce((sum, option) => {
+                                                    const optionKey = participationKey(option.category, option.referenceId);
+                                                    const enabled =
+                                                        participationEnabledByMatch[match.id]?.[optionKey] ??
+                                                        isParticipationDefaultSelected(option);
+                                                    if (!enabled) {
+                                                        return sum;
+                                                    }
+                                                    const multiplier =
+                                                        participationDrafts[match.id]?.[optionKey] ??
+                                                        (option.multiplier ?? 1);
+                                                    return sum + option.unitAmount * multiplier;
+                                                }, 0);
                                                 const adjustScore = (field: 'home' | 'away', delta: number) => {
                                                     const cur = draft[field];
                                                     const n = cur === '' ? Math.max(0, delta) : Math.max(0, Math.min(99, Number(cur) + delta));
@@ -2567,7 +2593,7 @@ const Predictions: React.FC = () => {
                                                                                 Participaciones
                                                                             </p>
                                                                             <p className="text-xs text-slate-500">
-                                                                                Selecciona categorías y multiplicadores sin salir de la quiniela.
+                                                                                Revisa tu cuota general y activa extras opcionales de este partido sin salir de la quiniela.
                                                                             </p>
                                                                         </div>
                                                                         {participationLoadingByMatch[match.id] ? (
@@ -2585,51 +2611,76 @@ const Predictions: React.FC = () => {
                                                                                     participationEnabledByMatch[match.id]?.[optionKey] ??
                                                                                     isParticipationDefaultSelected(option);
                                                                                 const isOptional = option.category !== 'PRINCIPAL';
+                                                                                const isPrincipal = option.category === 'PRINCIPAL';
+                                                                                const OptionIcon =
+                                                                                    option.category === 'PRINCIPAL'
+                                                                                        ? Trophy
+                                                                                        : option.category === 'MATCH'
+                                                                                          ? Coins
+                                                                                          : option.category === 'GROUP'
+                                                                                            ? Trophy
+                                                                                            : option.category === 'ROUND'
+                                                                                              ? GitMerge
+                                                                                              : Medal;
 
                                                                                 return (
                                                                                     <div
                                                                                         key={optionKey}
-                                                                                        className="rounded-2xl border border-white bg-white px-3 py-2.5 shadow-sm"
+                                                                                        className={`rounded-2xl border bg-white px-3 py-3 shadow-sm ${
+                                                                                            isPrincipal ? 'border-amber-200 bg-amber-50/40' : 'border-white'
+                                                                                        }`}
                                                                                     >
-                                                                                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                                                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                                                                             <div className="min-w-0 flex-1">
-                                                                                                <div className="flex items-center justify-between gap-2">
-                                                                                                    <p className="truncate text-sm font-black text-slate-900">
-                                                                                                        {option.referenceLabel}
-                                                                                                    </p>
-                                                                                                    <span
-                                                                                                        className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${ParticipationStatusColors[option.status ?? 'UNSELECTED']}`}
-                                                                                                    >
-                                                                                                        {option.status === 'PENDING_PAYMENT'
-                                                                                                            ? 'Pendiente'
-                                                                                                            : option.status === 'PAID'
-                                                                                                              ? 'Pagado'
-                                                                                                              : option.status === 'EXPIRED'
-                                                                                                                ? 'Vencido'
-                                                                                                                : option.status === 'CANCELLED'
-                                                                                                                  ? 'Cancelado'
-                                                                                                                  : 'Nuevo'}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                                <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                                                                                                    {ParticipationCategoryLabels[option.category]}
-                                                                                                </p>
-                                                                                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                                                                                                    <p className="font-black text-slate-900">
-                                                                                                        {formatCurrency(option.unitAmount, option.currency)}
-                                                                                                    </p>
-                                                                                                    <p className="text-slate-500">
-                                                                                                        {option.deadlineAt
-                                                                                                            ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
-                                                                                                            : 'Disponible'}
-                                                                                                    </p>
+                                                                                                <div className="flex items-start gap-3">
+                                                                                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                                                                                                        isPrincipal ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                                                                                                    }`}>
+                                                                                                        <OptionIcon className="h-4 w-4" />
+                                                                                                    </div>
+                                                                                                    <div className="min-w-0 flex-1">
+                                                                                                        <div className="flex items-center justify-between gap-2">
+                                                                                                            <div className="min-w-0">
+                                                                                                                <p className={`text-[11px] font-black uppercase tracking-[0.16em] ${
+                                                                                                                    isPrincipal ? 'text-amber-700' : 'text-slate-500'
+                                                                                                                }`}>
+                                                                                                                    {isPrincipal ? 'Cuota general de la liga' : ParticipationCategoryLabels[option.category]}
+                                                                                                                </p>
+                                                                                                                <p className="truncate text-sm font-black text-slate-900">
+                                                                                                                    {option.referenceLabel}
+                                                                                                                </p>
+                                                                                                            </div>
+                                                                                                            <span
+                                                                                                                className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${ParticipationStatusColors[option.status ?? 'UNSELECTED']}`}
+                                                                                                            >
+                                                                                                                {getParticipationStatusLabel(option.status)}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                        <p className="mt-1 text-xs text-slate-500">
+                                                                                                            {isPrincipal
+                                                                                                                ? 'Se cobra una sola vez por liga; no corresponde a este partido específico.'
+                                                                                                                : 'Extra opcional de este partido. Actívalo solo si quieres participar en esta modalidad.'}
+                                                                                                        </p>
+                                                                                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                                                                                            <p className="font-black text-slate-900">
+                                                                                                                {formatCurrency(option.unitAmount, option.currency)}
+                                                                                                            </p>
+                                                                                                            <p className="flex items-center gap-1 text-slate-500">
+                                                                                                                <Calendar className="h-3.5 w-3.5" />
+                                                                                                                {option.deadlineAt
+                                                                                                                    ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
+                                                                                                                    : 'Disponible'}
+                                                                                                            </p>
+                                                                                                        </div>
+                                                                                                    </div>
                                                                                                 </div>
                                                                                             </div>
                                                                                             <div className="flex flex-wrap items-center justify-end gap-2">
                                                                                                 {isOptional ? (
                                                                                                     <button
                                                                                                         type="button"
-                                                                                                        aria-pressed={isSelected}
+                                                                                                        role="switch"
+                                                                                                        aria-checked={isSelected}
                                                                                                         aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}`}
                                                                                                         onClick={() =>
                                                                                                             handleParticipationEnabledChange(
@@ -2641,7 +2692,7 @@ const Predictions: React.FC = () => {
                                                                                                         }
                                                                                                         className={`rounded-xl border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] transition ${
                                                                                                             isSelected
-                                                                                                                ? 'border-amber-300 bg-amber-100 text-amber-800'
+                                                                                                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                                                                                                 : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
                                                                                                         }`}
                                                                                                     >
@@ -2684,7 +2735,7 @@ const Predictions: React.FC = () => {
                                                                             })
                                                                         ) : !participationLoadingByMatch[match.id] ? (
                                                                             <div className="rounded-2xl border border-dashed border-amber-200 bg-white px-4 py-5 text-center text-sm text-slate-500">
-                                                                                No hay categorías pagas habilitadas para este partido.
+                                                                                No hay extras pagas habilitadas para este partido. Tu cuota general se gestiona a nivel de liga.
                                                                             </div>
                                                                         ) : null}
 
@@ -2692,7 +2743,7 @@ const Predictions: React.FC = () => {
                                                                             <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3 shadow-sm">
                                                                                 <div>
                                                                                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                                                                                        Total selección
+                                                                                        Total estimado
                                                                                     </p>
                                                                                     <p className="text-lg font-black text-slate-900">
                                                                                         {formatCurrency(
@@ -2711,6 +2762,9 @@ const Predictions: React.FC = () => {
                                                                                             }, 0),
                                                                                             participationOptionsByMatch[match.id]?.[0]?.currency ?? 'COP',
                                                                                         )}
+                                                                                    </p>
+                                                                                    <p className="text-xs text-slate-500">
+                                                                                        Incluye la cuota general y los extras activos en este partido.
                                                                                     </p>
                                                                                 </div>
                                                                                 <button

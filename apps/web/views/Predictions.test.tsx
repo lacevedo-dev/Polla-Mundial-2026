@@ -330,7 +330,7 @@ describe('Predictions view', () => {
         expect(screen.queryByText(/Por ronda/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Por grupo/i)).not.toBeInTheDocument();
         expect(screen.getAllByText(/Cierra/i).length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: /Agregar Colombia vs México/i })).toBeInTheDocument();
+        expect(screen.getByRole('switch', { name: /Agregar Colombia vs México/i })).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: 'x2' }).length).toBeGreaterThan(0);
         expect(screen.getAllByRole('button', { name: 'x1' }).every((button) => button.getAttribute('aria-pressed') === 'true')).toBe(true);
         expect(screen.getByRole('button', { name: /Guardar participación/i })).toBeInTheDocument();
@@ -345,9 +345,9 @@ describe('Predictions view', () => {
             await screen.findByRole('button', { name: /Ver participaciones de Colombia vs México/i }),
         );
 
-        await user.click(screen.getByRole('button', { name: /Agregar Colombia vs México/i }));
+        await user.click(screen.getByRole('switch', { name: /Agregar Colombia vs México/i }));
 
-        expect(screen.getByRole('button', { name: /Quitar Colombia vs México/i })).toBeInTheDocument();
+        expect(screen.getByRole('switch', { name: /Quitar Colombia vs México/i })).toBeInTheDocument();
         expect(screen.getByText(/20.000/i)).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: /Guardar participación/i }));
