@@ -135,6 +135,14 @@ function participationKey(category: string, referenceId?: string): string {
     return `${category}:${referenceId ?? 'ROOT'}`;
 }
 
+function isParticipationDefaultSelected(option: ParticipationCategoryOption): boolean {
+    if (option.category === 'PRINCIPAL') {
+        return true;
+    }
+
+    return option.status === 'PENDING_PAYMENT' || option.status === 'PAID';
+}
+
 function formatCurrency(value: number, currency: string): string {
     try {
         return new Intl.NumberFormat('es-CO', {
@@ -1390,6 +1398,7 @@ const Predictions: React.FC = () => {
     const [activeParticipationMatchId, setActiveParticipationMatchId] = React.useState<string | null>(null);
     const [participationOptionsByMatch, setParticipationOptionsByMatch] = React.useState<Record<string, ParticipationCategoryOption[]>>({});
     const [participationDrafts, setParticipationDrafts] = React.useState<Record<string, Record<string, 1 | 2 | 3>>>({});
+    const [participationEnabledByMatch, setParticipationEnabledByMatch] = React.useState<Record<string, Record<string, boolean>>>({});
     const [participationLoadingByMatch, setParticipationLoadingByMatch] = React.useState<Record<string, boolean>>({});
     const [participationSavingMatchId, setParticipationSavingMatchId] = React.useState<string | null>(null);
     const [participationSummary, setParticipationSummary] = React.useState<ParticipationSummaryBar | null>(null);
@@ -1435,6 +1444,7 @@ const Predictions: React.FC = () => {
             setParticipationSummary(null);
             setParticipationOptionsByMatch({});
             setParticipationDrafts({});
+            setParticipationEnabledByMatch({});
             setActiveParticipationMatchId(null);
             return;
         }
@@ -1479,6 +1489,19 @@ const Predictions: React.FC = () => {
                         ]),
                     ),
                 );
+                setParticipationEnabledByMatch(
+                    Object.fromEntries(
+                        optionEntries.map(([matchId, options]) => [
+                            matchId,
+                            Object.fromEntries(
+                                options.map((option) => [
+                                    participationKey(option.category, option.referenceId),
+                                    isParticipationDefaultSelected(option),
+                                ]),
+                            ),
+                        ]),
+                    ),
+                );
             })
             .catch((nextError) => {
                 setError(nextError instanceof Error ? nextError.message : 'No fue posible cargar los partidos.');
@@ -1508,6 +1531,16 @@ const Predictions: React.FC = () => {
                         options.map((option) => [
                             participationKey(option.category, option.referenceId),
                             (option.multiplier ?? 1) as 1 | 2 | 3,
+                        ]),
+                    ),
+                }));
+                setParticipationEnabledByMatch((current) => ({
+                    ...current,
+                    [matchId]: Object.fromEntries(
+                        options.map((option) => [
+                            participationKey(option.category, option.referenceId),
+                            current[matchId]?.[participationKey(option.category, option.referenceId)] ??
+                                isParticipationDefaultSelected(option),
                         ]),
                     ),
                 }));
@@ -1717,6 +1750,22 @@ const Predictions: React.FC = () => {
         }));
     };
 
+    const handleParticipationEnabledChange = (
+        matchId: string,
+        category: string,
+        referenceId: string | undefined,
+        enabled: boolean,
+    ) => {
+        const key = participationKey(category, referenceId);
+        setParticipationEnabledByMatch((current) => ({
+            ...current,
+            [matchId]: {
+                ...(current[matchId] ?? {}),
+                [key]: enabled,
+            },
+        }));
+    };
+
     const handleParticipationSave = async (matchId: string) => {
         if (!activeLeague?.id) {
             return;
@@ -1736,14 +1785,21 @@ const Predictions: React.FC = () => {
                 body: JSON.stringify({
                     leagueId: activeLeague.id,
                     matchId,
-                    selections: options.map((option) => ({
-                        category: option.category,
-                        referenceId: option.referenceId,
-                        multiplier:
-                            participationDrafts[matchId]?.[
-                                participationKey(option.category, option.referenceId)
-                            ] ?? 1,
-                    })),
+                    selections: options
+                        .filter(
+                            (option) =>
+                                participationEnabledByMatch[matchId]?.[
+                                    participationKey(option.category, option.referenceId)
+                                ] ?? isParticipationDefaultSelected(option),
+                        )
+                        .map((option) => ({
+                            category: option.category,
+                            referenceId: option.referenceId,
+                            multiplier:
+                                participationDrafts[matchId]?.[
+                                    participationKey(option.category, option.referenceId)
+                                ] ?? 1,
+                        })),
                 }),
             });
 
@@ -2541,69 +2597,102 @@ const Predictions: React.FC = () => {
                                                                                 const optionKey = participationKey(option.category, option.referenceId);
                                                                                 const selectedMultiplier =
                                                                                     participationDrafts[match.id]?.[optionKey] ?? (option.multiplier ?? 1);
+                                                                                const isSelected =
+                                                                                    participationEnabledByMatch[match.id]?.[optionKey] ??
+                                                                                    isParticipationDefaultSelected(option);
+                                                                                const isOptional = option.category !== 'PRINCIPAL';
 
                                                                                 return (
                                                                                     <div
                                                                                         key={optionKey}
-                                                                                        className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm"
+                                                                                        className="rounded-2xl border border-white bg-white px-3 py-2.5 shadow-sm"
                                                                                     >
-                                                                                        <div className="flex items-start justify-between gap-3">
-                                                                                            <div className="min-w-0">
-                                                                                                <p className="truncate text-sm font-black text-slate-900">
-                                                                                                    {option.referenceLabel}
-                                                                                                </p>
+                                                                                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                                                                                            <div className="min-w-0 flex-1">
+                                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                                    <p className="truncate text-sm font-black text-slate-900">
+                                                                                                        {option.referenceLabel}
+                                                                                                    </p>
+                                                                                                    <span
+                                                                                                        className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${ParticipationStatusColors[option.status ?? 'UNSELECTED']}`}
+                                                                                                    >
+                                                                                                        {option.status === 'PENDING_PAYMENT'
+                                                                                                            ? 'Pendiente'
+                                                                                                            : option.status === 'PAID'
+                                                                                                              ? 'Pagado'
+                                                                                                              : option.status === 'EXPIRED'
+                                                                                                                ? 'Vencido'
+                                                                                                                : option.status === 'CANCELLED'
+                                                                                                                  ? 'Cancelado'
+                                                                                                                  : 'Nuevo'}
+                                                                                                    </span>
+                                                                                                </div>
                                                                                                 <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
                                                                                                     {ParticipationCategoryLabels[option.category]}
                                                                                                 </p>
+                                                                                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                                                                                    <p className="font-black text-slate-900">
+                                                                                                        {formatCurrency(option.unitAmount, option.currency)}
+                                                                                                    </p>
+                                                                                                    <p className="text-slate-500">
+                                                                                                        {option.deadlineAt
+                                                                                                            ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
+                                                                                                            : 'Disponible'}
+                                                                                                    </p>
+                                                                                                </div>
                                                                                             </div>
-                                                                                            <span
-                                                                                                className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${ParticipationStatusColors[option.status ?? 'UNSELECTED']}`}
-                                                                                            >
-                                                                                                {option.status === 'PENDING_PAYMENT'
-                                                                                                    ? 'Pendiente'
-                                                                                                    : option.status === 'PAID'
-                                                                                                      ? 'Pagado'
-                                                                                                      : option.status === 'EXPIRED'
-                                                                                                        ? 'Vencido'
-                                                                                                        : option.status === 'CANCELLED'
-                                                                                                          ? 'Cancelado'
-                                                                                                          : 'Nuevo'}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                        <div className="mt-3 flex items-center justify-between gap-3">
-                                                                                            <div>
-                                                                                                <p className="text-sm font-black text-slate-900">
-                                                                                                    {formatCurrency(option.unitAmount, option.currency)}
-                                                                                                </p>
-                                                                                                <p className="text-xs text-slate-500">
-                                                                                                    {option.deadlineAt
-                                                                                                        ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
-                                                                                                        : 'Disponible'}
-                                                                                                </p>
-                                                                                            </div>
-                                                                                            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                                                                                                {[1, 2, 3].map((multiplier) => (
+                                                                                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                                                                                {isOptional ? (
                                                                                                     <button
-                                                                                                        key={multiplier}
                                                                                                         type="button"
-                                                                                                        aria-pressed={selectedMultiplier === multiplier}
+                                                                                                        aria-pressed={isSelected}
+                                                                                                        aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}`}
                                                                                                         onClick={() =>
-                                                                                                            handleParticipationMultiplierChange(
+                                                                                                            handleParticipationEnabledChange(
                                                                                                                 match.id,
                                                                                                                 option.category,
                                                                                                                 option.referenceId,
-                                                                                                                multiplier as 1 | 2 | 3,
+                                                                                                                !isSelected,
                                                                                                             )
                                                                                                         }
-                                                                                                        className={`rounded-lg px-2.5 py-1 text-[11px] font-black ${
-                                                                                                            selectedMultiplier === multiplier
-                                                                                                                ? 'bg-amber-400 text-slate-900'
-                                                                                                                : 'text-slate-500 hover:bg-white'
+                                                                                                        className={`rounded-xl border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] transition ${
+                                                                                                            isSelected
+                                                                                                                ? 'border-amber-300 bg-amber-100 text-amber-800'
+                                                                                                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
                                                                                                         }`}
                                                                                                     >
-                                                                                                        x{multiplier}
+                                                                                                        {isSelected ? 'Participando' : 'Agregar'}
                                                                                                     </button>
-                                                                                                ))}
+                                                                                                ) : (
+                                                                                                    <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                                                                                                        Incluida
+                                                                                                    </span>
+                                                                                                )}
+                                                                                                <div className={`flex items-center gap-1 rounded-xl border p-1 ${isSelected ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/60 opacity-50'}`}>
+                                                                                                    {[1, 2, 3].map((multiplier) => (
+                                                                                                        <button
+                                                                                                            key={multiplier}
+                                                                                                            type="button"
+                                                                                                            aria-pressed={selectedMultiplier === multiplier}
+                                                                                                            disabled={!isSelected}
+                                                                                                            onClick={() =>
+                                                                                                                handleParticipationMultiplierChange(
+                                                                                                                    match.id,
+                                                                                                                    option.category,
+                                                                                                                    option.referenceId,
+                                                                                                                    multiplier as 1 | 2 | 3,
+                                                                                                                )
+                                                                                                            }
+                                                                                                            className={`rounded-lg px-2.5 py-1 text-[11px] font-black transition ${
+                                                                                                                selectedMultiplier === multiplier
+                                                                                                                    ? 'bg-amber-400 text-slate-900'
+                                                                                                                    : 'text-slate-500 hover:bg-white'
+                                                                                                            } disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+                                                                                                        >
+                                                                                                            x{multiplier}
+                                                                                                        </button>
+                                                                                                    ))}
+                                                                                                </div>
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
@@ -2624,10 +2713,16 @@ const Predictions: React.FC = () => {
                                                                                     <p className="text-lg font-black text-slate-900">
                                                                                         {formatCurrency(
                                                                                             (participationOptionsByMatch[match.id] ?? []).reduce((sum, option) => {
+                                                                                                const optionKey = participationKey(option.category, option.referenceId);
+                                                                                                const enabled =
+                                                                                                    participationEnabledByMatch[match.id]?.[optionKey] ??
+                                                                                                    isParticipationDefaultSelected(option);
+                                                                                                if (!enabled) {
+                                                                                                    return sum;
+                                                                                                }
                                                                                                 const multiplier =
-                                                                                                    participationDrafts[match.id]?.[
-                                                                                                        participationKey(option.category, option.referenceId)
-                                                                                                    ] ?? (option.multiplier ?? 1);
+                                                                                                    participationDrafts[match.id]?.[optionKey] ??
+                                                                                                    (option.multiplier ?? 1);
                                                                                                 return sum + option.unitAmount * multiplier;
                                                                                             }, 0),
                                                                                             participationOptionsByMatch[match.id]?.[0]?.currency ?? 'COP',

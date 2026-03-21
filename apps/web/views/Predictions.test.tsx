@@ -262,9 +262,42 @@ describe('Predictions view', () => {
         expect(screen.queryByText(/Por ronda/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Por grupo/i)).not.toBeInTheDocument();
         expect(screen.getAllByText(/Cierra/i).length).toBeGreaterThan(0);
+        expect(screen.getByRole('button', { name: /Agregar Colombia vs México/i })).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: 'x2' }).length).toBeGreaterThan(0);
         expect(screen.getAllByRole('button', { name: 'x1' }).every((button) => button.getAttribute('aria-pressed') === 'true')).toBe(true);
         expect(screen.getByRole('button', { name: /Guardar participación/i })).toBeInTheDocument();
+    });
+
+    it('lets the user opt into optional participation categories before saving', async () => {
+        const user = userEvent.setup();
+        renderWithRouter();
+
+        await waitFor(() => expect(fetchLeagueMatchesMock).toHaveBeenCalled());
+        await user.click(
+            await screen.findByRole('button', { name: /Ver participaciones de Colombia vs México/i }),
+        );
+
+        await user.click(screen.getByRole('button', { name: /Agregar Colombia vs México/i }));
+
+        expect(screen.getByRole('button', { name: /Quitar Colombia vs México/i })).toBeInTheDocument();
+        expect(screen.getByText(/20.000/i)).toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /Guardar participación/i }));
+
+        const selectionCall = requestMock.mock.calls.find(
+            ([url]) => url === '/participation/selections',
+        );
+        const body = JSON.parse(selectionCall?.[1]?.body ?? '{}');
+
+        expect(body.selections).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ category: 'PRINCIPAL' }),
+                expect.objectContaining({ category: 'MATCH', referenceId: 'match-1' }),
+            ]),
+        );
+        expect(body.selections).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({ category: 'PHASE' })]),
+        );
     });
 
     it('hides the participation entry point when no payable categories apply', async () => {
