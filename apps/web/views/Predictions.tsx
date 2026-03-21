@@ -152,6 +152,52 @@ function getParticipationStatusLabel(status?: ParticipationCategoryOption['statu
     return 'Nuevo';
 }
 
+function getParticipationOptionIcon(category: ParticipationCategoryOption['category']) {
+    switch (category) {
+        case 'PRINCIPAL':
+            return Trophy;
+        case 'MATCH':
+            return Coins;
+        case 'ROUND':
+            return GitMerge;
+        case 'PHASE':
+            return Medal;
+        case 'GROUP':
+        default:
+            return Trophy;
+    }
+}
+
+function getPrincipalParticipationOption(
+    optionsByMatch: Record<string, ParticipationCategoryOption[]>,
+): ParticipationCategoryOption | null {
+    for (const options of Object.values(optionsByMatch)) {
+        const principal = options.find((option) => option.category === 'PRINCIPAL');
+        if (principal) return principal;
+    }
+    return null;
+}
+
+function getOptionalParticipationOptions(options: ParticipationCategoryOption[]): ParticipationCategoryOption[] {
+    return options.filter((option) => option.category !== 'PRINCIPAL');
+}
+
+function getParticipationMatchTotal(
+    options: ParticipationCategoryOption[],
+    enabledState: Record<string, boolean> = {},
+    draftState: Record<string, 1 | 2 | 3> = {},
+): number {
+    return getOptionalParticipationOptions(options).reduce((sum, option) => {
+        const optionKey = participationKey(option.category, option.referenceId);
+        const enabled = enabledState[optionKey] ?? isParticipationDefaultSelected(option);
+        if (!enabled) {
+            return sum;
+        }
+        const multiplier = draftState[optionKey] ?? (option.multiplier ?? 1);
+        return sum + option.unitAmount * multiplier;
+    }, 0);
+}
+
 function buildParticipationDraftState(
     optionsByMatch: Record<string, ParticipationCategoryOption[]>,
 ): Record<string, Record<string, 1 | 2 | 3>> {
@@ -468,6 +514,192 @@ type InsightsPayload = ReturnType<typeof generateMatchInsights> & {
     personalInsight?: string;
 };
 
+interface ParticipationConfiguratorProps {
+    matchId: string;
+    options: ParticipationCategoryOption[];
+    enabledState?: Record<string, boolean>;
+    draftState?: Record<string, 1 | 2 | 3>;
+    loading?: boolean;
+    saving?: boolean;
+    layout?: 'mobile' | 'desktop';
+    onToggleEnabled: (matchId: string, category: string, referenceId: string | undefined, enabled: boolean) => void;
+    onChangeMultiplier: (matchId: string, category: string, referenceId: string | undefined, multiplier: 1 | 2 | 3) => void;
+    onSave: (matchId: string) => void;
+}
+
+function ParticipationConfigurator({
+    matchId,
+    options,
+    enabledState = {},
+    draftState = {},
+    loading = false,
+    saving = false,
+    layout = 'desktop',
+    onToggleEnabled,
+    onChangeMultiplier,
+    onSave,
+}: ParticipationConfiguratorProps) {
+    const optionalOptions = getOptionalParticipationOptions(options);
+    const currency = optionalOptions[0]?.currency ?? options[0]?.currency ?? 'COP';
+    const total = getParticipationMatchTotal(options, enabledState, draftState);
+    const isMobile = layout === 'mobile';
+
+    return (
+        <div className={`rounded-2xl border border-amber-200 bg-amber-50/70 ${isMobile ? 'p-3' : 'p-3.5'}`}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                        Extras opcionales del partido
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Activa solo las modalidades extra que quieras jugar en este encuentro.
+                    </p>
+                </div>
+                {loading ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
+                ) : null}
+            </div>
+
+            <div className="space-y-2.5">
+                {optionalOptions.length > 0 ? (
+                    optionalOptions.map((option) => {
+                        const optionKey = participationKey(option.category, option.referenceId);
+                        const isSelected = enabledState[optionKey] ?? isParticipationDefaultSelected(option);
+                        const selectedMultiplier = draftState[optionKey] ?? ((option.multiplier ?? 1) as 1 | 2 | 3);
+                        const OptionIcon = getParticipationOptionIcon(option.category);
+
+                        return (
+                            <div
+                                key={optionKey}
+                                className={`rounded-2xl border border-white/90 bg-white shadow-sm shadow-amber-100/30 ${
+                                    isMobile ? 'p-3' : 'p-3.5'
+                                }`}
+                            >
+                                <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-start justify-between gap-4'}`}>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                                                <OptionIcon className="h-4 w-4" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                                        {ParticipationCategoryLabels[option.category]}
+                                                    </p>
+                                                    <span
+                                                        className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${
+                                                            ParticipationStatusColors[option.status ?? 'UNSELECTED']
+                                                        }`}
+                                                    >
+                                                        {getParticipationStatusLabel(option.status)}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-1 truncate text-sm font-black text-slate-900">
+                                                    {option.referenceLabel}
+                                                </p>
+                                                <p className="mt-1 text-xs leading-5 text-slate-500">
+                                                    Elige si quieres participar y luego define tu multiplicador.
+                                                </p>
+                                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                                    <p className="font-black text-slate-900">
+                                                        {formatCurrency(option.unitAmount, option.currency)}
+                                                    </p>
+                                                    <p className="flex items-center gap-1 text-slate-500">
+                                                        <Calendar className="h-3.5 w-3.5" />
+                                                        {option.deadlineAt
+                                                            ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
+                                                            : 'Disponible'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className={`flex ${isMobile ? 'flex-col gap-2' : 'flex-wrap items-center justify-end gap-2'}`}>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={isSelected}
+                                            aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}${isMobile ? ' en móvil' : ''}`}
+                                            onClick={() =>
+                                                onToggleEnabled(matchId, option.category, option.referenceId, !isSelected)
+                                            }
+                                            className={`min-h-11 rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] transition ${
+                                                isSelected
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            {isSelected ? 'Participando' : 'Agregar'}
+                                        </button>
+                                        <div
+                                            className={`flex items-center gap-1 rounded-xl border p-1 ${
+                                                isSelected ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/60 opacity-50'
+                                            }`}
+                                        >
+                                            {[1, 2, 3].map((multiplier) => (
+                                                <button
+                                                    key={multiplier}
+                                                    type="button"
+                                                    aria-pressed={selectedMultiplier === multiplier}
+                                                    aria-label={isMobile ? `Multiplicador x${multiplier} en móvil` : `x${multiplier}`}
+                                                    disabled={!isSelected}
+                                                    onClick={() =>
+                                                        onChangeMultiplier(
+                                                            matchId,
+                                                            option.category,
+                                                            option.referenceId,
+                                                            multiplier as 1 | 2 | 3,
+                                                        )
+                                                    }
+                                                    className={`min-h-9 rounded-lg px-3 py-1.5 text-[11px] font-black transition ${
+                                                        selectedMultiplier === multiplier
+                                                            ? 'bg-amber-400 text-slate-900'
+                                                            : 'text-slate-500 hover:bg-white'
+                                                    } disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+                                                >
+                                                    x{multiplier}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                ) : !loading ? (
+                    <div className="rounded-2xl border border-dashed border-amber-200 bg-white px-4 py-5 text-center text-sm text-slate-500">
+                        No hay extras pagas habilitadas para este partido.
+                    </div>
+                ) : null}
+
+                <div
+                    className={`rounded-2xl bg-white shadow-sm ${
+                        isMobile ? 'flex flex-col gap-3 px-3 py-3.5' : 'flex items-center justify-between gap-3 px-3 py-3'
+                    }`}
+                >
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                            Total de extras del partido
+                        </p>
+                        <p className="text-lg font-black text-slate-900">{formatCurrency(total, currency)}</p>
+                        <p className="text-xs text-slate-500">La cuota general se gestiona una sola vez a nivel de liga.</p>
+                    </div>
+                    <button
+                        type="button"
+                        aria-label={isMobile ? 'Guardar participación del partido en móvil' : 'Guardar participación'}
+                        onClick={() => onSave(matchId)}
+                        disabled={saving}
+                        className="min-h-11 rounded-2xl bg-amber-400 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-60"
+                    >
+                        {saving ? 'Guardando...' : 'Guardar participación'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 interface CompactMatchRowProps {
     match: MatchViewModel;
     draft: { home: string; away: string };
@@ -491,6 +723,9 @@ interface CompactMatchRowProps {
     onRequestInsights: () => void;
     onApplySuggestedScore: (home: string, away: string) => void;
     onCollapseOthers: () => void;
+    hasParticipationOptions: boolean;
+    isParticipationOpen: boolean;
+    onToggleParticipation: () => void;
 }
 
 function CompactMatchRow({
@@ -516,6 +751,9 @@ function CompactMatchRow({
     onRequestInsights,
     onApplySuggestedScore,
     onCollapseOthers,
+    hasParticipationOptions,
+    isParticipationOpen,
+    onToggleParticipation,
 }: CompactMatchRowProps) {
     const [insightsLevel, setInsightsLevel] = React.useState<'none' | 'suggestions' | 'full'>('none');
     const hasBeenConsulted = cachedInsights !== null;
@@ -600,6 +838,23 @@ function CompactMatchRow({
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
+                            {hasParticipationOptions ? (
+                                <button
+                                    type="button"
+                                    aria-label={`Gestionar participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleParticipation();
+                                    }}
+                                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                                        isParticipationOpen
+                                            ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-200'
+                                            : 'border border-slate-200 bg-white text-slate-400 hover:bg-amber-50 hover:text-amber-600'
+                                    }`}
+                                >
+                                    <Coins className="h-4 w-4" />
+                                </button>
+                            ) : null}
                             {/* Botón IA */}
                             <button
                                 type="button"
@@ -1458,6 +1713,11 @@ const Predictions: React.FC = () => {
         [],
     );
 
+    const principalParticipationOption = React.useMemo(
+        () => getPrincipalParticipationOption(participationOptionsByMatch),
+        [participationOptionsByMatch],
+    );
+
     // Dirty detection: open matches whose draft differs from saved prediction
     const dirtyMatchIds = React.useMemo(() =>
         matches
@@ -2155,6 +2415,48 @@ const Predictions: React.FC = () => {
                     </div>
                 ) : null}
 
+                {predictionMode === 'matches' && principalParticipationOption ? (
+                    <div className="rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-amber-50/80 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                                        <Trophy className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                            Cuota general de la liga
+                                        </p>
+                                        <p className="truncate text-base font-black text-slate-900">
+                                            {principalParticipationOption.referenceLabel}
+                                        </p>
+                                    </div>
+                                </div>
+                                <p className="mt-3 text-sm font-black text-slate-900">
+                                    {formatCurrency(
+                                        principalParticipationOption.unitAmount,
+                                        principalParticipationOption.currency,
+                                    )}
+                                </p>
+                                <p className="mt-1 text-sm leading-6 text-slate-500">
+                                    Se cobra una sola vez por liga y no hace parte de los extras de cada partido.
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-amber-100 bg-white/80 px-4 py-3 text-sm text-slate-600 sm:max-w-xs">
+                                <p className="flex items-center gap-2 font-semibold text-slate-700">
+                                    <Calendar className="h-4 w-4 text-amber-600" />
+                                    {principalParticipationOption.deadlineAt
+                                        ? `Cierra ${new Date(principalParticipationOption.deadlineAt).toLocaleString('es-CO')}`
+                                        : 'Disponible'}
+                                </p>
+                                <p className="mt-2 text-xs leading-5 text-slate-500">
+                                    Los paneles por partido ahora muestran solo extras opcionales para evitar confusión.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+
                 {/* ERROR */}
                 {error ? (
                     <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -2390,7 +2692,26 @@ const Predictions: React.FC = () => {
                                                                     // Colapsar todos los insights de otros partidos
                                                                     setExpandedMatches(new Set([match.id]));
                                                                 }}
+                                                                hasParticipationOptions={hasParticipationOptions}
+                                                                isParticipationOpen={activeParticipationMatchId === match.id}
+                                                                onToggleParticipation={() => void handleToggleParticipation(match.id)}
                                                             />
+                                                            {activeParticipationMatchId === match.id ? (
+                                                                <div className="border-t border-slate-100 bg-white p-3 sm:hidden">
+                                                                    <ParticipationConfigurator
+                                                                        matchId={match.id}
+                                                                        options={participationOptionsByMatch[match.id] ?? []}
+                                                                        enabledState={participationEnabledByMatch[match.id]}
+                                                                        draftState={participationDrafts[match.id]}
+                                                                        loading={participationLoadingByMatch[match.id]}
+                                                                        saving={participationSavingMatchId === match.id}
+                                                                        layout="mobile"
+                                                                        onToggleEnabled={handleParticipationEnabledChange}
+                                                                        onChangeMultiplier={handleParticipationMultiplierChange}
+                                                                        onSave={(nextMatchId) => void handleParticipationSave(nextMatchId)}
+                                                                    />
+                                                                </div>
+                                                            ) : null}
                                                         </div>
 
                                                         {/* Desktop: Full card */}
@@ -2586,199 +2907,18 @@ const Predictions: React.FC = () => {
                                                             </div>
 
                                                             {activeParticipationMatchId === match.id ? (
-                                                                <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
-                                                                    <div className="mb-3 flex items-center justify-between gap-3">
-                                                                        <div>
-                                                                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-                                                                                Participaciones
-                                                                            </p>
-                                                                            <p className="text-xs text-slate-500">
-                                                                                Revisa tu cuota general y activa extras opcionales de este partido sin salir de la quiniela.
-                                                                            </p>
-                                                                        </div>
-                                                                        {participationLoadingByMatch[match.id] ? (
-                                                                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
-                                                                        ) : null}
-                                                                    </div>
-
-                                                                    <div className="space-y-2">
-                                                                        {(participationOptionsByMatch[match.id] ?? []).length > 0 ? (
-                                                                            (participationOptionsByMatch[match.id] ?? []).map((option) => {
-                                                                                const optionKey = participationKey(option.category, option.referenceId);
-                                                                                const selectedMultiplier =
-                                                                                    participationDrafts[match.id]?.[optionKey] ?? (option.multiplier ?? 1);
-                                                                                const isSelected =
-                                                                                    participationEnabledByMatch[match.id]?.[optionKey] ??
-                                                                                    isParticipationDefaultSelected(option);
-                                                                                const isOptional = option.category !== 'PRINCIPAL';
-                                                                                const isPrincipal = option.category === 'PRINCIPAL';
-                                                                                const OptionIcon =
-                                                                                    option.category === 'PRINCIPAL'
-                                                                                        ? Trophy
-                                                                                        : option.category === 'MATCH'
-                                                                                          ? Coins
-                                                                                          : option.category === 'GROUP'
-                                                                                            ? Trophy
-                                                                                            : option.category === 'ROUND'
-                                                                                              ? GitMerge
-                                                                                              : Medal;
-
-                                                                                return (
-                                                                                    <div
-                                                                                        key={optionKey}
-                                                                                        className={`rounded-2xl border bg-white px-3 py-3 shadow-sm ${
-                                                                                            isPrincipal ? 'border-amber-200 bg-amber-50/40' : 'border-white'
-                                                                                        }`}
-                                                                                    >
-                                                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                                                            <div className="min-w-0 flex-1">
-                                                                                                <div className="flex items-start gap-3">
-                                                                                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
-                                                                                                        isPrincipal ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
-                                                                                                    }`}>
-                                                                                                        <OptionIcon className="h-4 w-4" />
-                                                                                                    </div>
-                                                                                                    <div className="min-w-0 flex-1">
-                                                                                                        <div className="flex items-center justify-between gap-2">
-                                                                                                            <div className="min-w-0">
-                                                                                                                <p className={`text-[11px] font-black uppercase tracking-[0.16em] ${
-                                                                                                                    isPrincipal ? 'text-amber-700' : 'text-slate-500'
-                                                                                                                }`}>
-                                                                                                                    {isPrincipal ? 'Cuota general de la liga' : ParticipationCategoryLabels[option.category]}
-                                                                                                                </p>
-                                                                                                                <p className="truncate text-sm font-black text-slate-900">
-                                                                                                                    {option.referenceLabel}
-                                                                                                                </p>
-                                                                                                            </div>
-                                                                                                            <span
-                                                                                                                className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${ParticipationStatusColors[option.status ?? 'UNSELECTED']}`}
-                                                                                                            >
-                                                                                                                {getParticipationStatusLabel(option.status)}
-                                                                                                            </span>
-                                                                                                        </div>
-                                                                                                        <p className="mt-1 text-xs text-slate-500">
-                                                                                                            {isPrincipal
-                                                                                                                ? 'Se cobra una sola vez por liga; no corresponde a este partido específico.'
-                                                                                                                : 'Extra opcional de este partido. Actívalo solo si quieres participar en esta modalidad.'}
-                                                                                                        </p>
-                                                                                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                                                                                                            <p className="font-black text-slate-900">
-                                                                                                                {formatCurrency(option.unitAmount, option.currency)}
-                                                                                                            </p>
-                                                                                                            <p className="flex items-center gap-1 text-slate-500">
-                                                                                                                <Calendar className="h-3.5 w-3.5" />
-                                                                                                                {option.deadlineAt
-                                                                                                                    ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
-                                                                                                                    : 'Disponible'}
-                                                                                                            </p>
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                                                                                {isOptional ? (
-                                                                                                    <button
-                                                                                                        type="button"
-                                                                                                        role="switch"
-                                                                                                        aria-checked={isSelected}
-                                                                                                        aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}`}
-                                                                                                        onClick={() =>
-                                                                                                            handleParticipationEnabledChange(
-                                                                                                                match.id,
-                                                                                                                option.category,
-                                                                                                                option.referenceId,
-                                                                                                                !isSelected,
-                                                                                                            )
-                                                                                                        }
-                                                                                                        className={`rounded-xl border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] transition ${
-                                                                                                            isSelected
-                                                                                                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                                                                                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                                                                                                        }`}
-                                                                                                    >
-                                                                                                        {isSelected ? 'Participando' : 'Agregar'}
-                                                                                                    </button>
-                                                                                                ) : (
-                                                                                                    <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
-                                                                                                        Incluida
-                                                                                                    </span>
-                                                                                                )}
-                                                                                                <div className={`flex items-center gap-1 rounded-xl border p-1 ${isSelected ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/60 opacity-50'}`}>
-                                                                                                    {[1, 2, 3].map((multiplier) => (
-                                                                                                        <button
-                                                                                                            key={multiplier}
-                                                                                                            type="button"
-                                                                                                            aria-pressed={selectedMultiplier === multiplier}
-                                                                                                            disabled={!isSelected}
-                                                                                                            onClick={() =>
-                                                                                                                handleParticipationMultiplierChange(
-                                                                                                                    match.id,
-                                                                                                                    option.category,
-                                                                                                                    option.referenceId,
-                                                                                                                    multiplier as 1 | 2 | 3,
-                                                                                                                )
-                                                                                                            }
-                                                                                                            className={`rounded-lg px-2.5 py-1 text-[11px] font-black transition ${
-                                                                                                                selectedMultiplier === multiplier
-                                                                                                                    ? 'bg-amber-400 text-slate-900'
-                                                                                                                    : 'text-slate-500 hover:bg-white'
-                                                                                                            } disabled:cursor-not-allowed disabled:hover:bg-transparent`}
-                                                                                                        >
-                                                                                                            x{multiplier}
-                                                                                                        </button>
-                                                                                                    ))}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                );
-                                                                            })
-                                                                        ) : !participationLoadingByMatch[match.id] ? (
-                                                                            <div className="rounded-2xl border border-dashed border-amber-200 bg-white px-4 py-5 text-center text-sm text-slate-500">
-                                                                                No hay extras pagas habilitadas para este partido. Tu cuota general se gestiona a nivel de liga.
-                                                                            </div>
-                                                                        ) : null}
-
-                                                                        {(participationOptionsByMatch[match.id] ?? []).length > 0 ? (
-                                                                            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3 shadow-sm">
-                                                                                <div>
-                                                                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                                                                                        Total estimado
-                                                                                    </p>
-                                                                                    <p className="text-lg font-black text-slate-900">
-                                                                                        {formatCurrency(
-                                                                                            (participationOptionsByMatch[match.id] ?? []).reduce((sum, option) => {
-                                                                                                const optionKey = participationKey(option.category, option.referenceId);
-                                                                                                const enabled =
-                                                                                                    participationEnabledByMatch[match.id]?.[optionKey] ??
-                                                                                                    isParticipationDefaultSelected(option);
-                                                                                                if (!enabled) {
-                                                                                                    return sum;
-                                                                                                }
-                                                                                                const multiplier =
-                                                                                                    participationDrafts[match.id]?.[optionKey] ??
-                                                                                                    (option.multiplier ?? 1);
-                                                                                                return sum + option.unitAmount * multiplier;
-                                                                                            }, 0),
-                                                                                            participationOptionsByMatch[match.id]?.[0]?.currency ?? 'COP',
-                                                                                        )}
-                                                                                    </p>
-                                                                                    <p className="text-xs text-slate-500">
-                                                                                        Incluye la cuota general y los extras activos en este partido.
-                                                                                    </p>
-                                                                                </div>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => void handleParticipationSave(match.id)}
-                                                                                    disabled={participationSavingMatchId === match.id}
-                                                                                    className="rounded-2xl bg-amber-400 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-60"
-                                                                                >
-                                                                                    {participationSavingMatchId === match.id ? 'Guardando...' : 'Guardar participación'}
-                                                                                </button>
-                                                                            </div>
-                                                                        ) : null}
-                                                                    </div>
-                                                                </div>
+                                                                <ParticipationConfigurator
+                                                                    matchId={match.id}
+                                                                    options={participationOptionsByMatch[match.id] ?? []}
+                                                                    enabledState={participationEnabledByMatch[match.id]}
+                                                                    draftState={participationDrafts[match.id]}
+                                                                    loading={participationLoadingByMatch[match.id]}
+                                                                    saving={participationSavingMatchId === match.id}
+                                                                    layout="desktop"
+                                                                    onToggleEnabled={handleParticipationEnabledChange}
+                                                                    onChangeMultiplier={handleParticipationMultiplierChange}
+                                                                    onSave={(nextMatchId) => void handleParticipationSave(nextMatchId)}
+                                                                />
                                                             ) : null}
 
                                                             <div className="flex flex-col gap-1.5 text-[9px] sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:text-[10px]">

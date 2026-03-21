@@ -323,17 +323,18 @@ describe('Predictions view', () => {
         await waitFor(() =>
             expect(requestMock).toHaveBeenCalledWith('/participation/options-batch?leagueId=league-1'),
         );
-        expect(screen.getAllByText(/Participaciones/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Cuota general de la liga/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Extras opcionales del partido/i).length).toBeGreaterThan(0);
         expect(screen.getAllByText(/Liga Uno/i).length).toBeGreaterThan(0);
-        expect(screen.getByText(/Colombia vs México/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/Colombia vs México/i).length).toBeGreaterThan(0);
         expect(screen.getAllByText(/Grupos/i).length).toBeGreaterThan(0);
         expect(screen.queryByText(/Por ronda/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Por grupo/i)).not.toBeInTheDocument();
         expect(screen.getAllByText(/Cierra/i).length).toBeGreaterThan(0);
-        expect(screen.getByRole('switch', { name: /Agregar Colombia vs México/i })).toBeInTheDocument();
+        expect(screen.getByRole('switch', { name: /^Agregar Colombia vs México$/i })).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: 'x2' }).length).toBeGreaterThan(0);
         expect(screen.getAllByRole('button', { name: 'x1' }).every((button) => button.getAttribute('aria-pressed') === 'true')).toBe(true);
-        expect(screen.getByRole('button', { name: /Guardar participación/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Guardar participación$/i })).toBeInTheDocument();
     });
 
     it('lets the user opt into optional participation categories before saving', async () => {
@@ -345,12 +346,12 @@ describe('Predictions view', () => {
             await screen.findByRole('button', { name: /Ver participaciones de Colombia vs México/i }),
         );
 
-        await user.click(screen.getByRole('switch', { name: /Agregar Colombia vs México/i }));
+        await user.click(screen.getByRole('switch', { name: /^Agregar Colombia vs México$/i }));
 
-        expect(screen.getByRole('switch', { name: /Quitar Colombia vs México/i })).toBeInTheDocument();
-        expect(screen.getByText(/20.000/i)).toBeInTheDocument();
+        expect(screen.getByRole('switch', { name: /^Quitar Colombia vs México$/i })).toBeInTheDocument();
+        expect(screen.getAllByText(/5.000/i).length).toBeGreaterThan(0);
 
-        await user.click(screen.getByRole('button', { name: /Guardar participación/i }));
+        await user.click(screen.getByRole('button', { name: /^Guardar participación$/i }));
 
         const selectionCall = requestMock.mock.calls.find(
             ([url]) => url === '/participation/selections',
