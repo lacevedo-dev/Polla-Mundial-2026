@@ -20,6 +20,7 @@ describe('useAuthStore', () => {
             user: null,
             token: null,
             isLoading: false,
+            sessionChecked: true,
             emailVerified: false,
         });
     });
@@ -132,6 +133,7 @@ describe('useAuthStore', () => {
             },
             token: 'stale-token',
             isLoading: false,
+            sessionChecked: false,
             emailVerified: true,
         });
         requestMock.mockRejectedValueOnce(new Error('Unauthorized'));
@@ -141,6 +143,7 @@ describe('useAuthStore', () => {
         expect(localStorage.getItem('token')).toBeNull();
         expect(useAuthStore.getState().user).toBeNull();
         expect(useAuthStore.getState().token).toBeNull();
+        expect(useAuthStore.getState().sessionChecked).toBe(true);
         expect(useAuthStore.getState().emailVerified).toBe(false);
     });
 });

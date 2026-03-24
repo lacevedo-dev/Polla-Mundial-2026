@@ -19,11 +19,12 @@ interface AuthState {
     user: User | null;
     token: string | null;
     isLoading: boolean;
+    sessionChecked: boolean;
     emailVerified: boolean;
     login: (data: any) => Promise<void>;
     register: (data: any) => Promise<void>;
     logout: () => void;
-    checkAuth: () => Promise<void>;
+    checkAuth: () => Promise<boolean>;
     verifyEmail: (token: string) => Promise<void>;
     resendVerification: () => Promise<void>;
     isEmailVerified: () => boolean;
@@ -68,6 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     token: localStorage.getItem('token'),
     isLoading: false,
+    sessionChecked: !localStorage.getItem('token'),
     emailVerified: false,
 
     login: async (credentials) => {
@@ -87,6 +89,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 user: normalizeUser(response.user),
                 token,
                 emailVerified,
+                sessionChecked: true,
                 isLoading: false,
             });
         } catch (error) {
@@ -112,6 +115,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 user: normalizeUser(response.user),
                 token,
                 emailVerified,
+                sessionChecked: true,
                 isLoading: false,
             });
             return {
@@ -126,19 +130,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     logout: () => {
         localStorage.removeItem('token');
-        set({ user: null, token: null, emailVerified: false });
+        set({ user: null, token: null, emailVerified: false, sessionChecked: true });
     },
 
     checkAuth: async () => {
         const token = localStorage.getItem('token');
-        if (!token) return;
+        if (!token) {
+            set({ user: null, token: null, emailVerified: false, sessionChecked: true });
+            return false;
+        }
+
         try {
             const user: any = await request('/auth/profile');
             const emailVerified = user?.emailVerified ?? false;
-            set({ user: normalizeUser(user), token, emailVerified });
+            set({ user: normalizeUser(user), token, emailVerified, sessionChecked: true });
+            return true;
         } catch {
             localStorage.removeItem('token');
-            set({ user: null, token: null, emailVerified: false });
+            set({ user: null, token: null, emailVerified: false, sessionChecked: true });
+            return false;
         }
     },
 
@@ -154,6 +164,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             set({
                 user: { ...user, emailVerified },
                 emailVerified,
+                sessionChecked: true,
                 isLoading: false,
             });
         } catch (error) {
