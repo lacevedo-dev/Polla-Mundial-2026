@@ -16,6 +16,7 @@ const AdminMatches = React.lazy(() => import('./views/admin/AdminMatches'));
 const AdminPlans = React.lazy(() => import('./views/admin/AdminPlans'));
 const AdminAffiliations = React.lazy(() => import('./views/admin/AdminAffiliations'));
 const AdminPredictions = React.lazy(() => import('./views/admin/AdminPredictions'));
+const AdminPayments = React.lazy(() => import('./views/admin/AdminPayments'));
 const AdminSettings = React.lazy(() => import('./views/admin/AdminSettings'));
 const AdminAiUsage = React.lazy(() => import('./views/admin/AdminAiUsage'));
 const FootballSyncDashboard = React.lazy(() => import('./views/admin/FootballSyncDashboard'));
@@ -88,6 +89,7 @@ const adminRoutes: RouteObject[] = [
     { path: '/admin/plans', element: <Suspense fallback={<LoadingFallback />}><AdminPlans /></Suspense> },
     { path: '/admin/affiliations', element: <Suspense fallback={<LoadingFallback />}><AdminAffiliations /></Suspense> },
     { path: '/admin/predictions', element: <Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense> },
+    { path: '/admin/payments', element: <Suspense fallback={<LoadingFallback />}><AdminPayments /></Suspense> },
     { path: '/admin/settings', element: <Suspense fallback={<LoadingFallback />}><AdminSettings /></Suspense> },
     { path: '/admin/ai-usage', element: <Suspense fallback={<LoadingFallback />}><AdminAiUsage /></Suspense> },
     { path: '/admin/football-sync', element: <Suspense fallback={<LoadingFallback />}><FootballSyncDashboard /></Suspense> },

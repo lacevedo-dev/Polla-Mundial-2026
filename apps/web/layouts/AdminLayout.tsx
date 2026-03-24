@@ -2,7 +2,7 @@ import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
     BarChart3, Users, Trophy, Swords, CreditCard, Layers,
-    Settings, LogOut, Shield, Menu, X, Target, ArrowLeft, RefreshCw, Sparkles,
+    Settings, LogOut, Shield, Menu, X, Target, ArrowLeft, RefreshCw, Sparkles, Coins,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 
@@ -14,6 +14,7 @@ const adminNavItems = [
     { to: '/admin/plans', label: 'Planes', icon: CreditCard },
     { to: '/admin/affiliations', label: 'Afiliaciones', icon: Layers },
     { to: '/admin/predictions', label: 'Pronósticos', icon: Target },
+    { to: '/admin/payments', label: 'Pagos', icon: Coins },
     { to: '/admin/ai-usage', label: 'Consultas IA', icon: Sparkles },
     { to: '/admin/football-sync', label: 'Football Sync', icon: RefreshCw },
     { to: '/admin/settings', label: 'Sistema', icon: Settings },
