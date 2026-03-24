@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown,
-    Download, Globe, Loader2, Search, Shield, Trophy, Users, X, Zap,
+    Download, Globe, Info, Loader2, Search, Shield, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
 
@@ -41,12 +41,39 @@ interface ImportResult {
     dryRun: boolean;
 }
 
+interface UsageInfo {
+    requests: { used: number; limit: number; available: number };
+}
+
 interface Props {
     onClose: () => void;
     onImported: () => void;
 }
 
 const STEP_LABELS = ['Buscar liga', 'Temporada', 'Vista previa', 'Importar'];
+
+/* ─── Popular leagues — Colombia primero ────────────────────────── */
+const POPULAR_LEAGUES = [
+    { query: 'Liga BetPlay',    label: 'Liga BetPlay',                 country: 'Colombia',       note: 'Primera División Colombia' },
+    { query: 'Copa Colombia',   label: 'Copa Colombia',                country: 'Colombia',       note: 'Torneo eliminatorio Colombia' },
+    { query: 'FIFA World Cup',  label: 'FIFA World Cup 2026',          country: 'World',          note: 'ID 1 · Solo el torneo oficial, no amistosos' },
+    { query: 'FIFA Friendlies', label: 'Amistosos Internacionales',    country: 'World',          note: 'ID 10 · Amistosos prep. Mundial (Colombia incluida)' },
+    { query: 'Copa America',    label: 'Copa América',                  country: 'América del Sur', note: 'ID 9' },
+    { query: 'Champions League', label: 'UEFA Champions League',       country: 'Europa',         note: 'ID 2' },
+];
+
+/* ─── Rate limit badge ───────────────────────────────────────────── */
+const RateBadge: React.FC<{ usage: UsageInfo | null }> = ({ usage }) => {
+    if (!usage) return null;
+    const { used, limit, available } = usage.requests;
+    const pct = Math.round((used / limit) * 100);
+    const color = pct >= 90 ? 'bg-rose-100 text-rose-700' : pct >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-lime-100 text-lime-700';
+    return (
+        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${color}`} title={`${available} requests disponibles hoy`}>
+            <Zap size={10} /> {used}/{limit}
+        </span>
+    );
+};
 
 /* ─── Step indicator ─────────────────────────────────────────────── */
 const StepDots: React.FC<{ step: number }> = ({ step }) => (
@@ -68,6 +95,7 @@ const StepDots: React.FC<{ step: number }> = ({ step }) => (
 /* ─── Main component ─────────────────────────────────────────────── */
 const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [step, setStep] = useState(0);
+    const [usage, setUsage] = useState<UsageInfo | null>(null);
 
     // Step 0: Search
     const [searchQuery, setSearchQuery] = useState('');
@@ -93,27 +121,47 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [importError, setImportError] = useState('');
 
+    /* ─ load usage on mount ─ */
+    useEffect(() => {
+        request<UsageInfo>('/admin/football/usage').then(setUsage).catch(() => null);
+    }, []);
+
+    /* ─ reload usage after each API-consuming action ─ */
+    const refreshUsage = useCallback(() => {
+        request<UsageInfo>('/admin/football/usage').then(setUsage).catch(() => null);
+    }, []);
+
     /* ─ search ─ */
-    const handleSearch = useCallback(async () => {
-        if (!searchQuery.trim()) return;
+    const handleSearch = useCallback(async (overrideQuery?: string) => {
+        const q = overrideQuery ?? searchQuery;
+        if (!q.trim()) return;
         setSearching(true);
         setSearchError('');
+        setSearchResults([]);
         try {
             const data = await request<LeagueSearchResult[]>(
-                `/admin/football/leagues/search?q=${encodeURIComponent(searchQuery)}&country=${encodeURIComponent(searchCountry)}`,
+                `/admin/football/leagues/search?q=${encodeURIComponent(q)}&country=${encodeURIComponent(searchCountry)}`,
             );
             setSearchResults(data);
+            refreshUsage();
         } catch (e: any) {
             setSearchError(e?.message ?? 'Error al buscar ligas');
         } finally {
             setSearching(false);
         }
-    }, [searchQuery, searchCountry]);
+    }, [searchQuery, searchCountry, refreshUsage]);
 
+    /* debounce on typed query */
     useEffect(() => {
         const t = setTimeout(() => { if (searchQuery.length >= 2) void handleSearch(); }, 500);
         return () => clearTimeout(t);
     }, [searchQuery, handleSearch]);
+
+    /* ─ quicklink: trigger real search ─ */
+    const handleQuickSearch = (query: string) => {
+        setSearchQuery(query);
+        void handleSearch(query);
+    };
 
     /* ─ select league → set default season ─ */
     const handleSelectLeague = (league: LeagueSearchResult) => {
@@ -135,6 +183,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
             );
             setPreview(data);
             setStep(2);
+            refreshUsage();
         } catch (e: any) {
             setPreviewError(e?.message ?? 'Error al cargar vista previa');
         } finally {
@@ -160,6 +209,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
             });
             setImportResult(data);
             setStep(3);
+            refreshUsage();
         } catch (e: any) {
             setImportError(e?.message ?? 'Error al importar');
         } finally {
@@ -187,9 +237,12 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Desde API-Football</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50">
-                        <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <RateBadge usage={usage} />
+                        <button onClick={onClose} className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50">
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Steps */}
@@ -204,14 +257,26 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                         {/* ── Step 0: Search league ── */}
                         {step === 0 && (
                             <motion.div key="s0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                                <p className="text-sm text-slate-600">Busca una liga o torneo por nombre o país.</p>
+
+                                {/* Rate limit info */}
+                                {usage && (
+                                    <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                                        <Info size={13} className="shrink-0 mt-0.5 text-slate-400" />
+                                        <p>
+                                            Cada búsqueda consume <strong>1 request</strong>, la vista previa consume <strong>2</strong> y la importación consume <strong>2–3</strong>.
+                                            Hoy llevas <strong>{usage.requests.used}/{usage.requests.limit}</strong> — quedan <strong>{usage.requests.available}</strong>.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <p className="text-sm text-slate-600">Busca una liga o torneo por nombre. Los resultados vienen directamente de la API con las temporadas disponibles.</p>
 
                                 <div className="flex gap-2">
                                     <div className="relative flex-1">
                                         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                         <input
                                             type="text"
-                                            placeholder="Ej: World Cup, Champions, Copa América…"
+                                            placeholder="Ej: Liga BetPlay, World Cup, Champions…"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             onKeyDown={(e) => e.key === 'Enter' && void handleSearch()}
@@ -223,7 +288,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                         placeholder="País"
                                         value={searchCountry}
                                         onChange={(e) => setSearchCountry(e.target.value)}
-                                        className="w-32 px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                        className="w-28 px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                                     />
                                     <button
                                         onClick={() => void handleSearch()}
@@ -241,9 +306,15 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                 )}
 
                                 {/* Results */}
-                                {searchResults.length > 0 && (
+                                {searching && (
+                                    <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+                                        <Loader2 size={16} className="animate-spin" /> Consultando API-Football…
+                                    </div>
+                                )}
+
+                                {!searching && searchResults.length > 0 && (
                                     <div className="space-y-2">
-                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{searchResults.length} resultados</p>
+                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{searchResults.length} resultados (consumió 1 request)</p>
                                         {searchResults.map((league) => (
                                             <button
                                                 key={league.id}
@@ -259,19 +330,22 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                 )}
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-black text-slate-900 truncate">{league.name}</p>
-                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                         <span className="text-[10px] text-slate-400 flex items-center gap-1">
                                                             <Globe size={10} /> {league.country}
                                                         </span>
                                                         <span className="text-[10px] text-slate-400 uppercase">{league.type}</span>
                                                         {league.currentSeason && (
                                                             <span className="text-[10px] bg-lime-100 text-lime-700 px-1.5 py-0.5 rounded font-bold">
-                                                                {league.currentSeason}
+                                                                Temporada activa: {league.currentSeason}
                                                             </span>
+                                                        )}
+                                                        {league.seasons.length > 0 && (
+                                                            <span className="text-[10px] text-slate-400">{league.seasons.length} temporadas disponibles</span>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-300 group-hover:text-amber-500 transition-colors">ID: {league.id}</span>
+                                                <span className="text-[10px] font-bold text-slate-300 group-hover:text-amber-500 transition-colors shrink-0">ID: {league.id}</span>
                                                 <ArrowRight size={14} className="text-slate-300 group-hover:text-amber-500 transition-colors shrink-0" />
                                             </button>
                                         ))}
@@ -282,28 +356,32 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     <p className="text-center text-sm text-slate-400 py-6">Sin resultados para "{searchQuery}"</p>
                                 )}
 
-                                {/* Popular leagues quicklinks */}
-                                {searchResults.length === 0 && !searching && (
+                                {/* Popular leagues quicklinks — trigger real search */}
+                                {!searching && searchResults.length === 0 && (
                                     <div className="space-y-2">
-                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Torneos populares</p>
-                                        {[
-                                            { id: 1, name: 'FIFA World Cup', country: 'World', type: 'Cup', currentSeason: 2026 },
-                                            { id: 9, name: 'Copa America', country: 'World', type: 'Cup', currentSeason: 2024 },
-                                            { id: 2, name: 'UEFA Champions League', country: 'Europe', type: 'Cup', currentSeason: 2024 },
-                                            { id: 239, name: 'Liga BetPlay', country: 'Colombia', type: 'League', currentSeason: 2025 },
-                                            { id: 4, name: 'UEFA Euro', country: 'Europe', type: 'Cup', currentSeason: 2024 },
-                                        ].map((league) => (
+                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Accesos rápidos</p>
+                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2 text-xs text-blue-700 mb-3">
+                                            <Info size={13} className="shrink-0 mt-0.5" />
+                                            <p>
+                                                <strong>¿Mundial vs Amistosos?</strong> El torneo <strong>FIFA World Cup</strong> (ID 1) solo tiene los partidos oficiales.
+                                                Los <strong>Amistosos Internacionales</strong> (ID 10) contienen los partidos preparatorios donde juega Colombia
+                                                y otros seleccionados — estos son los que debes importar si quieres los amistosos del ciclo mundialista.
+                                            </p>
+                                        </div>
+                                        {POPULAR_LEAGUES.map((item) => (
                                             <button
-                                                key={league.id}
-                                                onClick={() => handleSelectLeague({ ...league, logoUrl: undefined, countryCode: undefined, seasons: [league.currentSeason!] })}
+                                                key={item.query}
+                                                onClick={() => handleQuickSearch(item.query)}
                                                 className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-amber-300 hover:bg-amber-50/30 transition-all text-left"
                                             >
-                                                <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 text-[10px] font-black">{league.id}</div>
-                                                <div className="flex-1">
-                                                    <p className="text-xs font-bold text-slate-800">{league.name}</p>
-                                                    <p className="text-[10px] text-slate-400">{league.country} · {league.type} · {league.currentSeason}</p>
+                                                <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
+                                                    <Search size={14} className="text-amber-600" />
                                                 </div>
-                                                <ArrowRight size={13} className="text-slate-300" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-bold text-slate-800">{item.label}</p>
+                                                    <p className="text-[10px] text-slate-400 truncate">{item.country} · {item.note}</p>
+                                                </div>
+                                                <ArrowRight size={13} className="text-slate-300 shrink-0" />
                                             </button>
                                         ))}
                                     </div>
@@ -326,36 +404,46 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     <div>
                                         <p className="font-black text-slate-900">{selectedLeague.name}</p>
                                         <p className="text-xs text-slate-500">{selectedLeague.country} · {selectedLeague.type} · ID: {selectedLeague.id}</p>
+                                        {usage && (
+                                            <p className="text-[10px] text-slate-400 mt-0.5">
+                                                La vista previa consumirá 2 requests · quedan {usage.requests.available}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
                                 {/* Season selector */}
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Temporada</label>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {(selectedLeague.seasons.length > 0 ? selectedLeague.seasons.slice(0, 8) : [
-                                            new Date().getFullYear(),
-                                            new Date().getFullYear() - 1,
-                                            new Date().getFullYear() + 1,
-                                        ]).map((y) => (
-                                            <button
-                                                key={y}
-                                                onClick={() => setSeason(y)}
-                                                className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${season === y ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-200 text-slate-600 hover:border-slate-400'}`}
-                                            >
-                                                {y}
-                                            </button>
-                                        ))}
-                                        <input
-                                            type="number"
-                                            value={season}
-                                            onChange={(e) => setSeason(Number(e.target.value))}
-                                            min={2000}
-                                            max={2030}
-                                            className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                            placeholder="Año"
-                                        />
-                                    </div>
+                                    {selectedLeague.seasons.length > 0 ? (
+                                        <div className="flex gap-2 flex-wrap">
+                                            {selectedLeague.seasons.slice(0, 8).map((y) => (
+                                                <button
+                                                    key={y}
+                                                    onClick={() => setSeason(y)}
+                                                    className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${season === y ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-200 text-slate-600 hover:border-slate-400'}`}
+                                                >
+                                                    {y}
+                                                    {y === selectedLeague.currentSeason && (
+                                                        <span className="ml-1.5 text-[9px] bg-lime-400 text-slate-900 rounded px-1 font-black">ACTIVA</span>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-slate-500">Ingresa el año de la temporada manualmente:</p>
+                                            <input
+                                                type="number"
+                                                value={season}
+                                                onChange={(e) => setSeason(Number(e.target.value))}
+                                                min={2000}
+                                                max={2030}
+                                                className="w-32 px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                                placeholder="Año"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Options */}
@@ -373,7 +461,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                             <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
                                                 <Users size={14} className="text-lime-600" /> Crear equipos automáticamente
                                             </p>
-                                            <p className="text-xs text-slate-500 mt-0.5">Si un equipo no existe en la base de datos, lo crea con nombre, código, bandera y ID de API.</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">Si un equipo no existe en la BD, lo crea con nombre, código, bandera y ID de API. Consume 1 request adicional.</p>
                                         </div>
                                     </label>
 
@@ -404,7 +492,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     disabled={loadingPreview}
                                     className="w-full py-3 rounded-2xl bg-amber-400 text-slate-900 font-black uppercase text-sm hover:bg-amber-500 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
                                 >
-                                    {loadingPreview ? <><Loader2 size={16} className="animate-spin" /> Cargando vista previa…</> : <><ArrowRight size={16} /> Ver vista previa</>}
+                                    {loadingPreview ? <><Loader2 size={16} className="animate-spin" /> Consultando API-Football…</> : <><ArrowRight size={16} /> Ver vista previa</>}
                                 </button>
                             </motion.div>
                         )}
@@ -426,6 +514,13 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                         </div>
                                     ))}
                                 </div>
+
+                                {usage && (
+                                    <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                                        <Zap size={13} className="text-amber-500 shrink-0" />
+                                        <p>La importación consumirá <strong>{createTeams ? '3' : '2'} requests</strong>. Quedan disponibles: <strong>{usage.requests.available}</strong>.</p>
+                                    </div>
+                                )}
 
                                 {/* Rounds */}
                                 <div>
@@ -493,6 +588,9 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                 <div>
                                     <h3 className="text-xl font-black text-slate-900 uppercase">{importResult.tournamentName}</h3>
                                     <p className="text-sm text-slate-500 mt-1">Importación completada · Temporada {season}</p>
+                                    {usage && (
+                                        <p className="text-[10px] text-slate-400 mt-1">Requests restantes hoy: {usage.requests.available}</p>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
@@ -535,8 +633,8 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                     </AnimatePresence>
                 </div>
 
-                {/* Footer nav (steps 0-2) */}
-                {step < 3 && step > 0 && (
+                {/* Footer nav (steps 1-2) */}
+                {step > 0 && step < 3 && (
                     <div className="px-6 pb-6 shrink-0 flex justify-between">
                         <button
                             onClick={() => setStep((s) => Math.max(0, s - 1))}

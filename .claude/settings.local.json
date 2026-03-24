@@ -45,7 +45,9 @@
       "Bash(find D:/Proyectos/polla-ui/apps/api/src -name *schedule* -o -name *cron* -o -name *queue*)",
       "Bash(find D:/Proyectos/polla-ui/apps/api -name *payment* -o -name *order* -o -name *checkout*)",
       "Bash(npx tsc:*)",
-      "Bash(find D:Proyectospolla-uiappswebcomponents -type f -name *payment* -o -name *admin*)"
+      "Bash(find D:Proyectospolla-uiappswebcomponents -type f -name *payment* -o -name *admin*)",
+      "Bash(find D:/Proyectos/polla-ui -name *.prisma -type f)",
+      "Bash(npx prisma:*)"
     ]
   }
 }
