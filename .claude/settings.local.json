@@ -44,7 +44,8 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nfix: mostrar créditos restantes en lugar de usados en contador IA\n\n- Cambiar aiCredits.usedCredits por aiCredits.remainingCredits\n- Ahora muestra correctamente \"30/30\" en lugar de \"0/30\" al inicio\n- El contador decrementa conforme se usan los créditos (ej: 29/30, 28/30)\n- Resolver confusión en la visualización de créditos disponibles\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(find D:/Proyectos/polla-ui/apps/api/src -name *schedule* -o -name *cron* -o -name *queue*)",
       "Bash(find D:/Proyectos/polla-ui/apps/api -name *payment* -o -name *order* -o -name *checkout*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(find D:Proyectospolla-uiappswebcomponents -type f -name *payment* -o -name *admin*)"
     ]
   }
 }

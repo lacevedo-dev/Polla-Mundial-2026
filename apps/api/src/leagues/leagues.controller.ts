@@ -66,4 +66,32 @@ export class LeaguesController {
     async removeMember(@Request() req, @Param('id') leagueId: string, @Param('userId') targetUserId: string) {
         return this.leaguesService.removeMember(req.user.userId, leagueId, targetUserId);
     }
+
+    /* ── Payment obligations (league admin) ── */
+
+    @Get(':id/payments')
+    async getLeaguePayments(@Request() req, @Param('id') leagueId: string) {
+        return this.leaguesService.getLeaguePaymentObligations(req.user.userId, leagueId);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Post(':id/payments/:obligationId/confirm')
+    async confirmPayment(
+        @Request() req,
+        @Param('id') leagueId: string,
+        @Param('obligationId') obligationId: string,
+        @Body() body: { method: string; reference?: string; note?: string },
+    ) {
+        return this.leaguesService.confirmObligation(req.user.userId, leagueId, obligationId, body);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Post(':id/payments/:obligationId/reset')
+    async resetPayment(
+        @Request() req,
+        @Param('id') leagueId: string,
+        @Param('obligationId') obligationId: string,
+    ) {
+        return this.leaguesService.resetObligation(req.user.userId, leagueId, obligationId);
+    }
 }

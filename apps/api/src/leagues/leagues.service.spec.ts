@@ -7,7 +7,7 @@ import { LeaguesService } from './leagues.service';
 
 describe('LeaguesService', () => {
     const createService = (prismaMock: any, participationMock: any = { createPrincipalObligationForInvitation: jest.fn() }) =>
-        new LeaguesService(prismaMock as any, participationMock as any);
+        new LeaguesService(prismaMock as any, participationMock as any, { createInAppNotification: jest.fn() } as any);
 
     it('creates league with default scoring rules', async () => {
         const prismaMock = {

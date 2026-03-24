@@ -1,16 +1,18 @@
-﻿import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Plan } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { ParticipationService } from '../participation/participation.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class LeaguesService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly participationService: ParticipationService,
+        private readonly notifications: NotificationsService,
     ) { }
 
     private static readonly DEFAULT_SCORING_RULES = [
@@ -381,5 +383,90 @@ export class LeaguesService {
             where: { userId_leagueId: { userId: targetUserId, leagueId } },
         });
         return { ok: true };
+    }
+
+    /* ─── League Payment Obligations (admin endpoints) ─────────────────── */
+
+    private async assertLeagueAdmin(userId: string, leagueId: string) {
+        const member = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId, leagueId } },
+        });
+        if (!member || member.role !== MemberRole.ADMIN) {
+            throw new ForbiddenException('Solo el administrador de la polla puede gestionar los pagos');
+        }
+    }
+
+    async getLeaguePaymentObligations(requestingUserId: string, leagueId: string) {
+        await this.assertLeagueAdmin(requestingUserId, leagueId);
+
+        const obligations = await this.prisma.participationObligation.findMany({
+            where: { leagueId },
+            include: {
+                user: { select: { id: true, name: true, avatar: true } },
+            },
+            orderBy: [{ userId: 'asc' }, { category: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        return obligations.map((o) => ({
+            id: o.id,
+            userId: o.userId,
+            userName: o.user.name,
+            userAvatar: o.user.avatar,
+            category: o.category,
+            referenceLabel: o.referenceLabel,
+            unitAmount: o.unitAmount,
+            multiplier: o.multiplier,
+            totalAmount: o.totalAmount,
+            currency: o.currency,
+            status: o.status,
+            deadlineAt: o.deadlineAt,
+            paidAt: o.paidAt,
+            createdAt: o.createdAt,
+        }));
+    }
+
+    async confirmObligation(
+        requestingUserId: string,
+        leagueId: string,
+        obligationId: string,
+        data: { method: string; reference?: string; note?: string },
+    ) {
+        await this.assertLeagueAdmin(requestingUserId, leagueId);
+
+        const obligation = await this.prisma.participationObligation.findFirst({
+            where: { id: obligationId, leagueId },
+        });
+        if (!obligation) throw new NotFoundException('Obligación no encontrada');
+
+        await this.prisma.participationObligation.update({
+            where: { id: obligationId },
+            data: { status: 'PAID', paidAt: new Date() },
+        });
+
+        await this.notifications.createInAppNotification({
+            userId: obligation.userId,
+            type: 'PAYMENT_CONFIRMED',
+            title: '✅ Pago confirmado',
+            body: `Tu pago de "${obligation.referenceLabel}" fue confirmado por el administrador vía ${data.method}.`,
+            data: { leagueId, obligationId, method: data.method, reference: data.reference ?? '' },
+        });
+
+        return { confirmed: true };
+    }
+
+    async resetObligation(requestingUserId: string, leagueId: string, obligationId: string) {
+        await this.assertLeagueAdmin(requestingUserId, leagueId);
+
+        const obligation = await this.prisma.participationObligation.findFirst({
+            where: { id: obligationId, leagueId },
+        });
+        if (!obligation) throw new NotFoundException('Obligación no encontrada');
+
+        await this.prisma.participationObligation.update({
+            where: { id: obligationId },
+            data: { status: 'PENDING_PAYMENT', paidAt: null },
+        });
+
+        return { reset: true };
     }
 }
