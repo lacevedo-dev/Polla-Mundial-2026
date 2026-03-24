@@ -542,85 +542,94 @@ function ParticipationConfigurator({
     const optionalOptions = getOptionalParticipationOptions(options);
     const currency = optionalOptions[0]?.currency ?? options[0]?.currency ?? 'COP';
     const total = getParticipationMatchTotal(options, enabledState, draftState);
-    const isMobile = layout === 'mobile';
 
     return (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-2">
-            {/* Header mini */}
-            <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-                <div className="flex items-center gap-1.5">
-                    <Coins className="h-3.5 w-3.5 text-amber-600" />
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-700">Extras del partido</p>
+        <div className="space-y-1.5">
+            {loading && optionalOptions.length === 0 ? (
+                <div className="flex items-center justify-center py-3">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
                 </div>
-                {loading ? (
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
-                ) : null}
-            </div>
+            ) : optionalOptions.length > 0 ? (
+                optionalOptions.map((option) => {
+                    const optionKey = participationKey(option.category, option.referenceId);
+                    const isPaid = option.status === 'PAID';
+                    const isSelected = enabledState[optionKey] ?? isParticipationDefaultSelected(option);
+                    const selectedMultiplier = draftState[optionKey] ?? ((option.multiplier ?? 1) as 1 | 2 | 3);
+                    const OptionIcon = getParticipationOptionIcon(option.category);
 
-            <div className="space-y-1.5">
-                {optionalOptions.length > 0 ? (
-                    optionalOptions.map((option) => {
-                        const optionKey = participationKey(option.category, option.referenceId);
-                        const isSelected = enabledState[optionKey] ?? isParticipationDefaultSelected(option);
-                        const selectedMultiplier = draftState[optionKey] ?? ((option.multiplier ?? 1) as 1 | 2 | 3);
-                        const OptionIcon = getParticipationOptionIcon(option.category);
+                    return (
+                        <div
+                            key={optionKey}
+                            className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition-colors ${
+                                isPaid
+                                    ? 'border-emerald-200 bg-emerald-50/60'
+                                    : isSelected
+                                    ? 'border-amber-200 bg-white'
+                                    : 'border-slate-100 bg-white'
+                            }`}
+                        >
+                            {/* Ícono de categoría */}
+                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                                isPaid
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : isSelected
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-100 text-slate-400'
+                            }`}>
+                                <OptionIcon className="h-3.5 w-3.5" />
+                            </div>
 
-                        return (
-                            <div
-                                key={optionKey}
-                                className={`flex items-center gap-2 rounded-xl border bg-white px-2.5 py-2 transition-colors ${
-                                    isSelected ? 'border-amber-200' : 'border-slate-100'
-                                }`}
-                            >
-                                {/* Ícono de categoría */}
-                                <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                                    isSelected ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
-                                }`}>
-                                    <OptionIcon className="h-3.5 w-3.5" />
+                            {/* Info */}
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1">
+                                    <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">
+                                        {ParticipationCategoryLabels[option.category]}
+                                    </span>
+                                    <span className={`rounded-full border px-1.5 py-px text-[8px] font-black uppercase tracking-[0.1em] ${
+                                        ParticipationStatusColors[option.status ?? 'UNSELECTED']
+                                    }`}>
+                                        {getParticipationStatusLabel(option.status)}
+                                    </span>
                                 </div>
-
-                                {/* Info principal */}
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-1">
-                                        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">
-                                            {ParticipationCategoryLabels[option.category]}
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-black text-slate-900">
+                                        {formatCurrency(option.unitAmount, option.currency)}
+                                    </span>
+                                    {option.deadlineAt ? (
+                                        <span className="flex items-center gap-0.5 text-[9px] text-slate-400">
+                                            <Calendar className="h-2.5 w-2.5" />
+                                            {new Date(option.deadlineAt).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })}
                                         </span>
-                                        <span className={`rounded-full border px-1.5 py-px text-[8px] font-black uppercase tracking-[0.1em] ${
-                                            ParticipationStatusColors[option.status ?? 'UNSELECTED']
-                                        }`}>
-                                            {getParticipationStatusLabel(option.status)}
-                                        </span>
-                                    </div>
-                                    <p className="truncate text-[11px] font-bold text-slate-700 leading-tight">{option.referenceLabel}</p>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className="text-[10px] font-black text-slate-900">
-                                            {formatCurrency(option.unitAmount, option.currency)}
-                                        </span>
-                                        {option.deadlineAt ? (
-                                            <span className="flex items-center gap-0.5 text-[9px] text-slate-400">
-                                                <Calendar className="h-2.5 w-2.5" />
-                                                {new Date(option.deadlineAt).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })}
-                                            </span>
-                                        ) : null}
-                                    </div>
+                                    ) : null}
                                 </div>
+                            </div>
 
-                                {/* Controles */}
+                            {/* Controles — deshabilitados si ya pagó */}
+                            {isPaid ? (
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                </div>
+                            ) : (
                                 <div className="flex shrink-0 flex-col items-end gap-1">
+                                    {/* Toggle — solo ícono */}
                                     <button
                                         type="button"
                                         role="switch"
                                         aria-checked={isSelected}
                                         aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}`}
                                         onClick={() => onToggleEnabled(matchId, option.category, option.referenceId, !isSelected)}
-                                        className={`rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-[0.1em] transition ${
+                                        className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
                                             isSelected
                                                 ? 'bg-emerald-100 text-emerald-700'
-                                                : 'border border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                                                : 'border border-slate-200 bg-white text-slate-400 hover:border-amber-300 hover:text-amber-600'
                                         }`}
                                     >
-                                        {isSelected ? '✓ Activo' : '+ Agregar'}
+                                        {isSelected
+                                            ? <CheckCircle2 className="h-3.5 w-3.5" />
+                                            : <Zap className="h-3.5 w-3.5" />
+                                        }
                                     </button>
+                                    {/* Multiplicadores */}
                                     <div className={`flex items-center gap-px rounded-lg border p-0.5 transition-opacity ${
                                         isSelected ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/50 opacity-40'
                                     }`}>
@@ -643,15 +652,17 @@ function ParticipationConfigurator({
                                         ))}
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })
-                ) : !loading ? (
-                    <p className="py-2 text-center text-[10px] text-slate-400">Sin extras habilitados</p>
-                ) : null}
+                            )}
+                        </div>
+                    );
+                })
+            ) : !loading ? (
+                <p className="py-1.5 text-center text-[10px] text-slate-400">Sin extras habilitados</p>
+            ) : null}
 
-                {/* Footer: total + guardar */}
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2">
+            {/* Footer: total + guardar (ícono solo en móvil) */}
+            {optionalOptions.length > 0 ? (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2">
                     <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Total extras</p>
                         <p className="text-sm font-black text-slate-900">{formatCurrency(total, currency)}</p>
@@ -661,13 +672,18 @@ function ParticipationConfigurator({
                         aria-label="Guardar participación"
                         onClick={() => onSave(matchId)}
                         disabled={saving}
-                        className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-60"
+                        className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-2.5 py-2 text-slate-900 transition hover:bg-amber-300 disabled:opacity-60 sm:px-3"
                     >
-                        <Save className="h-3 w-3" />
-                        {saving ? 'Guardando...' : 'Guardar'}
+                        {saving
+                            ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                            : <Save className="h-3.5 w-3.5" />
+                        }
+                        <span className="hidden text-[10px] font-black uppercase tracking-[0.12em] sm:inline">
+                            {saving ? 'Guardando...' : 'Guardar'}
+                        </span>
                     </button>
                 </div>
-            </div>
+            ) : null}
         </div>
     );
 }
@@ -2358,33 +2374,7 @@ const Predictions: React.FC = () => {
             </div>
 
             <div className="mx-auto max-w-5xl space-y-4 px-4 py-4">
-                {predictionMode === 'matches' && participationSummary && participationSummary.itemCount > 0 ? (
-                    <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-2">
-                        <Coins className="h-4 w-4 shrink-0 text-amber-600" />
-                        <div className="min-w-0 flex-1">
-                            <span className="text-sm font-black text-slate-900">
-                                {formatCurrency(participationSummary.totalPending, participationSummary.currency)}
-                            </span>
-                            <span className="ml-1.5 text-[10px] text-slate-500">
-                                · {participationSummary.itemCount} pend.
-                            </span>
-                        </div>
-                        {participationSummary.hasPrincipalPending ? (
-                            <span className="shrink-0 rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-rose-700">
-                                Principal
-                            </span>
-                        ) : null}
-                        <button
-                            type="button"
-                            onClick={() => void handleParticipationCheckout()}
-                            disabled={participationCheckoutLoading}
-                            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-slate-800 disabled:opacity-60"
-                        >
-                            <Coins className="h-3 w-3" />
-                            {participationCheckoutLoading ? '...' : 'Pagar'}
-                        </button>
-                    </div>
-                ) : null}
+                {/* El resumen de pagos pendientes se muestra en el FAB flotante */}
 
                 {predictionMode === 'matches' && principalParticipationOption ? (
                     <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/50 px-3 py-2.5">
@@ -2861,18 +2851,20 @@ const Predictions: React.FC = () => {
                                                             </div>
 
                                                             {activeParticipationMatchId === match.id ? (
-                                                                <ParticipationConfigurator
-                                                                    matchId={match.id}
-                                                                    options={participationOptionsByMatch[match.id] ?? []}
-                                                                    enabledState={participationEnabledByMatch[match.id]}
-                                                                    draftState={participationDrafts[match.id]}
-                                                                    loading={participationLoadingByMatch[match.id]}
-                                                                    saving={participationSavingMatchId === match.id}
-                                                                    layout="desktop"
-                                                                    onToggleEnabled={handleParticipationEnabledChange}
-                                                                    onChangeMultiplier={handleParticipationMultiplierChange}
-                                                                    onSave={(nextMatchId) => void handleParticipationSave(nextMatchId)}
-                                                                />
+                                                                <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-2">
+                                                                    <ParticipationConfigurator
+                                                                        matchId={match.id}
+                                                                        options={participationOptionsByMatch[match.id] ?? []}
+                                                                        enabledState={participationEnabledByMatch[match.id]}
+                                                                        draftState={participationDrafts[match.id]}
+                                                                        loading={participationLoadingByMatch[match.id]}
+                                                                        saving={participationSavingMatchId === match.id}
+                                                                        layout="desktop"
+                                                                        onToggleEnabled={handleParticipationEnabledChange}
+                                                                        onChangeMultiplier={handleParticipationMultiplierChange}
+                                                                        onSave={(nextMatchId) => void handleParticipationSave(nextMatchId)}
+                                                                    />
+                                                                </div>
                                                             ) : null}
 
                                                             <div className="flex flex-col gap-1.5 text-[9px] sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:text-[10px]">
@@ -3074,6 +3066,32 @@ const Predictions: React.FC = () => {
                 }
             </button>
         )}
+
+        {/* FAB — pending payments */}
+        {predictionMode === 'matches' && participationSummary && participationSummary.itemCount > 0 ? (
+            <button
+                type="button"
+                onClick={() => void handleParticipationCheckout()}
+                disabled={participationCheckoutLoading}
+                className={`fixed left-4 z-40 flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 shadow-lg transition-all disabled:opacity-70 sm:left-6 ${
+                    participationSummary.hasPrincipalPending
+                        ? 'bg-rose-400 shadow-rose-400/30 hover:bg-rose-300'
+                        : 'bg-amber-400 shadow-amber-400/30 hover:bg-amber-300'
+                } ${hasDirtyChanges ? 'bottom-20' : 'bottom-6'}`}
+            >
+                {participationCheckoutLoading ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                ) : (
+                    <>
+                        <Coins className="h-4 w-4 shrink-0" />
+                        <span>{formatCurrency(participationSummary.totalPending, participationSummary.currency)}</span>
+                        {participationSummary.hasPrincipalPending ? (
+                            <span className="hidden rounded-full bg-slate-900/20 px-1.5 py-0.5 text-[9px] sm:inline">Principal</span>
+                        ) : null}
+                    </>
+                )}
+            </button>
+        ) : null}
 
         {/* Unsaved changes dialog */}
         {blocker.state === 'blocked' && (
