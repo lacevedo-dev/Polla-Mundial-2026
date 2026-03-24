@@ -565,6 +565,37 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     )}
                                 </div>
 
+                                {preview.totalFixtures === 0 && (
+                                    <div className="flex items-start gap-2 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs space-y-1">
+                                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-bold mb-1">No hay fixtures para la temporada {season}</p>
+                                            <p className="text-rose-700">Esta combinación liga/temporada no tiene partidos en API-Football. Posibles causas:</p>
+                                            <ul className="mt-1 space-y-0.5 text-rose-700 list-disc list-inside">
+                                                <li>La temporada seleccionada aún no tiene partidos programados</li>
+                                                <li>La liga {preview.league.id} puede ser de clubes, no de selecciones nacionales</li>
+                                                <li>Para amistosos de selecciones, prueba buscar por equipo (ej: "Colombia") en vez de liga</li>
+                                            </ul>
+                                            {preview.league.seasons.length > 0 && (
+                                                <div className="mt-2">
+                                                    <p className="font-bold text-rose-800">Temporadas con datos disponibles:</p>
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {preview.league.seasons.slice(0, 10).map((y) => (
+                                                            <button
+                                                                key={y}
+                                                                onClick={() => { setSeason(y); setStep(1); }}
+                                                                className="px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 font-bold hover:bg-rose-100 transition-colors"
+                                                            >
+                                                                {y}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {preview.existingFixturesCount > 0 && !overwriteExisting && (
                                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
                                         <AlertCircle size={14} className="shrink-0 mt-0.5" />
@@ -574,7 +605,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                 <button
                                     onClick={() => void handleImport()}
-                                    disabled={importing}
+                                    disabled={importing || preview.totalFixtures === 0}
                                     className="w-full py-3 rounded-2xl bg-slate-900 text-white font-black uppercase text-sm hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
                                 >
                                     {importing ? <><Loader2 size={16} className="animate-spin" /> Importando…</> : <><Download size={16} /> Confirmar importación</>}

@@ -161,6 +161,10 @@ export class TournamentImportService {
       where: { externalId: { in: externalIds } },
     });
 
+    const availableSeasons: number[] = ((leagueData.seasons ?? []) as any[])
+      .map((s: any) => Number(s.year))
+      .sort((a: number, b: number) => b - a);
+
     const league: LeagueSearchResult = {
       id: leagueData.league.id,
       name: leagueData.league.name,
@@ -168,7 +172,7 @@ export class TournamentImportService {
       countryCode: (leagueData.country as any)?.code,
       type: (leagueData.league as any).type ?? 'Cup',
       logoUrl: leagueData.league.logo,
-      seasons: [],
+      seasons: availableSeasons,
       currentSeason: season,
     };
 
