@@ -545,22 +545,19 @@ function ParticipationConfigurator({
     const isMobile = layout === 'mobile';
 
     return (
-        <div className={`rounded-2xl border border-amber-200 bg-amber-50/70 ${isMobile ? 'p-3' : 'p-3.5'}`}>
-            <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-                        Extras opcionales del partido
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                        Activa solo las modalidades extra que quieras jugar en este encuentro.
-                    </p>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-2">
+            {/* Header mini */}
+            <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
+                <div className="flex items-center gap-1.5">
+                    <Coins className="h-3.5 w-3.5 text-amber-600" />
+                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-700">Extras del partido</p>
                 </div>
                 {loading ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700" />
                 ) : null}
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-1.5">
                 {optionalOptions.length > 0 ? (
                     optionalOptions.map((option) => {
                         const optionKey = participationKey(option.category, option.referenceId);
@@ -571,128 +568,103 @@ function ParticipationConfigurator({
                         return (
                             <div
                                 key={optionKey}
-                                className={`rounded-2xl border border-white/90 bg-white shadow-sm shadow-amber-100/30 ${
-                                    isMobile ? 'p-3' : 'p-3.5'
+                                className={`flex items-center gap-2 rounded-xl border bg-white px-2.5 py-2 transition-colors ${
+                                    isSelected ? 'border-amber-200' : 'border-slate-100'
                                 }`}
                             >
-                                <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-start justify-between gap-4'}`}>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-start gap-3">
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                                                <OptionIcon className="h-4 w-4" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
-                                                        {ParticipationCategoryLabels[option.category]}
-                                                    </p>
-                                                    <span
-                                                        className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${
-                                                            ParticipationStatusColors[option.status ?? 'UNSELECTED']
-                                                        }`}
-                                                    >
-                                                        {getParticipationStatusLabel(option.status)}
-                                                    </span>
-                                                </div>
-                                                <p className="mt-1 truncate text-sm font-black text-slate-900">
-                                                    {option.referenceLabel}
-                                                </p>
-                                                <p className="mt-1 text-xs leading-5 text-slate-500">
-                                                    Elige si quieres participar y luego define tu multiplicador.
-                                                </p>
-                                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                                                    <p className="font-black text-slate-900">
-                                                        {formatCurrency(option.unitAmount, option.currency)}
-                                                    </p>
-                                                    <p className="flex items-center gap-1 text-slate-500">
-                                                        <Calendar className="h-3.5 w-3.5" />
-                                                        {option.deadlineAt
-                                                            ? `Cierra ${new Date(option.deadlineAt).toLocaleString('es-CO')}`
-                                                            : 'Disponible'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                {/* Ícono de categoría */}
+                                <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                                    isSelected ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
+                                }`}>
+                                    <OptionIcon className="h-3.5 w-3.5" />
+                                </div>
 
-                                    <div className={`flex ${isMobile ? 'flex-col gap-2' : 'flex-wrap items-center justify-end gap-2'}`}>
-                                        <button
-                                            type="button"
-                                            role="switch"
-                                            aria-checked={isSelected}
-                                            aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}${isMobile ? ' en móvil' : ''}`}
-                                            onClick={() =>
-                                                onToggleEnabled(matchId, option.category, option.referenceId, !isSelected)
-                                            }
-                                            className={`min-h-11 rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] transition ${
-                                                isSelected
-                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                                            }`}
-                                        >
-                                            {isSelected ? 'Participando' : 'Agregar'}
-                                        </button>
-                                        <div
-                                            className={`flex items-center gap-1 rounded-xl border p-1 ${
-                                                isSelected ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/60 opacity-50'
-                                            }`}
-                                        >
-                                            {[1, 2, 3].map((multiplier) => (
-                                                <button
-                                                    key={multiplier}
-                                                    type="button"
-                                                    aria-pressed={selectedMultiplier === multiplier}
-                                                    aria-label={isMobile ? `Multiplicador x${multiplier} en móvil` : `x${multiplier}`}
-                                                    disabled={!isSelected}
-                                                    onClick={() =>
-                                                        onChangeMultiplier(
-                                                            matchId,
-                                                            option.category,
-                                                            option.referenceId,
-                                                            multiplier as 1 | 2 | 3,
-                                                        )
-                                                    }
-                                                    className={`min-h-9 rounded-lg px-3 py-1.5 text-[11px] font-black transition ${
-                                                        selectedMultiplier === multiplier
-                                                            ? 'bg-amber-400 text-slate-900'
-                                                            : 'text-slate-500 hover:bg-white'
-                                                    } disabled:cursor-not-allowed disabled:hover:bg-transparent`}
-                                                >
-                                                    x{multiplier}
-                                                </button>
-                                            ))}
-                                        </div>
+                                {/* Info principal */}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-1">
+                                        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">
+                                            {ParticipationCategoryLabels[option.category]}
+                                        </span>
+                                        <span className={`rounded-full border px-1.5 py-px text-[8px] font-black uppercase tracking-[0.1em] ${
+                                            ParticipationStatusColors[option.status ?? 'UNSELECTED']
+                                        }`}>
+                                            {getParticipationStatusLabel(option.status)}
+                                        </span>
+                                    </div>
+                                    <p className="truncate text-[11px] font-bold text-slate-700 leading-tight">{option.referenceLabel}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className="text-[10px] font-black text-slate-900">
+                                            {formatCurrency(option.unitAmount, option.currency)}
+                                        </span>
+                                        {option.deadlineAt ? (
+                                            <span className="flex items-center gap-0.5 text-[9px] text-slate-400">
+                                                <Calendar className="h-2.5 w-2.5" />
+                                                {new Date(option.deadlineAt).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                {/* Controles */}
+                                <div className="flex shrink-0 flex-col items-end gap-1">
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={isSelected}
+                                        aria-label={`${isSelected ? 'Quitar' : 'Agregar'} ${option.referenceLabel}`}
+                                        onClick={() => onToggleEnabled(matchId, option.category, option.referenceId, !isSelected)}
+                                        className={`rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-[0.1em] transition ${
+                                            isSelected
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : 'border border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                                        }`}
+                                    >
+                                        {isSelected ? '✓ Activo' : '+ Agregar'}
+                                    </button>
+                                    <div className={`flex items-center gap-px rounded-lg border p-0.5 transition-opacity ${
+                                        isSelected ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/50 opacity-40'
+                                    }`}>
+                                        {[1, 2, 3].map((multiplier) => (
+                                            <button
+                                                key={multiplier}
+                                                type="button"
+                                                aria-pressed={selectedMultiplier === multiplier}
+                                                aria-label={`x${multiplier}`}
+                                                disabled={!isSelected}
+                                                onClick={() => onChangeMultiplier(matchId, option.category, option.referenceId, multiplier as 1 | 2 | 3)}
+                                                className={`rounded-md px-2 py-0.5 text-[10px] font-black transition ${
+                                                    selectedMultiplier === multiplier
+                                                        ? 'bg-amber-400 text-slate-900'
+                                                        : 'text-slate-400 hover:bg-white'
+                                                } disabled:cursor-not-allowed`}
+                                            >
+                                                x{multiplier}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
                         );
                     })
                 ) : !loading ? (
-                    <div className="rounded-2xl border border-dashed border-amber-200 bg-white px-4 py-5 text-center text-sm text-slate-500">
-                        No hay extras pagas habilitadas para este partido.
-                    </div>
+                    <p className="py-2 text-center text-[10px] text-slate-400">Sin extras habilitados</p>
                 ) : null}
 
-                <div
-                    className={`rounded-2xl bg-white shadow-sm ${
-                        isMobile ? 'flex flex-col gap-3 px-3 py-3.5' : 'flex items-center justify-between gap-3 px-3 py-3'
-                    }`}
-                >
+                {/* Footer: total + guardar */}
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                            Total de extras del partido
-                        </p>
-                        <p className="text-lg font-black text-slate-900">{formatCurrency(total, currency)}</p>
-                        <p className="text-xs text-slate-500">La cuota general se gestiona una sola vez a nivel de liga.</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Total extras</p>
+                        <p className="text-sm font-black text-slate-900">{formatCurrency(total, currency)}</p>
                     </div>
                     <button
                         type="button"
-                        aria-label={isMobile ? 'Guardar participación del partido en móvil' : 'Guardar participación'}
+                        aria-label="Guardar participación"
                         onClick={() => onSave(matchId)}
                         disabled={saving}
-                        className="min-h-11 rounded-2xl bg-amber-400 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-60"
+                        className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-60"
                     >
-                        {saving ? 'Guardando...' : 'Guardar participación'}
+                        <Save className="h-3 w-3" />
+                        {saving ? 'Guardando...' : 'Guardar'}
                     </button>
                 </div>
             </div>
@@ -2387,72 +2359,54 @@ const Predictions: React.FC = () => {
 
             <div className="mx-auto max-w-5xl space-y-4 px-4 py-4">
                 {predictionMode === 'matches' && participationSummary && participationSummary.itemCount > 0 ? (
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
-                        <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-                                Resumen de participaciones
-                            </p>
-                            <p className="text-base font-black text-slate-900">
+                    <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-2">
+                        <Coins className="h-4 w-4 shrink-0 text-amber-600" />
+                        <div className="min-w-0 flex-1">
+                            <span className="text-sm font-black text-slate-900">
                                 {formatCurrency(participationSummary.totalPending, participationSummary.currency)}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                                {participationSummary.itemCount} ítem{participationSummary.itemCount !== 1 ? 's' : ''} pendiente{participationSummary.itemCount !== 1 ? 's' : ''}
-                            </p>
+                            </span>
+                            <span className="ml-1.5 text-[10px] text-slate-500">
+                                · {participationSummary.itemCount} pend.
+                            </span>
                         </div>
                         {participationSummary.hasPrincipalPending ? (
-                            <span className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-rose-700">
-                                Principal pendiente
+                            <span className="shrink-0 rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-rose-700">
+                                Principal
                             </span>
                         ) : null}
                         <button
                             type="button"
                             onClick={() => void handleParticipationCheckout()}
                             disabled={participationCheckoutLoading}
-                            className="rounded-2xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800 disabled:opacity-60"
+                            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-slate-800 disabled:opacity-60"
                         >
-                            {participationCheckoutLoading ? 'Abriendo pago...' : 'Pagar ahora'}
+                            <Coins className="h-3 w-3" />
+                            {participationCheckoutLoading ? '...' : 'Pagar'}
                         </button>
                     </div>
                 ) : null}
 
                 {predictionMode === 'matches' && principalParticipationOption ? (
-                    <div className="rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-amber-50/80 p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-                                        <Trophy className="h-5 w-5" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-                                            Cuota general de la liga
-                                        </p>
-                                        <p className="truncate text-base font-black text-slate-900">
-                                            {principalParticipationOption.referenceLabel}
-                                        </p>
-                                    </div>
-                                </div>
-                                <p className="mt-3 text-sm font-black text-slate-900">
-                                    {formatCurrency(
-                                        principalParticipationOption.unitAmount,
-                                        principalParticipationOption.currency,
-                                    )}
+                    <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/50 px-3 py-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                            <Trophy className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-amber-700">Cuota general</p>
+                            <p className="truncate text-xs font-black text-slate-900 leading-tight">
+                                {principalParticipationOption.referenceLabel}
+                            </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                            <p className="text-sm font-black text-slate-900">
+                                {formatCurrency(principalParticipationOption.unitAmount, principalParticipationOption.currency)}
+                            </p>
+                            {principalParticipationOption.deadlineAt ? (
+                                <p className="flex items-center justify-end gap-0.5 text-[9px] text-slate-400">
+                                    <Calendar className="h-2.5 w-2.5" />
+                                    {new Date(principalParticipationOption.deadlineAt).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })}
                                 </p>
-                                <p className="mt-1 text-sm leading-6 text-slate-500">
-                                    Se cobra una sola vez por liga y no hace parte de los extras de cada partido.
-                                </p>
-                            </div>
-                            <div className="rounded-2xl border border-amber-100 bg-white/80 px-4 py-3 text-sm text-slate-600 sm:max-w-xs">
-                                <p className="flex items-center gap-2 font-semibold text-slate-700">
-                                    <Calendar className="h-4 w-4 text-amber-600" />
-                                    {principalParticipationOption.deadlineAt
-                                        ? `Cierra ${new Date(principalParticipationOption.deadlineAt).toLocaleString('es-CO')}`
-                                        : 'Disponible'}
-                                </p>
-                                <p className="mt-2 text-xs leading-5 text-slate-500">
-                                    Los paneles por partido ahora muestran solo extras opcionales para evitar confusión.
-                                </p>
-                            </div>
+                            ) : null}
                         </div>
                     </div>
                 ) : null}
