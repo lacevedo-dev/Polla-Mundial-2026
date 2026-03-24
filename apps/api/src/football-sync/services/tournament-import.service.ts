@@ -415,6 +415,39 @@ export class TournamentImportService {
     return result;
   }
 
+  /* ─── Diagnose API-Football response ────────────────────────────────── */
+
+  async diagnose(leagueId: number, season: number) {
+    const leagueRes = await this.apiClient.getLeagues({ id: leagueId });
+    await this.rateLimiter.logRequest('/leagues', { id: leagueId }, 200, 0);
+    const leagueData = (leagueRes.response as any[])?.[0];
+
+    const fixturesRes = await this.apiClient.getFixturesByLeague(leagueId, season);
+    await this.rateLimiter.logRequest('/fixtures', { league: leagueId, season }, 200, fixturesRes.results ?? 0);
+
+    const availableSeasons = ((leagueData?.seasons ?? []) as any[])
+      .map((s: any) => ({ year: Number(s.year), current: Boolean(s.current) }))
+      .sort((a: any, b: any) => b.year - a.year);
+
+    return {
+      league: leagueData
+        ? { id: leagueData.league?.id, name: leagueData.league?.name, type: leagueData.league?.type, country: leagueData.country?.name }
+        : null,
+      requestedSeason: season,
+      availableSeasons,
+      fixturesCount: fixturesRes.results ?? 0,
+      firstFixtures: ((fixturesRes.response ?? []) as any[]).slice(0, 3).map((f: any) => ({
+        id: f.fixture?.id,
+        date: f.fixture?.date,
+        status: f.fixture?.status?.short,
+        home: f.teams?.home?.name,
+        away: f.teams?.away?.name,
+        round: f.league?.round,
+      })),
+      errors: leagueRes.errors ?? fixturesRes.errors ?? [],
+    };
+  }
+
   /* ─── List imported tournaments ─────────────────────────────────────── */
 
   async listTournaments() {

@@ -259,6 +259,15 @@ export class FootballSyncController {
     return this.tournamentImport.listTournaments();
   }
 
+  @Get('diagnose')
+  @ApiOperation({ summary: 'Diagnose raw API-Football response for a league+season' })
+  async diagnose(
+    @Query('leagueId') leagueId: string,
+    @Query('season') season: string,
+  ) {
+    return this.tournamentImport.diagnose(Number(leagueId), Number(season));
+  }
+
   @Get('leagues/search')
   @ApiOperation({ summary: 'Search leagues/tournaments in API-Football' })
   async searchLeagues(
