@@ -3121,7 +3121,7 @@ const Predictions: React.FC = () => {
                 type="button"
                 onClick={() => void handleParticipationCheckout()}
                 disabled={participationCheckoutLoading}
-                className={`fixed bottom-20 left-4 z-40 flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 shadow-lg transition-all disabled:opacity-70 md:bottom-6 md:left-6 ${
+                className={`fixed right-4 z-40 flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 shadow-lg transition-all disabled:opacity-70 md:right-6 ${hasDirtyChanges ? 'bottom-32 md:bottom-[4.5rem]' : 'bottom-20 md:bottom-6'} ${
                     participationSummary.hasPrincipalPending
                         ? 'bg-rose-400 shadow-rose-400/30 hover:bg-rose-300'
                         : 'bg-amber-400 shadow-amber-400/30 hover:bg-amber-300'
