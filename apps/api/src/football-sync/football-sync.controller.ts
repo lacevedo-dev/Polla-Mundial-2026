@@ -40,6 +40,13 @@ class ImportTournamentDto {
   @IsBoolean() @IsOptional() dryRun?: boolean;
 }
 
+class ImportFixturesDto {
+  fixtureIds: number[];
+  @IsBoolean() @IsOptional() createTeams?: boolean;
+  @IsBoolean() @IsOptional() overwriteExisting?: boolean;
+  @IsString() @IsOptional() tournamentName?: string;
+}
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -257,6 +264,31 @@ export class FootballSyncController {
   @ApiOperation({ summary: 'List all imported tournaments' })
   async listTournaments() {
     return this.tournamentImport.listTournaments();
+  }
+
+  @Get('fixtures/search')
+  @ApiOperation({ summary: 'Search fixtures by date from API-Football' })
+  async searchFixturesByDate(@Query('date') date: string) {
+    if (!date) throw new HttpException('date query param required (YYYY-MM-DD)', HttpStatus.BAD_REQUEST);
+    try {
+      return await this.tournamentImport.searchFixturesByDateWithStatus(date);
+    } catch (error) {
+      throw new HttpException(`Failed to search fixtures: ${error.message}`, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('fixtures/import-selection')
+  @ApiOperation({ summary: 'Import specific fixture IDs from API-Football' })
+  async importFixtures(@Body() dto: ImportFixturesDto) {
+    try {
+      return await this.tournamentImport.importFixtures(
+        dto.fixtureIds,
+        { createTeams: dto.createTeams ?? true, overwriteExisting: dto.overwriteExisting ?? false },
+        dto.tournamentName ?? 'Amistosos',
+      );
+    } catch (error) {
+      throw new HttpException(`Import failed: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Get('diagnose')

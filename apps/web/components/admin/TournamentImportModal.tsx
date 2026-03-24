@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-    AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown,
+    AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, ChevronDown,
     Download, Globe, Info, Loader2, Search, Shield, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
@@ -43,6 +43,20 @@ interface ImportResult {
 
 interface UsageInfo {
     requests: { used: number; limit: number; available: number };
+}
+
+interface FixtureResult {
+    fixtureId: number;
+    date: string;
+    status: string;
+    statusLong: string;
+    homeTeam: { id: number; name: string; logo?: string };
+    awayTeam: { id: number; name: string; logo?: string };
+    homeScore: number | null;
+    awayScore: number | null;
+    league: { id: number; name: string; country: string; logo?: string; round: string };
+    venue: string | null;
+    alreadyImported: boolean;
 }
 
 interface Props {
@@ -97,14 +111,24 @@ const StepDots: React.FC<{ step: number }> = ({ step }) => (
 const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [step, setStep] = useState(0);
     const [usage, setUsage] = useState<UsageInfo | null>(null);
+    const [mode, setMode] = useState<'league' | 'date'>('league');
 
-    // Step 0: Search
+    // Step 0: Search by league
     const [searchQuery, setSearchQuery] = useState('');
     const [searchCountry, setSearchCountry] = useState('');
     const [searchResults, setSearchResults] = useState<LeagueSearchResult[]>([]);
     const [searching, setSearching] = useState(false);
     const [searchError, setSearchError] = useState('');
     const [selectedLeague, setSelectedLeague] = useState<LeagueSearchResult | null>(null);
+
+    // Step 0: Search by date
+    const [fixtureDate, setFixtureDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [fixtureResults, setFixtureResults] = useState<FixtureResult[]>([]);
+    const [searchingDate, setSearchingDate] = useState(false);
+    const [dateError, setDateError] = useState('');
+    const [selectedFixtures, setSelectedFixtures] = useState<Set<number>>(new Set());
+    const [dateCreateTeams, setDateCreateTeams] = useState(true);
+    const [dateOverwrite, setDateOverwrite] = useState(false);
 
     // Step 1: Season + options
     const [season, setSeason] = useState<number>(new Date().getFullYear());
@@ -160,6 +184,56 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         const t = setTimeout(() => { if (searchQuery.length >= minLen) void handleSearch(); }, delay);
         return () => clearTimeout(t);
     }, [searchQuery, handleSearch]);
+
+    /* ─ search by date ─ */
+    const handleSearchByDate = async () => {
+        if (!fixtureDate) return;
+        setSearchingDate(true);
+        setDateError('');
+        setFixtureResults([]);
+        setSelectedFixtures(new Set());
+        try {
+            const data = await request<FixtureResult[]>(`/admin/football/fixtures/search?date=${fixtureDate}`);
+            setFixtureResults(data);
+            refreshUsage();
+        } catch (e: any) {
+            setDateError(e?.message ?? 'Error al buscar partidos');
+        } finally {
+            setSearchingDate(false);
+        }
+    };
+
+    const toggleFixture = (id: number) => {
+        setSelectedFixtures((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    const handleImportSelected = async () => {
+        if (selectedFixtures.size === 0) return;
+        setImporting(true);
+        setImportError('');
+        try {
+            const data = await request<ImportResult>('/admin/football/fixtures/import-selection', {
+                method: 'POST',
+                body: JSON.stringify({
+                    fixtureIds: [...selectedFixtures],
+                    createTeams: dateCreateTeams,
+                    overwriteExisting: dateOverwrite,
+                    tournamentName: 'Amistosos Internacionales',
+                }),
+            });
+            setImportResult(data);
+            setStep(3);
+            refreshUsage();
+        } catch (e: any) {
+            setImportError(e?.message ?? 'Error al importar');
+        } finally {
+            setImporting(false);
+        }
+    };
 
     /* ─ quicklink: trigger real search ─ */
     const handleQuickSearch = (query: string) => {
@@ -261,6 +335,157 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                         {/* ── Step 0: Search league ── */}
                         {step === 0 && (
                             <motion.div key="s0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+
+                                {/* Mode tabs */}
+                                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+                                    <button
+                                        onClick={() => setMode('league')}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'league' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        <Trophy size={14} /> Por torneo/liga
+                                    </button>
+                                    <button
+                                        onClick={() => setMode('date')}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'date' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        <Calendar size={14} /> Por fecha
+                                    </button>
+                                </div>
+
+                                {/* ── Date mode ── */}
+                                {mode === 'date' && (
+                                    <div className="space-y-4">
+                                        <p className="text-sm text-slate-600">Busca todos los partidos de un día específico y selecciona cuáles importar. Ideal para amistosos puntuales como Colombia vs Croacia.</p>
+
+                                        {usage && (
+                                            <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                                                <Info size={13} className="shrink-0 mt-0.5 text-slate-400" />
+                                                <p>Buscar por fecha consume <strong>1 request</strong>. Cada fixture individual consume <strong>1 request adicional</strong> al importar. Quedan: <strong>{usage.requests.available}</strong>.</p>
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="date"
+                                                value={fixtureDate}
+                                                onChange={(e) => setFixtureDate(e.target.value)}
+                                                className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                            />
+                                            <button
+                                                onClick={() => void handleSearchByDate()}
+                                                disabled={searchingDate || !fixtureDate}
+                                                className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-900 text-sm font-bold hover:bg-amber-500 disabled:opacity-50 transition-colors"
+                                            >
+                                                {searchingDate ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
+                                            </button>
+                                        </div>
+
+                                        {dateError && (
+                                            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                                <AlertCircle size={14} /> {dateError}
+                                            </div>
+                                        )}
+
+                                        {searchingDate && (
+                                            <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+                                                <Loader2 size={16} className="animate-spin" /> Consultando API-Football…
+                                            </div>
+                                        )}
+
+                                        {!searchingDate && fixtureResults.length > 0 && (
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{fixtureResults.length} partidos encontrados</p>
+                                                    <button
+                                                        onClick={() => setSelectedFixtures(
+                                                            selectedFixtures.size === fixtureResults.filter(f => !f.alreadyImported).length
+                                                                ? new Set()
+                                                                : new Set(fixtureResults.filter(f => !f.alreadyImported).map(f => f.fixtureId))
+                                                        )}
+                                                        className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
+                                                    >
+                                                        {selectedFixtures.size > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                                    </button>
+                                                </div>
+
+                                                <div className="space-y-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                                    {fixtureResults.map((f) => (
+                                                        <label
+                                                            key={f.fixtureId}
+                                                            className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
+                                                                f.alreadyImported
+                                                                    ? 'border-lime-200 bg-lime-50/50 opacity-70'
+                                                                    : selectedFixtures.has(f.fixtureId)
+                                                                    ? 'border-slate-900 bg-slate-50'
+                                                                    : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50/30'
+                                                            }`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
+                                                                disabled={f.alreadyImported}
+                                                                onChange={() => toggleFixture(f.fixtureId)}
+                                                                className="w-4 h-4 accent-amber-500 shrink-0"
+                                                            />
+                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                {f.homeTeam.logo && <img src={f.homeTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                                <span className="text-xs font-bold text-slate-800 truncate">{f.homeTeam.name}</span>
+                                                                <span className="text-xs text-slate-400 shrink-0">
+                                                                    {f.homeScore != null ? `${f.homeScore} - ${f.awayScore}` : 'vs'}
+                                                                </span>
+                                                                <span className="text-xs font-bold text-slate-800 truncate">{f.awayTeam.name}</span>
+                                                                {f.awayTeam.logo && <img src={f.awayTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                            </div>
+                                                            <div className="shrink-0 text-right">
+                                                                <p className="text-[10px] text-slate-400 truncate max-w-[100px]">{f.league.name}</p>
+                                                                {f.alreadyImported
+                                                                    ? <span className="text-[10px] font-black text-lime-600">Ya importado</span>
+                                                                    : <span className="text-[10px] text-slate-400">{new Date(f.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                                }
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+
+                                                {/* Options */}
+                                                <div className="flex gap-4 text-sm">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" checked={dateCreateTeams} onChange={e => setDateCreateTeams(e.target.checked)} className="w-4 h-4 accent-lime-500" />
+                                                        <span className="text-slate-700 font-medium">Crear equipos</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" checked={dateOverwrite} onChange={e => setDateOverwrite(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                                                        <span className="text-slate-700 font-medium">Actualizar existentes</span>
+                                                    </label>
+                                                </div>
+
+                                                {importError && (
+                                                    <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                                        <AlertCircle size={14} /> {importError}
+                                                    </div>
+                                                )}
+
+                                                <button
+                                                    onClick={() => void handleImportSelected()}
+                                                    disabled={importing || selectedFixtures.size === 0}
+                                                    className="w-full py-3 rounded-2xl bg-slate-900 text-white font-black uppercase text-sm hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+                                                >
+                                                    {importing
+                                                        ? <><Loader2 size={16} className="animate-spin" /> Importando {selectedFixtures.size} partido{selectedFixtures.size !== 1 ? 's' : ''}…</>
+                                                        : <><Download size={16} /> Importar {selectedFixtures.size} seleccionado{selectedFixtures.size !== 1 ? 's' : ''}</>
+                                                    }
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {!searchingDate && fixtureResults.length === 0 && fixtureDate && !dateError && (
+                                            <p className="text-center text-sm text-slate-400 py-4">Busca una fecha para ver los partidos disponibles</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ── League mode ── */}
+                                {mode === 'league' && (<>
 
                                 {/* Rate limit info */}
                                 {usage && (
@@ -366,7 +591,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                 )}
 
                                 {/* Popular leagues quicklinks — trigger real search */}
-                                {!searching && searchResults.length === 0 && (
+                                {!searching && searchResults.length === 0 && mode === 'league' && (
                                     <div className="space-y-2">
                                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Accesos rápidos</p>
                                         <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2 text-xs text-blue-700 mb-3">
@@ -395,6 +620,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                         ))}
                                     </div>
                                 )}
+                                </>)}
                             </motion.div>
                         )}
 
