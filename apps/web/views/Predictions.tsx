@@ -3058,7 +3058,7 @@ const Predictions: React.FC = () => {
                 type="button"
                 onClick={handleSaveAll}
                 disabled={isSavingAll}
-                className="fixed bottom-6 right-4 z-40 flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 shadow-lg shadow-lime-400/30 transition-all hover:bg-lime-300 disabled:opacity-70 sm:right-6"
+                className="fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 shadow-lg shadow-lime-400/30 transition-all hover:bg-lime-300 disabled:opacity-70 md:bottom-6 md:right-6"
             >
                 {isSavingAll
                     ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" /><span className="hidden sm:inline">Guardando...</span></>
@@ -3073,11 +3073,11 @@ const Predictions: React.FC = () => {
                 type="button"
                 onClick={() => void handleParticipationCheckout()}
                 disabled={participationCheckoutLoading}
-                className={`fixed left-4 z-40 flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 shadow-lg transition-all disabled:opacity-70 sm:left-6 ${
+                className={`fixed bottom-20 left-4 z-40 flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-900 shadow-lg transition-all disabled:opacity-70 md:bottom-6 md:left-6 ${
                     participationSummary.hasPrincipalPending
                         ? 'bg-rose-400 shadow-rose-400/30 hover:bg-rose-300'
                         : 'bg-amber-400 shadow-amber-400/30 hover:bg-amber-300'
-                } ${hasDirtyChanges ? 'bottom-20' : 'bottom-6'}`}
+                }`}
             >
                 {participationCheckoutLoading ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />

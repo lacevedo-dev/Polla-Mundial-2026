@@ -1,5 +1,27 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import Stripe from 'stripe';
+
+/** Currencies where Stripe expects the amount as-is (no cents conversion). */
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf',
+  'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
+]);
+
+/**
+ * Stripe requires unit_amount in the smallest currency unit.
+ * For COP and other non-zero-decimal currencies that don't use fractions
+ * in practice (COP prices are already whole numbers with no centavos),
+ * we do NOT multiply by 100 — Stripe treats COP as a standard decimal
+ * currency but Colombian amounts are already at the unit level.
+ * For USD and EUR we multiply by 100 (dollars → cents).
+ */
+function toStripeAmount(amount: number, currency: string): number {
+  const c = currency.toLowerCase();
+  if (ZERO_DECIMAL_CURRENCIES.has(c) || c === 'cop') {
+    return Math.round(amount);
+  }
+  return Math.round(amount * 100);
+}
 
 @Injectable()
 export class StripeService {
@@ -34,7 +56,7 @@ export class StripeService {
           product_data: {
             name: item.name,
           },
-          unit_amount: Math.round(item.amount * 100), // Convert to cents
+          unit_amount: toStripeAmount(item.amount, item.currency),
         },
         quantity: item.quantity,
       }));
@@ -56,6 +78,12 @@ export class StripeService {
       };
     } catch (error) {
       this.logger.error('Failed to create Stripe checkout session:', error);
+      // Convert Stripe API errors into readable BadRequestException
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(
+          `Error de pasarela de pago: ${error.message}`,
+        );
+      }
       throw error;
     }
   }

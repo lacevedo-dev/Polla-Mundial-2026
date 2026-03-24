@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Request, HttpCode, HttpStatus, BadRequestException, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, HttpCode, HttpStatus, BadRequestException, InternalServerErrorException, Req } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/payment.dto';
@@ -30,13 +30,19 @@ export class PaymentsController {
         @Body() createCheckoutSessionDto: CreateCheckoutSessionDto,
     ) {
         const userId = req.user.userId;
-        return this.paymentsService.createStripeCheckoutSession(
-            userId,
-            createCheckoutSessionDto.items,
-            createCheckoutSessionDto.currency,
-            createCheckoutSessionDto.successUrl,
-            createCheckoutSessionDto.cancelUrl,
-        );
+        try {
+            return await this.paymentsService.createStripeCheckoutSession(
+                userId,
+                createCheckoutSessionDto.items,
+                createCheckoutSessionDto.currency,
+                createCheckoutSessionDto.successUrl,
+                createCheckoutSessionDto.cancelUrl,
+            );
+        } catch (error) {
+            if (error instanceof BadRequestException) throw error;
+            const message = error instanceof Error ? error.message : 'Error al crear sesión de pago';
+            throw new InternalServerErrorException(message);
+        }
     }
 
     @Post('webhook')
