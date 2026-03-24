@@ -121,16 +121,16 @@ export class TournamentImportService {
   /* ─── Preview import ─────────────────────────────────────────────────── */
 
   async previewImport(leagueId: number, season: number): Promise<TournamentPreview> {
-    // Fetch league info
-    const leagueRes = await this.apiClient.getLeagues({ id: leagueId, season });
-    await this.rateLimiter.logRequest('/leagues', { id: leagueId, season }, 200, 0);
+    // Fetch league info by ID only (without season — avoids empty response when season has no data yet)
+    const leagueRes = await this.apiClient.getLeagues({ id: leagueId });
+    await this.rateLimiter.logRequest('/leagues', { id: leagueId }, 200, 0);
 
     const leagueData = (leagueRes.response as any[])?.[0];
     if (!leagueData) {
       throw new Error(`League ${leagueId} not found in API-Football`);
     }
 
-    // Fetch fixtures
+    // Fetch fixtures for the specific season
     const fixturesRes = await this.apiClient.getFixturesByLeague(leagueId, season);
     await this.rateLimiter.logRequest('/fixtures', { league: leagueId, season }, 200, fixturesRes.results ?? 0);
 
@@ -208,9 +208,9 @@ export class TournamentImportService {
     };
 
     try {
-      // 1. Fetch league info
-      const leagueRes = await this.apiClient.getLeagues({ id: leagueId, season });
-      await this.rateLimiter.logRequest('/leagues', { id: leagueId, season }, 200, 0);
+      // 1. Fetch league info by ID only (season filter causes empty response when season has no fixtures yet)
+      const leagueRes = await this.apiClient.getLeagues({ id: leagueId });
+      await this.rateLimiter.logRequest('/leagues', { id: leagueId }, 200, 0);
       const leagueData = (leagueRes.response as any[])?.[0];
       if (!leagueData) throw new Error(`League ${leagueId} not found`);
 
