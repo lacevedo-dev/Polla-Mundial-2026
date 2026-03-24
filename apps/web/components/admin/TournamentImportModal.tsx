@@ -53,13 +53,14 @@ interface Props {
 const STEP_LABELS = ['Buscar liga', 'Temporada', 'Vista previa', 'Importar'];
 
 /* ─── Popular leagues — Colombia primero ────────────────────────── */
+// Búsqueda por ID numérico: el backend detecta que es número y usa ?id= en vez de ?search=
 const POPULAR_LEAGUES = [
-    { query: 'Liga BetPlay',    label: 'Liga BetPlay',                 country: 'Colombia',       note: 'Primera División Colombia' },
-    { query: 'Copa Colombia',   label: 'Copa Colombia',                country: 'Colombia',       note: 'Torneo eliminatorio Colombia' },
-    { query: 'FIFA World Cup',  label: 'FIFA World Cup 2026',          country: 'World',          note: 'ID 1 · Solo el torneo oficial, no amistosos' },
-    { query: 'FIFA Friendlies', label: 'Amistosos Internacionales',    country: 'World',          note: 'ID 10 · Amistosos prep. Mundial (Colombia incluida)' },
-    { query: 'Copa America',    label: 'Copa América',                  country: 'América del Sur', note: 'ID 9' },
-    { query: 'Champions League', label: 'UEFA Champions League',       country: 'Europa',         note: 'ID 2' },
+    { query: '239',  label: 'Liga BetPlay',                country: 'Colombia',        note: 'Primera División Colombia · ID 239' },
+    { query: '241',  label: 'Copa Colombia',               country: 'Colombia',        note: 'Torneo eliminatorio Colombia · ID 241' },
+    { query: '1',    label: 'FIFA World Cup 2026',         country: 'World',           note: 'ID 1 · Solo partidos oficiales del torneo' },
+    { query: '10',   label: 'Amistosos Internacionales',   country: 'World',           note: 'ID 10 · Amistosos de selecciones nacionales' },
+    { query: '9',    label: 'Copa América',                country: 'América del Sur', note: 'ID 9' },
+    { query: '2',    label: 'UEFA Champions League',       country: 'Europa',          note: 'ID 2' },
 ];
 
 /* ─── Rate limit badge ───────────────────────────────────────────── */
@@ -151,9 +152,12 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         }
     }, [searchQuery, searchCountry, refreshUsage]);
 
-    /* debounce on typed query */
+    /* debounce on typed query — for IDs trigger at 1+ digits, for text at 3+ chars */
     useEffect(() => {
-        const t = setTimeout(() => { if (searchQuery.length >= 2) void handleSearch(); }, 500);
+        const isId = /^\d+$/.test(searchQuery.trim());
+        const minLen = isId ? 1 : 3;
+        const delay = isId ? 800 : 500;
+        const t = setTimeout(() => { if (searchQuery.length >= minLen) void handleSearch(); }, delay);
         return () => clearTimeout(t);
     }, [searchQuery, handleSearch]);
 
@@ -269,14 +273,16 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     </div>
                                 )}
 
-                                <p className="text-sm text-slate-600">Busca una liga o torneo por nombre. Los resultados vienen directamente de la API con las temporadas disponibles.</p>
+                                <p className="text-sm text-slate-600">
+                                    Busca por nombre <span className="text-slate-400">o directamente por</span> <strong>ID numérico</strong> de la liga (más preciso).
+                                </p>
 
                                 <div className="flex gap-2">
                                     <div className="relative flex-1">
                                         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                         <input
                                             type="text"
-                                            placeholder="Ej: Liga BetPlay, World Cup, Champions…"
+                                            placeholder="Nombre (ej: World Cup) o ID (ej: 10, 239, 1)…"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             onKeyDown={(e) => e.key === 'Enter' && void handleSearch()}
@@ -314,7 +320,10 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                 {!searching && searchResults.length > 0 && (
                                     <div className="space-y-2">
-                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{searchResults.length} resultados (consumió 1 request)</p>
+                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                            {searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''} · consumió 1 request
+                                            {/^\d+$/.test(searchQuery.trim()) && ' (búsqueda por ID)'}
+                                        </p>
                                         {searchResults.map((league) => (
                                             <button
                                                 key={league.id}

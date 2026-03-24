@@ -83,10 +83,13 @@ export class TournamentImportService {
   /* ─── Search leagues ─────────────────────────────────────────────────── */
 
   async searchLeagues(query: string, country?: string): Promise<LeagueSearchResult[]> {
-    const response = await this.apiClient.getLeagues({
-      search: query || undefined,
-      country: country || undefined,
-    });
+    const numericId = query && /^\d+$/.test(query.trim()) ? Number(query.trim()) : null;
+
+    const response = await this.apiClient.getLeagues(
+      numericId
+        ? { id: numericId }
+        : { search: query || undefined, country: country || undefined },
+    );
 
     await this.rateLimiter.logRequest('/leagues', { search: query, country }, 200, 0);
 
