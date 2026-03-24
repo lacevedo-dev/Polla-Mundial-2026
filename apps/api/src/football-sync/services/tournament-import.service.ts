@@ -415,6 +415,47 @@ export class TournamentImportService {
     return result;
   }
 
+  /* ─── Search teams ──────────────────────────────────────────────────── */
+
+  async searchTeams(name: string) {
+    const res = await this.apiClient.searchTeams(name);
+    await this.rateLimiter.logRequest('/teams', { search: name }, 200, res.results ?? 0);
+    return ((res.response ?? []) as any[]).map((item: any) => ({
+      id: item.team?.id,
+      name: item.team?.name,
+      code: item.team?.code,
+      logo: item.team?.logo,
+      country: item.team?.country,
+      national: item.team?.national ?? false,
+    }));
+  }
+
+  async searchFixturesByTeam(teamId: number, season: number) {
+    const res = await this.apiClient.getFixturesByTeam(teamId, season);
+    await this.rateLimiter.logRequest('/fixtures', { team: teamId, season }, 200, res.results ?? 0);
+
+    const fixtureIds = ((res.response ?? []) as any[]).map((f: any) => String(f.fixture?.id));
+    const existing = await this.prisma.match.findMany({
+      where: { externalId: { in: fixtureIds } },
+      select: { externalId: true },
+    });
+    const existingSet = new Set(existing.map((m) => m.externalId));
+
+    return ((res.response ?? []) as any[]).map((f: any) => ({
+      fixtureId: f.fixture?.id,
+      date: f.fixture?.date,
+      status: f.fixture?.status?.short,
+      statusLong: f.fixture?.status?.long,
+      homeTeam: { id: f.teams?.home?.id, name: f.teams?.home?.name, logo: f.teams?.home?.logo },
+      awayTeam: { id: f.teams?.away?.id, name: f.teams?.away?.name, logo: f.teams?.away?.logo },
+      homeScore: f.goals?.home ?? null,
+      awayScore: f.goals?.away ?? null,
+      league: { id: f.league?.id, name: f.league?.name, country: f.league?.country, logo: f.league?.logo, round: f.league?.round },
+      venue: f.fixture?.venue?.name ?? null,
+      alreadyImported: existingSet.has(String(f.fixture?.id)),
+    }));
+  }
+
   /* ─── Search fixtures by date ───────────────────────────────────────── */
 
   async searchFixturesByDate(date: string) {

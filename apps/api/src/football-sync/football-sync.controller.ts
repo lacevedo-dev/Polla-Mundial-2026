@@ -266,6 +266,31 @@ export class FootballSyncController {
     return this.tournamentImport.listTournaments();
   }
 
+  @Get('teams/search')
+  @ApiOperation({ summary: 'Search teams by name in API-Football' })
+  async searchTeams(@Query('name') name: string) {
+    if (!name) throw new HttpException('name query param required', HttpStatus.BAD_REQUEST);
+    try {
+      return await this.tournamentImport.searchTeams(name);
+    } catch (error) {
+      throw new HttpException(`Failed to search teams: ${error.message}`, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get('fixtures/by-team')
+  @ApiOperation({ summary: 'Get all fixtures for a team in a season' })
+  async getFixturesByTeam(
+    @Query('teamId') teamId: string,
+    @Query('season') season: string,
+  ) {
+    if (!teamId || !season) throw new HttpException('teamId and season required', HttpStatus.BAD_REQUEST);
+    try {
+      return await this.tournamentImport.searchFixturesByTeam(Number(teamId), Number(season));
+    } catch (error) {
+      throw new HttpException(`Failed to get fixtures: ${error.message}`, HttpStatus.BAD_REQUEST);
+    }
+  }
+
   @Get('fixtures/search')
   @ApiOperation({ summary: 'Search fixtures by date from API-Football' })
   async searchFixturesByDate(@Query('date') date: string) {

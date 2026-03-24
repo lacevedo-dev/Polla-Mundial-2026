@@ -45,6 +45,15 @@ interface UsageInfo {
     requests: { used: number; limit: number; available: number };
 }
 
+interface TeamResult {
+    id: number;
+    name: string;
+    code?: string;
+    logo?: string;
+    country?: string;
+    national: boolean;
+}
+
 interface FixtureResult {
     fixtureId: number;
     date: string;
@@ -111,7 +120,7 @@ const StepDots: React.FC<{ step: number }> = ({ step }) => (
 const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [step, setStep] = useState(0);
     const [usage, setUsage] = useState<UsageInfo | null>(null);
-    const [mode, setMode] = useState<'league' | 'date'>('league');
+    const [mode, setMode] = useState<'league' | 'date' | 'team'>('league');
 
     // Step 0: Search by league
     const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +129,16 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [searching, setSearching] = useState(false);
     const [searchError, setSearchError] = useState('');
     const [selectedLeague, setSelectedLeague] = useState<LeagueSearchResult | null>(null);
+
+    // Step 0: Search by team
+    const [teamQuery, setTeamQuery] = useState('');
+    const [teamResults, setTeamResults] = useState<TeamResult[]>([]);
+    const [searchingTeam, setSearchingTeam] = useState(false);
+    const [teamError, setTeamError] = useState('');
+    const [selectedTeam, setSelectedTeam] = useState<TeamResult | null>(null);
+    const [teamSeason, setTeamSeason] = useState(new Date().getFullYear());
+    const [teamFixtures, setTeamFixtures] = useState<FixtureResult[]>([]);
+    const [loadingTeamFixtures, setLoadingTeamFixtures] = useState(false);
 
     // Step 0: Search by date
     const [fixtureDate, setFixtureDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -185,6 +204,41 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         return () => clearTimeout(t);
     }, [searchQuery, handleSearch]);
 
+    /* ─ search by team ─ */
+    const handleSearchTeam = useCallback(async () => {
+        if (!teamQuery.trim()) return;
+        setSearchingTeam(true);
+        setTeamError('');
+        setTeamResults([]);
+        setSelectedTeam(null);
+        setTeamFixtures([]);
+        try {
+            const data = await request<TeamResult[]>(`/admin/football/teams/search?name=${encodeURIComponent(teamQuery)}`);
+            setTeamResults(data);
+            refreshUsage();
+        } catch (e: any) {
+            setTeamError(e?.message ?? 'Error al buscar equipos');
+        } finally {
+            setSearchingTeam(false);
+        }
+    }, [teamQuery, refreshUsage]);
+
+    const handleLoadTeamFixtures = async (team: TeamResult) => {
+        setSelectedTeam(team);
+        setLoadingTeamFixtures(true);
+        setTeamFixtures([]);
+        setSelectedFixtures(new Set());
+        try {
+            const data = await request<FixtureResult[]>(`/admin/football/fixtures/by-team?teamId=${team.id}&season=${teamSeason}`);
+            setTeamFixtures(data);
+            refreshUsage();
+        } catch (e: any) {
+            setTeamError(e?.message ?? 'Error al cargar partidos');
+        } finally {
+            setLoadingTeamFixtures(false);
+        }
+    };
+
     /* ─ search by date ─ */
     const handleSearchByDate = async () => {
         if (!fixtureDate) return;
@@ -222,7 +276,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                     fixtureIds: [...selectedFixtures],
                     createTeams: dateCreateTeams,
                     overwriteExisting: dateOverwrite,
-                    tournamentName: 'Amistosos Internacionales',
+                    tournamentName: mode === 'team' && selectedTeam ? `Amistosos ${selectedTeam.name}` : 'Amistosos Internacionales',
                 }),
             });
             setImportResult(data);
@@ -338,17 +392,14 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                 {/* Mode tabs */}
                                 <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
-                                    <button
-                                        onClick={() => setMode('league')}
-                                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'league' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        <Trophy size={14} /> Por torneo/liga
+                                    <button onClick={() => setMode('league')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'league' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                        <Trophy size={13} /> Liga
                                     </button>
-                                    <button
-                                        onClick={() => setMode('date')}
-                                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'date' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        <Calendar size={14} /> Por fecha
+                                    <button onClick={() => setMode('date')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'date' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                        <Calendar size={13} /> Fecha
+                                    </button>
+                                    <button onClick={() => setMode('team')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'team' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                        <Shield size={13} /> Equipo
                                     </button>
                                 </div>
 
@@ -480,6 +531,233 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                         {!searchingDate && fixtureResults.length === 0 && fixtureDate && !dateError && (
                                             <p className="text-center text-sm text-slate-400 py-4">Busca una fecha para ver los partidos disponibles</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ── Team mode ── */}
+                                {mode === 'team' && (
+                                    <div className="space-y-4">
+                                        <p className="text-sm text-slate-600">Busca un equipo por nombre, selecciónalo y carga sus partidos para una temporada. Ideal para encontrar amistosos de selecciones como Colombia.</p>
+
+                                        {usage && (
+                                            <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                                                <Info size={13} className="shrink-0 mt-0.5 text-slate-400" />
+                                                <p>Buscar equipo consume <strong>1 request</strong>. Cargar sus partidos consume <strong>1 request adicional</strong>. Quedan: <strong>{usage.requests.available}</strong>.</p>
+                                            </div>
+                                        )}
+
+                                        {/* Team search input */}
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Shield size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Nombre del equipo (ej: Colombia, Argentina…)"
+                                                    value={teamQuery}
+                                                    onChange={(e) => setTeamQuery(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && void handleSearchTeam()}
+                                                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => void handleSearchTeam()}
+                                                disabled={searchingTeam || !teamQuery.trim()}
+                                                className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-900 text-sm font-bold hover:bg-amber-500 disabled:opacity-50 transition-colors"
+                                            >
+                                                {searchingTeam ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
+                                            </button>
+                                        </div>
+
+                                        {teamError && (
+                                            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                                <AlertCircle size={14} /> {teamError}
+                                            </div>
+                                        )}
+
+                                        {searchingTeam && (
+                                            <div className="flex items-center justify-center gap-2 py-6 text-sm text-slate-400">
+                                                <Loader2 size={16} className="animate-spin" /> Buscando equipos…
+                                            </div>
+                                        )}
+
+                                        {/* Team results list */}
+                                        {!searchingTeam && teamResults.length > 0 && !selectedTeam && (
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{teamResults.length} equipo{teamResults.length !== 1 ? 's' : ''} encontrado{teamResults.length !== 1 ? 's' : ''}</p>
+                                                <div className="space-y-1.5 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                                    {teamResults.map((team) => (
+                                                        <button
+                                                            key={team.id}
+                                                            onClick={() => void handleLoadTeamFixtures(team)}
+                                                            className="w-full flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 transition-all text-left group"
+                                                        >
+                                                            {team.logo ? (
+                                                                <img src={team.logo} alt={team.name} className="w-9 h-9 object-contain shrink-0" />
+                                                            ) : (
+                                                                <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+                                                                    <Shield size={16} className="text-slate-400" />
+                                                                </div>
+                                                            )}
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-black text-slate-900 truncate">{team.name}</p>
+                                                                <p className="text-[10px] text-slate-400">
+                                                                    {team.country && <span>{team.country} · </span>}
+                                                                    {team.national ? <span className="text-blue-600 font-bold">Selección Nacional</span> : 'Club'}
+                                                                    {team.code && <span className="ml-1 text-slate-300">· {team.code}</span>}
+                                                                </p>
+                                                            </div>
+                                                            <ArrowRight size={14} className="text-slate-300 group-hover:text-amber-500 transition-colors shrink-0" />
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Selected team + season + fixtures */}
+                                        {selectedTeam && (
+                                            <div className="space-y-3">
+                                                {/* Selected team header */}
+                                                <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-2xl">
+                                                    {selectedTeam.logo ? (
+                                                        <img src={selectedTeam.logo} alt={selectedTeam.name} className="w-10 h-10 object-contain shrink-0" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+                                                            <Shield size={18} className="text-slate-400" />
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-black text-slate-900">{selectedTeam.name}</p>
+                                                        <p className="text-[10px] text-slate-500">{selectedTeam.country} · {selectedTeam.national ? 'Selección Nacional' : 'Club'}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => { setSelectedTeam(null); setTeamFixtures([]); setSelectedFixtures(new Set()); }}
+                                                        className="text-slate-400 hover:text-slate-600 transition-colors"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                </div>
+
+                                                {/* Season selector */}
+                                                <div className="flex items-center gap-3">
+                                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest shrink-0">Temporada</label>
+                                                    <input
+                                                        type="number"
+                                                        value={teamSeason}
+                                                        onChange={(e) => setTeamSeason(Number(e.target.value))}
+                                                        min={2018}
+                                                        max={2030}
+                                                        className="w-24 px-3 py-1.5 rounded-xl border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                                    />
+                                                    <button
+                                                        onClick={() => void handleLoadTeamFixtures(selectedTeam)}
+                                                        disabled={loadingTeamFixtures}
+                                                        className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {loadingTeamFixtures ? <Loader2 size={13} className="animate-spin" /> : 'Cargar'}
+                                                    </button>
+                                                </div>
+
+                                                {loadingTeamFixtures && (
+                                                    <div className="flex items-center justify-center gap-2 py-6 text-sm text-slate-400">
+                                                        <Loader2 size={16} className="animate-spin" /> Cargando partidos de {selectedTeam.name}…
+                                                    </div>
+                                                )}
+
+                                                {!loadingTeamFixtures && teamFixtures.length > 0 && (
+                                                    <div className="space-y-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{teamFixtures.length} partidos temporada {teamSeason}</p>
+                                                            <button
+                                                                onClick={() => setSelectedFixtures(
+                                                                    selectedFixtures.size === teamFixtures.filter(f => !f.alreadyImported).length
+                                                                        ? new Set()
+                                                                        : new Set(teamFixtures.filter(f => !f.alreadyImported).map(f => f.fixtureId))
+                                                                )}
+                                                                className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
+                                                            >
+                                                                {selectedFixtures.size > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                                            </button>
+                                                        </div>
+
+                                                        <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                                            {teamFixtures.map((f) => (
+                                                                <label
+                                                                    key={f.fixtureId}
+                                                                    className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
+                                                                        f.alreadyImported
+                                                                            ? 'border-lime-200 bg-lime-50/50 opacity-70'
+                                                                            : selectedFixtures.has(f.fixtureId)
+                                                                            ? 'border-slate-900 bg-slate-50'
+                                                                            : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50/30'
+                                                                    }`}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
+                                                                        disabled={f.alreadyImported}
+                                                                        onChange={() => toggleFixture(f.fixtureId)}
+                                                                        className="w-4 h-4 accent-amber-500 shrink-0"
+                                                                    />
+                                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                        {f.homeTeam.logo && <img src={f.homeTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                                        <span className="text-xs font-bold text-slate-800 truncate">{f.homeTeam.name}</span>
+                                                                        <span className="text-xs text-slate-400 shrink-0">
+                                                                            {f.homeScore != null ? `${f.homeScore} - ${f.awayScore}` : 'vs'}
+                                                                        </span>
+                                                                        <span className="text-xs font-bold text-slate-800 truncate">{f.awayTeam.name}</span>
+                                                                        {f.awayTeam.logo && <img src={f.awayTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                                    </div>
+                                                                    <div className="shrink-0 text-right">
+                                                                        <p className="text-[10px] text-slate-400 truncate max-w-[100px]">{f.league.name}</p>
+                                                                        {f.alreadyImported
+                                                                            ? <span className="text-[10px] font-black text-lime-600">Ya importado</span>
+                                                                            : <span className="text-[10px] text-slate-400">{new Date(f.date).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })}</span>
+                                                                        }
+                                                                    </div>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* Options */}
+                                                        <div className="flex gap-4 text-sm">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input type="checkbox" checked={dateCreateTeams} onChange={e => setDateCreateTeams(e.target.checked)} className="w-4 h-4 accent-lime-500" />
+                                                                <span className="text-slate-700 font-medium">Crear equipos</span>
+                                                            </label>
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input type="checkbox" checked={dateOverwrite} onChange={e => setDateOverwrite(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                                                                <span className="text-slate-700 font-medium">Actualizar existentes</span>
+                                                            </label>
+                                                        </div>
+
+                                                        {importError && (
+                                                            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                                                <AlertCircle size={14} /> {importError}
+                                                            </div>
+                                                        )}
+
+                                                        <button
+                                                            onClick={() => void handleImportSelected()}
+                                                            disabled={importing || selectedFixtures.size === 0}
+                                                            className="w-full py-3 rounded-2xl bg-slate-900 text-white font-black uppercase text-sm hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+                                                        >
+                                                            {importing
+                                                                ? <><Loader2 size={16} className="animate-spin" /> Importando {selectedFixtures.size} partido{selectedFixtures.size !== 1 ? 's' : ''}…</>
+                                                                : <><Download size={16} /> Importar {selectedFixtures.size} seleccionado{selectedFixtures.size !== 1 ? 's' : ''}</>
+                                                            }
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {!loadingTeamFixtures && teamFixtures.length === 0 && !teamError && (
+                                                    <p className="text-center text-sm text-slate-400 py-4">No se encontraron partidos para {selectedTeam.name} en {teamSeason}. Prueba otra temporada.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {!searchingTeam && teamResults.length === 0 && !teamQuery && (
+                                            <p className="text-center text-sm text-slate-400 py-4">Escribe el nombre de un equipo para comenzar</p>
                                         )}
                                     </div>
                                 )}

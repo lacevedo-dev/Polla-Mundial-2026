@@ -162,6 +162,20 @@ export class ApiFootballClient {
   }
 
   /**
+   * Search teams by name
+   */
+  async searchTeams(name: string): Promise<ApiFootballResponse> {
+    return this.makeRequest('/teams', { search: name });
+  }
+
+  /**
+   * Get fixtures for a specific team + season
+   */
+  async getFixturesByTeam(teamId: number, season: number, timezone = 'America/Bogota'): Promise<ApiFootballResponse> {
+    return this.makeRequest('/fixtures', { team: teamId, season, timezone });
+  }
+
+  /**
    * Check if API key is configured
    */
   isConfigured(): boolean {
