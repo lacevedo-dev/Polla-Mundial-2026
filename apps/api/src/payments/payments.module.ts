@@ -8,9 +8,10 @@ import { WebhookHandler } from './webhook.handler';
 import { OrdersModule } from '../orders/orders.module';
 import { StripeWebhookMiddleware } from './stripe-webhook.middleware';
 import { ParticipationModule } from '../participation/participation.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-    imports: [PrismaModule, OrdersModule, ParticipationModule],
+    imports: [PrismaModule, OrdersModule, ParticipationModule, NotificationsModule],
     providers: [PaymentsService, BoldService, StripeService, WebhookHandler],
     controllers: [PaymentsController],
     exports: [PaymentsService, StripeService, WebhookHandler],

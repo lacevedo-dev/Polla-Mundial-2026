@@ -6,6 +6,7 @@ import {
     ArrowLeft,
     ArrowUp,
     BarChart3,
+    Banknote,
     Brain,
     Calendar,
     CheckCircle2,
@@ -14,13 +15,16 @@ import {
     ChevronUp,
     Coins,
     GitMerge,
+    Landmark,
     LayoutGrid,
     Lock,
     Medal,
     Save,
     Search,
+    Smartphone,
     Sparkles,
     Trophy,
+    X,
     Zap,
 } from 'lucide-react';
 import { useNavigate, useBlocker } from 'react-router-dom';
@@ -1688,6 +1692,11 @@ const Predictions: React.FC = () => {
     const [participationSavingMatchId, setParticipationSavingMatchId] = React.useState<string | null>(null);
     const [participationSummary, setParticipationSummary] = React.useState<ParticipationSummaryBar | null>(null);
     const [participationCheckoutLoading, setParticipationCheckoutLoading] = React.useState(false);
+    const [stripeEnabled, setStripeEnabled] = React.useState<boolean | null>(null);
+    const [manualPaymentOpen, setManualPaymentOpen] = React.useState(false);
+    const [manualPaymentMethod, setManualPaymentMethod] = React.useState('');
+    const [manualPaymentSending, setManualPaymentSending] = React.useState(false);
+    const [manualPaymentDone, setManualPaymentDone] = React.useState(false);
 
     const applyParticipationBatch = React.useCallback(
         (batch: ParticipationOptionsBatch | null) => {
@@ -1728,6 +1737,12 @@ const Predictions: React.FC = () => {
     const [activeGroup, setActiveGroup] = React.useState<string>('ALL');
     const [activeGroupModal, setActiveGroupModal] = React.useState<string | null>(null);
     const [groups, setGroups] = React.useState<SimulatorGroup[]>(INITIAL_GROUPS);
+
+    React.useEffect(() => {
+        void request<{ stripeEnabled: boolean }>('/payments/config')
+            .then((cfg) => setStripeEnabled(cfg.stripeEnabled))
+            .catch(() => setStripeEnabled(false));
+    }, []);
 
     React.useEffect(() => {
         if (myLeagues.length > 0) {
@@ -2064,8 +2079,41 @@ const Predictions: React.FC = () => {
         }
     };
 
+    const handleManualPaymentSubmit = async () => {
+        if (!activeLeague?.id || !participationSummary || !manualPaymentMethod) return;
+        setManualPaymentSending(true);
+        try {
+            const obligationIds = participationSummary.items
+                .filter((item) => item.status === 'PENDING_PAYMENT')
+                .map((item) => item.id);
+            await request('/payments/manual-intent', {
+                method: 'POST',
+                body: JSON.stringify({
+                    leagueId: activeLeague.id,
+                    obligationIds,
+                    method: manualPaymentMethod,
+                    totalAmount: participationSummary.totalPending,
+                    currency: participationSummary.currency,
+                }),
+            });
+            setManualPaymentDone(true);
+        } catch (nextError) {
+            setError(nextError instanceof Error ? nextError.message : 'No fue posible registrar el pago.');
+        } finally {
+            setManualPaymentSending(false);
+        }
+    };
+
     const handleParticipationCheckout = async () => {
         if (!activeLeague?.id || !participationSummary || participationSummary.itemCount === 0) {
+            return;
+        }
+
+        // Si Stripe no está habilitado, abrir modal de pago manual
+        if (stripeEnabled === false) {
+            setManualPaymentOpen(true);
+            setManualPaymentDone(false);
+            setManualPaymentMethod('');
             return;
         }
 
@@ -3083,14 +3131,108 @@ const Predictions: React.FC = () => {
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
                 ) : (
                     <>
-                        <Coins className="h-4 w-4 shrink-0" />
+                        {stripeEnabled === false ? <Banknote className="h-4 w-4 shrink-0" /> : <Coins className="h-4 w-4 shrink-0" />}
                         <span>{formatCurrency(participationSummary.totalPending, participationSummary.currency)}</span>
-                        {participationSummary.hasPrincipalPending ? (
+                        {stripeEnabled === false ? (
+                            <span className="hidden rounded-full bg-slate-900/20 px-1.5 py-0.5 text-[9px] sm:inline">Manual</span>
+                        ) : participationSummary.hasPrincipalPending ? (
                             <span className="hidden rounded-full bg-slate-900/20 px-1.5 py-0.5 text-[9px] sm:inline">Principal</span>
                         ) : null}
                     </>
                 )}
             </button>
+        ) : null}
+
+        {/* Modal de pago manual */}
+        {manualPaymentOpen ? (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4">
+                <div className="w-full max-w-sm overflow-hidden rounded-t-[2rem] bg-white shadow-2xl sm:rounded-[2rem]">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Pago manual</p>
+                            <p className="text-sm font-black text-slate-900">
+                                {participationSummary ? formatCurrency(participationSummary.totalPending, participationSummary.currency) : ''}
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => { setManualPaymentOpen(false); setManualPaymentDone(false); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div className="px-5 py-4 space-y-4">
+                        {manualPaymentDone ? (
+                            <div className="flex flex-col items-center gap-3 py-4 text-center">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100">
+                                    <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                                </div>
+                                <p className="text-sm font-black text-slate-900">¡Listo! Administrador notificado</p>
+                                <p className="text-xs text-slate-500">
+                                    El admin de la polla recibirá tu aviso y confirmará el pago cuando lo verifique.
+                                </p>
+                                <button
+                                    onClick={() => { setManualPaymentOpen(false); setManualPaymentDone(false); }}
+                                    className="mt-2 w-full rounded-2xl bg-slate-900 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="text-xs text-slate-500">
+                                    El pago online no está disponible. Realiza la transferencia y selecciona el método para notificar al administrador.
+                                </p>
+
+                                {/* Métodos de pago */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { id: 'Nequi', label: 'Nequi', Icon: Smartphone, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
+                                        { id: 'Daviplata', label: 'Daviplata', Icon: Smartphone, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
+                                        { id: 'Bancolombia', label: 'Bancolombia', Icon: Landmark, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
+                                        { id: 'Efectivo', label: 'Efectivo', Icon: Banknote, color: 'text-lime-700', bg: 'bg-lime-50', border: 'border-lime-200' },
+                                    ].map(({ id, label, Icon, color, bg, border }) => (
+                                        <button
+                                            key={id}
+                                            type="button"
+                                            onClick={() => setManualPaymentMethod(id)}
+                                            className={`flex items-center gap-2 rounded-2xl border p-3 text-left transition-all ${
+                                                manualPaymentMethod === id
+                                                    ? `${bg} ${border} ring-2 ring-offset-1 ${color.replace('text-', 'ring-')}`
+                                                    : 'border-slate-100 bg-white hover:border-slate-200'
+                                            }`}
+                                        >
+                                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${bg}`}>
+                                                <Icon className={`h-4 w-4 ${color}`} />
+                                            </div>
+                                            <span className="text-xs font-bold text-slate-700">{label}</span>
+                                            {manualPaymentMethod === id && (
+                                                <CheckCircle2 className={`ml-auto h-4 w-4 shrink-0 ${color}`} />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => void handleManualPaymentSubmit()}
+                                    disabled={!manualPaymentMethod || manualPaymentSending}
+                                    className="w-full rounded-2xl bg-amber-400 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 transition hover:bg-amber-300 disabled:opacity-50"
+                                >
+                                    {manualPaymentSending
+                                        ? 'Enviando...'
+                                        : manualPaymentMethod
+                                            ? `Ya pagué con ${manualPaymentMethod} — Notificar admin`
+                                            : 'Selecciona un método de pago'
+                                    }
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
         ) : null}
 
         {/* Unsaved changes dialog */}

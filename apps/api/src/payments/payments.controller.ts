@@ -88,4 +88,26 @@ export class PaymentsController {
         const userId = req.user.userId;
         return this.paymentsService.getMyPayments(userId);
     }
+
+    /** Public — no auth needed. Returns whether Stripe gateway is active. */
+    @Get('config')
+    getPaymentConfig() {
+        const key = process.env.STRIPE_SECRET_KEY;
+        const stripeEnabled = !!key && key !== 'sk_test_dummy_key';
+        return { stripeEnabled };
+    }
+
+    /**
+     * User signals a manual payment intent so the admin is notified.
+     * The obligation stays PENDING_PAYMENT — admin confirms manually.
+     */
+    @UseGuards(JwtAuthGuard)
+    @Post('manual-intent')
+    async registerManualIntent(
+        @Request() req,
+        @Body() body: { leagueId: string; obligationIds: string[]; method: string; totalAmount: number; currency: string },
+    ) {
+        const userId = req.user.userId;
+        return this.paymentsService.registerManualPaymentIntent(userId, body);
+    }
 }

@@ -5,6 +5,7 @@ import { BoldService } from './bold.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { OrdersService } from '../orders/orders.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +16,7 @@ export class PaymentsService {
         private readonly boldService: BoldService,
         private readonly stripeService: StripeService,
         private readonly ordersService: OrdersService,
+        private readonly notifications: NotificationsService,
     ) { }
 
     async createPaymentSession(userId: string, createPaymentDto: CreatePaymentDto) {
@@ -175,5 +177,61 @@ export class PaymentsService {
             );
             throw error;
         }
+    }
+
+    async registerManualPaymentIntent(
+        userId: string,
+        params: {
+            leagueId: string;
+            obligationIds: string[];
+            method: string;
+            totalAmount: number;
+            currency: string;
+        },
+    ) {
+        const { leagueId, obligationIds, method, totalAmount, currency } = params;
+
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            select: { name: true },
+        });
+
+        const leagueAdminMember = await this.prisma.leagueMember.findFirst({
+            where: { leagueId, role: 'ADMIN' },
+            select: { userId: true },
+        });
+
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true },
+        });
+
+        const amount = new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: currency ?? 'COP',
+            minimumFractionDigits: 0, maximumFractionDigits: 0,
+        }).format(totalAmount);
+
+        // Notify the user: confirmation that intent was registered
+        await this.notifications.createInAppNotification({
+            userId,
+            type: 'PAYMENT_CONFIRMED',
+            title: '💳 Intención de pago registrada',
+            body: `Tu intención de pago por ${amount} en ${league?.name ?? 'la polla'} vía ${method} fue registrada. El administrador la confirmará pronto.`,
+            data: { leagueId, obligationIds, method, totalAmount, currency },
+        });
+
+        // Notify the league admin if different from user
+        if (leagueAdminMember?.userId && leagueAdminMember.userId !== userId) {
+            await this.notifications.createInAppNotification({
+                userId: leagueAdminMember.userId,
+                type: 'PAYMENT_CONFIRMED',
+                title: '💰 Pago manual pendiente de confirmación',
+                body: `${user?.name ?? 'Un usuario'} indica que pagó ${amount} en ${league?.name ?? 'la polla'} vía ${method}. Confírmalo en la sección de pagos.`,
+                data: { leagueId, userId, obligationIds, method, totalAmount, currency },
+            });
+        }
+
+        this.logger.log(`Manual payment intent registered by user ${userId} for league ${leagueId} — method: ${method}, amount: ${totalAmount}`);
+        return { registered: true, obligationIds };
     }
 }
