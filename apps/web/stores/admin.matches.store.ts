@@ -10,9 +10,20 @@ export interface AdminTeam {
     flagUrl?: string;
 }
 
+export interface AdminTournament {
+    id: string;
+    name: string;
+    country?: string;
+    season: number;
+    logoUrl?: string;
+    type: string;
+    active: boolean;
+}
+
 export interface AdminMatch {
     id: string;
     phase: string;
+    round?: string | null;
     group?: string;
     matchNumber?: number;
     matchDate: string;
@@ -21,6 +32,9 @@ export interface AdminMatch {
     homeScore?: number;
     awayScore?: number;
     externalId?: string | null;
+    tournamentId?: string | null;
+    tournamentName?: string | null;
+    tournamentLogo?: string | null;
     lastSyncAt?: string | null;
     syncCount?: number;
     lastSyncStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'SKIPPED' | null;
@@ -75,11 +89,13 @@ interface MatchesFilters {
     linked?: 'true' | 'false';
     risk?: 'blocked' | 'failing' | 'healthy';
     linkSource?: 'manual' | 'suggested';
+    tournamentId?: string;
 }
 
 interface AdminMatchesState {
     matches: AdminMatch[];
     teams: AdminTeam[];
+    tournaments: AdminTournament[];
     total: number;
     summary: AdminMatchesSummary;
     filters: MatchesFilters;
@@ -89,6 +105,7 @@ interface AdminMatchesState {
 
     fetchMatches: () => Promise<void>;
     fetchTeams: () => Promise<void>;
+    fetchTournaments: () => Promise<void>;
     createMatch: (data: Partial<AdminMatch>) => Promise<void>;
     updateMatch: (id: string, data: Partial<AdminMatch>) => Promise<void>;
     updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
@@ -104,6 +121,7 @@ interface AdminMatchesState {
 export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
     matches: [],
     teams: [],
+    tournaments: [],
     total: 0,
     summary: { blocked: 0, failing: 0, healthy: 0, pending: 0 },
     filters: { page: 1, limit: 50 },
@@ -121,6 +139,7 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
             ...(filters.linked && { linked: filters.linked }),
             ...(filters.risk && { risk: filters.risk }),
             ...(filters.linkSource && { linkSource: filters.linkSource }),
+            ...(filters.tournamentId && { tournamentId: filters.tournamentId }),
         });
         set({ isLoading: true, error: null });
         try {
@@ -137,6 +156,15 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
             set({ teams });
         } catch (error) {
             set({ error: error instanceof Error ? error.message : 'Error al cargar equipos' });
+        }
+    },
+
+    fetchTournaments: async () => {
+        try {
+            const tournaments = await request<AdminTournament[]>('/admin/football/tournaments');
+            set({ tournaments });
+        } catch {
+            // non-critical, silently ignore
         }
     },
 

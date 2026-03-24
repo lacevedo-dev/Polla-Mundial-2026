@@ -30,6 +30,11 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
     'http://localhost:5173',
     'http://localhost:3000',
     'https://polla.agildesarrollo.com.co',
+    'https://polla.agildesarrollo.com',
+    'https://tupollamundial.com',
+    'https://www.tupollamundial.com',
+    'https://zonapronosticos.com',
+    'https://www.zonapronosticos.com',
   ];
 
   app.enableCors({

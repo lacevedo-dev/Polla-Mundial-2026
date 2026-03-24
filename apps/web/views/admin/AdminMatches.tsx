@@ -1,11 +1,12 @@
 ﻿import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Edit3, Link2, Loader2, Plus, RefreshCw, Search, Trash2, Unlink2 } from 'lucide-react';
+import { ChevronDown, Edit3, Link2, Loader2, Plus, RefreshCw, Search, Trash2, Trophy, Unlink2 } from 'lucide-react';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
+import TournamentImportModal from '../../components/admin/TournamentImportModal';
 import { useAdminMatchesStore } from '../../stores/admin.matches.store';
-import type { AdminMatchLinkAudit, AdminMatchSyncLog } from '../../stores/admin.matches.store';
+import type { AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament } from '../../stores/admin.matches.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
 
 const PHASES = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
@@ -172,7 +173,7 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
   };
 
   const handleSave = async () => {
-    await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+    await updateMatch(match.id, { externalId, currentLinkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
     onOpenChange(false);
   };
 
@@ -184,7 +185,7 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
   const handleSync = async () => {
     if (!match?.externalId && !externalId.trim()) return;
     if (!match?.externalId && externalId.trim()) {
-      await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+      await updateMatch(match.id, { externalId, currentLinkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
     }
     await syncMatch(match.id);
     onOpenChange(false);
@@ -401,22 +402,27 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, fetchMatches, fetchTeams, deleteMatch, setFilters, syncMatch } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
+  const [showImportTournament, setShowImportTournament] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
 
   React.useEffect(() => {
     fetchMatches();
+  }, [filters, fetchMatches]);
+
+  React.useEffect(() => {
     fetchTeams();
-  }, [filters, fetchMatches, fetchTeams]);
+    fetchTournaments();
+  }, [fetchTeams, fetchTournaments]);
 
   const applyQuickFilter = React.useCallback((risk?: 'blocked' | 'failing' | 'healthy', linkSource?: 'manual' | 'suggested') => {
     setFilters({ risk, linkSource, page: 1 });
   }, [setFilters]);
 
-  const hasActiveFilters = Boolean(filters.phase || filters.status || filters.linked || filters.risk || filters.linkSource);
+  const hasActiveFilters = Boolean(filters.phase || filters.status || filters.linked || filters.risk || filters.linkSource || filters.tournamentId);
 
   return (
     <div className="space-y-5">
@@ -425,9 +431,14 @@ const AdminMatches: React.FC = () => {
           <h1 className="font-brand text-2xl font-black uppercase tracking-tight text-slate-900">Partidos</h1>
           <p className="mt-1 text-sm text-slate-500">{total.toLocaleString()} partidos</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 sm:w-auto">
-          <Plus size={16} /> Nuevo partido
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button onClick={() => setShowImportTournament(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition-all hover:bg-amber-100 sm:w-auto">
+            <Trophy size={16} /> Importar torneo
+          </button>
+          <button onClick={() => setShowCreate(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 sm:w-auto">
+            <Plus size={16} /> Nuevo partido
+          </button>
+        </div>
       </div>
 
       <section aria-label="Resumen operativo" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -461,9 +472,10 @@ const AdminMatches: React.FC = () => {
           {filters.linked && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">{filters.linked === 'true' ? 'Vinculados' : 'Sin vínculo'}</span>}
           {filters.risk && <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white">Riesgo: {filters.risk}</span>}
           {filters.linkSource && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-bold text-violet-700">Origen: {filters.linkSource}</span>}
+          {filters.tournamentId && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700">Torneo: {tournaments.find((t) => t.id === filters.tournamentId)?.name ?? filters.tournamentId}</span>}
           <button
             type="button"
-            onClick={() => setFilters({ page: 1, phase: undefined, status: undefined, linked: undefined, risk: undefined, linkSource: undefined })}
+            onClick={() => setFilters({ page: 1, phase: undefined, status: undefined, linked: undefined, risk: undefined, linkSource: undefined, tournamentId: undefined })}
             className="ml-auto rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50"
           >
             Limpiar filtros
@@ -504,6 +516,17 @@ const AdminMatches: React.FC = () => {
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
         </div>
+        {tournaments.length > 0 && (
+          <div className="relative">
+            <select value={filters.tournamentId ?? ''} onChange={(e) => setFilters({ tournamentId: e.target.value || undefined, page: 1 })} className="appearance-none rounded-xl border border-amber-200 bg-amber-50 py-2.5 pl-3 pr-8 text-sm font-bold text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-400">
+              <option value="">Todos los torneos</option>
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} {t.season}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-amber-600" />
+          </div>
+        )}
       </div>
 
       {isLoading ? null : matches.length === 0 ? (
@@ -521,6 +544,11 @@ const AdminMatches: React.FC = () => {
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">{match.homeTeam.name} <span className="font-normal text-slate-400">vs</span> {match.awayTeam.name}</h2>
                   <p className="mt-1 text-xs text-slate-500">{formatDate(match.matchDate)} · {match.phase}</p>
+                  {(match.tournamentName || match.round) && (
+                    <p className="mt-0.5 text-[11px] text-amber-700 font-medium">
+                      {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
+                    </p>
+                  )}
                 </div>
                 <StatusBadge status={match.status} />
               </div>
@@ -602,7 +630,14 @@ const AdminMatches: React.FC = () => {
                 <div key={match.id} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 md:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
                   <div>
                     <p className="text-sm font-bold text-slate-800">{match.homeTeam.name} <span className="font-normal text-slate-400">vs</span> {match.awayTeam.name}</p>
-                    <p className="text-xs text-slate-400">{formatDate(match.matchDate)} - {match.phase}</p>
+                    <p className="text-xs text-slate-400">{formatDate(match.matchDate)} · {match.phase}</p>
+                    {(match.tournamentName || match.round) && (
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        {match.tournamentName && <span className="font-medium text-amber-700">{match.tournamentName}</span>}
+                        {match.tournamentName && match.round && <span className="text-slate-300"> · </span>}
+                        {match.round && <span>{match.round}</span>}
+                      </p>
+                    )}
                   </div>
                   <p className="hidden text-sm font-black text-slate-700 md:block">{match.homeScore != null ? `${match.homeScore} - ${match.awayScore}` : '- - -'}</p>
                   <div className="hidden md:block"><StatusBadge status={match.status} /></div>
@@ -654,6 +689,12 @@ const AdminMatches: React.FC = () => {
       <ScoreDialog match={scoreMatch} open={!!scoreMatch} onOpenChange={(v) => { if (!v) setScoreMatch(null); }} />
       <LinkDialog match={linkMatch} open={!!linkMatch} onOpenChange={(v) => { if (!v) setLinkMatch(null); }} />
       <CreateMatchDialog open={showCreate} onOpenChange={setShowCreate} />
+      {showImportTournament && (
+        <TournamentImportModal
+          onClose={() => setShowImportTournament(false)}
+          onImported={() => { fetchMatches(); fetchTeams(); }}
+        />
+      )}
       <ConfirmDialog
         open={!!confirmDelete}
         onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}

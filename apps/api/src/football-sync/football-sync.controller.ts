@@ -22,11 +22,22 @@ import {
   MatchLinkCandidateDto,
   TeamCatalogBackfillResultDto,
 } from './dto/api-football.dto';
-import { IsString } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { Query } from '@nestjs/common';
+import { TournamentImportService } from './services/tournament-import.service';
 
 class LinkMatchDto {
   @IsString()
   externalId: string;
+}
+
+class ImportTournamentDto {
+  @IsNumber() @Type(() => Number) leagueId: number;
+  @IsNumber() @Type(() => Number) season: number;
+  @IsBoolean() @IsOptional() createTeams?: boolean;
+  @IsBoolean() @IsOptional() overwriteExisting?: boolean;
+  @IsBoolean() @IsOptional() dryRun?: boolean;
 }
 
 @ApiTags('admin')
@@ -40,6 +51,7 @@ export class FootballSyncController {
     private readonly rateLimiter: RateLimiterService,
     private readonly matchSync: MatchSyncService,
     private readonly scheduler: AdaptiveSyncScheduler,
+    private readonly tournamentImport: TournamentImportService,
   ) {}
 
   /**
@@ -237,5 +249,66 @@ export class FootballSyncController {
   @ApiOperation({ summary: 'Get detailed daily sync plan' })
   async getSyncPlan() {
     return this.syncPlan.calculateDailyPlan();
+  }
+
+  /* ── Tournament import ─────────────────────────────────────────────── */
+
+  @Get('tournaments')
+  @ApiOperation({ summary: 'List all imported tournaments' })
+  async listTournaments() {
+    return this.tournamentImport.listTournaments();
+  }
+
+  @Get('leagues/search')
+  @ApiOperation({ summary: 'Search leagues/tournaments in API-Football' })
+  async searchLeagues(
+    @Query('q') q: string,
+    @Query('country') country?: string,
+  ) {
+    try {
+      return await this.tournamentImport.searchLeagues(q, country);
+    } catch (error) {
+      throw new HttpException(
+        `Failed to search leagues: ${error.message}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get('tournaments/preview')
+  @ApiOperation({ summary: 'Preview fixtures before importing a tournament' })
+  async previewTournamentImport(
+    @Query('leagueId') leagueId: string,
+    @Query('season') season: string,
+  ) {
+    try {
+      return await this.tournamentImport.previewImport(Number(leagueId), Number(season));
+    } catch (error) {
+      throw new HttpException(
+        `Preview failed: ${error.message}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Post('tournaments/import')
+  @ApiOperation({ summary: 'Import all fixtures and teams from a league/season' })
+  async importTournament(@Body() dto: ImportTournamentDto) {
+    try {
+      return await this.tournamentImport.importTournament(
+        dto.leagueId,
+        dto.season,
+        {
+          createTeams: dto.createTeams ?? true,
+          overwriteExisting: dto.overwriteExisting ?? false,
+          dryRun: dto.dryRun ?? false,
+        },
+      );
+    } catch (error) {
+      throw new HttpException(
+        `Import failed: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

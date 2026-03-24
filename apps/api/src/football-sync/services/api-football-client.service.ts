@@ -124,6 +124,44 @@ export class ApiFootballClient {
   }
 
   /**
+   * Search leagues/tournaments available in API-Football
+   */
+  async getLeagues(params: {
+    search?: string;
+    country?: string;
+    current?: boolean;
+    season?: number;
+    id?: number;
+  }): Promise<ApiFootballResponse> {
+    const endpoint = '/leagues';
+    const p: Record<string, unknown> = {};
+    if (params.search) p.search = params.search;
+    if (params.country) p.country = params.country;
+    if (params.current !== undefined) p.current = params.current;
+    if (params.season) p.season = params.season;
+    if (params.id) p.id = params.id;
+    return this.makeRequest(endpoint, p);
+  }
+
+  /**
+   * Get all fixtures for a league + season
+   */
+  async getFixturesByLeague(
+    leagueId: number,
+    season: number,
+    timezone = 'America/Bogota',
+  ): Promise<ApiFootballResponse> {
+    return this.makeRequest('/fixtures', { league: leagueId, season, timezone });
+  }
+
+  /**
+   * Get teams for a league + season
+   */
+  async getTeamsByLeague(leagueId: number, season: number): Promise<ApiFootballResponse> {
+    return this.makeRequest('/teams', { league: leagueId, season });
+  }
+
+  /**
    * Check if API key is configured
    */
   isConfigured(): boolean {

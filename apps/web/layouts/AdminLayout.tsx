@@ -22,8 +22,9 @@ const adminNavItems = [
 
 const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
-    const { user, logout, isSuperAdmin } = useAuthStore();
+    const { user, logout, isSuperAdmin, checkAuth, sessionChecked } = useAuthStore();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+    const hasStoredToken = Boolean(localStorage.getItem('token'));
 
     React.useEffect(() => {
         const token = localStorage.getItem('token');
@@ -31,15 +32,32 @@ const AdminLayout: React.FC = () => {
             navigate('/login');
             return;
         }
+        void checkAuth().then((isAuthenticated) => {
+            if (!isAuthenticated) {
+                navigate('/login');
+            }
+        });
         if (user && !isSuperAdmin()) {
             navigate('/dashboard');
         }
-    }, [navigate, user, isSuperAdmin]);
+    }, [navigate, user, isSuperAdmin, checkAuth]);
 
     const handleLogout = () => {
         logout();
         navigate('/');
     };
+
+    if (hasStoredToken && !sessionChecked) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
+                <div className="rounded-3xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+                    <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-amber-400" />
+                    <p className="mt-4 text-sm font-semibold text-slate-700">Validando tu sesión…</p>
+                    <p className="mt-1 text-xs text-slate-400">Estamos confirmando tus credenciales guardadas.</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex flex-col md:flex-row bg-slate-100">

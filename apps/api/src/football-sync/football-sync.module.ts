@@ -12,12 +12,13 @@ import { ConfigService as FootballConfigService } from './services/config.servic
 import { AdaptiveSyncScheduler } from './schedulers/adaptive-sync.scheduler';
 import { FootballSyncController } from './football-sync.controller';
 import { AdminMonitoringController } from './controllers/admin-monitoring.controller';
+import { TournamentImportService } from './services/tournament-import.service';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     HttpModule.register({
-      timeout: 10000,
+      timeout: 15000,
       maxRedirects: 3,
     }),
     PrismaModule,
@@ -32,7 +33,8 @@ import { AdminMonitoringController } from './controllers/admin-monitoring.contro
     MonitoringService,
     FootballConfigService,
     AdaptiveSyncScheduler,
+    TournamentImportService,
   ],
-  exports: [MatchSyncService, MonitoringService, FootballConfigService],
+  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService],
 })
 export class FootballSyncModule {}

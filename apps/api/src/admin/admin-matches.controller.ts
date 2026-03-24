@@ -69,6 +69,7 @@ export class AdminMatchesController {
         @Query('linked') linked?: string,
         @Query('risk') risk?: 'blocked' | 'failing' | 'healthy',
         @Query('linkSource') linkSource?: 'manual' | 'suggested',
+        @Query('tournamentId') tournamentId?: string,
     ) {
         const skip = (page - 1) * limit;
         const linkSourceMatchIds = linkSource
@@ -97,6 +98,7 @@ export class AdminMatchesController {
             ...(risk === 'failing' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'FAILED' } } } : {}),
             ...(risk === 'healthy' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'SUCCESS' } } } : {}),
             ...(linkSource ? { id: { in: linkSourceMatchIds?.length ? linkSourceMatchIds : ['__none__'] } } : {}),
+            ...(tournamentId ? { tournamentId } : {}),
         };
 
         const [data, total, summaryMatches] = await Promise.all([
@@ -108,6 +110,7 @@ export class AdminMatchesController {
                 include: {
                     homeTeam: true,
                     awayTeam: true,
+                    tournament: { select: { id: true, name: true, logoUrl: true } },
                     syncLogs: {
                         orderBy: { createdAt: 'desc' },
                         take: 1,
@@ -163,8 +166,11 @@ export class AdminMatchesController {
         }, { blocked: 0, failing: 0, healthy: 0, pending: 0 });
 
         return {
-            data: data.map(({ syncLogs, ...match }) => ({
+            data: data.map(({ syncLogs, tournament, ...match }) => ({
                 ...match,
+                tournamentId: tournament?.id ?? null,
+                tournamentName: tournament?.name ?? null,
+                tournamentLogo: tournament?.logoUrl ?? null,
                 lastSyncStatus: syncLogs[0]?.status ?? null,
                 lastSyncMessage: syncLogs[0]?.message ?? null,
                 lastSyncError: syncLogs[0]?.error ?? null,

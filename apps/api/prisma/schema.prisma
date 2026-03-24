@@ -138,6 +138,23 @@ model ScoringRule {
   @@unique([leagueId, ruleType, appliesToPhase])
 }
 
+model Tournament {
+  id                  String   @id @default(cuid())
+  name                String
+  country             String?
+  type                String   @default("KNOCKOUT")
+  logoUrl             String?
+  apiFootballLeagueId Int      @unique
+  season              Int
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  matches             Match[]
+
+  @@index([apiFootballLeagueId])
+  @@index([season])
+}
+
 model Team {
   id                String  @id @default(cuid())
   name              String  @unique
@@ -166,10 +183,13 @@ model Match {
   status      MatchStatus       @default(SCHEDULED)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
-  externalId  String?           @unique
-  lastSyncAt  DateTime?
-  syncCount   Int               @default(0)
-  syncLogs    FootballSyncLog[]
+  externalId    String?           @unique
+  lastSyncAt    DateTime?
+  syncCount     Int               @default(0)
+  tournamentId  String?
+  round         String?
+  syncLogs      FootballSyncLog[]
+  tournament    Tournament?       @relation(fields: [tournamentId], references: [id])
   participationObligations ParticipationObligation[]
   awayTeam    Team              @relation("AwayTeam", fields: [awayTeamId], references: [id])
   homeTeam    Team              @relation("HomeTeam", fields: [homeTeamId], references: [id])
