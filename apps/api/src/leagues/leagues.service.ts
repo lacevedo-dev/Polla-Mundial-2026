@@ -38,12 +38,19 @@ export class LeaguesService {
         });
     }
 
+    private async isSuperAdmin(userId: string): Promise<boolean> {
+        const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { systemRole: true } });
+        return user?.systemRole === 'SUPERADMIN';
+    }
+
     async setLeagueTournament(userId: string, leagueId: string, tournamentId: string | null): Promise<{ ok: boolean }> {
         const member = await this.prisma.leagueMember.findUnique({
             where: { userId_leagueId: { userId, leagueId } },
         });
         if (!member || member.role !== MemberRole.ADMIN) {
-            throw new ForbiddenException('Solo el administrador puede cambiar el torneo de la polla');
+            if (!await this.isSuperAdmin(userId)) {
+                throw new ForbiddenException('Solo el administrador puede cambiar el torneo de la polla');
+            }
         }
 
         if (tournamentId) {
@@ -391,7 +398,9 @@ export class LeaguesService {
             where: { userId_leagueId: { userId, leagueId } },
         });
         if (!member || member.role !== MemberRole.ADMIN) {
-            throw new BadRequestException('No tienes permisos para editar esta liga');
+            if (!await this.isSuperAdmin(userId)) {
+                throw new BadRequestException('No tienes permisos para editar esta liga');
+            }
         }
 
         const { stageFees: sfDto, distributions: distDto, ...scalarFields } = dto;
@@ -439,7 +448,9 @@ export class LeaguesService {
             where: { userId_leagueId: { userId: adminUserId, leagueId } },
         });
         if (!adminMember || adminMember.role !== MemberRole.ADMIN) {
-            throw new BadRequestException('No tienes permisos para eliminar miembros');
+            if (!await this.isSuperAdmin(adminUserId)) {
+                throw new BadRequestException('No tienes permisos para eliminar miembros');
+            }
         }
         await this.prisma.leagueMember.delete({
             where: { userId_leagueId: { userId: targetUserId, leagueId } },
@@ -450,11 +461,15 @@ export class LeaguesService {
     /* ─── League Payment Obligations (admin endpoints) ─────────────────── */
 
     private async assertLeagueAdmin(userId: string, leagueId: string) {
-        const member = await this.prisma.leagueMember.findUnique({
-            where: { userId_leagueId: { userId, leagueId } },
-        });
+        const [member] = await Promise.all([
+            this.prisma.leagueMember.findUnique({
+                where: { userId_leagueId: { userId, leagueId } },
+            }),
+        ]);
         if (!member || member.role !== MemberRole.ADMIN) {
-            throw new ForbiddenException('Solo el administrador de la polla puede gestionar los pagos');
+            if (!await this.isSuperAdmin(userId)) {
+                throw new ForbiddenException('Solo el administrador de la polla puede gestionar los pagos');
+            }
         }
     }
 

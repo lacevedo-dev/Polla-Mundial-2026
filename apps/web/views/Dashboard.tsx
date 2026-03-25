@@ -1280,6 +1280,7 @@ const LeagueConfigModal: React.FC<{
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
+    const isSuperAdmin = useAuthStore((state) => state.isSuperAdmin);
     const activeLeague = useLeagueStore((state) => state.activeLeague);
     const myLeagues = useLeagueStore((state) => state.myLeagues);
     const leagueLoading = useLeagueStore((state) => state.isLoading);
@@ -1308,7 +1309,7 @@ const Dashboard: React.FC = () => {
     const [scoringTab, setScoringTab] = useState<'resultado' | 'bonos' | 'desempate'>('resultado');
 
     const isLoading = leagueLoading || dashboardLoading;
-    const isRealAdmin = activeLeague?.role === 'ADMIN';
+    const isRealAdmin = activeLeague?.role === 'ADMIN' || isSuperAdmin();
     const isAdmin = isRealAdmin && !spectatorMode;
 
     const upcomingMatches = useMemo(() => matches.filter(m => m.status === 'open').slice(0, 3), [matches]);

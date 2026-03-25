@@ -407,6 +407,24 @@ const AdminMatches: React.FC = () => {
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
   const [showImportTournament, setShowImportTournament] = React.useState(false);
+  const [recalculating, setRecalculating] = React.useState(false);
+  const [recalcResult, setRecalcResult] = React.useState<{ total: number; processed: number; errors: { matchId: string; error: string }[] } | null>(null);
+
+  const handleRecalculateAll = React.useCallback(async () => {
+    if (!window.confirm('¿Recalcular puntos de todos los partidos finalizados? Esto puede tomar unos segundos.')) return;
+    setRecalculating(true);
+    setRecalcResult(null);
+    try {
+      const { request } = await import('../../api');
+      const result = await request<{ total: number; processed: number; errors: { matchId: string; error: string }[] }>(
+        '/admin/matches/recalculate-all',
+        { method: 'POST' },
+      );
+      setRecalcResult(result);
+    } finally {
+      setRecalculating(false);
+    }
+  }, []);
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
 
   React.useEffect(() => {
@@ -431,7 +449,15 @@ const AdminMatches: React.FC = () => {
           <h1 className="font-brand text-2xl font-black uppercase tracking-tight text-slate-900">Partidos</h1>
           <p className="mt-1 text-sm text-slate-500">{total.toLocaleString()} partidos</p>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleRecalculateAll}
+            disabled={recalculating}
+            className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-lime-300 bg-lime-50 px-4 py-2.5 text-sm font-bold text-lime-800 transition-all hover:bg-lime-100 disabled:opacity-60 sm:w-auto"
+          >
+            {recalculating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Recalcular puntos
+          </button>
           <button onClick={() => setShowImportTournament(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition-all hover:bg-amber-100 sm:w-auto">
             <Trophy size={16} /> Importar torneo
           </button>
@@ -439,6 +465,12 @@ const AdminMatches: React.FC = () => {
             <Plus size={16} /> Nuevo partido
           </button>
         </div>
+        {recalcResult && (
+          <div className={`mt-2 rounded-xl px-4 py-2.5 text-sm font-medium ${recalcResult.errors.length ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-lime-50 text-lime-700 border border-lime-200'}`}>
+            ✓ {recalcResult.processed}/{recalcResult.total} partidos recalculados.
+            {recalcResult.errors.length > 0 && ` ${recalcResult.errors.length} errores.`}
+          </div>
+        )}
       </div>
 
       <section aria-label="Resumen operativo" className="grid grid-cols-2 gap-3 lg:grid-cols-4">

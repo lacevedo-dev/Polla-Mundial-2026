@@ -16,9 +16,10 @@ import { UsersModule } from '../users/users.module';
 import { MatchesModule } from '../matches/matches.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PredictionsModule } from '../predictions/predictions.module';
 
 @Module({
-    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule],
+    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule, PredictionsModule],
     controllers: [
         AdminStatsController,
         AdminUsersController,

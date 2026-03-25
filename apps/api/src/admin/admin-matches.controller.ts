@@ -11,6 +11,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { MatchesService } from '../matches/matches.service';
+import { PredictionsService } from '../predictions/predictions.service';
 
 export class AdminCreateMatchDto {
     @IsString() homeTeamId: string;
@@ -48,6 +49,7 @@ export class AdminMatchesController {
     constructor(
         private readonly prisma: PrismaService,
         private readonly matchesService: MatchesService,
+        private readonly predictionsService: PredictionsService,
     ) {}
 
     private parseAuditDetail(detail?: string | null) {
@@ -241,6 +243,41 @@ export class AdminMatchesController {
     @ApiOperation({ summary: 'Update match score and trigger points calculation' })
     async updateScore(@Param('id') id: string, @Body() dto: AdminUpdateScoreDto) {
         return this.matchesService.updateScore(id, dto);
+    }
+
+    @Post('recalculate-all')
+    @ApiOperation({ summary: 'Recalculate points for all finished matches' })
+    async recalculateAll() {
+        const finishedMatches = await this.prisma.match.findMany({
+            where: { status: 'FINISHED', homeScore: { not: null }, awayScore: { not: null } },
+            select: { id: true, phase: true },
+            orderBy: { matchDate: 'asc' },
+        });
+
+        let processed = 0;
+        const errors: { matchId: string; error: string }[] = [];
+
+        for (const match of finishedMatches) {
+            try {
+                await this.predictionsService.calculateMatchPoints(match.id);
+                await this.predictionsService.calculatePhaseBonuses(match.id);
+                processed++;
+            } catch (err) {
+                errors.push({ matchId: match.id, error: err instanceof Error ? err.message : String(err) });
+            }
+        }
+
+        return { total: finishedMatches.length, processed, errors };
+    }
+
+    @Post(':id/recalculate')
+    @ApiOperation({ summary: 'Recalculate points for a single finished match' })
+    async recalculateOne(@Param('id') id: string) {
+        const match = await this.prisma.match.findUnique({ where: { id } });
+        if (!match) throw new NotFoundException('Partido no encontrado');
+        await this.predictionsService.calculateMatchPoints(id);
+        await this.predictionsService.calculatePhaseBonuses(id);
+        return { ok: true, matchId: id };
     }
 
     @Delete(':id')
