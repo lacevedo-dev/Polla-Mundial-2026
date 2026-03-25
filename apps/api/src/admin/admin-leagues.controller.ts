@@ -3,8 +3,9 @@ import {
     NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { LeagueStatus, Plan, MemberStatus } from '@prisma/client';
-import { IsOptional, IsEnum, IsString } from 'class-validator';
+import { LeagueStatus, Plan, MemberStatus, ScoringType } from '@prisma/client';
+import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -214,5 +215,34 @@ export class AdminLeaguesController {
 
         await this.prisma.league.update({ where: { id }, data: { primaryTournamentId: tournamentId } });
         return { message: 'Torneo principal actualizado' };
+    }
+
+    /* ── Scoring rules ── */
+
+    @Get(':id/scoring-rules')
+    @ApiOperation({ summary: 'Get scoring rules for a league' })
+    async getScoringRules(@Param('id') id: string) {
+        return this.prisma.scoringRule.findMany({
+            where: { leagueId: id },
+            orderBy: { ruleType: 'asc' },
+        });
+    }
+
+    @Patch(':id/scoring-rules')
+    @ApiOperation({ summary: 'Update scoring rules for a league' })
+    async updateScoringRules(
+        @Param('id') id: string,
+        @Body() body: { rules: { ruleType: string; points: number }[] },
+    ) {
+        for (const rule of body.rules) {
+            await this.prisma.scoringRule.updateMany({
+                where: { leagueId: id, ruleType: rule.ruleType as ScoringType },
+                data: { points: rule.points },
+            });
+        }
+        return this.prisma.scoringRule.findMany({
+            where: { leagueId: id },
+            orderBy: { ruleType: 'asc' },
+        });
     }
 }

@@ -49,13 +49,19 @@ const PodiumFirst: React.FC<{ player: LeaderboardRow }> = ({ player }) => (
                     <Trophy className="h-5 w-5 text-slate-900" />
                 </div>
             </div>
-            <h3 className="truncate text-xl font-black text-white">{player.name}</h3>
+            <div className="flex items-center justify-center gap-1.5">
+                <h3 className="truncate text-xl font-black text-white">{player.name}</h3>
+                {player.hasChampion && <Trophy className="h-4 w-4 flex-shrink-0 text-amber-400" title="Acertó el campeón" />}
+            </div>
             <p className="mb-5 text-[10px] font-bold uppercase tracking-[0.2em] text-lime-400/60">@{player.username}</p>
             <div className="flex items-center justify-center gap-3">
                 <span className="text-5xl font-black text-white">{player.points}</span>
                 <div className="text-left">
                     <p className="text-[10px] font-black uppercase leading-none text-lime-400">Puntos</p>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Líder</p>
+                    {(player.phaseBonusPoints ?? 0) > 0
+                        ? <p className="text-[9px] font-bold text-amber-400/80">+{player.phaseBonusPoints} bono</p>
+                        : <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Líder</p>
+                    }
                 </div>
             </div>
         </div>
@@ -77,11 +83,19 @@ const PodiumSecond: React.FC<{ player: LeaderboardRow }> = ({ player }) => (
                     <Medal className="h-4 w-4 text-slate-400" />
                 </div>
             </div>
-            <h3 className="truncate text-lg font-black text-slate-900">{player.name}</h3>
+            <div className="flex items-center justify-center gap-1">
+                <h3 className="truncate text-lg font-black text-slate-900">{player.name}</h3>
+                {player.hasChampion && <Trophy className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" title="Acertó el campeón" />}
+            </div>
             <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">@{player.username}</p>
             <div className="flex items-center justify-center gap-2">
                 <span className="text-3xl font-black text-slate-900">{player.points}</span>
-                <span className="text-[10px] font-black uppercase text-slate-400">pts</span>
+                <div className="text-left">
+                    <span className="text-[10px] font-black uppercase text-slate-400">pts</span>
+                    {(player.phaseBonusPoints ?? 0) > 0 && (
+                        <p className="text-[9px] font-bold text-amber-500">+{player.phaseBonusPoints} bono</p>
+                    )}
+                </div>
             </div>
             <div className="mt-4 flex items-center justify-between border-t border-slate-50 pt-3 text-[10px] font-black uppercase tracking-tighter text-slate-400">
                 <span>#{player.rank} Lugar</span>
@@ -106,11 +120,19 @@ const PodiumThird: React.FC<{ player: LeaderboardRow }> = ({ player }) => (
                     <Medal className="h-4 w-4 text-orange-400" />
                 </div>
             </div>
-            <h3 className="truncate text-lg font-black text-slate-900">{player.name}</h3>
+            <div className="flex items-center justify-center gap-1">
+                <h3 className="truncate text-lg font-black text-slate-900">{player.name}</h3>
+                {player.hasChampion && <Trophy className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" title="Acertó el campeón" />}
+            </div>
             <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">@{player.username}</p>
             <div className="flex items-center justify-center gap-2">
                 <span className="text-3xl font-black text-slate-900">{player.points}</span>
-                <span className="text-[10px] font-black uppercase text-slate-400">pts</span>
+                <div className="text-left">
+                    <span className="text-[10px] font-black uppercase text-slate-400">pts</span>
+                    {(player.phaseBonusPoints ?? 0) > 0 && (
+                        <p className="text-[9px] font-bold text-amber-500">+{player.phaseBonusPoints} bono</p>
+                    )}
+                </div>
             </div>
             <div className="mt-4 flex items-center justify-between border-t border-slate-50 pt-3 text-[10px] font-black uppercase tracking-tighter text-slate-400">
                 <span>#{player.rank} Lugar</span>
@@ -344,7 +366,10 @@ const Ranking: React.FC = () => {
                                                         className="h-10 w-10 flex-shrink-0 rounded-2xl object-cover ring-2 ring-white shadow-sm"
                                                     />
                                                     <div className="min-w-0">
-                                                        <p className="truncate font-black text-slate-900">{player.name}</p>
+                                                        <div className="flex items-center gap-1">
+                                                            <p className="truncate font-black text-slate-900">{player.name}</p>
+                                                            {player.hasChampion && <Trophy className="h-3 w-3 flex-shrink-0 text-amber-400" title="Acertó el campeón" />}
+                                                        </div>
                                                         <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">@{player.username}</p>
                                                     </div>
                                                 </div>
@@ -353,7 +378,10 @@ const Ranking: React.FC = () => {
                                                 </div>
                                                 <div className="text-right">
                                                     <span className="text-xl font-black leading-none text-lime-600">{player.points}</span>
-                                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">pts</p>
+                                                    {(player.phaseBonusPoints ?? 0) > 0
+                                                        ? <p className="text-[9px] font-bold text-amber-500">+{player.phaseBonusPoints} bono</p>
+                                                        : <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">pts</p>
+                                                    }
                                                 </div>
                                             </motion.article>
                                         ))}

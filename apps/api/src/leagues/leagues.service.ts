@@ -16,9 +16,15 @@ export class LeaguesService {
     ) { }
 
     private static readonly DEFAULT_SCORING_RULES = [
-        { ruleType: ScoringType.EXACT_SCORE, points: 5, description: 'Marcador exacto' },
-        { ruleType: ScoringType.CORRECT_DIFF, points: 3, description: 'Misma diferencia de goles' },
-        { ruleType: ScoringType.CORRECT_WINNER, points: 2, description: 'Solo ganador/empate' },
+        { ruleType: ScoringType.EXACT_SCORE,       points: 5, description: 'Marcador exacto' },
+        { ruleType: ScoringType.CORRECT_WINNER,    points: 2, description: 'Ganador / empate correcto' },
+        { ruleType: ScoringType.TEAM_GOALS,        points: 1, description: 'Gol acertado (al menos un equipo)' },
+        { ruleType: ScoringType.UNIQUE_PREDICTION, points: 5, description: 'Predicción única en la liga' },
+        { ruleType: ScoringType.PHASE_BONUS_R32,   points: 0, description: 'Bono clasificados Fase 32' },
+        { ruleType: ScoringType.PHASE_BONUS_R16,   points: 8, description: 'Bono clasificados Octavos' },
+        { ruleType: ScoringType.PHASE_BONUS_QF,    points: 4, description: 'Bono clasificados Cuartos' },
+        { ruleType: ScoringType.PHASE_BONUS_SF,    points: 2, description: 'Bono clasificados Semifinal' },
+        { ruleType: ScoringType.PHASE_BONUS_FINAL, points: 5, description: 'Bono Campeón (Final)' },
     ] as const;
 
     private generateUniqueCode(): string {

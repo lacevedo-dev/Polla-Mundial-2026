@@ -16,6 +16,26 @@ interface AvailableTournament {
     active: boolean;
 }
 
+interface ScoringRule {
+    id: string;
+    ruleType: string;
+    points: number;
+    description?: string;
+}
+
+const RULE_LABELS: Record<string, string> = {
+    EXACT_SCORE:       'Marcador exacto',
+    CORRECT_WINNER:    'Ganador / empate correcto',
+    TEAM_GOALS:        'Gol acertado (al menos un equipo)',
+    UNIQUE_PREDICTION: 'Predicción única en la liga',
+    PHASE_BONUS_R32:   'Bono clasificados — Fase 32',
+    PHASE_BONUS_R16:   'Bono clasificados — Octavos',
+    PHASE_BONUS_QF:    'Bono clasificados — Cuartos de final',
+    PHASE_BONUS_SF:    'Bono clasificados — Semifinal',
+    PHASE_BONUS_FINAL: 'Bono Campeón — Final',
+    CORRECT_DIFF:      'Diferencia de goles correcta (obsoleto)',
+};
+
 const STATUSES = ['SETUP', 'ACTIVE', 'PAUSED', 'FINISHED', 'CANCELLED'];
 
 const AdminLeagueDetail: React.FC = () => {
@@ -30,6 +50,10 @@ const AdminLeagueDetail: React.FC = () => {
     const [allTournaments, setAllTournaments] = React.useState<AvailableTournament[]>([]);
     const [loadingTournaments, setLoadingTournaments] = React.useState(false);
 
+    const [scoringRules, setScoringRules] = React.useState<ScoringRule[]>([]);
+    const [rulesEdited, setRulesEdited] = React.useState<Record<string, number>>({});
+    const [savingRules, setSavingRules] = React.useState(false);
+
     React.useEffect(() => {
         if (id) {
             fetchLeague(id);
@@ -40,6 +64,14 @@ const AdminLeagueDetail: React.FC = () => {
             );
         }
     }, [id, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments]);
+
+    // Load scoring rules
+    React.useEffect(() => {
+        if (!id) return;
+        request<ScoringRule[]>(`/admin/leagues/${id}/scoring-rules`)
+            .then((rules) => { setScoringRules(rules); setRulesEdited({}); })
+            .catch(() => null);
+    }, [id]);
 
     // Load all available tournaments for the picker
     React.useEffect(() => {
@@ -58,6 +90,22 @@ const AdminLeagueDetail: React.FC = () => {
         if (!id) return;
         await updateLeague(id, { status });
         setIsDirty(false);
+    };
+
+    const handleSaveRules = async () => {
+        if (!id || Object.keys(rulesEdited).length === 0) return;
+        setSavingRules(true);
+        try {
+            const rules = Object.entries(rulesEdited).map(([ruleType, points]) => ({ ruleType, points }));
+            const updated = await request<ScoringRule[]>(`/admin/leagues/${id}/scoring-rules`, {
+                method: 'PATCH',
+                body: JSON.stringify({ rules }),
+            });
+            setScoringRules(updated);
+            setRulesEdited({});
+        } finally {
+            setSavingRules(false);
+        }
     };
 
     if (isLoading && !selectedLeague) {
@@ -104,6 +152,7 @@ const AdminLeagueDetail: React.FC = () => {
                         { value: 'info', label: 'Información' },
                         { value: 'tournaments', label: 'Torneos' },
                         { value: 'members', label: 'Miembros' },
+                        { value: 'rules', label: 'Reglas' },
                     ].map((tab) => (
                         <TabsPrimitive.Trigger
                             key={tab.value}
@@ -272,6 +321,62 @@ const AdminLeagueDetail: React.FC = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </TabsPrimitive.Content>
+
+                <TabsPrimitive.Content value="rules">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Puntuación</p>
+                                <p className="text-sm text-slate-500 mt-0.5">Los cambios aplican al próximo cálculo de puntos.</p>
+                            </div>
+                            {Object.keys(rulesEdited).length > 0 && (
+                                <button
+                                    onClick={handleSaveRules}
+                                    disabled={savingRules}
+                                    className="px-5 py-2 bg-amber-400 text-slate-950 font-bold rounded-xl text-sm hover:bg-amber-500 disabled:opacity-60 transition-all"
+                                >
+                                    {savingRules ? 'Guardando...' : 'Guardar cambios'}
+                                </button>
+                            )}
+                        </div>
+                        <div className="overflow-hidden rounded-2xl border border-slate-100">
+                            <div className="grid grid-cols-[1fr_80px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-100">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Regla</p>
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 text-right">Puntos</p>
+                            </div>
+                            {scoringRules.map((rule) => {
+                                const currentPoints = rulesEdited[rule.ruleType] ?? rule.points;
+                                const isChanged = rulesEdited[rule.ruleType] !== undefined;
+                                return (
+                                    <div key={rule.id} className="grid grid-cols-[1fr_80px] gap-4 px-4 py-3 items-center border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50">
+                                        <div>
+                                            <p className={`text-sm font-bold ${rule.ruleType === 'CORRECT_DIFF' ? 'text-slate-300 line-through' : 'text-slate-800'}`}>
+                                                {RULE_LABELS[rule.ruleType] ?? rule.ruleType}
+                                            </p>
+                                            {rule.description && rule.description !== RULE_LABELS[rule.ruleType] && (
+                                                <p className="text-[10px] text-slate-400 mt-0.5">{rule.description}</p>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={50}
+                                            value={currentPoints}
+                                            onChange={(e) => setRulesEdited((prev) => ({ ...prev, [rule.ruleType]: Number(e.target.value) }))}
+                                            disabled={rule.ruleType === 'CORRECT_DIFF'}
+                                            className={`w-full rounded-xl border px-2 py-1.5 text-right text-sm font-black transition-all outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-30 disabled:cursor-not-allowed ${
+                                                isChanged ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-900'
+                                            }`}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {scoringRules.length === 0 && (
+                            <p className="text-sm text-slate-400 text-center py-4">Cargando reglas...</p>
+                        )}
                     </div>
                 </TabsPrimitive.Content>
 
