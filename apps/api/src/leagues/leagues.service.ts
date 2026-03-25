@@ -214,7 +214,14 @@ export class LeaguesService {
             throw new BadRequestException('No tienes acceso a esta liga');
         }
 
-        return league;
+        // Ensure the current user's member entry is first so the frontend
+        // adapter (members[0].role) picks up the correct role for this user.
+        const sortedMembers = [
+            ...league.members.filter((m) => m.userId === userId),
+            ...league.members.filter((m) => m.userId !== userId),
+        ];
+
+        return { ...league, members: sortedMembers };
     }
 
     async findPublicLeagues(userId: string) {
