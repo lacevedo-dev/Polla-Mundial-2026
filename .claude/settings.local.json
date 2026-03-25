@@ -48,7 +48,10 @@
       "Bash(find D:Proyectospolla-uiappswebcomponents -type f -name *payment* -o -name *admin*)",
       "Bash(find D:/Proyectos/polla-ui -name *.prisma -type f)",
       "Bash(npx prisma:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(git add:*)",
+      "Bash(ls D:/Proyectos/polla-ui/apps/web/stores/admin*.ts)",
+      "Bash(find D:/Proyectos/polla-ui/apps/web -name router* -o -name routes*)"
     ]
   }
 }
