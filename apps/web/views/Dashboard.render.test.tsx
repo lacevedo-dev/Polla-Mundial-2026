@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import { useAuthStore } from '../stores/auth.store';
@@ -40,6 +40,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
                 baseFee: 0,
                 currency: 'COP',
                 plan: 'FREE',
+                closePredictionMinutes: 15,
             },
             stats: {
                 memberCount: 4,
@@ -82,7 +83,24 @@ describe('Dashboard render stability', () => {
         });
 
         useLeagueStore.setState({
-            activeLeague: null,
+            activeLeague: {
+                id: 'league-1',
+                name: 'Liga Test',
+                description: 'Liga para prueba',
+                code: 'TEST123',
+                status: 'ACTIVE',
+                role: 'ADMIN',
+                settings: {
+                    maxParticipants: 20,
+                    baseFee: 0,
+                    currency: 'COP',
+                    plan: 'FREE',
+                    closePredictionMinutes: 15,
+                },
+                stats: {
+                    memberCount: 4,
+                },
+            },
             myLeagues: [
                 {
                     id: 'league-1',
@@ -134,6 +152,7 @@ describe('Dashboard render stability', () => {
     });
 
     afterEach(() => {
+        cleanup();
         vi.unstubAllGlobals();
         fetchMock.mockClear();
         useDashboardStore.getState().reset();
@@ -161,9 +180,9 @@ describe('Dashboard render stability', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText('Dashboard')).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Liga Test' })).toBeTruthy();
         });
 
-        expect(screen.getByText(/Bienvenido, Test User/)).toBeInTheDocument();
+        expect(screen.getByText(/Código TEST123/i)).toBeTruthy();
     });
 });

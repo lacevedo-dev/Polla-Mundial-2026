@@ -37,7 +37,7 @@ import {
 import { request } from '../api';
 import { resolveApiAssetUrl } from '../api';
 import { useLeagueStore } from '../stores/league.store';
-import { usePredictionStore } from '../stores/prediction.store';
+import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
@@ -82,6 +82,56 @@ const fade = (delay = 0) => ({
     animate: { opacity: 1, y: 0 },
     transition: { duration: 0.3, ease: 'easeOut' as const, delay },
 });
+
+function getClosePredictionMinutes(closePredictionMinutes?: number | null): number {
+    if (typeof closePredictionMinutes !== 'number' || !Number.isFinite(closePredictionMinutes)) {
+        return 15;
+    }
+
+    return Math.max(0, closePredictionMinutes);
+}
+
+function getPredictionCloseTime(matchDate: string, closePredictionMinutes?: number | null): number {
+    return new Date(matchDate).getTime() - getClosePredictionMinutes(closePredictionMinutes) * 60_000;
+}
+
+function isPredictionWindowClosed(
+    matchDate: string,
+    closePredictionMinutes?: number | null,
+    now = Date.now(),
+): boolean {
+    return now > getPredictionCloseTime(matchDate, closePredictionMinutes);
+}
+
+function summarizeCloseTime(
+    matchDate: string,
+    closePredictionMinutes?: number | null,
+    now = Date.now(),
+): string {
+    const diffMs = getPredictionCloseTime(matchDate, closePredictionMinutes) - now;
+
+    if (!Number.isFinite(diffMs) || diffMs <= 0) {
+        return 'Cerrado';
+    }
+
+    const totalMinutes = Math.round(diffMs / 60_000);
+
+    if (totalMinutes < 60) {
+        return `${totalMinutes} min`;
+    }
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+}
+
+function formatMatchTime(date: string): string {
+    return new Intl.DateTimeFormat('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(new Date(date));
+}
 
 /* ─── Invite Modal ─────────────────────────────────────────────── */
 
@@ -1307,13 +1357,14 @@ const Dashboard: React.FC = () => {
     const [quickPreds, setQuickPreds] = useState<Record<string, { home: string; away: string }>>({});
     const [savingMatchId, setSavingMatchId] = useState<string | null>(null);
     const [scoringTab, setScoringTab] = useState<'resultado' | 'bonos' | 'desempate'>('resultado');
+    const [currentTime, setCurrentTime] = useState(() => Date.now());
 
     const isLoading = leagueLoading || dashboardLoading;
     const isRealAdmin = activeLeague?.role === 'ADMIN' || isSuperAdmin();
     const isAdmin = isRealAdmin && !spectatorMode;
 
-    const upcomingMatches = useMemo(() => matches.filter(m => m.status === 'open').slice(0, 3), [matches]);
-    const nextUnsaved = useMemo(() => matches.find(m => m.status === 'open' && !m.saved), [matches]);
+    const upcomingMatches = useMemo(() => matches.filter((m) => m.status === 'open').slice(0, 3), [matches]);
+    const nextUnsaved = useMemo(() => matches.find((m) => m.status === 'open' && !m.saved), [matches]);
     const topPlayers = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
 
     // My position in leaderboard
@@ -1350,6 +1401,26 @@ const Dashboard: React.FC = () => {
         return suffix.length > 0 ? `${league.name} · ${suffix.join(' · ')}` : league.name;
     }, []);
 
+    const buildLeagueMeta = useCallback((league?: {
+        code?: string;
+        stats?: { memberCount?: number; points?: number };
+    } | null) => {
+        if (!league) return [] as string[];
+        const meta: string[] = [];
+        if (league.code) meta.push(`Código ${league.code}`);
+        if (typeof league.stats?.memberCount === 'number') meta.push(`${league.stats.memberCount} participantes`);
+        if (typeof league.stats?.points === 'number' && league.stats.points > 0) meta.push(`${league.stats.points} pts`);
+        return meta;
+    }, []);
+
+    const getQuickDraft = useCallback((match: MatchViewModel) => {
+        const draft = quickPreds[match.id];
+        return {
+            home: draft?.home ?? match.prediction.home ?? '',
+            away: draft?.away ?? match.prediction.away ?? '',
+        };
+    }, [quickPreds]);
+
     const handleDashboardRetry = useCallback(() => {
         void fetchDashboardData(true);
     }, [fetchDashboardData]);
@@ -1366,6 +1437,11 @@ const Dashboard: React.FC = () => {
     }, [fetchMyLeagues, myLeagues.length]);
 
     useEffect(() => {
+        const interval = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
+        return () => window.clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
         if (!activeLeague?.id) { resetLeagueData(); return; }
         setError(null);
         void Promise.all([
@@ -1377,17 +1453,25 @@ const Dashboard: React.FC = () => {
         });
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
 
-    const handleQuickSave = async (matchId: string) => {
+    const handleQuickSave = async (match: MatchViewModel) => {
         if (!activeLeague?.id) return;
-        const pred = quickPreds[matchId];
+        const pred = getQuickDraft(match);
         const home = parseInt(pred?.home ?? '0', 10);
         const away = parseInt(pred?.away ?? '0', 10);
         if (isNaN(home) || isNaN(away)) return;
-        setSavingMatchId(matchId);
+        if (isPredictionWindowClosed(match.date, activeLeague?.settings?.closePredictionMinutes, currentTime)) {
+            setError('La ventana para cambiar este pronóstico ya cerró.');
+            return;
+        }
+
+        setSavingMatchId(match.id);
         try {
-            await savePrediction(activeLeague.id, matchId, home, away);
+            await savePrediction(activeLeague.id, match.id, home, away);
             await fetchLeagueMatches(activeLeague.id);
-            setQuickPreds((p) => { const n = { ...p }; delete n[matchId]; return n; });
+            setQuickPreds((p) => { const n = { ...p }; delete n[match.id]; return n; });
+            setError(null);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'No fue posible guardar el pronóstico.');
         } finally {
             setSavingMatchId(null);
         }
@@ -1498,11 +1582,18 @@ const Dashboard: React.FC = () => {
                     <div className="relative">
                         <button
                             onClick={() => setLeagueDropOpen((v) => !v)}
-                            className="flex items-center gap-2 group"
+                            className="flex items-start gap-2 text-left group"
                         >
-                            <h1 className="text-3xl font-black font-brand uppercase tracking-tight text-slate-900 sm:text-4xl group-hover:text-lime-700 transition-colors leading-none">
-                                {activeLeague ? buildLeagueLabel(activeLeague) : 'Sin liga'}
-                            </h1>
+                            <div className="space-y-1">
+                                <h1 className="text-3xl font-black font-brand uppercase tracking-tight text-slate-900 sm:text-4xl group-hover:text-lime-700 transition-colors leading-none">
+                                    {activeLeague?.name ?? 'Sin liga'}
+                                </h1>
+                                {activeLeague && buildLeagueMeta(activeLeague).length > 0 ? (
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">
+                                        {buildLeagueMeta(activeLeague).join(' · ')}
+                                    </p>
+                                ) : null}
+                            </div>
                             <motion.div animate={{ rotate: leagueDropOpen ? 180 : 0 }} transition={{ duration: 0.2 }} className="mt-1">
                                 <ChevronDown size={20} className="text-slate-400 group-hover:text-lime-600 transition-colors" />
                             </motion.div>
@@ -2029,11 +2120,14 @@ const Dashboard: React.FC = () => {
                             <div className="space-y-2">
                                 {predictions.slice(0, 3).map((p, i) => {
                                     const isPending = p.resultado === 'Pendiente' || !p.resultado;
+                                    const hasPoints = p.puntos > 0;
                                     const badge = isPending
                                         ? { label: 'Pendiente', cls: 'bg-slate-100 text-slate-500' }
                                         : p.acierto
-                                        ? { label: 'Acierto', cls: 'bg-lime-100 text-lime-700' }
-                                        : { label: 'Fallo', cls: 'bg-rose-100 text-rose-700' };
+                                        ? { label: 'Exacto', cls: 'bg-lime-100 text-lime-700' }
+                                        : hasPoints
+                                        ? { label: `+${p.puntos} pts`, cls: 'bg-amber-100 text-amber-700' }
+                                        : { label: 'Sin puntos', cls: 'bg-rose-100 text-rose-700' };
                                     return (
                                         <motion.div
                                             key={p.id}
@@ -2043,7 +2137,7 @@ const Dashboard: React.FC = () => {
                                             className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-3 ${
                                                 isPending ? 'border-slate-100 bg-slate-50'
                                                 : p.acierto ? 'border-lime-100 bg-lime-50/50'
-                                                : 'border-rose-100 bg-rose-50/40'
+                                                : hasPoints ? 'border-amber-100 bg-amber-50/50' : 'border-rose-100 bg-rose-50/40'
                                             }`}
                                         >
                                             <div className="min-w-0 flex-1">
@@ -2052,6 +2146,11 @@ const Dashboard: React.FC = () => {
                                                     <span className="text-[10px] font-bold text-slate-400">Mi pronóstico: <span className="text-slate-600">{p.tuPrediccion}</span></span>
                                                     {!isPending && (
                                                         <span className="text-[10px] font-bold text-slate-400">Resultado: <span className="text-slate-600">{p.resultado}</span></span>
+                                                    )}
+                                                    {!isPending && (
+                                                        <span className={`text-[10px] font-black ${hasPoints ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                            {hasPoints ? `Sumó ${p.puntos} pts` : 'No sumó puntos'}
+                                                        </span>
                                                     )}
                                                     <span className="text-[9px] text-slate-300">{p.fecha}</span>
                                                 </div>
@@ -2134,90 +2233,193 @@ const Dashboard: React.FC = () => {
 
                         {upcomingMatches.length > 0 ? (
                             <div className="space-y-3">
-                                {upcomingMatches.map((match, i) => (
-                                    <motion.div
-                                        key={match.id}
-                                        initial={{ opacity: 0, y: 6 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: 0.1 + i * 0.07 }}
-                                        className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3"
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                                                {safeText(match.displayDate, match.date)}
-                                            </p>
-                                            {match.saved ? (
-                                                <span className="flex items-center gap-1 rounded-full bg-lime-100 px-2 py-0.5 text-[9px] font-black uppercase text-lime-700">
-                                                    <CheckCircle2 size={10} /> Ok
+                                {upcomingMatches.map((match, i) => {
+                                    const draft = getQuickDraft(match);
+                                    const canEdit = !isPredictionWindowClosed(
+                                        match.date,
+                                        activeLeague?.settings?.closePredictionMinutes,
+                                        currentTime,
+                                    );
+                                    const isDirty =
+                                        draft.home !== (match.prediction.home ?? '') ||
+                                        draft.away !== (match.prediction.away ?? '');
+                                    const hasDraftValues = draft.home !== '' && draft.away !== '';
+
+                                    return (
+                                        <motion.div
+                                            key={match.id}
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: 0.1 + i * 0.07 }}
+                                            className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4 shadow-sm shadow-slate-100"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                                                        {safeText(match.displayDate, match.date)}
+                                                    </p>
+                                                    <p className="mt-1 text-xs font-black text-slate-900">{formatMatchTime(match.date)}</p>
+                                                </div>
+                                                <span
+                                                    className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${
+                                                        !canEdit
+                                                            ? 'bg-slate-200 text-slate-600'
+                                                            : isDirty
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : match.saved
+                                                            ? 'bg-lime-100 text-lime-700'
+                                                            : 'bg-amber-100 text-amber-700'
+                                                    }`}
+                                                >
+                                                    {!canEdit ? 'Cerrado' : isDirty ? 'Sin guardar' : match.saved ? 'Guardado' : 'Activo'}
                                                 </span>
-                                            ) : (
-                                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700">Activo</span>
-                                            )}
-                                        </div>
-
-                                        {/* Teams + score inputs */}
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="text-center flex-1">
-                                                <p className="text-xl font-black uppercase text-slate-900 leading-none">{match.homeTeam?.slice(0, 3) || '???'}</p>
-                                                <p className="text-[9px] text-slate-400 mt-0.5 truncate">{match.homeTeam}</p>
                                             </div>
 
-                                            {!match.saved ? (
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="number"
-                                                        min={0} max={99}
-                                                        value={quickPreds[match.id]?.home ?? '0'}
-                                                        onChange={(e) => setQuickPreds((p) => ({ ...p, [match.id]: { home: e.target.value, away: p[match.id]?.away ?? '0' } }))}
-                                                        className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-center text-sm font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
-                                                    />
-                                                    <span className="text-slate-300 font-bold">-</span>
-                                                    <input
-                                                        type="number"
-                                                        min={0} max={99}
-                                                        value={quickPreds[match.id]?.away ?? '0'}
-                                                        onChange={(e) => setQuickPreds((p) => ({ ...p, [match.id]: { home: p[match.id]?.home ?? '0', away: e.target.value } }))}
-                                                        className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-center text-sm font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-lime-400"
-                                                    />
+                                            <div className="mt-3 flex items-center justify-between gap-2">
+                                                <div className="min-w-0 flex-1 text-left">
+                                                    <div className="flex items-center gap-2">
+                                                        <img src={match.homeFlag} alt={`Bandera de ${match.homeTeam}`} className="h-5 w-7 rounded-md object-cover shadow-sm" />
+                                                        <p className="truncate text-base font-black uppercase text-slate-900 sm:text-lg">{match.homeTeamCode}</p>
+                                                    </div>
+                                                    <p className="mt-1 truncate text-[10px] text-slate-400">{match.homeTeam}</p>
                                                 </div>
-                                            ) : (
-                                                <div className="flex items-center gap-1 text-slate-400">
-                                                    <span className="text-sm font-black">{match.prediction.home}</span>
-                                                    <span className="text-xs">-</span>
-                                                    <span className="text-sm font-black">{match.prediction.away}</span>
-                                                </div>
-                                            )}
 
-                                            <div className="text-center flex-1">
-                                                <p className="text-xl font-black uppercase text-slate-900 leading-none">{match.awayTeam?.slice(0, 3) || '???'}</p>
-                                                <p className="text-[9px] text-slate-400 mt-0.5 truncate">{match.awayTeam}</p>
+                                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                                    {(['home', 'away'] as const).map((side, scoreIndex) => (
+                                                        <React.Fragment key={side}>
+                                                            <div className="sm:hidden">
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={99}
+                                                                    inputMode="numeric"
+                                                                    value={side === 'home' ? draft.home : draft.away}
+                                                                    onChange={(e) =>
+                                                                        setQuickPreds((prev) => ({
+                                                                            ...prev,
+                                                                            [match.id]: {
+                                                                                home: side === 'home' ? e.target.value : draft.home,
+                                                                                away: side === 'away' ? e.target.value : draft.away,
+                                                                            },
+                                                                        }))
+                                                                    }
+                                                                    disabled={!canEdit || savingMatchId === match.id}
+                                                                    aria-label={`Marcador ${side === 'home' ? 'local' : 'visitante'} para ${side === 'home' ? match.homeTeam : match.awayTeam}`}
+                                                                    className="h-11 w-12 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                                                />
+                                                            </div>
+                                                            <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm shadow-slate-100 sm:flex">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setQuickPreds((prev) => {
+                                                                            const currentValue = parseInt(side === 'home' ? draft.home || '0' : draft.away || '0', 10) || 0;
+                                                                            const nextValue = Math.max(0, currentValue - 1);
+                                                                            return {
+                                                                                ...prev,
+                                                                                [match.id]: {
+                                                                                    home: side === 'home' ? String(nextValue) : draft.home,
+                                                                                    away: side === 'away' ? String(nextValue) : draft.away,
+                                                                                },
+                                                                            };
+                                                                        })
+                                                                    }
+                                                                    disabled={!canEdit || savingMatchId === match.id}
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+                                                                    aria-label={`Disminuir marcador ${side === 'home' ? 'local' : 'visitante'}`}
+                                                                >
+                                                                    <Minus size={14} />
+                                                                </button>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={99}
+                                                                    inputMode="numeric"
+                                                                    value={side === 'home' ? draft.home : draft.away}
+                                                                    onChange={(e) =>
+                                                                        setQuickPreds((prev) => ({
+                                                                            ...prev,
+                                                                            [match.id]: {
+                                                                                home: side === 'home' ? e.target.value : draft.home,
+                                                                                away: side === 'away' ? e.target.value : draft.away,
+                                                                            },
+                                                                        }))
+                                                                    }
+                                                                    disabled={!canEdit || savingMatchId === match.id}
+                                                                    aria-label={`Marcador ${side === 'home' ? 'local' : 'visitante'} para ${side === 'home' ? match.homeTeam : match.awayTeam}`}
+                                                                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setQuickPreds((prev) => {
+                                                                            const currentValue = parseInt(side === 'home' ? draft.home || '0' : draft.away || '0', 10) || 0;
+                                                                            const nextValue = currentValue + 1;
+                                                                            return {
+                                                                                ...prev,
+                                                                                [match.id]: {
+                                                                                    home: side === 'home' ? String(nextValue) : draft.home,
+                                                                                    away: side === 'away' ? String(nextValue) : draft.away,
+                                                                                },
+                                                                            };
+                                                                        })
+                                                                    }
+                                                                    disabled={!canEdit || savingMatchId === match.id}
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+                                                                    aria-label={`Aumentar marcador ${side === 'home' ? 'local' : 'visitante'}`}
+                                                                >
+                                                                    <Plus size={14} />
+                                                                </button>
+                                                            </div>
+                                                            {scoreIndex === 0 ? <span className="text-slate-300 font-black">-</span> : null}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </div>
+
+                                                <div className="min-w-0 flex-1 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <p className="truncate text-base font-black uppercase text-slate-900 sm:text-lg">{match.awayTeamCode}</p>
+                                                        <img src={match.awayFlag} alt={`Bandera de ${match.awayTeam}`} className="h-5 w-7 rounded-md object-cover shadow-sm" />
+                                                    </div>
+                                                    <p className="mt-1 truncate text-[10px] text-slate-400">{match.awayTeam}</p>
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        {/* Save button + admin link */}
-                                        <div className="flex items-center justify-between gap-2">
-                                            {!match.saved ? (
-                                                <button
-                                                    onClick={() => handleQuickSave(match.id)}
-                                                    disabled={savingMatchId === match.id}
-                                                    className="flex-1 rounded-xl bg-lime-400 py-2 text-[10px] font-black uppercase tracking-wide text-slate-950 hover:bg-lime-500 disabled:opacity-60 transition-colors"
-                                                >
-                                                    {savingMatchId === match.id ? 'Guardando...' : 'Guardar'}
-                                                </button>
-                                            ) : (
-                                                <div className="flex-1" />
-                                            )}
-                                            {isAdmin && (
-                                                <Link
-                                                    to="/predictions"
-                                                    className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
-                                                >
-                                                    <Settings size={11} /> Gestionar resultado
-                                                </Link>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                ))}
+                                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
+                                                <div className="min-w-0 flex-1 text-[10px] font-bold text-slate-500">
+                                                    {isDirty ? (
+                                                        <span className="text-amber-600">Cambios listos para guardar</span>
+                                                    ) : match.saved ? (
+                                                        <span className="text-lime-600">✓ Pronóstico actual {match.prediction.home}-{match.prediction.away}</span>
+                                                    ) : canEdit ? (
+                                                        <span>Ingresa tu pronóstico · cierra en {summarizeCloseTime(match.date, activeLeague?.settings?.closePredictionMinutes, currentTime)}</span>
+                                                    ) : (
+                                                        <span className="text-rose-500">Pronóstico cerrado 15 min antes del partido</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {canEdit ? (
+                                                        <button
+                                                            onClick={() => void handleQuickSave(match)}
+                                                            disabled={savingMatchId === match.id || !hasDraftValues || (!isDirty && match.saved)}
+                                                            className="rounded-xl bg-lime-400 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-950 transition-colors hover:bg-lime-500 disabled:opacity-60"
+                                                        >
+                                                            {savingMatchId === match.id ? 'Guardando...' : match.saved ? 'Actualizar' : 'Guardar'}
+                                                        </button>
+                                                    ) : null}
+                                                    {isAdmin && (
+                                                        <Link
+                                                            to="/predictions"
+                                                            className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
+                                                        >
+                                                            <Settings size={11} /> Gestionar
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">

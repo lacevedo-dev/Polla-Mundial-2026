@@ -28,6 +28,7 @@ export interface RecentPrediction {
   tuPrediccion: string;
   resultado: string;
   acierto: boolean;
+  puntos: number;
   fecha: string;
 }
 
@@ -55,16 +56,13 @@ export class DashboardService {
       },
     });
 
-    // Count correct and incorrect
+    // Count predictions with points vs predictions without points once a match is resolved
     let aciertos = 0;
     let errores = 0;
 
     predictions.forEach((pred) => {
       if (pred.match.homeScore !== null && pred.match.awayScore !== null) {
-        const isCorrect =
-          pred.homeScore === pred.match.homeScore &&
-          pred.awayScore === pred.match.awayScore;
-        if (isCorrect) {
+        if ((pred.points ?? 0) > 0) {
           aciertos++;
         } else {
           errores++;
@@ -285,6 +283,7 @@ export class DashboardService {
         pred.match.awayScore !== null &&
         pred.homeScore === pred.match.homeScore &&
         pred.awayScore === pred.match.awayScore;
+      const puntos = pred.points ?? 0;
       const fecha = new Date(pred.submittedAt).toLocaleDateString('es-ES');
 
       return {
@@ -293,6 +292,7 @@ export class DashboardService {
         tuPrediccion,
         resultado: actualResult,
         acierto,
+        puntos,
         fecha,
       };
     });

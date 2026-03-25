@@ -8,6 +8,7 @@
  *   "tuPrediccion": "2-1",
  *   "resultado": "2-1",
  *   "acierto": true,
+ *   "puntos": 5,
  *   "fecha": "15/3/2026"
  * }
  */
@@ -26,6 +27,9 @@ export class RecentPredictionDto {
 
   /** Whether the prediction was exactly correct */
   acierto: boolean;
+
+  /** Points earned for the prediction once the match is resolved */
+  puntos: number;
 
   /** Prediction submission date formatted in es-ES locale */
   fecha: string;
@@ -46,6 +50,7 @@ export class RecentPredictionDto {
  *       "tuPrediccion": "2-1",
  *       "resultado": "2-1",
  *       "acierto": true,
+ *       "puntos": 5,
  *       "fecha": "15/3/2026"
  *     }
  *   ]

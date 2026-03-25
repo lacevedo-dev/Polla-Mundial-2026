@@ -28,6 +28,7 @@ export interface RecentPrediction {
   tuPrediccion: string;
   resultado: string;
   acierto: boolean;
+  puntos: number;
   fecha: string;
 }
 
@@ -115,6 +116,7 @@ function isValidPredictionArray(preds: unknown): preds is RecentPrediction[] {
       typeof (p as Record<string, unknown>)['tuPrediccion'] === 'string' &&
       typeof (p as Record<string, unknown>)['resultado'] === 'string' &&
       typeof (p as Record<string, unknown>)['acierto'] === 'boolean' &&
+      typeof (p as Record<string, unknown>)['puntos'] === 'number' &&
       typeof (p as Record<string, unknown>)['fecha'] === 'string',
   );
 }
