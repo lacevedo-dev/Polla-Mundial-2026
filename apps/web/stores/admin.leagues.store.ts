@@ -57,6 +57,7 @@ interface AdminLeaguesState {
     fetchLeague: (id: string) => Promise<void>;
     fetchLeagueMembers: (id: string) => Promise<void>;
     fetchLeagueTournaments: (id: string) => Promise<void>;
+    createLeague: (data: { name: string; description?: string; plan?: string; privacy?: string }) => Promise<AdminLeague>;
     updateLeague: (id: string, data: Partial<{ status: string; plan: string; name: string; description: string }>) => Promise<void>;
     addLeagueTournament: (leagueId: string, tournamentId: string) => Promise<void>;
     removeLeagueTournament: (leagueId: string, tournamentId: string) => Promise<void>;
@@ -111,6 +112,21 @@ export const useAdminLeaguesStore = create<AdminLeaguesState>((set, get) => ({
             set({ members, isLoading: false });
         } catch (error) {
             set({ isLoading: false, error: error instanceof Error ? error.message : 'Error' });
+        }
+    },
+
+    createLeague: async (data) => {
+        set({ isSaving: true });
+        try {
+            const league = await request<AdminLeague>('/admin/leagues', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+            set((s) => ({ leagues: [league, ...s.leagues], total: s.total + 1, isSaving: false }));
+            return league;
+        } catch (error) {
+            set({ isSaving: false });
+            throw error;
         }
     },
 

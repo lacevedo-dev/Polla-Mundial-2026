@@ -4,12 +4,15 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LeagueStatus, Plan, MemberStatus, ScoringType } from '@prisma/client';
-import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min, IsNotEmpty, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { LeaguesService } from '../leagues/leagues.service';
+import { CreateLeagueDto } from '../leagues/dto/create-league.dto';
 
 export class UpdateLeagueAdminDto {
     @IsOptional()
@@ -39,7 +42,16 @@ export class UpdateLeagueAdminDto {
 @Roles('SUPERADMIN')
 @Controller('admin/leagues')
 export class AdminLeaguesController {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly leaguesService: LeaguesService,
+    ) {}
+
+    @Post()
+    @ApiOperation({ summary: 'Create a new league as admin' })
+    async create(@CurrentUser() user: { id: string }, @Body() dto: CreateLeagueDto) {
+        return this.leaguesService.create(user.id, dto);
+    }
 
     @Get()
     @ApiOperation({ summary: 'List all leagues with pagination' })

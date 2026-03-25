@@ -17,9 +17,10 @@ import { MatchesModule } from '../matches/matches.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PredictionsModule } from '../predictions/predictions.module';
+import { LeaguesModule } from '../leagues/leagues.module';
 
 @Module({
-    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule, PredictionsModule],
+    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule, PredictionsModule, LeaguesModule],
     controllers: [
         AdminStatsController,
         AdminUsersController,

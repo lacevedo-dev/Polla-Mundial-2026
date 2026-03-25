@@ -199,22 +199,27 @@ const AdminPlans: React.FC = () => {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">Planes</h1>
-                <p className="text-sm text-slate-500 mt-1">Configura las características y límites de cada plan</p>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-brand uppercase tracking-tight leading-tight">Planes</h1>
+                <p className="text-xs text-slate-400 mt-1">Configura características y límites de cada plan</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 items-center">
+            {/* Mobile: scroll horizontal + hint */}
+            <p className="text-xs text-slate-400 lg:hidden flex items-center gap-1">
+                <span>← Desliza para ver todos los planes →</span>
+            </p>
+            <div className="flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:items-center lg:overflow-visible">
                 {PLAN_NAMES.map((planName) => {
                     const config = plans[planName];
                     if (!config) return null;
                     return (
-                        <PlanCard
-                            key={planName}
-                            planName={planName}
-                            config={config}
-                            onSave={updatePlan}
-                            isSaving={isSaving}
-                        />
+                        <div key={planName} className="min-w-[min(85vw,320px)] lg:min-w-0 shrink-0 lg:shrink">
+                            <PlanCard
+                                planName={planName}
+                                config={config}
+                                onSave={updatePlan}
+                                isSaving={isSaving}
+                            />
+                        </div>
                     );
                 })}
             </div>
