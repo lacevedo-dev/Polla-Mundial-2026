@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, ChevronDown,
-    Download, Globe, Info, Loader2, Search, Shield, Trophy, Users, X, Zap,
+    Download, Globe, Hash, Info, Loader2, Search, Shield, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
 
@@ -120,7 +120,13 @@ const StepDots: React.FC<{ step: number }> = ({ step }) => (
 const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [step, setStep] = useState(0);
     const [usage, setUsage] = useState<UsageInfo | null>(null);
-    const [mode, setMode] = useState<'league' | 'date' | 'team'>('league');
+    const [mode, setMode] = useState<'league' | 'date' | 'team' | 'id'>('league');
+
+    // Step 0: Import by fixture ID
+    const [fixtureIdInput, setFixtureIdInput] = useState('');
+    const [previewingIds, setPreviewingIds] = useState(false);
+    const [idFixtures, setIdFixtures] = useState<FixtureResult[]>([]);
+    const [idError, setIdError] = useState('');
 
     // Step 0: Search by league
     const [searchQuery, setSearchQuery] = useState('');
@@ -236,6 +242,40 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
             setTeamError(e?.message ?? 'Error al cargar partidos');
         } finally {
             setLoadingTeamFixtures(false);
+        }
+    };
+
+    /* ─ preview fixtures by IDs ─ */
+    const handlePreviewByIds = async () => {
+        const ids = fixtureIdInput
+            .split(/[\s,;]+/)
+            .map(s => s.trim())
+            .filter(s => /^\d+$/.test(s))
+            .map(Number);
+        if (ids.length === 0) return;
+        setPreviewingIds(true);
+        setIdError('');
+        setIdFixtures([]);
+        setSelectedFixtures(new Set());
+        try {
+            // Fetch each fixture individually via the search endpoint trick — use date endpoint as fallback
+            // We call import-selection in dry-run-like mode via previewing each ID
+            const results: FixtureResult[] = [];
+            for (const id of ids) {
+                try {
+                    const data = await request<FixtureResult[]>(`/admin/football/fixtures/by-id?id=${id}`);
+                    results.push(...data);
+                } catch {
+                    // skip individual failures
+                }
+            }
+            setIdFixtures(results);
+            if (results.length === 0) setIdError('No se encontraron fixtures para los IDs ingresados. Verifica que los IDs sean correctos en api-football.com');
+            refreshUsage();
+        } catch (e: any) {
+            setIdError(e?.message ?? 'Error al buscar fixtures');
+        } finally {
+            setPreviewingIds(false);
         }
     };
 
@@ -400,6 +440,9 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     </button>
                                     <button onClick={() => setMode('team')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'team' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                                         <Shield size={13} /> Equipo
+                                    </button>
+                                    <button onClick={() => setMode('id')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'id' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                        <Hash size={13} /> ID
                                     </button>
                                 </div>
 
@@ -758,6 +801,146 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                         {!searchingTeam && teamResults.length === 0 && !teamQuery && (
                                             <p className="text-center text-sm text-slate-400 py-4">Escribe el nombre de un equipo para comenzar</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ── ID mode ── */}
+                                {mode === 'id' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+                                            <Info size={13} className="shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-bold mb-1">¿Cómo obtener el ID del fixture?</p>
+                                                <ol className="list-decimal list-inside space-y-0.5 text-blue-600">
+                                                    <li>Ve a <strong>api-football.com</strong> → Products → Fixtures</li>
+                                                    <li>Busca el partido por fecha o equipo</li>
+                                                    <li>El ID aparece en la URL o en la respuesta JSON como <code className="bg-blue-100 px-1 rounded">fixture.id</code></li>
+                                                    <li>Pega el ID aquí y haz clic en Buscar</li>
+                                                </ol>
+                                                <p className="mt-1.5 text-blue-500">Puedes ingresar múltiples IDs separados por coma o espacio.</p>
+                                            </div>
+                                        </div>
+
+                                        {usage && (
+                                            <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                                                <Zap size={13} className="shrink-0 mt-0.5 text-amber-500" />
+                                                <p>Cada ID consume <strong>1 request</strong> para previsualizar. Quedan: <strong>{usage.requests.available}</strong>.</p>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">ID(s) de fixture en API-Football</label>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ej: 1208138, 1208139"
+                                                    value={fixtureIdInput}
+                                                    onChange={(e) => setFixtureIdInput(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && void handlePreviewByIds()}
+                                                    className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                                />
+                                                <button
+                                                    onClick={() => void handlePreviewByIds()}
+                                                    disabled={previewingIds || !fixtureIdInput.trim()}
+                                                    className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-900 text-sm font-bold hover:bg-amber-500 disabled:opacity-50 transition-colors"
+                                                >
+                                                    {previewingIds ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {idError && (
+                                            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                                <AlertCircle size={14} /> {idError}
+                                            </div>
+                                        )}
+
+                                        {previewingIds && (
+                                            <div className="flex items-center justify-center gap-2 py-6 text-sm text-slate-400">
+                                                <Loader2 size={16} className="animate-spin" /> Consultando API-Football…
+                                            </div>
+                                        )}
+
+                                        {!previewingIds && idFixtures.length > 0 && (
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{idFixtures.length} fixture{idFixtures.length !== 1 ? 's' : ''} encontrado{idFixtures.length !== 1 ? 's' : ''}</p>
+                                                    <button
+                                                        onClick={() => setSelectedFixtures(
+                                                            selectedFixtures.size === idFixtures.filter(f => !f.alreadyImported).length
+                                                                ? new Set()
+                                                                : new Set(idFixtures.filter(f => !f.alreadyImported).map(f => f.fixtureId))
+                                                        )}
+                                                        className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
+                                                    >
+                                                        {selectedFixtures.size > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                                    </button>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    {idFixtures.map((f) => (
+                                                        <label
+                                                            key={f.fixtureId}
+                                                            className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
+                                                                f.alreadyImported
+                                                                    ? 'border-lime-200 bg-lime-50/50 opacity-70'
+                                                                    : selectedFixtures.has(f.fixtureId)
+                                                                    ? 'border-slate-900 bg-slate-50'
+                                                                    : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50/30'
+                                                            }`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
+                                                                disabled={f.alreadyImported}
+                                                                onChange={() => toggleFixture(f.fixtureId)}
+                                                                className="w-4 h-4 accent-amber-500 shrink-0"
+                                                            />
+                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                {f.homeTeam.logo && <img src={f.homeTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                                <span className="text-xs font-bold text-slate-800 truncate">{f.homeTeam.name}</span>
+                                                                <span className="text-xs text-slate-400 shrink-0">vs</span>
+                                                                <span className="text-xs font-bold text-slate-800 truncate">{f.awayTeam.name}</span>
+                                                                {f.awayTeam.logo && <img src={f.awayTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                            </div>
+                                                            <div className="shrink-0 text-right">
+                                                                <p className="text-[10px] text-slate-500 font-mono">ID: {f.fixtureId}</p>
+                                                                <p className="text-[10px] text-slate-400">{new Date(f.date).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                                                {f.alreadyImported && <span className="text-[10px] font-black text-lime-600">Ya importado</span>}
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+
+                                                <div className="flex gap-4 text-sm">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" checked={dateCreateTeams} onChange={e => setDateCreateTeams(e.target.checked)} className="w-4 h-4 accent-lime-500" />
+                                                        <span className="text-slate-700 font-medium">Crear equipos</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" checked={dateOverwrite} onChange={e => setDateOverwrite(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                                                        <span className="text-slate-700 font-medium">Actualizar existentes</span>
+                                                    </label>
+                                                </div>
+
+                                                {importError && (
+                                                    <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                                        <AlertCircle size={14} /> {importError}
+                                                    </div>
+                                                )}
+
+                                                <button
+                                                    onClick={() => void handleImportSelected()}
+                                                    disabled={importing || selectedFixtures.size === 0}
+                                                    className="w-full py-3 rounded-2xl bg-slate-900 text-white font-black uppercase text-sm hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+                                                >
+                                                    {importing
+                                                        ? <><Loader2 size={16} className="animate-spin" /> Importando…</>
+                                                        : <><Download size={16} /> Importar {selectedFixtures.size} seleccionado{selectedFixtures.size !== 1 ? 's' : ''}</>
+                                                    }
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 )}

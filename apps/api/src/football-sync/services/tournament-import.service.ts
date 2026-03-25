@@ -456,6 +456,32 @@ export class TournamentImportService {
     }));
   }
 
+  /* ─── Search fixture by single ID ──────────────────────────────────── */
+
+  async searchFixtureById(fixtureId: number) {
+    const res = await this.apiClient.getFixtureById(fixtureId);
+    await this.rateLimiter.logRequest('/fixtures', { id: fixtureId }, 200, res.results ?? 0);
+
+    const existing = await this.prisma.match.findFirst({
+      where: { externalId: String(fixtureId) },
+      select: { externalId: true },
+    });
+
+    return ((res.response ?? []) as any[]).map((f: any) => ({
+      fixtureId: f.fixture?.id,
+      date: f.fixture?.date,
+      status: f.fixture?.status?.short,
+      statusLong: f.fixture?.status?.long,
+      homeTeam: { id: f.teams?.home?.id, name: f.teams?.home?.name, logo: f.teams?.home?.logo },
+      awayTeam: { id: f.teams?.away?.id, name: f.teams?.away?.name, logo: f.teams?.away?.logo },
+      homeScore: f.goals?.home ?? null,
+      awayScore: f.goals?.away ?? null,
+      league: { id: f.league?.id, name: f.league?.name, country: f.league?.country, logo: f.league?.logo, round: f.league?.round },
+      venue: f.fixture?.venue?.name ?? null,
+      alreadyImported: !!existing,
+    }));
+  }
+
   /* ─── Search fixtures by date ───────────────────────────────────────── */
 
   async searchFixturesByDate(date: string) {

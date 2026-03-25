@@ -291,6 +291,17 @@ export class FootballSyncController {
     }
   }
 
+  @Get('fixtures/by-id')
+  @ApiOperation({ summary: 'Get a specific fixture by its API-Football ID' })
+  async getFixtureById(@Query('id') id: string) {
+    if (!id || isNaN(Number(id))) throw new HttpException('id query param required (numeric)', HttpStatus.BAD_REQUEST);
+    try {
+      return await this.tournamentImport.searchFixtureById(Number(id));
+    } catch (error) {
+      throw new HttpException(`Failed to get fixture: ${error.message}`, HttpStatus.BAD_REQUEST);
+    }
+  }
+
   @Get('fixtures/search')
   @ApiOperation({ summary: 'Search fixtures by date from API-Football' })
   async searchFixturesByDate(@Query('date') date: string) {
