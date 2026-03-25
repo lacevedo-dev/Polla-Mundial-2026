@@ -890,7 +890,7 @@ function CompactMatchRow({
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                            {hasParticipationOptions ? (
+                            {hasParticipationOptions && canEdit ? (
                                 <button
                                     type="button"
                                     aria-label={`Gestionar participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
@@ -2861,7 +2861,7 @@ const Predictions: React.FC = () => {
                                                                     ) : null}
                                                                 </div>
                                                                 <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                                                                    {hasParticipationOptions ? (
+                                                                    {hasParticipationOptions && canEdit ? (
                                                                         <button
                                                                             type="button"
                                                                             aria-label={`Ver participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
@@ -3070,12 +3070,12 @@ const Predictions: React.FC = () => {
                                                                         <span className="font-bold text-lime-600">
                                                                             ✓ {match.prediction.home}−{match.prediction.away}
                                                                         </span>
-                                                                    ) : (
+                                                                    ) : canEdit ? (
                                                                         <>
                                                                             <span className="text-slate-400 sm:hidden">Ingresa tu pronóstico</span>
                                                                             <span className="hidden text-slate-400 sm:inline">Completa y guarda para cerrar este partido.</span>
                                                                         </>
-                                                                    )}
+                                                                    ) : null}
                                                                 </div>
                                                             </div>
                                                         </div>
