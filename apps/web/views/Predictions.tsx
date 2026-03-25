@@ -382,7 +382,7 @@ function formatMatchTime(matchDate: string): string {
 function getMatchStatusLabel(status: MatchViewModel['status']): string {
     switch (status) {
         case 'live':
-            return 'En vivo';
+            return 'En curso';
         case 'finished':
             return 'Finalizado';
         case 'closed':
@@ -791,7 +791,7 @@ function CompactMatchRow({
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</span>
                             <span className="text-[8px] font-black uppercase tracking-wider text-amber-500">
-                                {summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
+                                {match.status === 'live' ? 'Act. ~1m' : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -834,14 +834,14 @@ function CompactMatchRow({
                                     className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
                                 />
                             </div>
-                        ) : match.status === 'finished' && match.result ? (
+                        ) : (match.status === 'finished' || match.status === 'live') && match.result ? (
                             <div className="flex shrink-0 flex-col items-center gap-0.5">
                                 <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2">
                                     <span className="text-sm font-black text-white">{match.result.home}</span>
                                     <span className="text-sm font-black text-slate-500">:</span>
                                     <span className="text-sm font-black text-white">{match.result.away}</span>
                                 </div>
-                                {match.pointsEarned !== undefined && (
+                                {match.status === 'finished' && match.pointsEarned !== undefined && (
                                     <span className={`text-[10px] font-black tabular-nums ${match.pointsEarned > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
                                         {match.pointsEarned > 0 ? `+${match.pointsEarned} pts` : '0 pts'}
                                     </span>
@@ -1251,7 +1251,7 @@ function CompactMatchRow({
                                 Grupo {match.group}
                             </span>
                         )}
-                        <span className="text-slate-400">• {summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
+                        <span className="text-slate-400">• {match.status === 'live' ? 'Act. ~1m' : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
                         {match.saved && (
                             <span className="ml-auto font-bold text-lime-600">
                                 ✓ {match.prediction.home}-{match.prediction.away}
@@ -1931,8 +1931,28 @@ const Predictions: React.FC = () => {
     }, [activeLeague?.id, applyParticipationBatch, fetchLeagueMatches, resetLeagueData]);
 
     React.useEffect(() => {
-        setDrafts(buildDrafts(matches));
-    }, [matches]);
+        setDrafts((currentDrafts) => {
+            const nextDrafts = buildDrafts(matches);
+            dirtyMatchIds.forEach((matchId) => {
+                if (currentDrafts[matchId]) {
+                    nextDrafts[matchId] = currentDrafts[matchId];
+                }
+            });
+            return nextDrafts;
+        });
+    }, [dirtyMatchIds, matches]);
+
+    React.useEffect(() => {
+        if (!activeLeague?.id || dirtyMatchIds.length > 0) {
+            return;
+        }
+
+        const intervalId = window.setInterval(() => {
+            void fetchLeagueMatches(activeLeague.id).catch(() => undefined);
+        }, 60_000);
+
+        return () => window.clearInterval(intervalId);
+    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches]);
 
     const loadParticipationOptions = React.useCallback(
         async (matchId: string) => {
@@ -2910,11 +2930,13 @@ const Predictions: React.FC = () => {
                                                                     <div className="shrink-0">
                                                                         <p className="text-xs font-black text-slate-900 sm:text-sm">{formatMatchTime(match.date)}</p>
                                                                         <p className={`mt-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:text-[9px] sm:tracking-[0.18em] ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
-                                                                            {summarizeCloseTime(
-                                                                                match.date,
-                                                                                activeLeague?.settings?.closePredictionMinutes,
-                                                                                currentTime,
-                                                                            )}
+                                                                            {match.status === 'live'
+                                                                                ? 'Act. ~1m'
+                                                                                : summarizeCloseTime(
+                                                                                    match.date,
+                                                                                    activeLeague?.settings?.closePredictionMinutes,
+                                                                                    currentTime,
+                                                                                )}
                                                                         </p>
                                                                     </div>
                                                                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em] ${getMatchStatusClasses(match.status)}`}>
@@ -3084,12 +3106,12 @@ const Predictions: React.FC = () => {
                                                                             onAdjust={(delta) => adjustScore('away', delta)}
                                                                         />
                                                                     </div>
-                                                                ) : match.status === 'finished' && match.result ? (
+                                                                ) : (match.status === 'finished' || match.status === 'live') && match.result ? (
                                                                     <div className="flex shrink-0 flex-col items-center gap-0.5">
                                                                         <span className="rounded-xl border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm font-black text-white sm:rounded-2xl sm:px-3 sm:py-2">
                                                                             {match.result.home} : {match.result.away}
                                                                         </span>
-                                                                        {match.pointsEarned !== undefined && (
+                                                                        {match.status === 'finished' && match.pointsEarned !== undefined && (
                                                                             <span className={`text-[10px] font-black tabular-nums ${match.pointsEarned > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
                                                                                 {match.pointsEarned > 0 ? `+${match.pointsEarned} pts` : '0 pts'}
                                                                             </span>
@@ -3150,6 +3172,11 @@ const Predictions: React.FC = () => {
                                                                         <>
                                                                             <span className="text-slate-400 sm:hidden">Ingresa tu pronóstico</span>
                                                                             <span className="hidden text-slate-400 sm:inline">Completa y guarda para cerrar este partido.</span>
+                                                                        </>
+                                                                    ) : match.status === 'live' ? (
+                                                                        <>
+                                                                            <span className="text-rose-500 sm:hidden">Partido en curso</span>
+                                                                            <span className="hidden text-rose-500 sm:inline">En curso · actualización aproximada cada minuto.</span>
                                                                         </>
                                                                     ) : null}
                                                                 </div>
