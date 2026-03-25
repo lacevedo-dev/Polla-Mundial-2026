@@ -1,4 +1,4 @@
-﻿import React from 'react';
+�import React from 'react';
 import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
 import { PrizeWinner, StageType, LeagueData } from '@polla-2026/shared';
 import { useLeagueStore } from '../stores/league.store';
@@ -50,7 +50,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
 
-// Props eliminadas â€” navegaciÃ³n via useNavigate
+// Props eliminadas � navegación via useNavigate
 
 interface InvitedUser {
   id: string;
@@ -72,13 +72,13 @@ interface Country {
 
 const COUNTRY_CODES: Country[] = [
   { code: '+57', name: 'Colombia', iso: 'co', length: 10, placeholder: '310 123 4567', regex: /^3\d{9}$/ },
-  { code: '+52', name: 'MÃ©xico', iso: 'mx', length: 10, placeholder: '55 1234 5678' },
-  { code: '+1', name: 'USA / CanadÃ¡', iso: 'us', length: 10, placeholder: '202 555 0123' },
-  { code: '+34', name: 'EspaÃ±a', iso: 'es', length: 9, placeholder: '612 345 678' },
+  { code: '+52', name: 'México', iso: 'mx', length: 10, placeholder: '55 1234 5678' },
+  { code: '+1', name: 'USA / Canadá', iso: 'us', length: 10, placeholder: '202 555 0123' },
+  { code: '+34', name: 'España', iso: 'es', length: 9, placeholder: '612 345 678' },
   { code: '+54', name: 'Argentina', iso: 'ar', length: 10, placeholder: '11 1234 5678' },
   { code: '+56', name: 'Chile', iso: 'cl', length: 9, placeholder: '9 1234 5678' },
   { code: '+58', name: 'Venezuela', iso: 've', length: 10, placeholder: '412 123 4567' },
-  { code: '+51', name: 'PerÃº', iso: 'pe', length: 9, placeholder: '912 345 678' },
+  { code: '+51', name: 'Perú', iso: 'pe', length: 9, placeholder: '912 345 678' },
   { code: '+55', name: 'Brasil', iso: 'br', length: 11, placeholder: '11 91234 5678' },
 ];
 
@@ -113,7 +113,7 @@ const formatSpanishTitleCase = (str: string) => {
 const getInitialDistribution = (winnersCount: number, adminFee: number): PrizeWinner[] => {
   const prizes: PrizeWinner[] = Array.from({ length: 10 }, (_, i) => ({
     position: i + 1,
-    label: `${i + 1}Âº PUESTO`,
+    label: `${i + 1}º PUESTO`,
     percentage: 0,
     active: false
   }));
@@ -236,7 +236,7 @@ const CreateLeague: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Validar si la categorÃ­a actual sigue activa, sino cambiar a una disponible
+  // Validar si la categoría actual sigue activa, sino cambiar a una disponible
   React.useEffect(() => {
     if (step === 3) {
       const isCurrentActive = activeCategory === 'general' ? leagueData.includeBaseFee : leagueData.includeStageFees && leagueData.stageFees[activeCategory as StageType]?.active;
@@ -339,7 +339,7 @@ const CreateLeague: React.FC = () => {
     }
 
     if (!isValidLength) {
-      setInputErrors(prev => ({ ...prev, phone: `El nÃºmero debe tener ${country.length} dÃ­gitos` }));
+      setInputErrors(prev => ({ ...prev, phone: `El número debe tener ${country.length} dígitos` }));
       if (foundExistingUser) setFoundExistingUser(false);
       return true; // Error exists
     } else {
@@ -369,7 +369,7 @@ const CreateLeague: React.FC = () => {
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) return "Formato de correo invÃ¡lido.";
+    if (!emailRegex.test(email)) return "Formato de correo inválido.";
     return "";
   };
 
@@ -482,7 +482,7 @@ const CreateLeague: React.FC = () => {
             <div className="w-10 h-10 bg-white rounded flex items-center justify-center font-brand text-black font-black mb-8 shadow-xl shadow-lime-500/10">26</div>
             <h2 className="text-5xl font-black font-brand leading-tight mb-8 uppercase tracking-tighter">EL PASO <br /><span className="text-lime-400">FINAL.</span></h2>
             <div className="space-y-6">
-              {[{ label: "DiseÃ±o FIFA Pass", icon: Ticket }, { label: "QR de InvitaciÃ³n", icon: QrCode }, { label: "Compartir en Redes", icon: Share2 }].map((b, i) => (
+              {[{ label: "Diseño FIFA Pass", icon: Ticket }, { label: "QR de Invitación", icon: QrCode }, { label: "Compartir en Redes", icon: Share2 }].map((b, i) => (
                 <div key={i} className="flex items-center gap-4 text-slate-300">
                   <div className="w-8 h-8 rounded-xl bg-lime-400/20 flex items-center justify-center text-lime-400"><b.icon size={16} /></div>
                   <span className="font-medium text-sm">{b.label}</span>
@@ -497,7 +497,7 @@ const CreateLeague: React.FC = () => {
         {/* Formulario */}
         <div className="p-4 md:p-12 flex flex-col h-full relative overflow-hidden">
 
-          {/* Cabecera Pasos RE-DISEÃ‘ADA */}
+          {/* Cabecera Pasos RE-DISE�ADA */}
           <div className="mb-6 flex items-end justify-between">
             <div>
               <h3 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
@@ -544,11 +544,11 @@ const CreateLeague: React.FC = () => {
                     {leagueData.name.length >= 3 && (
                       <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                         <div className="flex justify-between items-center ml-1">
-                          <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">DescripciÃ³n (Opcional)</label>
+                          <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Descripción (Opcional)</label>
                           <span className="text-[9px] font-bold text-slate-400">{leagueData.description?.length || 0}/100</span>
                         </div>
                         <Input
-                          placeholder="Â¿De quÃ© trata tu liga?"
+                          placeholder="¿De qué trata tu liga?"
                           value={leagueData.description}
                           onChange={(e) => setLeagueData({ ...leagueData, description: e.target.value })}
                           className="h-10 text-center font-medium rounded-xl border-slate-300 text-sm"
@@ -560,7 +560,7 @@ const CreateLeague: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-3 pt-2">
                       <button onClick={() => setLeagueData({ ...leagueData, privacy: 'private' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'private' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Lock size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Privada</span></button>
-                      <button onClick={() => setLeagueData({ ...leagueData, privacy: 'public' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'public' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Globe size={16} /><span className="text-[8px] font-black uppercase tracking-widest">PÃºblica</span></button>
+                      <button onClick={() => setLeagueData({ ...leagueData, privacy: 'public' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'public' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Globe size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Pública</span></button>
                     </div>
 
                     {/* Tournament picker */}
@@ -569,7 +569,7 @@ const CreateLeague: React.FC = () => {
                       {!tournamentsLoaded ? (
                         <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">Cargando torneos...</div>
                       ) : tournaments.length === 0 ? (
-                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">No hay torneos importados aún</div>
+                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">No hay torneos importados a�n</div>
                       ) : (
                         <div className="relative">
                           <Trophy size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -582,7 +582,7 @@ const CreateLeague: React.FC = () => {
                             <option value="">Sin torneo (opcional)</option>
                             {tournaments.map((t) => (
                               <option key={t.id} value={t.id}>
-                                {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? ` — ${t.country}` : ''}
+                                {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? `  ${t.country}` : ''}
                               </option>
                             ))}
                           </select>
@@ -644,7 +644,7 @@ const CreateLeague: React.FC = () => {
             {step === 3 && (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 flex flex-col h-full">
 
-                {/* Indicador de Plan de SuscripciÃ³n RE-DISEÃ‘ADO */}
+                {/* Indicador de Plan de Suscripción RE-DISE�ADO */}
                 <div className="border border-slate-200 rounded-3xl p-4 flex items-center justify-between bg-white shadow-sm">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
@@ -663,7 +663,7 @@ const CreateLeague: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* PARTICIPANTES - NUEVO DISEÃ‘O */}
+                  {/* PARTICIPANTES - NUEVO DISE�O */}
                   <Card className="p-4 flex flex-col items-center justify-center gap-3 rounded-[2rem] border-slate-100 shadow-sm border">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Participantes</span>
                     <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-1.5 border border-slate-100">
@@ -674,12 +674,12 @@ const CreateLeague: React.FC = () => {
                     {isLimitExceeded && (
                       <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <AlertCircle size={10} className="text-rose-500" />
-                        <span className="text-[8px] font-bold text-rose-500">LÃ­mite: {PLAN_LIMITS[leagueData.plan]}</span>
+                        <span className="text-[8px] font-bold text-rose-500">Límite: {PLAN_LIMITS[leagueData.plan]}</span>
                       </div>
                     )}
                   </Card>
 
-                  {/* % ADMIN - NUEVO DISEÃ‘O */}
+                  {/* % ADMIN - NUEVO DISE�O */}
                   <Card className="p-4 flex flex-col justify-center gap-4 rounded-[2rem] border-slate-100 shadow-sm border">
                     <div className="flex justify-between w-full px-1 items-center">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">% Admin</span>
@@ -697,7 +697,7 @@ const CreateLeague: React.FC = () => {
                   </Card>
                 </div>
 
-                {/* PestaÃ±as Filtradas - DISEÃ‘O CAPSULA */}
+                {/* Pestañas Filtradas - DISE�O CAPSULA */}
                 <div className="flex p-1 bg-white rounded-[2rem] gap-1 border border-slate-100 shadow-sm overflow-x-auto scrollbar-hide">
                   {([
                     { id: 'general', label: 'GENERAL', active: leagueData.includeBaseFee },
@@ -800,7 +800,7 @@ const CreateLeague: React.FC = () => {
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                               className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-lime-100"
-                              placeholder="Buscar paÃ­s..."
+                              placeholder="Buscar país..."
                               value={countrySearch}
                               onChange={(e) => setCountrySearch(e.target.value)}
                             />
@@ -849,7 +849,7 @@ const CreateLeague: React.FC = () => {
                       <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-lime-200 shadow-sm animate-in fade-in slide-in-from-top-2">
                         <img src={MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar} className="w-10 h-10 rounded-lg shadow-sm" />
                         <div>
-                          <p className="text-[10px] font-black text-lime-700 uppercase tracking-tight">Â¡Usuario Encontrado!</p>
+                          <p className="text-[10px] font-black text-lime-700 uppercase tracking-tight">¡Usuario Encontrado!</p>
                           <p className="text-[10px] font-bold text-slate-600">{newUserInput.name}</p>
                         </div>
                         <div className="ml-auto bg-lime-100 rounded-full p-1">
@@ -872,7 +872,7 @@ const CreateLeague: React.FC = () => {
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
                   <div className="grid grid-cols-1 gap-2 overflow-y-auto scrollbar-hide pb-2">
                     {invitedUsers.map(user => (
-                      <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14} />}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} â€¢ {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14} /></button></div>
+                      <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14} />}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} ⬢ {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14} /></button></div>
                     ))}
                   </div>
                 </div>
@@ -897,7 +897,7 @@ const CreateLeague: React.FC = () => {
                       <Badge color={leagueData.privacy === 'private' ? 'bg-slate-800 text-slate-200 border border-slate-700 pl-2 pr-3' : 'bg-lime-400 text-black border border-lime-300 pl-2 pr-3'}>
                         <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
                           {leagueData.privacy === 'private' ? <Lock size={10} className="shrink-0" /> : <Globe size={10} className="shrink-0" />}
-                          <span className="text-[9px] leading-none">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</span>
+                          <span className="text-[9px] leading-none">{leagueData.privacy === 'private' ? 'PRIVADA' : 'P�BLICA'}</span>
                         </div>
                       </Badge>
                     </div>
@@ -927,7 +927,7 @@ const CreateLeague: React.FC = () => {
                       </div>
                       <div className="bg-slate-50 rounded-xl p-1 space-y-1">
                         {!leagueData.includeBaseFee && !leagueData.includeStageFees ? (
-                          <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCIÓN</div>
+                          <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCI�N</div>
                         ) : (
                           <>
                             {leagueData.includeBaseFee && (
@@ -964,7 +964,7 @@ const CreateLeague: React.FC = () => {
                       <div className="relative z-10 space-y-3">
                         <div className="flex items-center gap-2 mb-2">
                           <Calculator size={14} className="text-lime-400" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCIÓN DE FONDOS</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCI�N DE FONDOS</span>
                         </div>
 
                         <div className="flex justify-between items-center text-xs opacity-80">
@@ -986,7 +986,7 @@ const CreateLeague: React.FC = () => {
                     </div>
 
                     <button onClick={() => setStep(2)} className="w-full text-center text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 pt-2">
-                      <Eye size={12} /> REVISAR CONFIGURACIÓN
+                      <Eye size={12} /> REVISAR CONFIGURACI�N
                     </button>
                   </div>
                 </div>
@@ -997,9 +997,9 @@ const CreateLeague: React.FC = () => {
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 flex flex-col items-center">
                 <div className="text-center space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
-                    ¡LIGA <span className="text-lime-600">LISTA!</span>
+                    �LIGA <span className="text-lime-600">LISTA!</span>
                   </h4>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACIÓN.</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACI�N.</p>
                 </div>
 
                 {/* Ticket Card - EXTENDED VERSION */}
@@ -1020,7 +1020,7 @@ const CreateLeague: React.FC = () => {
                       <h3 className="text-2xl font-black font-brand uppercase leading-tight tracking-tight text-white">
                         {leagueData.name || 'POLLA MUNDIALISTA'}
                       </h3>
-                      <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACIÓN EXCLUSIVA</p>
+                      <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACI�N EXCLUSIVA</p>
                     </div>
 
                     {/* Grid Info High Level */}
@@ -1047,7 +1047,7 @@ const CreateLeague: React.FC = () => {
                       <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
                         {leagueData.privacy === 'private' ? <Lock size={14} className="text-slate-400 mb-1" /> : <Globe size={14} className="text-slate-400 mb-1" />}
                         <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TIPO</p>
-                        <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</p>
+                        <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'P�BLICA'}</p>
                       </div>
                     </div>
 
@@ -1090,11 +1090,11 @@ const CreateLeague: React.FC = () => {
                         </div>
                       )}
 
-                      {/* DistribuciÃ³n de Fondos */}
+                      {/* Distribución de Fondos */}
                       <div className="bg-white/5 rounded-2xl p-4 border border-white/10 text-left">
                         <div className="flex items-center gap-2 mb-3">
                           <Calculator size={12} className="text-lime-400" />
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCIÓN ESTIMADA</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCI�N ESTIMADA</span>
                         </div>
                         <div className="space-y-2">
                           <div className="flex justify-between text-[10px] font-bold">
@@ -1126,11 +1126,11 @@ const CreateLeague: React.FC = () => {
                   {/* Bottom Part */}
                   <div className="p-8 pt-6 flex items-center justify-between gap-4 bg-slate-900 relative">
                     <div className="min-w-0">
-                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">CÓDIGO DE ACCESO</p>
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">C�DIGO DE ACCESO</p>
                       <p className="text-3xl font-black font-brand text-white tracking-widest">{leagueId}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white">A</div>
-                        <p className="text-[10px] font-bold text-slate-400">Admin: Tú</p>
+                        <p className="text-[10px] font-bold text-slate-400">Admin: T�</p>
                       </div>
                     </div>
                     <div className="shrink-0 bg-white p-2 rounded-xl">
