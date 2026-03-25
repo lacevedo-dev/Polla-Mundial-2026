@@ -165,15 +165,16 @@ const AdminAiUsage: React.FC = () => {
     const [endDate, setEndDate] = React.useState('');
     const [selectedRecord, setSelectedRecord] = React.useState<AiUsageRecord | null>(null);
 
+    // Debounce userId search
+    const debouncedSearch = React.useDeferredValue(searchInput);
+    React.useEffect(() => {
+        setFilters({ userId: debouncedSearch || undefined, page: 1 });
+    }, [debouncedSearch, setFilters]);
+
     React.useEffect(() => {
         void fetchRecords();
         void fetchStats();
     }, [filters, fetchRecords, fetchStats]);
-
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        setFilters({ userId: searchInput || undefined, page: 1 });
-    };
 
     const handleDateFilter = () => {
         setFilters({
@@ -214,8 +215,8 @@ const AdminAiUsage: React.FC = () => {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">Consultas IA</h1>
-                <p className="mt-1.5 text-sm text-slate-500">
+                <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900 font-brand leading-tight">Consultas IA</h1>
+                <p className="mt-1 text-xs text-slate-400">
                     Auditoría completa de uso de créditos de inteligencia artificial
                 </p>
             </div>
@@ -348,23 +349,15 @@ const AdminAiUsage: React.FC = () => {
                 </div>
                 <div className="p-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        <form onSubmit={handleSearch} className="flex gap-2">
-                            <div className="relative flex-1">
-                                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    value={searchInput}
-                                    onChange={(e) => setSearchInput(e.target.value)}
-                                    placeholder="Buscar por userId..."
-                                    className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                className="rounded-xl bg-violet-500 px-4 py-2 text-xs font-bold uppercase text-white transition-all hover:bg-violet-600"
-                            >
-                                Buscar
-                            </button>
-                        </form>
+                        <div className="relative">
+                            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                placeholder="Buscar por userId..."
+                                className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            />
+                        </div>
 
                         <select
                             value={featureFilter}

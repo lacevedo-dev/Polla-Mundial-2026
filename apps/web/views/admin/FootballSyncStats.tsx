@@ -15,24 +15,19 @@ export default function FootballSyncStats() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 lg:p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-rose-50 border border-rose-200 rounded-[1.75rem] p-6">
-            <p className="text-rose-700 font-medium">Error: {error}</p>
-          </div>
-        </div>
+      <div className="rounded-[1.75rem] border border-rose-200 bg-rose-50 p-6">
+        <p className="text-rose-700 font-medium">Error: {error}</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-slate-900">Estadísticas de Sincronización</h1>
-            <p className="text-slate-600 mt-1">Métricas y análisis de rendimiento</p>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-brand uppercase tracking-tight leading-tight">Estadísticas de Sync</h1>
+            <p className="text-xs text-slate-400 mt-1">Métricas y análisis de rendimiento</p>
           </div>
 
           {/* Period Selector */}
@@ -265,7 +260,6 @@ export default function FootballSyncStats() {
             <p className="text-slate-600">No hay datos estadísticos disponibles</p>
           </div>
         )}
-      </div>
     </div>
   );
 }
