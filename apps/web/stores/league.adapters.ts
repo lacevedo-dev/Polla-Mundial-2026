@@ -59,6 +59,8 @@ export interface LeagueApiResponse {
     currency?: string | null;
     plan?: string | null;
     closePredictionMinutes?: number | null;
+    rank?: number | null;
+    points?: number | null;
     _count?: {
         members?: number;
     };
@@ -259,6 +261,8 @@ export function toLeagueContextListItem(response: LeagueApiResponse): LeagueCont
             closePredictionMinutes: response.closePredictionMinutes ?? undefined,
         },
         stats: {
+            rank: parseOptionalInteger(response.rank ?? undefined),
+            points: typeof response.points === 'number' ? response.points : undefined,
             memberCount,
             totalPrize: estimatePrizePool(response.baseFee, memberCount, response.currency),
         },

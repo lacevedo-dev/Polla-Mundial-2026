@@ -30,6 +30,8 @@ describe('useLeagueStore', () => {
                 status: 'ACTIVE',
                 code: 'ABC123',
                 plan: 'FREE',
+                rank: 2,
+                points: 11,
                 _count: { members: 4 },
                 members: [{ role: 'ADMIN', status: 'ACTIVE' }],
             },
@@ -43,6 +45,8 @@ describe('useLeagueStore', () => {
             name: 'Liga Uno',
             role: 'ADMIN',
             stats: {
+                rank: 2,
+                points: 11,
                 memberCount: 4,
             },
         });
@@ -95,6 +99,8 @@ describe('useLeagueStore', () => {
                 baseFee: 25000,
                 currency: 'COP',
                 plan: 'GOLD',
+                includeStageFees: false,
+                adminFeePercent: 10,
             }),
         });
         expect(useLeagueStore.getState().activeLeague?.id).toBe('league-2');
