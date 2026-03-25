@@ -141,8 +141,8 @@ const AdminSettings: React.FC = () => {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">Configuración del Sistema</h1>
-                <p className="text-sm text-slate-500 mt-1">Información del sistema, roles y permisos</p>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-brand uppercase tracking-tight leading-tight">Configuración del Sistema</h1>
+                <p className="text-xs text-slate-400 mt-1">Información del sistema, roles y permisos</p>
             </div>
 
             {/* System Info */}

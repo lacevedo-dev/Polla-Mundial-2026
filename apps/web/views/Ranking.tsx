@@ -243,10 +243,13 @@ const Ranking: React.FC = () => {
         setActiveCategory(availableCategories[0]);
     }, [activeCategory, availableCategories]);
 
-    // True once at least one player has earned points
+    // True once at least one player has earned points in GENERAL,
+    // or any participant exists in a non-GENERAL category (meaning the tournament is underway).
     const tournamentStarted = React.useMemo(
-        () => leaderboard.some((p) => p.points > 0),
-        [leaderboard],
+        () => activeCategory !== 'GENERAL'
+            ? leaderboard.length > 0
+            : leaderboard.some((p) => p.points > 0),
+        [leaderboard, activeCategory],
     );
 
     const filteredRanking = React.useMemo(() => {

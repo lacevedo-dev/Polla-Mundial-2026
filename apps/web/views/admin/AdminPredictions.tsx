@@ -10,12 +10,8 @@ const AdminPredictions: React.FC = () => {
         fetchPredictions();
     }, [filters, fetchPredictions]);
 
-    const formatDate = (d: string) => new Date(d).toLocaleDateString('es-CO', {
-        day: '2-digit', month: 'short', year: 'numeric',
-    });
-
     const getResultColor = (pred: any) => {
-        if (!pred.match.homeScore == null) return 'text-slate-400';
+        if (pred.match.homeScore == null) return 'text-slate-400';
         if (pred.homeScore === pred.match.homeScore && pred.awayScore === pred.match.awayScore) return 'text-lime-600';
         return 'text-slate-600';
     };
@@ -23,8 +19,8 @@ const AdminPredictions: React.FC = () => {
     return (
         <div className="space-y-5">
             <div>
-                <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">Pronósticos</h1>
-                <p className="text-sm text-slate-500 mt-1">{total.toLocaleString()} pronósticos en el sistema</p>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-brand uppercase tracking-tight leading-tight">Pronósticos</h1>
+                <p className="text-xs text-slate-400 mt-1">{total.toLocaleString()} pronósticos en el sistema</p>
             </div>
 
             {/* Filters */}
@@ -66,7 +62,21 @@ const AdminPredictions: React.FC = () => {
                 </div>
 
                 {isLoading ? (
-                    <div className="p-8 text-center text-slate-400 text-sm">Cargando...</div>
+                    <div className="divide-y divide-slate-100">
+                        {[...Array(5)].map((_, i) => (
+                            <div key={i} className="grid grid-cols-[1fr_2fr_auto] md:grid-cols-[1fr_2fr_1fr_1fr_1fr] gap-4 px-5 py-3 items-center animate-pulse">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full bg-slate-200 shrink-0" />
+                                    <div className="h-3 w-20 bg-slate-200 rounded" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <div className="h-3 w-36 bg-slate-200 rounded" />
+                                    <div className="h-2.5 w-20 bg-slate-100 rounded" />
+                                </div>
+                                <div className="h-5 w-10 bg-slate-100 rounded" />
+                            </div>
+                        ))}
+                    </div>
                 ) : error ? (
                     <div className="p-8 text-center text-rose-500 text-sm">{error}</div>
                 ) : predictions.length === 0 ? (
