@@ -144,6 +144,7 @@ export const useAdminLeaguesStore = create<AdminLeaguesState>((set, get) => ({
             }));
         } catch (error) {
             set({ error: error instanceof Error ? error.message : 'Error al cargar torneos' });
+            throw error;
         }
     },
 

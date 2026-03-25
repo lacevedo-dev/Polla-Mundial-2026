@@ -21,7 +21,8 @@ const STATUSES = ['SETUP', 'ACTIVE', 'PAUSED', 'FINISHED', 'CANCELLED'];
 const AdminLeagueDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { selectedLeague, members, leagueTournaments, isLoading, isSaving, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments, updateLeague, addLeagueTournament, removeLeagueTournament, setPrimaryTournament, banMember } = useAdminLeaguesStore();
+    const { selectedLeague, members, leagueTournaments, isLoading, isSaving, error, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments, updateLeague, addLeagueTournament, removeLeagueTournament, setPrimaryTournament, banMember } = useAdminLeaguesStore();
+    const [tournamentsError, setTournamentsError] = React.useState<string | null>(null);
 
     const [status, setStatus] = React.useState('');
     const [confirmBan, setConfirmBan] = React.useState<{ userId: string; name: string } | null>(null);
@@ -33,7 +34,10 @@ const AdminLeagueDetail: React.FC = () => {
         if (id) {
             fetchLeague(id);
             fetchLeagueMembers(id);
-            fetchLeagueTournaments(id);
+            setTournamentsError(null);
+            fetchLeagueTournaments(id).catch((e: any) =>
+                setTournamentsError(e?.message ?? 'Error al cargar torneos')
+            );
         }
     }, [id, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments]);
 
@@ -78,10 +82,18 @@ const AdminLeagueDetail: React.FC = () => {
                     <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">
                         {selectedLeague.name}
                     </h1>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <StatusBadge status={selectedLeague.status} size="md" />
                         <StatusBadge status={selectedLeague.plan} size="md" />
                         <span className="text-xs text-slate-400 font-mono">{selectedLeague.code}</span>
+                        {leagueTournaments.length > 0 ? (
+                            <span className="flex items-center gap-1 text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                                <Trophy size={10} />
+                                {leagueTournaments.find(t => t.isPrimary)?.name ?? `${leagueTournaments.length} torneo(s)`}
+                            </span>
+                        ) : (
+                            <span className="text-[10px] text-slate-400 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg">Sin torneo — ir a tab Torneos</span>
+                        )}
                     </div>
                 </div>
             </div>
@@ -153,6 +165,13 @@ const AdminLeagueDetail: React.FC = () => {
 
                 <TabsPrimitive.Content value="tournaments">
                     <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+
+                        {tournamentsError && (
+                            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                                <strong>Error al cargar torneos:</strong> {tournamentsError}
+                                <p className="mt-1 text-xs text-rose-500">Es posible que la migración de base de datos no se haya aplicado. Ejecuta el SQL de migración en producción.</p>
+                            </div>
+                        )}
 
                         {/* Linked tournaments */}
                         <div>
