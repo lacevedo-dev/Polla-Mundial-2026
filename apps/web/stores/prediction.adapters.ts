@@ -106,6 +106,15 @@ function normalizeMatchStatus(status: string): MatchViewModel['status'] {
     }
 }
 
+/** Si el partido aún figura como SCHEDULED pero ya pasó su hora, lo cerramos en el frontend. */
+function resolveMatchStatus(apiStatus: string, matchDate: string): MatchViewModel['status'] {
+    const base = normalizeMatchStatus(apiStatus);
+    if (base === 'open' && new Date(matchDate).getTime() < Date.now()) {
+        return 'closed';
+    }
+    return base;
+}
+
 function toDisplayDate(matchDate: string): string {
     return matchDate.includes('T') ? matchDate.split('T')[0] : matchDate;
 }
@@ -182,7 +191,7 @@ export function toMatchViewModel(
         awayFlag: resolveFlagUrl(match.awayTeam.flagUrl, match.awayTeam.code),
         date: match.matchDate,
         displayDate: toDisplayDate(match.matchDate),
-        status: normalizeMatchStatus(match.status),
+        status: resolveMatchStatus(match.status, match.matchDate),
         phase: match.phase,
         group: match.group ?? undefined,
         venue: match.venue ?? 'Por definir',

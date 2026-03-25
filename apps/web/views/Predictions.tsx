@@ -805,6 +805,19 @@ function CompactMatchRow({
                                     className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
                                 />
                             </div>
+                        ) : match.status === 'finished' && match.result ? (
+                            <div className="flex shrink-0 flex-col items-center gap-0.5">
+                                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2">
+                                    <span className="text-sm font-black text-white">{match.result.home}</span>
+                                    <span className="text-sm font-black text-slate-500">:</span>
+                                    <span className="text-sm font-black text-white">{match.result.away}</span>
+                                </div>
+                                {match.pointsEarned !== undefined && (
+                                    <span className={`text-[10px] font-black tabular-nums ${match.pointsEarned > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
+                                        {match.pointsEarned > 0 ? `+${match.pointsEarned} pts` : '0 pts'}
+                                    </span>
+                                )}
+                            </div>
                         ) : (
                             <div className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                                 <span className="text-sm font-black text-slate-900">{draft.home || '−'}</span>
@@ -894,31 +907,33 @@ function CompactMatchRow({
                                     <Coins className="h-4 w-4" />
                                 </button>
                             ) : null}
-                            {/* Botón IA */}
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onCollapseOthers();
-                                    if (!cachedInsights && !insightsLoading) {
-                                        onRequestInsights();
-                                    }
-                                    setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
-                                }}
-                                className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
-                                    hasBeenConsulted
-                                        ? 'bg-violet-100 text-violet-600 ring-2 ring-violet-200'
-                                        : insightsLoading && analysisMatchId === match.id
-                                        ? 'bg-amber-100 text-amber-600'
-                                        : 'border border-slate-200 bg-white text-slate-400 hover:bg-violet-50 hover:text-violet-600'
-                                }`}
-                            >
-                                {insightsLoading && analysisMatchId === match.id ? (
-                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
-                                ) : (
-                                    <Brain className="h-4 w-4" />
-                                )}
-                            </button>
+                            {/* Botón IA — solo cuando el partido está abierto */}
+                            {canEdit && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onCollapseOthers();
+                                        if (!cachedInsights && !insightsLoading) {
+                                            onRequestInsights();
+                                        }
+                                        setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
+                                    }}
+                                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                                        hasBeenConsulted
+                                            ? 'bg-violet-100 text-violet-600 ring-2 ring-violet-200'
+                                            : insightsLoading && analysisMatchId === match.id
+                                            ? 'bg-amber-100 text-amber-600'
+                                            : 'border border-slate-200 bg-white text-slate-400 hover:bg-violet-50 hover:text-violet-600'
+                                    }`}
+                                >
+                                    {insightsLoading && analysisMatchId === match.id ? (
+                                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+                                    ) : (
+                                        <Brain className="h-4 w-4" />
+                                    )}
+                                </button>
+                            )}
 
                             {/* Botón guardar */}
                             {canEdit && (
@@ -1163,31 +1178,33 @@ function CompactMatchRow({
                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-lime-600" />
                     )}
 
-                    {/* IA Button - aparece junto a los días */}
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onCollapseOthers();
-                            if (!cachedInsights && !insightsLoading) {
-                                onRequestInsights();
-                            }
-                            setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
-                        }}
-                        className={`flex h-6 w-6 items-center justify-center rounded-lg transition-all ${
-                            hasBeenConsulted
-                                ? 'bg-violet-100 text-violet-600 ring-1 ring-violet-300'
-                                : insightsLoading && analysisMatchId === match.id
-                                ? 'bg-amber-100 text-amber-600'
-                                : 'bg-slate-100 text-slate-400 hover:bg-violet-50 hover:text-violet-600'
-                        }`}
-                    >
-                        {insightsLoading && analysisMatchId === match.id ? (
-                            <div className="h-3 w-3 animate-spin rounded-full border border-amber-600 border-t-transparent" />
-                        ) : (
-                            <Brain className="h-3 w-3" />
-                        )}
-                    </button>
+                    {/* IA Button — solo cuando el partido está abierto */}
+                    {canEdit && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onCollapseOthers();
+                                if (!cachedInsights && !insightsLoading) {
+                                    onRequestInsights();
+                                }
+                                setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
+                            }}
+                            className={`flex h-6 w-6 items-center justify-center rounded-lg transition-all ${
+                                hasBeenConsulted
+                                    ? 'bg-violet-100 text-violet-600 ring-1 ring-violet-300'
+                                    : insightsLoading && analysisMatchId === match.id
+                                    ? 'bg-amber-100 text-amber-600'
+                                    : 'bg-slate-100 text-slate-400 hover:bg-violet-50 hover:text-violet-600'
+                            }`}
+                        >
+                            {insightsLoading && analysisMatchId === match.id ? (
+                                <div className="h-3 w-3 animate-spin rounded-full border border-amber-600 border-t-transparent" />
+                            ) : (
+                                <Brain className="h-3 w-3" />
+                            )}
+                        </button>
+                    )}
 
                     <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
@@ -2859,7 +2876,7 @@ const Predictions: React.FC = () => {
                                                                             <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                                                         </button>
                                                                     ) : null}
-                                                                    <button
+                                                                    {canEdit && <button
                                                                         type="button"
                                                                         aria-label={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
                                                                         title={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
@@ -2942,7 +2959,7 @@ const Predictions: React.FC = () => {
                                                                         }`}
                                                                     >
                                                                         <Brain className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                                                    </button>
+                                                                    </button>}
                                                                     {canEdit ? (
                                                                         <button
                                                                             type="button"
@@ -2990,6 +3007,17 @@ const Predictions: React.FC = () => {
                                                                             onChange={(value) => handleDraftChange(match.id, 'away', value)}
                                                                             onAdjust={(delta) => adjustScore('away', delta)}
                                                                         />
+                                                                    </div>
+                                                                ) : match.status === 'finished' && match.result ? (
+                                                                    <div className="flex shrink-0 flex-col items-center gap-0.5">
+                                                                        <span className="rounded-xl border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm font-black text-white sm:rounded-2xl sm:px-3 sm:py-2">
+                                                                            {match.result.home} : {match.result.away}
+                                                                        </span>
+                                                                        {match.pointsEarned !== undefined && (
+                                                                            <span className={`text-[10px] font-black tabular-nums ${match.pointsEarned > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
+                                                                                {match.pointsEarned > 0 ? `+${match.pointsEarned} pts` : '0 pts'}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 ) : (
                                                                     <span className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm font-black text-slate-500 sm:rounded-2xl sm:px-3 sm:py-2">
