@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type LeaderboardRow } from '../stores/prediction.store';
+import type { LeaderboardCategory } from '../stores/prediction.adapters';
 import { useAuthStore } from '../stores/auth.store';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -180,17 +181,12 @@ const ParticipantsGrid: React.FC<{ players: LeaderboardRow[] }> = ({ players }) 
     </motion.section>
 );
 
-function buildLeagueOptionLabel(league: {
-    name: string;
-    code?: string;
-    stats?: { memberCount?: number; points?: number };
-}) {
-    const suffix: string[] = [];
-    if (league.code) suffix.push(`Código ${league.code}`);
-    if (typeof league.stats?.memberCount === 'number') suffix.push(`${league.stats.memberCount} participantes`);
-    if (typeof league.stats?.points === 'number' && league.stats.points > 0) suffix.push(`${league.stats.points} pts`);
-    return suffix.length > 0 ? `${league.name} · ${suffix.join(' · ')}` : league.name;
-}
+const RANKING_CATEGORY_META: Array<{ id: LeaderboardCategory; label: string }> = [
+    { id: 'GENERAL', label: 'General' },
+    { id: 'MATCH', label: 'Por partido' },
+    { id: 'GROUP', label: 'Por grupo' },
+    { id: 'ROUND', label: 'Por ronda' },
+];
 
 // ─── main component ───────────────────────────────────────────────────────────
 
@@ -198,12 +194,14 @@ const Ranking: React.FC = () => {
     const activeLeague = useLeagueStore((state) => state.activeLeague);
     const myLeagues = useLeagueStore((state) => state.myLeagues);
     const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
+    const fetchLeagueDetails = useLeagueStore((state) => state.fetchLeagueDetails);
     const setActiveLeague = useLeagueStore((state) => state.setActiveLeague);
     const leaderboard = usePredictionStore((state) => state.leaderboard);
     const isLoading = usePredictionStore((state) => state.isLoading);
     const fetchLeaderboard = usePredictionStore((state) => state.fetchLeaderboard);
     const user = useAuthStore((state) => state.user);
     const [searchTerm, setSearchTerm] = React.useState('');
+    const [activeCategory, setActiveCategory] = React.useState<LeaderboardCategory>('GENERAL');
 
     React.useEffect(() => {
         if (myLeagues.length > 0) return;
@@ -212,8 +210,38 @@ const Ranking: React.FC = () => {
 
     React.useEffect(() => {
         if (!activeLeague?.id) return;
-        void fetchLeaderboard(activeLeague.id);
-    }, [activeLeague?.id, fetchLeaderboard]);
+        void fetchLeaderboard(activeLeague.id, activeCategory);
+    }, [activeCategory, activeLeague?.id, fetchLeaderboard]);
+
+    React.useEffect(() => {
+        if (!activeLeague?.id || activeLeague.stageFees) return;
+        void fetchLeagueDetails(activeLeague.id);
+    }, [activeLeague?.id, activeLeague?.stageFees, fetchLeagueDetails]);
+
+    const availableCategories = React.useMemo(() => {
+        const categories: LeaderboardCategory[] = [];
+
+        if (activeLeague?.settings.includeBaseFee !== false) {
+            categories.push('GENERAL');
+        }
+
+        const activeStageFeeTypes = new Set(
+            (activeLeague?.stageFees ?? [])
+                .filter((fee) => fee.active)
+                .map((fee) => fee.type.toUpperCase()),
+        );
+
+        if (activeStageFeeTypes.has('MATCH')) categories.push('MATCH');
+        if (activeStageFeeTypes.has('PHASE')) categories.push('GROUP');
+        if (activeStageFeeTypes.has('ROUND')) categories.push('ROUND');
+
+        return categories.length > 0 ? categories : ['GENERAL'];
+    }, [activeLeague?.settings.includeBaseFee, activeLeague?.stageFees]);
+
+    React.useEffect(() => {
+        if (availableCategories.includes(activeCategory)) return;
+        setActiveCategory(availableCategories[0]);
+    }, [activeCategory, availableCategories]);
 
     // True once at least one player has earned points
     const tournamentStarted = React.useMemo(
@@ -269,7 +297,7 @@ const Ranking: React.FC = () => {
                             >
                                 {myLeagues.map((league) => (
                                     <option key={league.id} value={league.id}>
-                                        {buildLeagueOptionLabel(league)}
+                                        {league.name}
                                     </option>
                                 ))}
                             </select>
@@ -284,6 +312,31 @@ const Ranking: React.FC = () => {
                     </div>
                 )}
             </header>
+
+            {activeLeague && availableCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {RANKING_CATEGORY_META
+                        .filter((item) => availableCategories.includes(item.id))
+                        .map((item) => {
+                            const selected = item.id === activeCategory;
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setActiveCategory(item.id)}
+                                    aria-pressed={selected}
+                                    className={`rounded-2xl border px-4 py-2 text-xs font-black uppercase tracking-[0.18em] transition ${
+                                        selected
+                                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                                            : 'border-slate-200 bg-white text-slate-500 hover:border-lime-300 hover:text-slate-900'
+                                    }`}
+                                >
+                                    {item.label}
+                                </button>
+                            );
+                        })}
+                </div>
+            )}
 
             {/* ── Loading skeleton ── */}
             {isLoading && (

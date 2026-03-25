@@ -3,6 +3,7 @@ import { request } from '../api';
 import {
     mergeLeaguePredictions,
     toLeaderboardRows,
+    type LeaderboardCategory,
     type LeaderboardApiEntry,
     type LeaderboardRow,
     type LeaguePredictionResponse,
@@ -17,7 +18,7 @@ interface PredictionState {
     leaderboard: LeaderboardRow[];
     isLoading: boolean;
     fetchLeagueMatches: (leagueId: string) => Promise<MatchViewModel[]>;
-    fetchLeaderboard: (leagueId: string) => Promise<LeaderboardRow[]>;
+    fetchLeaderboard: (leagueId: string, category?: LeaderboardCategory) => Promise<LeaderboardRow[]>;
     savePrediction: (leagueId: string, matchId: string, home: number, away: number, advanceTeamId?: string) => Promise<void>;
     resetLeagueData: () => void;
 }
@@ -65,11 +66,14 @@ export const usePredictionStore = create<PredictionState>((set) => ({
         }
     },
 
-    fetchLeaderboard: async (leagueId) => {
+    fetchLeaderboard: async (leagueId, category = 'GENERAL') => {
         set({ isLoading: true });
         try {
+            const query = category !== 'GENERAL'
+                ? `?category=${encodeURIComponent(category)}`
+                : '';
             const leaderboard = toLeaderboardRows(
-                await request<LeaderboardApiEntry[]>(`/predictions/leaderboard/${leagueId}`),
+                await request<LeaderboardApiEntry[]>(`/predictions/leaderboard/${leagueId}${query}`),
             );
 
             set({

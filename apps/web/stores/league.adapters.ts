@@ -65,6 +65,21 @@ export interface LeagueApiResponse {
         members?: number;
     };
     members?: LeagueApiMember[];
+    stageFees?: Array<{
+        id?: string;
+        type: string;
+        label: string;
+        amount: number;
+        active: boolean;
+    }>;
+    distributions?: Array<{
+        id?: string;
+        category: string;
+        position: number;
+        label: string;
+        percentage: number;
+        active: boolean;
+    }>;
 }
 
 export interface LeagueContextMember {
@@ -99,6 +114,8 @@ export interface LeagueContext {
     };
     code?: string;
     members?: LeagueContextMember[];
+    stageFees?: LeagueApiResponse['stageFees'];
+    distributions?: LeagueApiResponse['distributions'];
 }
 
 function parseOptionalInteger(value: unknown): number | undefined {
@@ -274,6 +291,8 @@ export function toLeagueContextDetail(response: LeagueApiResponse): LeagueContex
 
     return {
         ...baseContext,
+        stageFees: response.stageFees,
+        distributions: response.distributions,
         members: response.members?.map((member, index) => ({
             id: member.user?.id ?? `${response.id}-member-${index}`,
             name: member.user?.name?.trim() || member.user?.username?.trim() || `Miembro ${index + 1}`,

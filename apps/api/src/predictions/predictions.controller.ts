@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseGuards, Request, Query } from '@nestjs/common';
 import { PredictionsService } from './predictions.service';
 import { CreatePredictionDto } from './dto/prediction.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,7 +21,10 @@ export class PredictionsController {
     }
 
     @Get('leaderboard/:leagueId')
-    async getLeaderboard(@Param('leagueId') leagueId: string) {
-        return this.predictionsService.getLeaderboard(leagueId);
+    async getLeaderboard(
+        @Param('leagueId') leagueId: string,
+        @Query('category') category?: string,
+    ) {
+        return this.predictionsService.getLeaderboard(leagueId, category);
     }
 }

@@ -46,6 +46,8 @@ export interface LeaderboardApiEntry {
     exactCount?: number;
 }
 
+export type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
+
 export interface MatchViewModel {
     id: string;
     homeTeam: string;

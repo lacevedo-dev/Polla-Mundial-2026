@@ -229,7 +229,7 @@ describe('PredictionsService', () => {
         });
     });
 
-    describe('getLeaderboard — criterios de desempate', () => {
+    describe('getLeaderboard ? criterios de desempate y filtros', () => {
         it('ordena por puntos descendente', async () => {
             const prismaMock = {
                 leagueMember: {
@@ -244,6 +244,7 @@ describe('PredictionsService', () => {
                         { userId: 'u2', points: 7, pointDetail: null },
                     ]),
                 },
+                phaseBonus: { findMany: jest.fn().mockResolvedValue([]) },
             };
             const service = createService(prismaMock);
             const lb = await service.getLeaderboard('league-1');
@@ -269,19 +270,76 @@ describe('PredictionsService', () => {
                 },
                 prediction: {
                     findMany: jest.fn().mockResolvedValue([
-                        // u1: 5 pts, 1 exacto
-                        { userId: 'u1', points: 5, pointDetail: detailExact },
-                        // u2: 5 pts, 0 exactos (ganador)
-                        { userId: 'u2', points: 2, pointDetail: detailWinner },
-                        { userId: 'u2', points: 3, pointDetail: JSON.stringify({ type: 'CORRECT_WINNER_GOAL', exactPoints: 0, winnerPoints: 2, goalPoints: 1, uniqueBonus: 0, basePoints: 3, phase: 'GROUP', multiplier: 1, total: 3 }) },
+                        { userId: 'u1', matchId: 'm1', points: 5, pointDetail: detailExact, match: { group: 'A', phase: Phase.GROUP } },
+                        { userId: 'u2', matchId: 'm2', points: 2, pointDetail: detailWinner, match: { group: 'A', phase: Phase.GROUP } },
+                        { userId: 'u2', matchId: 'm3', points: 3, pointDetail: JSON.stringify({ type: 'CORRECT_WINNER_GOAL', exactPoints: 0, winnerPoints: 2, goalPoints: 1, uniqueBonus: 0, basePoints: 3, phase: 'GROUP', multiplier: 1, total: 3 }), match: { group: 'A', phase: Phase.GROUP } },
+                    ]),
+                },
+                phaseBonus: { findMany: jest.fn().mockResolvedValue([]) },
+            };
+            const service = createService(prismaMock);
+            const lb = await service.getLeaderboard('league-1');
+            expect(lb[0]).toMatchObject({ id: 'u1', exactCount: 1 });
+            expect(lb[1]).toMatchObject({ id: 'u2', exactCount: 0 });
+        });
+
+        it('filtra ranking por participaci?n por partido usando obligaciones pagadas', async () => {
+            const prismaMock = {
+                leagueMember: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', user: { id: 'u1', username: 'ana', name: 'Ana', avatar: null } },
+                        { userId: 'u2', user: { id: 'u2', username: 'beto', name: 'Beto', avatar: null } },
+                    ]),
+                },
+                participationObligation: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', matchId: 'm1', referenceId: 'm1' },
+                    ]),
+                },
+                prediction: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', matchId: 'm1', points: 4, pointDetail: null, match: { group: 'A', phase: Phase.GROUP } },
+                        { userId: 'u2', matchId: 'm1', points: 7, pointDetail: null, match: { group: 'A', phase: Phase.GROUP } },
+                    ]),
+                },
+                phaseBonus: { findMany: jest.fn().mockResolvedValue([]) },
+            };
+            const service = createService(prismaMock);
+            const lb = await service.getLeaderboard('league-1', 'MATCH');
+
+            expect(prismaMock.participationObligation.findMany).toHaveBeenCalled();
+            expect(lb).toHaveLength(1);
+            expect(lb[0]).toMatchObject({ id: 'u1', points: 4 });
+        });
+
+        it('filtra ranking por ronda e incluye bonos de fase de esa ronda', async () => {
+            const prismaMock = {
+                leagueMember: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', user: { id: 'u1', username: 'ana', name: 'Ana', avatar: null } },
+                    ]),
+                },
+                participationObligation: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', matchId: null, referenceId: Phase.ROUND_OF_16 },
+                    ]),
+                },
+                prediction: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', matchId: 'm4', points: 6, pointDetail: null, match: { group: null, phase: Phase.ROUND_OF_16 } },
+                    ]),
+                },
+                phaseBonus: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', points: 8, phase: Phase.ROUND_OF_16 },
+                        { userId: 'u1', points: 5, phase: Phase.FINAL },
                     ]),
                 },
             };
             const service = createService(prismaMock);
-            const lb = await service.getLeaderboard('league-1');
-            // Both have 5 pts total, but u1 has 1 exact → u1 wins tiebreaker
-            expect(lb[0]).toMatchObject({ id: 'u1', exactCount: 1 });
-            expect(lb[1]).toMatchObject({ id: 'u2', exactCount: 0 });
+            const lb = await service.getLeaderboard('league-1', 'ROUND');
+
+            expect(lb[0]).toMatchObject({ id: 'u1', points: 14, phaseBonusPoints: 8 });
         });
     });
 });

@@ -46,7 +46,7 @@ describe('usePredictionStore', () => {
 
         await usePredictionStore.getState().fetchLeagueMatches('league-1');
 
-        expect(requestMock).toHaveBeenNthCalledWith(1, '/matches');
+        expect(requestMock).toHaveBeenNthCalledWith(1, '/matches?leagueId=league-1');
         expect(requestMock).toHaveBeenNthCalledWith(2, '/predictions/league/league-1');
         expect(usePredictionStore.getState().matches).toEqual([
             expect.objectContaining({
@@ -74,6 +74,16 @@ describe('usePredictionStore', () => {
             rank: 1,
             points: 13,
         });
+    });
+
+    it('requests leaderboard filtered by category when provided', async () => {
+        requestMock.mockResolvedValueOnce([
+            { id: 'user-1', username: 'ana', name: 'Ana', points: 4 },
+        ]);
+
+        await usePredictionStore.getState().fetchLeaderboard('league-1', 'MATCH');
+
+        expect(requestMock).toHaveBeenCalledWith('/predictions/leaderboard/league-1?category=MATCH');
     });
 
     it('persists predictions using the backend DTO and marks them as saved on success', async () => {

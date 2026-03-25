@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePredictionDto } from './dto/prediction.dto';
-import { MemberStatus, Phase, ScoringType } from '@prisma/client';
+import { MemberStatus, ParticipationCategory, ParticipationStatus, Phase, ScoringType } from '@prisma/client';
 import { matchTeamSelect } from '../matches/match-response.util';
 
 type ScoringRuleLike = {
@@ -35,6 +35,7 @@ export interface PredictionPointDetail {
 }
 
 type CalculatePointsResult = { total: number; detail: PredictionPointDetail };
+type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
 
 @Injectable()
 export class PredictionsService {
@@ -375,7 +376,8 @@ export class PredictionsService {
         return { total, detail };
     }
 
-    async getLeaderboard(leagueId: string) {
+    async getLeaderboard(leagueId: string, category?: string) {
+        const leaderboardCategory = this.normalizeLeaderboardCategory(category);
         const members = await this.prisma.leagueMember.findMany({
             where: { leagueId, status: MemberStatus.ACTIVE },
             include: {
@@ -390,9 +392,35 @@ export class PredictionsService {
             },
         });
 
+        const allMemberIds = members.map((member) => member.userId);
+        const participationKeys = await this.getParticipationScopeKeys(leagueId, leaderboardCategory);
+        const eligibleUserIds =
+            leaderboardCategory === 'GENERAL'
+                ? new Set(allMemberIds)
+                : new Set(
+                    [...participationKeys]
+                        .map((key) => key.split(':', 1)[0])
+                        .filter((userId) => allMemberIds.includes(userId)),
+                );
+
         const predictions = await this.prisma.prediction.findMany({
-            where: { leagueId, points: { not: null } },
-            select: { userId: true, points: true, pointDetail: true },
+            where: {
+                leagueId,
+                points: { not: null },
+                ...(leaderboardCategory === 'GENERAL' ? {} : { userId: { in: [...eligibleUserIds] } }),
+            },
+            select: {
+                userId: true,
+                matchId: true,
+                points: true,
+                pointDetail: true,
+                match: {
+                    select: {
+                        group: true,
+                        phase: true,
+                    },
+                },
+            },
         });
 
         // Acumular estadísticas por usuario para criterios de desempate
@@ -405,6 +433,10 @@ export class PredictionsService {
         }>();
 
         for (const pred of predictions) {
+            if (!this.matchesLeaderboardScope(leaderboardCategory, pred, participationKeys)) {
+                continue;
+            }
+
             const stats = userStats.get(pred.userId) ?? {
                 points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0,
             };
@@ -425,12 +457,18 @@ export class PredictionsService {
 
         // Phase bonuses
         const phaseBonuses = await this.prisma.phaseBonus.findMany({
-            where: { leagueId },
+            where: {
+                leagueId,
+                ...(leaderboardCategory === 'GENERAL' ? {} : { userId: { in: [...eligibleUserIds] } }),
+            },
             select: { userId: true, points: true, phase: true },
         });
 
         const bonusByUser = new Map<string, { total: number; hasChampion: boolean }>();
         for (const b of phaseBonuses) {
+            if (!this.matchesPhaseBonusScope(leaderboardCategory, b, participationKeys)) {
+                continue;
+            }
             const curr = bonusByUser.get(b.userId) ?? { total: 0, hasChampion: false };
             curr.total += b.points;
             if (b.phase === Phase.FINAL) curr.hasChampion = true;
@@ -445,6 +483,7 @@ export class PredictionsService {
         // 5. Goles acertados
         // 6. Predicciones únicas
         return members
+            .filter((member) => leaderboardCategory === 'GENERAL' || eligibleUserIds.has(member.userId))
             .map((member) => {
                 const stats = userStats.get(member.userId) ?? {
                     points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0,
@@ -472,5 +511,93 @@ export class PredictionsService {
                 if (b.goalCount   !== a.goalCount)    return b.goalCount   - a.goalCount;
                 return b.uniqueCount - a.uniqueCount;
             });
+    }
+
+    private normalizeLeaderboardCategory(category?: string): LeaderboardCategory {
+        const normalized = category?.trim().toUpperCase();
+        if (normalized === 'MATCH' || normalized === 'GROUP' || normalized === 'ROUND') {
+            return normalized;
+        }
+
+        return 'GENERAL';
+    }
+
+    private async getParticipationScopeKeys(
+        leagueId: string,
+        category: LeaderboardCategory,
+    ): Promise<Set<string>> {
+        if (category === 'GENERAL') {
+            return new Set();
+        }
+
+        const participationCategory =
+            category === 'MATCH'
+                ? ParticipationCategory.MATCH
+                : category === 'GROUP'
+                    ? ParticipationCategory.GROUP
+                    : ParticipationCategory.ROUND;
+
+        const obligations = await this.prisma.participationObligation.findMany({
+            where: {
+                leagueId,
+                category: participationCategory,
+                status: ParticipationStatus.PAID,
+            },
+            select: {
+                userId: true,
+                matchId: true,
+                referenceId: true,
+            },
+        });
+
+        return new Set(
+            obligations.map((obligation) =>
+                category === 'MATCH'
+                    ? `${obligation.userId}:${obligation.matchId ?? ''}`
+                    : `${obligation.userId}:${obligation.referenceId ?? ''}`,
+            ),
+        );
+    }
+
+    private matchesLeaderboardScope(
+        category: LeaderboardCategory,
+        prediction: {
+            userId: string;
+            matchId: string;
+            match: { group: string | null; phase: Phase };
+        },
+        participationKeys: Set<string>,
+    ) {
+        if (category === 'GENERAL') {
+            return true;
+        }
+
+        if (category === 'MATCH') {
+            return participationKeys.has(`${prediction.userId}:${prediction.matchId}`);
+        }
+
+        if (category === 'GROUP') {
+            return prediction.match.group
+                ? participationKeys.has(`${prediction.userId}:${prediction.match.group}`)
+                : false;
+        }
+
+        return participationKeys.has(`${prediction.userId}:${prediction.match.phase}`);
+    }
+
+    private matchesPhaseBonusScope(
+        category: LeaderboardCategory,
+        phaseBonus: { userId: string; phase: Phase },
+        participationKeys: Set<string>,
+    ) {
+        if (category === 'GENERAL') {
+            return true;
+        }
+
+        if (category !== 'ROUND') {
+            return false;
+        }
+
+        return participationKeys.has(`${phaseBonus.userId}:${phaseBonus.phase}`);
     }
 }
