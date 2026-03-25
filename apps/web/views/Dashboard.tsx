@@ -1748,12 +1748,14 @@ const Dashboard: React.FC = () => {
                                             <span className="text-slate-700">{formatCurrency(activeLeague?.settings.baseFee, activeLeague?.settings.currency)}</span>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => navigate('/manage-payments')}
-                                        className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-lime-400 text-[10px] font-black uppercase tracking-[0.2em] text-slate-950 hover:bg-lime-500 transition-colors"
-                                    >
-                                        <Coins size={14} /> Gestionar pagos
-                                    </button>
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => navigate('/manage-payments')}
+                                            className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-lime-400 text-[10px] font-black uppercase tracking-[0.2em] text-slate-950 hover:bg-lime-500 transition-colors"
+                                        >
+                                            <Coins size={14} /> Gestionar pagos
+                                        </button>
+                                    )}
                                 </article>
 
                                 {/* Cupos de liga */}
@@ -1781,12 +1783,14 @@ const Dashboard: React.FC = () => {
                                         {maxParticipants === 0 && <p className="mt-1 text-[10px] text-slate-400">Sin límite de participantes</p>}
                                     </div>
                                     <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setConfigOpen(true)}
-                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-[11px] font-black uppercase tracking-wide text-slate-600 hover:bg-slate-50 transition-colors"
-                                        >
-                                            <Settings size={13} /> Configurar
-                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => setConfigOpen(true)}
+                                                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-[11px] font-black uppercase tracking-wide text-slate-600 hover:bg-slate-50 transition-colors"
+                                            >
+                                                <Settings size={13} /> Configurar
+                                            </button>
+                                        )}
                                         {activeLeague?.code && (
                                             <button
                                                 onClick={() => setInviteOpen(true)}
