@@ -1803,24 +1803,81 @@ const Dashboard: React.FC = () => {
                                 </article>
 
                                 {/* Rules */}
-                                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+                                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
                                     <div className="flex items-center justify-between">
                                         <h2 className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-900">Reglas de puntos</h2>
                                         <ListChecks className="h-4 w-4 text-slate-300" />
                                     </div>
-                                    {[
-                                        { label: 'Marcador exacto', value: '5', icon: '🎯' },
-                                        { label: 'Ganador acertado', value: '2', icon: '✅' },
-                                        { label: 'Gol acertado', value: '1', icon: '⚽' },
-                                    ].map((rule) => (
-                                        <div key={rule.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-                                            <div className="flex items-center gap-2">
-                                                <span>{rule.icon}</span>
-                                                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-600">{rule.label}</span>
+
+                                    {/* Puntuación base */}
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Resultado del partido</p>
+                                        {[
+                                            { label: 'Marcador exacto', sub: 'Ambos goles exactos', value: '5 pts', icon: '🎯', color: 'text-lime-600', bg: 'bg-lime-50 border-lime-100' },
+                                            { label: 'Ganador + gol acertado', sub: 'Resultado + al menos un marcador', value: '3 pts', icon: '✅⚽', color: 'text-teal-600', bg: 'bg-teal-50 border-teal-100' },
+                                            { label: 'Solo ganador acertado', sub: 'Empate o equipo ganador', value: '2 pts', icon: '✅', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
+                                            { label: 'Solo gol acertado', sub: 'Al menos un marcador exacto', value: '1 pt', icon: '⚽', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100' },
+                                        ].map((rule) => (
+                                            <div key={rule.label} className={`flex items-center justify-between rounded-xl border px-3 py-2.5 ${rule.bg}`}>
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <span className="text-sm leading-none shrink-0">{rule.icon}</span>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-700 leading-tight">{rule.label}</p>
+                                                        <p className="text-[9px] text-slate-400 mt-0.5">{rule.sub}</p>
+                                                    </div>
+                                                </div>
+                                                <span className={`text-sm font-black shrink-0 ml-2 ${rule.color}`}>{rule.value}</span>
                                             </div>
-                                            <span className="text-sm font-black text-lime-600">{rule.value}</span>
+                                        ))}
+                                    </div>
+
+                                    {/* Bonus predicción única */}
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Bonificación especial</p>
+                                        <div className="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
+                                            <div className="flex items-center gap-2.5">
+                                                <span className="text-sm leading-none">⭐</span>
+                                                <div>
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-700 leading-tight">Predicción única</p>
+                                                    <p className="text-[9px] text-slate-400 mt-0.5">Eres el único en la liga con ese marcador exacto</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-sm font-black text-amber-600 shrink-0 ml-2">+5 pts</span>
                                         </div>
-                                    ))}
+                                    </div>
+
+                                    {/* Bonos clasificados */}
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Bono clasificados — fase eliminatoria</p>
+                                        <p className="text-[9px] text-slate-400 leading-snug">
+                                            En partidos de eliminatoria puedes predecir qué equipo clasifica.
+                                            Si <span className="font-bold text-slate-600">todos</span> tus picks de la fase son correctos, ganas el bono completo.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            {[
+                                                { label: 'Octavos', value: '8 pts', icon: '🥈' },
+                                                { label: 'Cuartos', value: '4 pts', icon: '🥉' },
+                                                { label: 'Semifinal', value: '2 pts', icon: '🏅' },
+                                                { label: 'Campeón', value: '5 pts', icon: '🏆' },
+                                            ].map((b) => (
+                                                <div key={b.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-xs leading-none">{b.icon}</span>
+                                                        <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-600">{b.label}</span>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-lime-600">{b.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Desempate */}
+                                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 space-y-1">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Criterio de desempate</p>
+                                        <p className="text-[9px] text-slate-400 leading-snug">
+                                            Puntos → Campeón acertado → Marcadores exactos → Ganadores → Goles → Predicciones únicas
+                                        </p>
+                                    </div>
                                 </article>
                             </motion.div>
                         )}
