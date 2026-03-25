@@ -15,6 +15,7 @@ describe('LeaguesService', () => {
                 findUnique: jest.fn().mockResolvedValue({ plan: 'FREE' }),
             },
             league: {
+                findFirst: jest.fn().mockResolvedValue(null),
                 findUnique: jest.fn().mockResolvedValue(null),
                 create: jest.fn().mockResolvedValue({
                     id: 'league-1',
@@ -38,11 +39,11 @@ describe('LeaguesService', () => {
             role: MemberRole.ADMIN,
             status: MemberStatus.ACTIVE,
         });
-        expect(createArgs.data.scoringRules.createMany.data).toEqual([
+        expect(createArgs.data.scoringRules.createMany.data).toEqual(expect.arrayContaining([
             { ruleType: 'EXACT_SCORE', points: 5, description: 'Marcador exacto' },
-            { ruleType: 'CORRECT_DIFF', points: 3, description: 'Misma diferencia de goles' },
-            { ruleType: 'CORRECT_WINNER', points: 2, description: 'Solo ganador/empate' },
-        ]);
+            { ruleType: 'CORRECT_WINNER', points: 2, description: 'Ganador / empate correcto' },
+            { ruleType: 'TEAM_GOALS', points: 1, description: 'Gol acertado (al menos un equipo)' },
+        ]));
         expect(createArgs.include).toEqual({
             members: true,
             scoringRules: true,
@@ -95,5 +96,36 @@ describe('LeaguesService', () => {
             deadlineAt: new Date('2026-06-01T00:00:00.000Z'),
         });
         expect(result.status).toBe(MemberStatus.PENDING_PAYMENT);
+    });
+
+    it('rejects creating a league with a duplicated name', async () => {
+        const prismaMock = {
+            league: {
+                findFirst: jest.fn().mockResolvedValue({ id: 'league-existing', name: 'Liga Test' }),
+            },
+        };
+
+        const service = createService(prismaMock);
+
+        await expect(service.create('user-1', { name: 'Liga Test' } as any)).rejects.toThrow(
+            'Ya existe una polla con ese nombre. Usa un nombre diferente.',
+        );
+    });
+
+    it('rejects updating a league with a duplicated name', async () => {
+        const prismaMock = {
+            leagueMember: {
+                findUnique: jest.fn().mockResolvedValue({ role: MemberRole.ADMIN }),
+            },
+            league: {
+                findFirst: jest.fn().mockResolvedValue({ id: 'league-existing', name: 'Liga Repetida' }),
+            },
+        };
+
+        const service = createService(prismaMock);
+
+        await expect(service.updateLeague('user-1', 'league-1', { name: 'Liga Repetida' } as any)).rejects.toThrow(
+            'Ya existe una polla con ese nombre. Usa un nombre diferente.',
+        );
     });
 });

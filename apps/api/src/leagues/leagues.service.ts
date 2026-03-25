@@ -31,6 +31,27 @@ export class LeaguesService {
         return randomBytes(3).toString('hex').toUpperCase();
     }
 
+    private normalizeLeagueName(name: string): string {
+        return name.trim().replace(/\s+/g, ' ');
+    }
+
+    private async assertUniqueLeagueName(name: string, excludeLeagueId?: string) {
+        const normalizedName = this.normalizeLeagueName(name);
+        const duplicated = await this.prisma.league.findFirst({
+            where: {
+                name: normalizedName,
+                ...(excludeLeagueId ? { id: { not: excludeLeagueId } } : {}),
+            },
+            select: { id: true, name: true },
+        });
+
+        if (duplicated) {
+            throw new BadRequestException('Ya existe una polla con ese nombre. Usa un nombre diferente.');
+        }
+
+        return normalizedName;
+    }
+
     private parsePointDetail(pointDetail: string | null) {
         if (!pointDetail) return null;
         try {
@@ -223,6 +244,7 @@ export class LeaguesService {
     }
 
     async create(userId: string, createLeagueDto: CreateLeagueDto) {
+        const normalizedLeagueName = await this.assertUniqueLeagueName(createLeagueDto.name);
         let code = this.generateUniqueCode();
         let isCodeUnique = false;
 
@@ -247,6 +269,7 @@ export class LeaguesService {
             const league = await this.prisma.league.create({
                 data: {
                     ...leagueScalars,
+                    name: normalizedLeagueName,
                     plan: leaguePlan,
                     code,
                     status: LeagueStatus.SETUP,
@@ -561,6 +584,10 @@ export class LeaguesService {
         }
 
         const { stageFees: sfDto, distributions: distDto, ...scalarFields } = dto;
+
+        if (typeof scalarFields.name === 'string') {
+            scalarFields.name = await this.assertUniqueLeagueName(scalarFields.name, leagueId);
+        }
 
         if (Object.keys(scalarFields).length) {
             await this.prisma.league.update({ where: { id: leagueId }, data: scalarFields as any });

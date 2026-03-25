@@ -180,6 +180,18 @@ const ParticipantsGrid: React.FC<{ players: LeaderboardRow[] }> = ({ players }) 
     </motion.section>
 );
 
+function buildLeagueOptionLabel(league: {
+    name: string;
+    code?: string;
+    stats?: { memberCount?: number; points?: number };
+}) {
+    const suffix: string[] = [];
+    if (league.code) suffix.push(`Código ${league.code}`);
+    if (typeof league.stats?.memberCount === 'number') suffix.push(`${league.stats.memberCount} participantes`);
+    if (typeof league.stats?.points === 'number' && league.stats.points > 0) suffix.push(`${league.stats.points} pts`);
+    return suffix.length > 0 ? `${league.name} · ${suffix.join(' · ')}` : league.name;
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 const Ranking: React.FC = () => {
@@ -257,7 +269,7 @@ const Ranking: React.FC = () => {
                             >
                                 {myLeagues.map((league) => (
                                     <option key={league.id} value={league.id}>
-                                        {league.name}
+                                        {buildLeagueOptionLabel(league)}
                                     </option>
                                 ))}
                             </select>

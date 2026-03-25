@@ -1338,6 +1338,18 @@ const Dashboard: React.FC = () => {
     const maxParticipants = activeLeague?.settings.maxParticipants ?? 0;
     const occupancyPct = maxParticipants > 0 ? Math.min(100, Math.round((memberCount / maxParticipants) * 100)) : 0;
 
+    const buildLeagueLabel = useCallback((league: {
+        name: string;
+        code?: string;
+        stats?: { memberCount?: number; points?: number };
+    }) => {
+        const suffix: string[] = [];
+        if (league.code) suffix.push(`Código ${league.code}`);
+        if (typeof league.stats?.memberCount === 'number') suffix.push(`${league.stats.memberCount} participantes`);
+        if (typeof league.stats?.points === 'number' && league.stats.points > 0) suffix.push(`${league.stats.points} pts`);
+        return suffix.length > 0 ? `${league.name} · ${suffix.join(' · ')}` : league.name;
+    }, []);
+
     const handleDashboardRetry = useCallback(() => {
         void fetchDashboardData(true);
     }, [fetchDashboardData]);
@@ -1489,7 +1501,7 @@ const Dashboard: React.FC = () => {
                             className="flex items-center gap-2 group"
                         >
                             <h1 className="text-3xl font-black font-brand uppercase tracking-tight text-slate-900 sm:text-4xl group-hover:text-lime-700 transition-colors leading-none">
-                                {activeLeague?.name || 'Sin liga'}
+                                {activeLeague ? buildLeagueLabel(activeLeague) : 'Sin liga'}
                             </h1>
                             <motion.div animate={{ rotate: leagueDropOpen ? 180 : 0 }} transition={{ duration: 0.2 }} className="mt-1">
                                 <ChevronDown size={20} className="text-slate-400 group-hover:text-lime-600 transition-colors" />
@@ -1515,7 +1527,7 @@ const Dashboard: React.FC = () => {
                                                     league.id === activeLeague?.id ? 'bg-lime-50 text-lime-700' : 'text-slate-700 hover:bg-slate-50'
                                                 }`}
                                             >
-                                                {league.name}
+                                                {buildLeagueLabel(league)}
                                             </button>
                                         ))}
                                     </motion.div>
