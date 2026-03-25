@@ -43,10 +43,11 @@ export interface DashboardState {
   loading: boolean;
   error: string | null;
   lastFetchTime: number | null;
+  lastLeagueId: string | null;
 
   // Actions
-  fetchDashboardData: (forceRefresh?: boolean) => Promise<void>;
-  refetch: () => Promise<void>;
+  fetchDashboardData: (forceRefresh?: boolean, leagueId?: string | null) => Promise<void>;
+  refetch: (leagueId?: string | null) => Promise<void>;
   clearError: () => void;
   reset: () => void;
 }
@@ -57,6 +58,7 @@ const CACHE_VERSION = 2; // Increment when data shape changes to bust stale cach
 
 interface CachedData {
   version?: number;
+  leagueId?: string | null;
   stats: DashboardStats | null;
   leagues: DashboardLeague[] | null;
   performance: PerformanceWeek[] | null;
@@ -140,6 +142,7 @@ function getCachedData(): CachedData | null {
     // Validate shapes to prevent React #185 from stale/corrupt cached data
     const validatedData: CachedData = {
       version: data.version,
+      leagueId: data.leagueId ?? null,
       timestamp: data.timestamp,
       stats: isValidStats(data.stats) ? data.stats : null,
       leagues: isValidLeagueArray(data.leagues) ? data.leagues : null,
@@ -175,13 +178,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   loading: false,
   error: null,
   lastFetchTime: null,
+  lastLeagueId: null,
 
   // Actions
-  fetchDashboardData: async (forceRefresh = false) => {
+  fetchDashboardData: async (forceRefresh = false, leagueId = null) => {
     const state = get();
 
     // Check cache
-    if (!forceRefresh && state.lastFetchTime) {
+    if (!forceRefresh && state.lastFetchTime && state.lastLeagueId === leagueId) {
       const timeSinceLastFetch = Date.now() - state.lastFetchTime;
       if (timeSinceLastFetch < CACHE_TTL) {
         return; // Use existing data
@@ -191,13 +195,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     // Check localStorage cache
     if (!forceRefresh) {
       const cached = getCachedData();
-      if (cached) {
+      if (cached && (cached.leagueId ?? null) === leagueId) {
         set({
           stats: cached.stats,
           leagues: cached.leagues,
           performance: cached.performance,
           predictions: cached.predictions,
           lastFetchTime: cached.timestamp,
+          lastLeagueId: cached.leagueId ?? null,
           loading: false,
           error: null,
         });
@@ -214,7 +219,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           request<DashboardStats>('/dashboard/stats'),
           request<{ ligas: DashboardLeague[] }>('/dashboard/leagues'),
           request<PerformanceWeek[]>('/dashboard/performance'),
-          request<{ predicciones: RecentPrediction[] }>('/dashboard/predictions/recent'),
+          request<{ predicciones: RecentPrediction[] }>(
+            leagueId ? `/dashboard/predictions/recent?leagueId=${leagueId}` : '/dashboard/predictions/recent',
+          ),
         ]);
 
       const newState = {
@@ -223,6 +230,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         performance: isValidPerformanceArray(performanceResponse) ? performanceResponse : null,
         predictions: isValidPredictionArray(predictionsResponse?.predicciones) ? predictionsResponse.predicciones : null,
         lastFetchTime: Date.now(),
+        lastLeagueId: leagueId,
         loading: false,
         error: null,
       };
@@ -230,6 +238,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       // Update state and cache
       set(newState);
       setCachedData({
+        leagueId,
         stats: newState.stats,
         leagues: newState.leagues,
         performance: newState.performance,
@@ -246,8 +255,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
 
-  refetch: async () => {
-    await get().fetchDashboardData(true);
+  refetch: async (leagueId = null) => {
+    await get().fetchDashboardData(true, leagueId);
   },
 
   clearError: () => {
@@ -263,6 +272,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       loading: false,
       error: null,
       lastFetchTime: null,
+      lastLeagueId: null,
     });
     try {
       localStorage.removeItem(STORAGE_KEY);

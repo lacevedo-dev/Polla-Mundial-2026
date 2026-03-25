@@ -254,9 +254,12 @@ export class DashboardService {
   /**
    * Get recent predictions (last 5)
    */
-  async getRecentPredictions(userId: string): Promise<{ predicciones: RecentPrediction[] }> {
+  async getRecentPredictions(userId: string, leagueId?: string): Promise<{ predicciones: RecentPrediction[] }> {
     const predictions = await this.prisma.prediction.findMany({
-      where: { userId },
+      where: {
+        userId,
+        ...(leagueId ? { leagueId } : {}),
+      },
       include: {
         match: {
           include: {
@@ -271,7 +274,15 @@ export class DashboardService {
       take: 5,
     });
 
-    const predicciones: RecentPrediction[] = predictions.map((pred) => {
+    const latestPredictions = new Map<string, (typeof predictions)[number]>();
+    for (const prediction of predictions) {
+      const key = leagueId ? prediction.matchId : `${prediction.leagueId}:${prediction.matchId}`;
+      if (!latestPredictions.has(key)) {
+        latestPredictions.set(key, prediction);
+      }
+    }
+
+    const predicciones: RecentPrediction[] = [...latestPredictions.values()].slice(0, 5).map((pred) => {
       const matchName = `${pred.match.homeTeam.name} vs ${pred.match.awayTeam.name}`;
       const tuPrediccion = `${pred.homeScore}-${pred.awayScore}`;
       const actualResult =

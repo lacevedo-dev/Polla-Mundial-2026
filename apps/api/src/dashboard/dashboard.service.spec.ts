@@ -78,4 +78,67 @@ describe('DashboardService', () => {
       ],
     });
   });
+
+  it('deduplicates recent predictions by match within a league keeping the latest submission first', async () => {
+    prismaMock.prediction.findMany.mockResolvedValue([
+      {
+        id: 'pred-new',
+        matchId: 'match-1',
+        leagueId: 'league-1',
+        homeScore: 2,
+        awayScore: 1,
+        points: 1,
+        submittedAt: '2026-03-25T11:00:00.000Z',
+        match: {
+          homeScore: 0,
+          awayScore: 1,
+          homeTeam: { name: 'Kyrgyzstan' },
+          awayTeam: { name: 'Equatorial Guinea' },
+        },
+      },
+      {
+        id: 'pred-old',
+        matchId: 'match-1',
+        leagueId: 'league-1',
+        homeScore: 1,
+        awayScore: 1,
+        points: 0,
+        submittedAt: '2026-03-25T10:00:00.000Z',
+        match: {
+          homeScore: 0,
+          awayScore: 1,
+          homeTeam: { name: 'Kyrgyzstan' },
+          awayTeam: { name: 'Equatorial Guinea' },
+        },
+      },
+      {
+        id: 'pred-2',
+        matchId: 'match-2',
+        leagueId: 'league-1',
+        homeScore: 1,
+        awayScore: 0,
+        points: null,
+        submittedAt: '2026-03-25T09:00:00.000Z',
+        match: {
+          homeScore: null,
+          awayScore: null,
+          homeTeam: { name: 'Moldova' },
+          awayTeam: { name: 'Lithuania' },
+        },
+      },
+    ]);
+
+    const response = await service.getRecentPredictions('user-1', 'league-1');
+
+    expect(response.predicciones).toHaveLength(2);
+    expect(response.predicciones[0]).toMatchObject({
+      id: 'pred-new',
+      match: 'Kyrgyzstan vs Equatorial Guinea',
+      tuPrediccion: '2-1',
+    });
+    expect(response.predicciones[1]).toMatchObject({
+      id: 'pred-2',
+      match: 'Moldova vs Lithuania',
+    });
+  });
 });

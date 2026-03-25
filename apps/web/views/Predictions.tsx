@@ -1161,111 +1161,137 @@ function CompactMatchRow({
     return (
         <div className="overflow-hidden border-b border-slate-100 last:border-b-0">
             {/* Compact row - one line */}
-            <button
-                type="button"
-                onClick={onToggleExpand}
-                className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-slate-50 active:bg-slate-100 sm:hidden"
-            >
-                <span className="shrink-0 text-[10px] font-black text-slate-500">{formatMatchTime(match.date)}</span>
+            <div className="flex items-center gap-2 px-3 py-2 sm:hidden">
+                <button
+                    type="button"
+                    onClick={onToggleExpand}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
+                >
+                    <span className="shrink-0 text-[10px] font-black text-slate-500">{formatMatchTime(match.date)}</span>
 
-                {/* Home team */}
-                <div className="flex min-w-0 items-center gap-1">
-                    <img src={match.homeFlag} alt={match.homeTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
-                    <span className="text-[10px] font-black uppercase text-slate-900">{match.homeTeamCode}</span>
-                </div>
-
-                {/* Score or inputs */}
-                {canEdit && isExpanded ? (
-                    <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <input
-                            ref={onHomeInputRef}
-                            type="tel"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={draft.home}
-                            onChange={(e) => {
-                                onDraftChange('home', e.target.value);
-                                if (e.target.value && /^\d+$/.test(e.target.value)) {
-                                    setTimeout(() => onHomeEnter(), 150);
-                                }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
-                        />
-                        <span className="text-xs font-black text-slate-300">-</span>
-                        <input
-                            ref={onAwayInputRef}
-                            type="tel"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={draft.away}
-                            onChange={(e) => {
-                                onDraftChange('away', e.target.value);
-                                if (e.target.value && /^\d+$/.test(e.target.value)) {
-                                    setTimeout(() => onAwayEnter(), 150);
-                                }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
-                        />
+                    <div className="flex min-w-0 items-center gap-1">
+                        <img src={match.homeFlag} alt={match.homeTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
+                        <span className="text-[10px] font-black uppercase text-slate-900">{match.homeTeamCode}</span>
                     </div>
-                ) : (
-                    <div className="flex shrink-0 items-center gap-1">
-                        <span className="text-xs font-black text-slate-900">{draft.home || '-'}</span>
-                        <span className="text-xs font-black text-slate-300">-</span>
-                        <span className="text-xs font-black text-slate-900">{draft.away || '-'}</span>
+
+                    {canEdit && isExpanded ? (
+                        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                                ref={onHomeInputRef}
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={draft.home}
+                                onChange={(e) => {
+                                    onDraftChange('home', e.target.value);
+                                    if (e.target.value && /^\d+$/.test(e.target.value)) {
+                                        setTimeout(() => onHomeEnter(), 150);
+                                    }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
+                            />
+                            <span className="text-xs font-black text-slate-300">-</span>
+                            <input
+                                ref={onAwayInputRef}
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={draft.away}
+                                onChange={(e) => {
+                                    onDraftChange('away', e.target.value);
+                                    if (e.target.value && /^\d+$/.test(e.target.value)) {
+                                        setTimeout(() => onAwayEnter(), 150);
+                                    }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex shrink-0 items-center gap-1">
+                            <span className="text-xs font-black text-slate-900">{draft.home || '-'}</span>
+                            <span className="text-xs font-black text-slate-300">-</span>
+                            <span className="text-xs font-black text-slate-900">{draft.away || '-'}</span>
+                        </div>
+                    )}
+
+                    <div className="flex min-w-0 items-center gap-1">
+                        <span className="text-[10px] font-black uppercase text-slate-900">{match.awayTeamCode}</span>
+                        <img src={match.awayFlag} alt={match.awayTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
                     </div>
-                )}
 
-                {/* Away team */}
-                <div className="flex min-w-0 items-center gap-1">
-                    <span className="text-[10px] font-black uppercase text-slate-900">{match.awayTeamCode}</span>
-                    <img src={match.awayFlag} alt={match.awayTeamCode} className="h-5 w-7 rounded border border-slate-200 object-cover" />
-                </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-1">
+                        {match.saved && <CheckCircle2 className="h-4 w-4 text-lime-600" />}
+                        {isDirty && !isSaving && <div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />}
+                        {isSaving && <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-lime-600" />}
+                        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </div>
+                </button>
 
-                {/* Status indicator + IA button */}
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                    {match.saved && (
-                        <CheckCircle2 className="h-4 w-4 text-lime-600" />
-                    )}
-                    {isDirty && !isSaving && (
-                        <div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                    )}
-                    {isSaving && (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-lime-600" />
-                    )}
-
-                    {/* IA Button — solo cuando el partido está abierto */}
-                    {canEdit && (
+                <div className="flex shrink-0 items-center gap-1">
+                    {hasParticipationOptions && canEdit ? (
                         <button
                             type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
+                            aria-label={`Ver participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
+                            title={`Ver participaciones de ${match.homeTeam} vs ${match.awayTeam}`}
+                            onClick={() => onToggleParticipation()}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                                isParticipationOpen
+                                    ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'
+                                    : 'border border-slate-200 bg-white text-slate-400 hover:bg-amber-50 hover:text-amber-600'
+                            }`}
+                        >
+                            <Coins className="h-3.5 w-3.5" />
+                        </button>
+                    ) : null}
+                    {canEdit ? (
+                        <button
+                            type="button"
+                            aria-label={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
+                            title={`Ver Smart Insights para ${match.homeTeam} vs ${match.awayTeam}`}
+                            onClick={() => {
                                 onCollapseOthers();
                                 if (!cachedInsights && !insightsLoading) {
                                     onRequestInsights();
                                 }
                                 setInsightsLevel(insightsLevel === 'none' ? 'suggestions' : 'none');
                             }}
-                            className={`flex h-6 w-6 items-center justify-center rounded-lg transition-all ${
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
                                 hasBeenConsulted
                                     ? 'bg-violet-100 text-violet-600 ring-1 ring-violet-300'
                                     : insightsLoading && analysisMatchId === match.id
                                     ? 'bg-amber-100 text-amber-600'
-                                    : 'bg-slate-100 text-slate-400 hover:bg-violet-50 hover:text-violet-600'
+                                    : 'border border-slate-200 bg-white text-slate-400 hover:bg-violet-50 hover:text-violet-600'
                             }`}
                         >
                             {insightsLoading && analysisMatchId === match.id ? (
                                 <div className="h-3 w-3 animate-spin rounded-full border border-amber-600 border-t-transparent" />
                             ) : (
-                                <Brain className="h-3 w-3" />
+                                <Brain className="h-3.5 w-3.5" />
                             )}
                         </button>
-                    )}
-
-                    <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    ) : null}
+                    {canEdit ? (
+                        <button
+                            type="button"
+                            aria-label={`Guardar pronóstico de ${match.homeTeam} vs ${match.awayTeam}`}
+                            title={`Guardar pronóstico de ${match.homeTeam} vs ${match.awayTeam}`}
+                            onClick={onSave}
+                            disabled={isSaving}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:opacity-60 ${
+                                isDirty || match.saved
+                                    ? 'bg-lime-400 text-slate-900 hover:bg-lime-300'
+                                    : 'border border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                            }`}
+                        >
+                            {isSaving
+                                ? <div className="h-3 w-3 animate-spin rounded-full border border-slate-900/30 border-t-slate-900" />
+                                : match.saved ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                        </button>
+                    ) : null}
                 </div>
-            </button>
+            </div>
 
             {/* Nivel 1: Info básica (cuando se expande) */}
             {isExpanded && (

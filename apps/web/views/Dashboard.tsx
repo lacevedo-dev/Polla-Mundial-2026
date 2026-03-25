@@ -1422,12 +1422,12 @@ const Dashboard: React.FC = () => {
     }, [quickPreds]);
 
     const handleDashboardRetry = useCallback(() => {
-        void fetchDashboardData(true);
-    }, [fetchDashboardData]);
+        void fetchDashboardData(true, activeLeague?.id ?? null);
+    }, [activeLeague?.id, fetchDashboardData]);
 
     useEffect(() => {
-        if (user) void fetchDashboardData().catch(() => {});
-    }, [user, fetchDashboardData]);
+        if (user) void fetchDashboardData(false, activeLeague?.id ?? null).catch(() => {});
+    }, [activeLeague?.id, fetchDashboardData, user]);
 
     useEffect(() => {
         if (myLeagues.length > 0) return;
