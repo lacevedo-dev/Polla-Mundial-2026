@@ -15,7 +15,13 @@ export class MatchesController {
     }
 
     @Get()
-    async findAll(@Query('phase') phase?: Phase) {
+    async findAll(
+        @Query('phase') phase?: Phase,
+        @Query('leagueId') leagueId?: string,
+    ) {
+        if (leagueId) {
+            return this.matchesService.findByLeague(leagueId);
+        }
         if (phase) {
             return this.matchesService.findByPhase(phase);
         }

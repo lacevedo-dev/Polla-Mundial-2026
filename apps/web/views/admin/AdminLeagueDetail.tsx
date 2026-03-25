@@ -1,28 +1,50 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Ban } from 'lucide-react';
+import { ArrowLeft, Ban, Check, Star, Trash2, Trophy } from 'lucide-react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { useAdminLeaguesStore } from '../../stores/admin.leagues.store';
 import StatusBadge from '../../components/admin/StatusBadge';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
+import { request } from '../../api';
+
+interface AvailableTournament {
+    id: string;
+    name: string;
+    logoUrl?: string;
+    season: number;
+    country?: string;
+    active: boolean;
+}
 
 const STATUSES = ['SETUP', 'ACTIVE', 'PAUSED', 'FINISHED', 'CANCELLED'];
 
 const AdminLeagueDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { selectedLeague, members, isLoading, isSaving, fetchLeague, fetchLeagueMembers, updateLeague, banMember } = useAdminLeaguesStore();
+    const { selectedLeague, members, leagueTournaments, isLoading, isSaving, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments, updateLeague, addLeagueTournament, removeLeagueTournament, setPrimaryTournament, banMember } = useAdminLeaguesStore();
 
     const [status, setStatus] = React.useState('');
     const [confirmBan, setConfirmBan] = React.useState<{ userId: string; name: string } | null>(null);
     const [isDirty, setIsDirty] = React.useState(false);
+    const [allTournaments, setAllTournaments] = React.useState<AvailableTournament[]>([]);
+    const [loadingTournaments, setLoadingTournaments] = React.useState(false);
 
     React.useEffect(() => {
         if (id) {
             fetchLeague(id);
             fetchLeagueMembers(id);
+            fetchLeagueTournaments(id);
         }
-    }, [id, fetchLeague, fetchLeagueMembers]);
+    }, [id, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments]);
+
+    // Load all available tournaments for the picker
+    React.useEffect(() => {
+        setLoadingTournaments(true);
+        request<AvailableTournament[]>('/admin/football/tournaments')
+            .then(setAllTournaments)
+            .catch(() => null)
+            .finally(() => setLoadingTournaments(false));
+    }, []);
 
     React.useEffect(() => {
         if (selectedLeague) setStatus(selectedLeague.status);
@@ -66,13 +88,17 @@ const AdminLeagueDetail: React.FC = () => {
 
             <TabsPrimitive.Root defaultValue="info">
                 <TabsPrimitive.List className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-full sm:w-fit">
-                    {['info', 'members'].map((tab) => (
+                    {[
+                        { value: 'info', label: 'Información' },
+                        { value: 'tournaments', label: 'Torneos' },
+                        { value: 'members', label: 'Miembros' },
+                    ].map((tab) => (
                         <TabsPrimitive.Trigger
-                            key={tab}
-                            value={tab}
-                            className="flex-1 sm:flex-none text-center px-4 py-2 text-sm font-bold rounded-lg text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all capitalize"
+                            key={tab.value}
+                            value={tab.value}
+                            className="flex-1 sm:flex-none text-center px-4 py-2 text-sm font-bold rounded-lg text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                         >
-                            {tab === 'info' ? 'Información' : 'Miembros'}
+                            {tab.label}
                         </TabsPrimitive.Trigger>
                     ))}
                 </TabsPrimitive.List>
@@ -120,6 +146,111 @@ const AdminLeagueDetail: React.FC = () => {
                                 >
                                     {isSaving ? 'Guardando...' : 'Guardar cambios'}
                                 </button>
+                            )}
+                        </div>
+                    </div>
+                </TabsPrimitive.Content>
+
+                <TabsPrimitive.Content value="tournaments">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+
+                        {/* Linked tournaments */}
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Torneos vinculados a esta polla</p>
+
+                            {leagueTournaments.length === 0 ? (
+                                <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
+                                    <Trophy size={28} className="opacity-40" />
+                                    <p className="text-sm">Sin torneos vinculados. Agrega un torneo para filtrar partidos.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {leagueTournaments.map((t) => (
+                                        <div key={t.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${t.isPrimary ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200'}`}>
+                                            {t.logoUrl ? (
+                                                <img src={t.logoUrl} alt={t.name} className="w-8 h-8 object-contain shrink-0" />
+                                            ) : (
+                                                <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                                                    <Trophy size={14} className="text-slate-400" />
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm font-bold text-slate-900 truncate">{t.name}</p>
+                                                    {t.isPrimary && (
+                                                        <span className="text-[10px] bg-amber-400 text-slate-900 font-black px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0">Principal</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-slate-400">{t.country} · Temporada {t.season}</p>
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                {!t.isPrimary && (
+                                                    <button
+                                                        onClick={() => id && void setPrimaryTournament(id, t.id)}
+                                                        disabled={isSaving}
+                                                        title="Establecer como principal (sugerencia de participación)"
+                                                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-all"
+                                                    >
+                                                        <Star size={14} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => id && void removeLeagueTournament(id, t.id)}
+                                                    disabled={isSaving}
+                                                    title="Desvincular torneo"
+                                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
+                                <Star size={10} className="text-amber-500" />
+                                El torneo <strong>Principal</strong> determina qué partidos generan sugerencia de participación
+                            </p>
+                        </div>
+
+                        {/* Add tournament picker */}
+                        <div className="border-t border-slate-100 pt-5">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Agregar torneo</p>
+                            {loadingTournaments ? (
+                                <p className="text-sm text-slate-400">Cargando torneos disponibles…</p>
+                            ) : allTournaments.length === 0 ? (
+                                <p className="text-sm text-slate-400">No hay torneos importados. Ve a la sección de partidos para importar torneos.</p>
+                            ) : (
+                                <div className="space-y-1.5 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                    {allTournaments
+                                        .filter(t => !leagueTournaments.some(lt => lt.id === t.id))
+                                        .map((t) => (
+                                            <button
+                                                key={t.id}
+                                                onClick={() => id && void addLeagueTournament(id, t.id)}
+                                                disabled={isSaving}
+                                                className="w-full flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-amber-300 hover:bg-amber-50/30 transition-all text-left group"
+                                            >
+                                                {t.logoUrl ? (
+                                                    <img src={t.logoUrl} alt={t.name} className="w-8 h-8 object-contain shrink-0" />
+                                                ) : (
+                                                    <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                                                        <Trophy size={14} className="text-slate-400" />
+                                                    </div>
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-slate-800 truncate">{t.name}</p>
+                                                    <p className="text-[10px] text-slate-400">{t.country} · Temporada {t.season}</p>
+                                                </div>
+                                                <Check size={14} className="text-slate-200 group-hover:text-amber-500 transition-colors shrink-0" />
+                                            </button>
+                                        ))
+                                    }
+                                    {allTournaments.filter(t => !leagueTournaments.some(lt => lt.id === t.id)).length === 0 && (
+                                        <p className="text-sm text-slate-400 py-3 text-center">Todos los torneos ya están vinculados.</p>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>

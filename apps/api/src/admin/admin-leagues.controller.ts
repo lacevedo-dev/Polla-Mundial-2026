@@ -1,6 +1,6 @@
 import {
-    Controller, Get, Patch, Param, Body, Query, UseGuards,
-    NotFoundException, ParseIntPipe, DefaultValuePipe,
+    Controller, Get, Patch, Post, Delete, Param, Body, Query, UseGuards,
+    NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LeagueStatus, Plan, MemberStatus } from '@prisma/client';
@@ -26,6 +26,10 @@ export class UpdateLeagueAdminDto {
     @IsOptional()
     @IsString()
     description?: string;
+
+    @IsOptional()
+    @IsString()
+    primaryTournamentId?: string | null;
 }
 
 @ApiTags('admin')
@@ -119,5 +123,96 @@ export class AdminLeaguesController {
             where: { userId_leagueId: { userId, leagueId: id } },
             data: { status: MemberStatus.BANNED },
         });
+    }
+
+    /* ── Tournament management ─────────────────────────────────────────── */
+
+    @Get(':id/tournaments')
+    @ApiOperation({ summary: 'Get tournaments linked to a league' })
+    async getLeagueTournaments(@Param('id') id: string) {
+        const league = await this.prisma.league.findUnique({
+            where: { id },
+            select: {
+                primaryTournamentId: true,
+                leagueTournaments: {
+                    include: {
+                        tournament: {
+                            select: { id: true, name: true, logoUrl: true, season: true, country: true, active: true },
+                        },
+                    },
+                },
+            },
+        });
+        if (!league) throw new NotFoundException('Liga no encontrada');
+        return {
+            primaryTournamentId: league.primaryTournamentId,
+            tournaments: league.leagueTournaments.map(lt => ({
+                ...lt.tournament,
+                addedAt: lt.addedAt,
+                isPrimary: lt.tournamentId === league.primaryTournamentId,
+            })),
+        };
+    }
+
+    @Post(':id/tournaments/:tournamentId')
+    @ApiOperation({ summary: 'Link a tournament to a league' })
+    async addTournament(@Param('id') id: string, @Param('tournamentId') tournamentId: string) {
+        const [league, tournament] = await Promise.all([
+            this.prisma.league.findUnique({ where: { id } }),
+            this.prisma.tournament.findUnique({ where: { id: tournamentId } }),
+        ]);
+        if (!league) throw new NotFoundException('Liga no encontrada');
+        if (!tournament) throw new NotFoundException('Torneo no encontrado');
+
+        try {
+            await this.prisma.leagueTournament.create({ data: { leagueId: id, tournamentId } });
+        } catch {
+            throw new HttpException('El torneo ya está vinculado a esta liga', HttpStatus.CONFLICT);
+        }
+
+        // If it's the first tournament, make it primary automatically
+        if (!league.primaryTournamentId) {
+            await this.prisma.league.update({ where: { id }, data: { primaryTournamentId: tournamentId } });
+        }
+
+        return { message: 'Torneo vinculado correctamente' };
+    }
+
+    @Delete(':id/tournaments/:tournamentId')
+    @ApiOperation({ summary: 'Unlink a tournament from a league' })
+    async removeTournament(@Param('id') id: string, @Param('tournamentId') tournamentId: string) {
+        const lt = await this.prisma.leagueTournament.findUnique({
+            where: { leagueId_tournamentId: { leagueId: id, tournamentId } },
+        });
+        if (!lt) throw new NotFoundException('Vínculo no encontrado');
+
+        await this.prisma.leagueTournament.delete({
+            where: { leagueId_tournamentId: { leagueId: id, tournamentId } },
+        });
+
+        // If removed tournament was primary, clear it
+        const league = await this.prisma.league.findUnique({ where: { id }, select: { primaryTournamentId: true } });
+        if (league?.primaryTournamentId === tournamentId) {
+            // Set next available as primary, or null
+            const next = await this.prisma.leagueTournament.findFirst({ where: { leagueId: id } });
+            await this.prisma.league.update({
+                where: { id },
+                data: { primaryTournamentId: next?.tournamentId ?? null },
+            });
+        }
+
+        return { message: 'Torneo desvinculado correctamente' };
+    }
+
+    @Patch(':id/tournaments/:tournamentId/set-primary')
+    @ApiOperation({ summary: 'Set a tournament as primary (for participation suggestions)' })
+    async setPrimaryTournament(@Param('id') id: string, @Param('tournamentId') tournamentId: string) {
+        const lt = await this.prisma.leagueTournament.findUnique({
+            where: { leagueId_tournamentId: { leagueId: id, tournamentId } },
+        });
+        if (!lt) throw new NotFoundException('El torneo no está vinculado a esta liga');
+
+        await this.prisma.league.update({ where: { id }, data: { primaryTournamentId: tournamentId } });
+        return { message: 'Torneo principal actualizado' };
     }
 }

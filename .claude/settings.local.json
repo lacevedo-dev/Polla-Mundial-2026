@@ -47,7 +47,8 @@
       "Bash(npx tsc:*)",
       "Bash(find D:Proyectospolla-uiappswebcomponents -type f -name *payment* -o -name *admin*)",
       "Bash(find D:/Proyectos/polla-ui -name *.prisma -type f)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

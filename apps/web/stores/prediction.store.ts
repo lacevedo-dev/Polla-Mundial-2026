@@ -41,7 +41,7 @@ export const usePredictionStore = create<PredictionState>((set) => ({
     fetchLeagueMatches: async (leagueId) => {
         set({ isLoading: true });
         try {
-            const matches = await request<MatchResponse[]>('/matches');
+            const matches = await request<MatchResponse[]>(`/matches?leagueId=${leagueId}`);
             const baseMatches = mergeAndSortMatches(matches, []);
             set({
                 matches: baseMatches,

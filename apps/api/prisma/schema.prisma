@@ -65,8 +65,11 @@ model League {
   plan                   Plan                @default(FREE)
   status                 LeagueStatus        @default(SETUP)
   closePredictionMinutes Int                 @default(15)
+  primaryTournamentId    String?
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
+  primaryTournament      Tournament?         @relation("LeaguePrimaryTournament", fields: [primaryTournamentId], references: [id])
+  leagueTournaments      LeagueTournament[]
   auditLogs              AuditLog[]
   invitations            Invitation[]
   members                LeagueMember[]
@@ -150,9 +153,24 @@ model Tournament {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   matches             Match[]
+  leagueTournaments   LeagueTournament[]
+  primaryLeagues      League[]            @relation("LeaguePrimaryTournament")
 
   @@index([apiFootballLeagueId])
   @@index([season])
+}
+
+model LeagueTournament {
+  id           String     @id @default(cuid())
+  leagueId     String
+  tournamentId String
+  addedAt      DateTime   @default(now())
+  league       League     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, tournamentId])
+  @@index([leagueId])
+  @@index([tournamentId])
 }
 
 model Team {

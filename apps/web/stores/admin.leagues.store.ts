@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import { request } from '../api';
 
+export interface AdminLeagueTournament {
+    id: string;
+    name: string;
+    logoUrl?: string;
+    season: number;
+    country?: string;
+    active: boolean;
+    addedAt: string;
+    isPrimary: boolean;
+}
+
 export interface AdminLeague {
     id: string;
     name: string;
@@ -11,6 +22,7 @@ export interface AdminLeague {
     privacy: string;
     currency: string;
     createdAt: string;
+    primaryTournamentId?: string | null;
     _count?: { members: number; predictions: number };
 }
 
@@ -34,6 +46,7 @@ interface AdminLeaguesState {
     leagues: AdminLeague[];
     selectedLeague: AdminLeague | null;
     members: AdminLeagueMember[];
+    leagueTournaments: AdminLeagueTournament[];
     total: number;
     filters: LeaguesFilters;
     isLoading: boolean;
@@ -43,7 +56,11 @@ interface AdminLeaguesState {
     fetchLeagues: () => Promise<void>;
     fetchLeague: (id: string) => Promise<void>;
     fetchLeagueMembers: (id: string) => Promise<void>;
+    fetchLeagueTournaments: (id: string) => Promise<void>;
     updateLeague: (id: string, data: Partial<{ status: string; plan: string; name: string; description: string }>) => Promise<void>;
+    addLeagueTournament: (leagueId: string, tournamentId: string) => Promise<void>;
+    removeLeagueTournament: (leagueId: string, tournamentId: string) => Promise<void>;
+    setPrimaryTournament: (leagueId: string, tournamentId: string) => Promise<void>;
     banMember: (leagueId: string, userId: string) => Promise<void>;
     setFilters: (filters: Partial<LeaguesFilters>) => void;
 }
@@ -52,6 +69,7 @@ export const useAdminLeaguesStore = create<AdminLeaguesState>((set, get) => ({
     leagues: [],
     selectedLeague: null,
     members: [],
+    leagueTournaments: [],
     total: 0,
     filters: { page: 1, limit: 20, search: '' },
     isLoading: false,
@@ -108,6 +126,57 @@ export const useAdminLeaguesStore = create<AdminLeaguesState>((set, get) => ({
                 selectedLeague: state.selectedLeague?.id === id ? { ...state.selectedLeague, ...updated } : state.selectedLeague,
                 isSaving: false,
             }));
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    fetchLeagueTournaments: async (id) => {
+        try {
+            const data = await request<{ primaryTournamentId: string | null; tournaments: AdminLeagueTournament[] }>(`/admin/leagues/${id}/tournaments`);
+            set({ leagueTournaments: data.tournaments });
+            // Sync primaryTournamentId back to selectedLeague
+            set((state) => ({
+                selectedLeague: state.selectedLeague?.id === id
+                    ? { ...state.selectedLeague, primaryTournamentId: data.primaryTournamentId }
+                    : state.selectedLeague,
+            }));
+        } catch (error) {
+            set({ error: error instanceof Error ? error.message : 'Error al cargar torneos' });
+        }
+    },
+
+    addLeagueTournament: async (leagueId, tournamentId) => {
+        set({ isSaving: true });
+        try {
+            await request(`/admin/leagues/${leagueId}/tournaments/${tournamentId}`, { method: 'POST' });
+            await get().fetchLeagueTournaments(leagueId);
+            set({ isSaving: false });
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    removeLeagueTournament: async (leagueId, tournamentId) => {
+        set({ isSaving: true });
+        try {
+            await request(`/admin/leagues/${leagueId}/tournaments/${tournamentId}`, { method: 'DELETE' });
+            await get().fetchLeagueTournaments(leagueId);
+            set({ isSaving: false });
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    setPrimaryTournament: async (leagueId, tournamentId) => {
+        set({ isSaving: true });
+        try {
+            await request(`/admin/leagues/${leagueId}/tournaments/${tournamentId}/set-primary`, { method: 'PATCH' });
+            await get().fetchLeagueTournaments(leagueId);
+            set({ isSaving: false });
         } catch (error) {
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;
