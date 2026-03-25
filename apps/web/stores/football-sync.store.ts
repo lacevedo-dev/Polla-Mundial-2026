@@ -12,6 +12,13 @@ import type {
   FootballMatchLinkCandidate,
 } from '../types/football-sync';
 
+interface ApiUsageSummary {
+  used: number;
+  remaining: number;
+  limit: number;
+  percentage: number;
+}
+
 interface FootballSyncStore {
   // State
   dashboard: MonitoringDashboard | null;
@@ -19,12 +26,14 @@ interface FootballSyncStore {
   alerts: AlertsResponse | null;
   config: FootballSyncConfig | null;
   stats: SyncStats | null;
+  usageSummary: ApiUsageSummary | null;
 
   isLoading: boolean;
   error: string | null;
 
   // Actions
   fetchDashboard: () => Promise<void>;
+  fetchUsageSummary: () => Promise<void>;
   fetchHistory: (filter: SyncHistoryFilter) => Promise<void>;
   fetchAlerts: (filter: AlertsFilter) => Promise<void>;
   fetchConfig: () => Promise<void>;
@@ -54,8 +63,19 @@ export const useFootballSyncStore = create<FootballSyncStore>((set, get) => ({
   alerts: null,
   config: null,
   stats: null,
+  usageSummary: null,
   isLoading: false,
   error: null,
+
+  // Usage summary
+  fetchUsageSummary: async () => {
+    try {
+      const usageSummary = await request<ApiUsageSummary>('/admin/football/usage/summary');
+      set({ usageSummary });
+    } catch {
+      // non-critical, ignore
+    }
+  },
 
   // Dashboard
   fetchDashboard: async () => {

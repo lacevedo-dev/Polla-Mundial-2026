@@ -62,6 +62,25 @@ export class FootballSyncController {
   ) {}
 
   /**
+   * Get a simple API-Football usage summary (used / remaining / limit)
+   */
+  @Get('usage/summary')
+  @ApiOperation({ summary: 'Simple API-Football request usage summary' })
+  async getUsageSummary() {
+    const [used, available, limit] = await Promise.all([
+      this.rateLimiter.getUsedRequestsToday(),
+      this.rateLimiter.getAvailableRequests(),
+      this.rateLimiter.getDailyLimit(),
+    ]);
+    return {
+      used,
+      remaining: available,
+      limit,
+      percentage: Math.round((used / limit) * 100),
+    };
+  }
+
+  /**
    * Get current sync usage and plan
    */
   @Get('usage')

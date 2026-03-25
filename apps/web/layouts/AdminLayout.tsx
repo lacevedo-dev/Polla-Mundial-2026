@@ -5,6 +5,7 @@ import {
     Settings, LogOut, Shield, Menu, X, Target, ArrowLeft, RefreshCw, Sparkles, Coins,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
+import { useFootballSyncStore } from '../stores/football-sync.store';
 
 const adminNavItems = [
     { to: '/admin', label: 'Dashboard', icon: BarChart3, end: true },
@@ -23,6 +24,13 @@ const adminNavItems = [
 const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
     const { user, logout, isSuperAdmin, checkAuth, sessionChecked } = useAuthStore();
+    const { usageSummary, fetchUsageSummary } = useFootballSyncStore();
+
+    React.useEffect(() => {
+        fetchUsageSummary();
+        const id = window.setInterval(fetchUsageSummary, 60_000);
+        return () => window.clearInterval(id);
+    }, [fetchUsageSummary]);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const hasStoredToken = Boolean(localStorage.getItem('token'));
 
@@ -104,7 +112,16 @@ const AdminLayout: React.FC = () => {
                                 }
                             >
                                 <item.icon size={18} />
-                                <span>{item.label}</span>
+                                <span className="flex-1">{item.label}</span>
+                                {item.to === '/admin/football-sync' && usageSummary && (
+                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md tabular-nums ${
+                                        usageSummary.percentage >= 90 ? 'bg-rose-500 text-white' :
+                                        usageSummary.percentage >= 70 ? 'bg-amber-400 text-slate-900' :
+                                        'bg-slate-700 text-slate-300'
+                                    }`}>
+                                        {usageSummary.used}/{usageSummary.limit}
+                                    </span>
+                                )}
                             </NavLink>
                         ))}
                     </nav>
@@ -185,7 +202,16 @@ const AdminLayout: React.FC = () => {
                                     }
                                 >
                                     <item.icon size={24} />
-                                    <span>{item.label}</span>
+                                    <span className="flex-1">{item.label}</span>
+                                    {item.to === '/admin/football-sync' && usageSummary && (
+                                        <span className={`text-xs font-black px-2 py-1 rounded-lg ${
+                                            usageSummary.percentage >= 90 ? 'bg-rose-500 text-white' :
+                                            usageSummary.percentage >= 70 ? 'bg-amber-400 text-slate-900' :
+                                            'bg-slate-700 text-slate-400'
+                                        }`}>
+                                            {usageSummary.used}/{usageSummary.limit} API
+                                        </span>
+                                    )}
                                 </NavLink>
                             ))}
                         </div>

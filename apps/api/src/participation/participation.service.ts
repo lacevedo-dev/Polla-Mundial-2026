@@ -213,6 +213,7 @@ export class ParticipationService {
           where: { active: true },
           orderBy: { position: 'asc' },
         },
+        leagueTournaments: { select: { tournamentId: true } },
       },
     });
 
@@ -220,11 +221,20 @@ export class ParticipationService {
       throw new NotFoundException('Liga no encontrada');
     }
 
+    // Build tournament filter: primary tournament first; fall back to all linked; then all matches
+    const linkedTournamentIds = league.leagueTournaments.map((lt: any) => lt.tournamentId);
+    const tournamentFilter = league.primaryTournamentId
+      ? { tournamentId: league.primaryTournamentId }
+      : linkedTournamentIds.length > 0
+        ? { tournamentId: { in: linkedTournamentIds } }
+        : {};
+
     const matches = await this.prisma.match.findMany({
       where: {
         status: {
           in: [MatchStatus.SCHEDULED, MatchStatus.LIVE],
         },
+        ...tournamentFilter,
       },
       include: {
         homeTeam: { select: { name: true } },

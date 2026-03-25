@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { ApiFootballResponse } from '../dto/api-football.dto';
+import { RateLimiterService } from './rate-limiter.service';
 
 @Injectable()
 export class ApiFootballClient {
@@ -10,9 +11,14 @@ export class ApiFootballClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
+  /** Cached from the last API-Football response headers */
+  private lastKnownRemaining: number | null = null;
+  private lastKnownLimit: number | null = null;
+
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly rateLimiter: RateLimiterService,
   ) {
     this.baseUrl = this.configService.get<string>(
       'API_FOOTBALL_BASE_URL',
@@ -94,18 +100,30 @@ export class ApiFootballClient {
 
       if (response.data.errors && response.data.errors.length > 0) {
         this.logger.error('API-Football errors:', response.data.errors);
+        await this.rateLimiter.logRequest(endpoint, params, 500, 0);
         throw new HttpException(
           `API-Football error: ${JSON.stringify(response.data.errors)}`,
           500,
         );
       }
 
+      // Capture rate-limit headers from API-Football
+      const remaining = response.headers?.['x-ratelimit-requests-remaining'];
+      const limit = response.headers?.['x-ratelimit-requests-limit'];
+      if (remaining !== undefined) this.lastKnownRemaining = Number(remaining);
+      if (limit !== undefined) this.lastKnownLimit = Number(limit);
+
+      const resultsCount = response.data.results ?? 0;
       this.logger.log(
-        `API-Football success: ${response.data.results} results from ${endpoint}`,
+        `API-Football success: ${resultsCount} results from ${endpoint} — remaining: ${this.lastKnownRemaining ?? 'unknown'}`,
       );
+
+      // Log every API call to the DB for usage tracking
+      await this.rateLimiter.logRequest(endpoint, params, response.status, resultsCount);
 
       return response.data;
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       this.logger.error('API-Football request failed:', error.message);
 
       if (error.response?.status === 429) {
@@ -180,5 +198,20 @@ export class ApiFootballClient {
    */
   isConfigured(): boolean {
     return !!this.apiKey;
+  }
+
+  /**
+   * Get the last known remaining requests from API-Football response headers.
+   * Returns null if no request has been made yet this session.
+   */
+  getLastKnownRemaining(): number | null {
+    return this.lastKnownRemaining;
+  }
+
+  /**
+   * Get the last known total limit from API-Football response headers.
+   */
+  getLastKnownLimit(): number | null {
+    return this.lastKnownLimit;
   }
 }
