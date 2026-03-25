@@ -9,6 +9,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class LeaguesController {
     constructor(private readonly leaguesService: LeaguesService) { }
 
+    @Get('tournaments')
+    async listTournaments() {
+        return this.leaguesService.listAvailableTournaments();
+    }
+
     @Post()
     async createLeague(@Request() req, @Body() createLeagueDto: CreateLeagueDto) {
         const userId = req.user.userId;

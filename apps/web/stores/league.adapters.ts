@@ -32,6 +32,7 @@ export interface CreateLeagueRequest {
     adminFeePercent?: number;
     stageFees?: CreateLeagueStageFee[];
     distributions?: CreateLeagueDistribution[];
+    primaryTournamentId?: string;
 }
 
 export interface LeagueApiMember {
@@ -234,6 +235,7 @@ export function toCreateLeagueRequest(input: LeagueData | CreateLeagueRequest): 
         adminFeePercent: input.adminFeePercent,
         stageFees: stageFees ?? undefined,
         distributions: distributions.length ? distributions : undefined,
+        primaryTournamentId: input.primaryTournamentId,
     };
 }
 

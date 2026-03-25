@@ -25,6 +25,13 @@ export class LeaguesService {
         return randomBytes(3).toString('hex').toUpperCase();
     }
 
+    async listAvailableTournaments() {
+        return this.prisma.tournament.findMany({
+            orderBy: [{ active: 'desc' }, { season: 'desc' }, { name: 'asc' }],
+            select: { id: true, name: true, country: true, season: true, logoUrl: true, active: true },
+        });
+    }
+
     async create(userId: string, createLeagueDto: CreateLeagueDto) {
         let code = this.generateUniqueCode();
         let isCodeUnique = false;
@@ -44,7 +51,7 @@ export class LeaguesService {
             leaguePlan = creator?.plan ?? Plan.FREE;
         }
 
-        const { stageFees: sfInput, distributions: distInput, ...leagueScalars } = createLeagueDto;
+        const { stageFees: sfInput, distributions: distInput, primaryTournamentId, ...leagueScalars } = createLeagueDto;
 
         try {
             const league = await this.prisma.league.create({
@@ -98,6 +105,16 @@ export class LeaguesService {
                     distributions: true,
                 },
             });
+
+            if (primaryTournamentId) {
+                await this.prisma.leagueTournament.create({
+                    data: { leagueId: league.id, tournamentId: primaryTournamentId },
+                }).catch(() => { /* tournament not found — ignore */ });
+                await this.prisma.league.update({
+                    where: { id: league.id },
+                    data: { primaryTournamentId },
+                }).catch(() => { /* column may not exist in older DB — ignore */ });
+            }
 
             return league;
         } catch (error) {

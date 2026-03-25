@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
+import { request } from '../api';
 
 // Props eliminadas â€” navegaciÃ³n via useNavigate
 
@@ -165,6 +166,8 @@ const CreateLeague: React.FC = () => {
   const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(saved?.foundExistingUser || false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [tournaments, setTournaments] = React.useState<{ id: string; name: string; country?: string; season: number; logoUrl?: string; active: boolean }[]>([]);
+  const [tournamentsLoaded, setTournamentsLoaded] = React.useState(false);
 
   // Phone selection state
   const [selectedCountry, setSelectedCountry] = React.useState<Country>(
@@ -213,6 +216,14 @@ const CreateLeague: React.FC = () => {
     setLeagueData(prev => ({ ...prev, plan }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser?.plan]);
+
+  // Load tournaments for picker on step 1
+  React.useEffect(() => {
+    if (step !== 1 || tournamentsLoaded) return;
+    request<{ id: string; name: string; country?: string; season: number; logoUrl?: string; active: boolean }[]>('/leagues/tournaments')
+      .then((data) => { setTournaments(data); setTournamentsLoaded(true); })
+      .catch(() => setTournamentsLoaded(true));
+  }, [step, tournamentsLoaded]);
 
   // Click outside for country selector
   React.useEffect(() => {
@@ -550,6 +561,33 @@ const CreateLeague: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3 pt-2">
                       <button onClick={() => setLeagueData({ ...leagueData, privacy: 'private' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'private' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Lock size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Privada</span></button>
                       <button onClick={() => setLeagueData({ ...leagueData, privacy: 'public' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'public' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Globe size={16} /><span className="text-[8px] font-black uppercase tracking-widest">PÃºblica</span></button>
+                    </div>
+
+                    {/* Tournament picker */}
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest ml-1">Torneo</label>
+                      {!tournamentsLoaded ? (
+                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">Cargando torneos...</div>
+                      ) : tournaments.length === 0 ? (
+                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">No hay torneos importados aún</div>
+                      ) : (
+                        <div className="relative">
+                          <Trophy size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <select
+                            value={leagueData.primaryTournamentId ?? ''}
+                            onChange={(e) => setLeagueData({ ...leagueData, primaryTournamentId: e.target.value || undefined })}
+                            className="w-full appearance-none pl-8 pr-8 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-400"
+                          >
+                            <option value="">Sin torneo (opcional)</option>
+                            {tournaments.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? ` — ${t.country}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

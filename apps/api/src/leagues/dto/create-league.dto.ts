@@ -74,4 +74,8 @@ export class CreateLeagueDto {
     @ValidateNested({ each: true })
     @Type(() => CreateDistributionDto)
     distributions?: CreateDistributionDto[];
+
+    @IsOptional()
+    @IsString()
+    primaryTournamentId?: string;
 }
