@@ -38,10 +38,32 @@ const RULE_LABELS: Record<string, string> = {
 
 const STATUSES = ['SETUP', 'ACTIVE', 'PAUSED', 'FINISHED', 'CANCELLED'];
 
+const DetailSkeleton: React.FC = () => (
+    <div className="space-y-5 animate-pulse">
+        <div className="flex items-start gap-4">
+            <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0" />
+            <div className="flex-1 space-y-2">
+                <div className="h-7 w-48 bg-slate-200 rounded-xl" />
+                <div className="flex gap-2">
+                    <div className="h-5 w-20 bg-slate-100 rounded-full" />
+                    <div className="h-5 w-16 bg-slate-100 rounded-full" />
+                    <div className="h-5 w-24 bg-slate-100 rounded-full" />
+                </div>
+            </div>
+        </div>
+        <div className="h-12 w-full sm:w-80 bg-slate-100 rounded-xl" />
+        <div className="h-64 rounded-[2rem] bg-slate-100" />
+    </div>
+);
+
 const AdminLeagueDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { selectedLeague, members, leagueTournaments, isLoading, isSaving, error, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments, updateLeague, addLeagueTournament, removeLeagueTournament, setPrimaryTournament, banMember } = useAdminLeaguesStore();
+    const {
+        selectedLeague, members, leagueTournaments, isLoading, isSaving, error,
+        fetchLeague, fetchLeagueMembers, fetchLeagueTournaments,
+        updateLeague, addLeagueTournament, removeLeagueTournament, setPrimaryTournament, banMember,
+    } = useAdminLeaguesStore();
     const [tournamentsError, setTournamentsError] = React.useState<string | null>(null);
 
     const [status, setStatus] = React.useState('');
@@ -65,7 +87,6 @@ const AdminLeagueDetail: React.FC = () => {
         }
     }, [id, fetchLeague, fetchLeagueMembers, fetchLeagueTournaments]);
 
-    // Load scoring rules
     React.useEffect(() => {
         if (!id) return;
         request<ScoringRule[]>(`/admin/leagues/${id}/scoring-rules`)
@@ -73,7 +94,6 @@ const AdminLeagueDetail: React.FC = () => {
             .catch(() => null);
     }, [id]);
 
-    // Load all available tournaments for the picker
     React.useEffect(() => {
         setLoadingTournaments(true);
         request<AvailableTournament[]>('/admin/football/tournaments')
@@ -108,26 +128,31 @@ const AdminLeagueDetail: React.FC = () => {
         }
     };
 
-    if (isLoading && !selectedLeague) {
-        return <div className="text-center py-16 text-slate-400">Cargando...</div>;
-    }
+    if (isLoading && !selectedLeague) return <DetailSkeleton />;
 
     if (!selectedLeague) {
         return <div className="text-center py-16 text-slate-400">Polla no encontrada</div>;
     }
 
+    const tabs = [
+        { value: 'info', label: 'Información' },
+        { value: 'tournaments', label: 'Torneos', count: leagueTournaments.length || undefined },
+        { value: 'members', label: 'Miembros', count: members.length || undefined },
+        { value: 'rules', label: 'Reglas' },
+    ];
+
     return (
         <div className="space-y-5">
             {/* Header */}
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-3">
                 <button
                     onClick={() => navigate('/admin/leagues')}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex-shrink-0"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex-shrink-0 mt-0.5"
                 >
                     <ArrowLeft size={16} />
                 </button>
-                <div>
-                    <h1 className="text-2xl font-black text-slate-900 font-brand uppercase tracking-tight">
+                <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-brand uppercase tracking-tight leading-tight truncate">
                         {selectedLeague.name}
                     </h1>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -140,32 +165,33 @@ const AdminLeagueDetail: React.FC = () => {
                                 {leagueTournaments.find(t => t.isPrimary)?.name ?? `${leagueTournaments.length} torneo(s)`}
                             </span>
                         ) : (
-                            <span className="text-[10px] text-slate-400 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg">Sin torneo — ir a tab Torneos</span>
+                            <span className="text-[10px] text-slate-400 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg">Sin torneo</span>
                         )}
                     </div>
                 </div>
             </div>
 
             <TabsPrimitive.Root defaultValue="info">
-                <TabsPrimitive.List className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-full sm:w-fit">
-                    {[
-                        { value: 'info', label: 'Información' },
-                        { value: 'tournaments', label: 'Torneos' },
-                        { value: 'members', label: 'Miembros' },
-                        { value: 'rules', label: 'Reglas' },
-                    ].map((tab) => (
+                <TabsPrimitive.List className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-full sm:w-fit overflow-x-auto">
+                    {tabs.map((tab) => (
                         <TabsPrimitive.Trigger
                             key={tab.value}
                             value={tab.value}
-                            className="flex-1 sm:flex-none text-center px-4 py-2 text-sm font-bold rounded-lg text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            className="flex-1 sm:flex-none whitespace-nowrap flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold rounded-lg text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                         >
                             {tab.label}
+                            {tab.count !== undefined && (
+                                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-slate-200 data-[state=active]:bg-amber-100 data-[state=active]:text-amber-700 text-[9px] font-black px-1">
+                                    {tab.count}
+                                </span>
+                            )}
                         </TabsPrimitive.Trigger>
                     ))}
                 </TabsPrimitive.List>
 
+                {/* INFO TAB */}
                 <TabsPrimitive.Content value="info">
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-5">
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                             {[
                                 { label: 'Descripción', value: selectedLeague.description ?? '—' },
@@ -181,7 +207,6 @@ const AdminLeagueDetail: React.FC = () => {
                             ))}
                         </div>
 
-                        {/* Status edit */}
                         <div className="border-t border-slate-100 pt-4">
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">Cambiar Estado</p>
                             <div className="flex gap-2 flex-wrap">
@@ -212,24 +237,22 @@ const AdminLeagueDetail: React.FC = () => {
                     </div>
                 </TabsPrimitive.Content>
 
+                {/* TOURNAMENTS TAB */}
                 <TabsPrimitive.Content value="tournaments">
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-6">
                         {tournamentsError && (
                             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
                                 <strong>Error al cargar torneos:</strong> {tournamentsError}
-                                <p className="mt-1 text-xs text-rose-500">Es posible que la migración de base de datos no se haya aplicado. Ejecuta el SQL de migración en producción.</p>
+                                <p className="mt-1 text-xs text-rose-500">Es posible que la migración de base de datos no se haya aplicado.</p>
                             </div>
                         )}
 
-                        {/* Linked tournaments */}
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Torneos vinculados a esta polla</p>
-
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Torneos vinculados</p>
                             {leagueTournaments.length === 0 ? (
                                 <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
                                     <Trophy size={28} className="opacity-40" />
-                                    <p className="text-sm">Sin torneos vinculados. Agrega un torneo para filtrar partidos.</p>
+                                    <p className="text-sm">Sin torneos vinculados. Agrega uno abajo.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -256,7 +279,7 @@ const AdminLeagueDetail: React.FC = () => {
                                                     <button
                                                         onClick={() => id && void setPrimaryTournament(id, t.id)}
                                                         disabled={isSaving}
-                                                        title="Establecer como principal (sugerencia de participación)"
+                                                        title="Establecer como principal"
                                                         className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-all"
                                                     >
                                                         <Star size={14} />
@@ -275,14 +298,12 @@ const AdminLeagueDetail: React.FC = () => {
                                     ))}
                                 </div>
                             )}
-
                             <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
                                 <Star size={10} className="text-amber-500" />
                                 El torneo <strong>Principal</strong> determina qué partidos generan sugerencia de participación
                             </p>
                         </div>
 
-                        {/* Add tournament picker */}
                         <div className="border-t border-slate-100 pt-5">
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Agregar torneo</p>
                             {loadingTournaments ? (
@@ -324,8 +345,9 @@ const AdminLeagueDetail: React.FC = () => {
                     </div>
                 </TabsPrimitive.Content>
 
+                {/* RULES TAB */}
                 <TabsPrimitive.Content value="rules">
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Puntuación</p>
@@ -380,40 +402,79 @@ const AdminLeagueDetail: React.FC = () => {
                     </div>
                 </TabsPrimitive.Content>
 
+                {/* MEMBERS TAB */}
                 <TabsPrimitive.Content value="members">
-                    <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
-                        <div className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Miembro</p>
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Rol</p>
-                            <p className="hidden md:block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acción</p>
+                    {members.length === 0 ? (
+                        <div className="rounded-[2rem] border border-slate-200 bg-white p-10 text-center text-slate-400 text-sm shadow-sm">
+                            Sin miembros en esta polla
                         </div>
-                        <div className="divide-y divide-slate-100">
-                            {members.map((member) => (
-                                <div key={member.id} className="grid grid-cols-[2fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 items-center">
-                                    <div className="flex items-center gap-2 min-w-0">
+                    ) : (
+                        <>
+                            {/* Mobile cards */}
+                            <div className="md:hidden space-y-2">
+                                {members.map((member) => (
+                                    <div key={member.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex items-center gap-3">
                                         <img
                                             src={member.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.name)}&background=e2e8f0&color=64748b`}
-                                            className="w-7 h-7 rounded-full flex-shrink-0"
+                                            className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
                                             alt={member.user.name}
                                         />
-                                        <div className="min-w-0">
+                                        <div className="flex-1 min-w-0">
                                             <p className="text-sm font-bold text-slate-800 truncate">{member.user.name}</p>
                                             <p className="text-xs text-slate-400 truncate">{member.user.email}</p>
+                                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                                <StatusBadge status={member.role} />
+                                                <StatusBadge status={member.status} />
+                                            </div>
                                         </div>
+                                        <button
+                                            onClick={() => setConfirmBan({ userId: member.user.id, name: member.user.name })}
+                                            disabled={member.status === 'BANNED'}
+                                            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all disabled:opacity-30"
+                                        >
+                                            <Ban size={15} />
+                                        </button>
                                     </div>
-                                    <StatusBadge status={member.role} />
-                                    <div className="hidden md:block"><StatusBadge status={member.status} /></div>
-                                    <button
-                                        onClick={() => setConfirmBan({ userId: member.user.id, name: member.user.name })}
-                                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
-                                    >
-                                        <Ban size={14} />
-                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Desktop table */}
+                            <div className="hidden md:block rounded-[2rem] border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Miembro</p>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Rol</p>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</p>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acción</p>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                                <div className="divide-y divide-slate-100">
+                                    {members.map((member) => (
+                                        <div key={member.id} className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-5 py-3 items-center hover:bg-slate-50/50 transition-colors">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <img
+                                                    src={member.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user.name)}&background=e2e8f0&color=64748b`}
+                                                    className="w-7 h-7 rounded-full flex-shrink-0 object-cover"
+                                                    alt={member.user.name}
+                                                />
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-slate-800 truncate">{member.user.name}</p>
+                                                    <p className="text-xs text-slate-400 truncate">{member.user.email}</p>
+                                                </div>
+                                            </div>
+                                            <StatusBadge status={member.role} />
+                                            <StatusBadge status={member.status} />
+                                            <button
+                                                onClick={() => setConfirmBan({ userId: member.user.id, name: member.user.name })}
+                                                disabled={member.status === 'BANNED'}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all disabled:opacity-30"
+                                            >
+                                                <Ban size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </TabsPrimitive.Content>
             </TabsPrimitive.Root>
 
