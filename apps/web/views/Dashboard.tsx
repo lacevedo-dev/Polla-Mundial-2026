@@ -1305,7 +1305,6 @@ const Dashboard: React.FC = () => {
     const [leagueDropOpen, setLeagueDropOpen] = useState(false);
     const [quickPreds, setQuickPreds] = useState<Record<string, { home: string; away: string }>>({});
     const [savingMatchId, setSavingMatchId] = useState<string | null>(null);
-    const [scoringTab, setScoringTab] = useState<'resultado' | 'bonos' | 'desempate'>('resultado');
 
     const isLoading = leagueLoading || dashboardLoading;
     const isRealAdmin = activeLeague?.role === 'ADMIN';
@@ -1804,219 +1803,24 @@ const Dashboard: React.FC = () => {
                                 </article>
 
                                 {/* Rules */}
-                                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm" aria-label="Reglas de puntos">
-
-                                    {/* Header */}
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h2 className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-900">Cómo se puntúa</h2>
-                                        <ListChecks className="h-4 w-4 text-slate-300" aria-hidden="true" />
+                                <article className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-900">Reglas de puntos</h2>
+                                        <ListChecks className="h-4 w-4 text-slate-300" />
                                     </div>
-
-                                    {/* Segmented control */}
-                                    <div role="tablist" aria-label="Secciones de reglas" className="flex rounded-xl bg-slate-100 p-0.5 gap-0.5 mb-4">
-                                        {([
-                                            { id: 'resultado', label: 'Resultado', icon: '⚽' },
-                                            { id: 'bonos',     label: 'Bonos',     icon: '⭐' },
-                                            { id: 'desempate', label: 'Ranking',   icon: '🏅' },
-                                        ] as const).map((tab) => (
-                                            <button
-                                                key={tab.id}
-                                                role="tab"
-                                                aria-selected={scoringTab === tab.id}
-                                                aria-controls={`scoring-panel-${tab.id}`}
-                                                id={`scoring-tab-${tab.id}`}
-                                                onClick={() => setScoringTab(tab.id)}
-                                                className={`flex-1 flex items-center justify-center gap-1 rounded-[10px] min-h-[36px] text-[10px] font-black uppercase tracking-[0.1em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 focus-visible:ring-offset-1 ${
-                                                    scoringTab === tab.id
-                                                        ? 'bg-white text-slate-900 shadow-sm'
-                                                        : 'text-slate-500 hover:text-slate-700'
-                                                }`}
-                                            >
-                                                <span aria-hidden="true">{tab.icon}</span>
-                                                <span>{tab.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* ── Panel: Resultado ── */}
-                                    <div
-                                        role="tabpanel"
-                                        id="scoring-panel-resultado"
-                                        aria-labelledby="scoring-tab-resultado"
-                                        hidden={scoringTab !== 'resultado'}
-                                        className="space-y-2"
-                                    >
-                                        <p className="text-xs text-slate-500 leading-relaxed mb-1">
-                                            Cada partido tiene hasta <span className="font-bold text-slate-700">5 puntos</span> según qué tanto acertaste.
-                                            Los puntos de ganador y gol se <span className="font-bold text-slate-700">suman entre sí</span>.
-                                        </p>
-
-                                        {/* 5 pts — Marcador exacto */}
-                                        <div className="rounded-2xl border border-lime-200 bg-lime-50 px-3.5 py-3">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-base leading-none" aria-hidden="true">🎯</span>
-                                                    <span className="text-xs font-black uppercase tracking-wide text-lime-800">Marcador exacto</span>
-                                                </div>
-                                                <span className="text-lg font-black text-lime-700 tabular-nums">5 pts</span>
-                                            </div>
-                                            <p className="text-[11px] text-lime-700 leading-relaxed">
-                                                Predijiste el resultado final con los dos goles exactos.
-                                            </p>
-                                            <p className="text-[10px] text-lime-600/70 mt-1 italic">
-                                                Ej. predijiste 2-1 y el partido terminó 2-1.
-                                            </p>
-                                        </div>
-
-                                        {/* 2 pts — Ganador */}
-                                        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-3.5 py-3">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-base leading-none" aria-hidden="true">✅</span>
-                                                    <span className="text-xs font-black uppercase tracking-wide text-blue-800">Ganador acertado</span>
-                                                </div>
-                                                <span className="text-lg font-black text-blue-700 tabular-nums">2 pts</span>
-                                            </div>
-                                            <p className="text-[11px] text-blue-700 leading-relaxed">
-                                                Acertaste quién ganó el partido o que terminaría empatado, aunque los goles no coincidan.
-                                            </p>
-                                            <p className="text-[10px] text-blue-600/70 mt-1 italic">
-                                                Ej. predijiste 2-0 y el resultado fue 3-1. Ganador correcto → 2 pts.
-                                            </p>
-                                        </div>
-
-                                        {/* 1 pt — Gol acertado */}
-                                        <div className="rounded-2xl border border-purple-200 bg-purple-50 px-3.5 py-3">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-base leading-none" aria-hidden="true">⚽</span>
-                                                    <span className="text-xs font-black uppercase tracking-wide text-purple-800">Gol acertado</span>
-                                                </div>
-                                                <span className="text-lg font-black text-purple-700 tabular-nums">1 pt</span>
-                                            </div>
-                                            <p className="text-[11px] text-purple-700 leading-relaxed">
-                                                Al menos uno de los dos marcadores (local o visitante) coincide exactamente con el resultado real.
-                                            </p>
-                                            <p className="text-[10px] text-purple-600/70 mt-1 italic">
-                                                Ej. predijiste 1-2 y el resultado fue 1-0. El gol local (1) es correcto → 1 pt.
-                                            </p>
-                                        </div>
-
-                                        {/* Combinaciones */}
-                                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3 space-y-2">
-                                            <p className="text-[11px] font-black uppercase tracking-wide text-slate-600">Combinaciones posibles</p>
-                                            <div className="space-y-1.5">
-                                                {[
-                                                    { combo: 'Ganador + gol acertado', total: '3 pts', detail: '2 + 1', color: 'text-teal-700' },
-                                                    { combo: 'Solo ganador acertado',  total: '2 pts', detail: '2 + 0', color: 'text-blue-700' },
-                                                    { combo: 'Solo gol acertado',      total: '1 pt',  detail: '0 + 1', color: 'text-purple-700' },
-                                                    { combo: 'Ninguno acertado',       total: '0 pts', detail: '—',     color: 'text-slate-400' },
-                                                ].map((c) => (
-                                                    <div key={c.combo} className="flex items-center justify-between">
-                                                        <span className="text-[11px] text-slate-600">{c.combo}</span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] text-slate-400">{c.detail}</span>
-                                                            <span className={`text-xs font-black tabular-nums ${c.color}`}>{c.total}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* ── Panel: Bonos ── */}
-                                    <div
-                                        role="tabpanel"
-                                        id="scoring-panel-bonos"
-                                        aria-labelledby="scoring-tab-bonos"
-                                        hidden={scoringTab !== 'bonos'}
-                                        className="space-y-3"
-                                    >
-                                        {/* Predicción única */}
-                                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-base leading-none" aria-hidden="true">⭐</span>
-                                                    <span className="text-xs font-black uppercase tracking-wide text-amber-800">Predicción única</span>
-                                                </div>
-                                                <span className="text-lg font-black text-amber-700 tabular-nums">+5 pts</span>
-                                            </div>
-                                            <p className="text-[11px] text-amber-700 leading-relaxed">
-                                                Si acertaste el marcador exacto <span className="font-bold">y eres el único en la liga</span> con esa predicción, ganas 5 puntos adicionales.
-                                            </p>
-                                            <p className="text-[10px] text-amber-600/70 mt-1 italic">
-                                                Ej. solo tú predijiste 2-1 y el partido terminó 2-1 → 5 pts base + 5 pts extra = 10 pts.
-                                            </p>
-                                        </div>
-
-                                        {/* Bono clasificados */}
-                                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3 space-y-2.5">
+                                    {[
+                                        { label: 'Marcador exacto', value: '5', icon: '🎯' },
+                                        { label: 'Ganador acertado', value: '2', icon: '✅' },
+                                        { label: 'Gol acertado', value: '1', icon: '⚽' },
+                                    ].map((rule) => (
+                                        <div key={rule.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-base leading-none" aria-hidden="true">🏆</span>
-                                                <span className="text-xs font-black uppercase tracking-wide text-slate-800">Bono clasificados</span>
+                                                <span>{rule.icon}</span>
+                                                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-600">{rule.label}</span>
                                             </div>
-                                            <p className="text-[11px] text-slate-600 leading-relaxed">
-                                                En partidos de eliminatoria, elige qué equipo <span className="font-bold text-slate-800">clasifica a la siguiente ronda</span>.
-                                                Si aciertas <span className="font-bold text-slate-800">todos los picks de una fase</span>, recibes el bono de esa fase automáticamente.
-                                            </p>
-                                            <div className="grid grid-cols-2 gap-1.5">
-                                                {[
-                                                    { phase: 'Octavos de final', pts: '8 pts', icon: '🥈', sub: '16 → 8 equipos' },
-                                                    { phase: 'Cuartos de final', pts: '4 pts', icon: '🥉', sub: '8 → 4 equipos'  },
-                                                    { phase: 'Semifinal',        pts: '2 pts', icon: '🏅', sub: '4 → 2 equipos'  },
-                                                    { phase: 'Campeón',          pts: '5 pts', icon: '🏆', sub: 'El ganador'      },
-                                                ].map((b) => (
-                                                    <div key={b.phase} className="rounded-xl border border-white bg-white px-3 py-2.5 shadow-sm">
-                                                        <div className="flex items-center justify-between mb-0.5">
-                                                            <span className="text-sm leading-none" aria-hidden="true">{b.icon}</span>
-                                                            <span className="text-sm font-black text-lime-600 tabular-nums">{b.pts}</span>
-                                                        </div>
-                                                        <p className="text-[11px] font-black text-slate-700 leading-tight">{b.phase}</p>
-                                                        <p className="text-[10px] text-slate-400 mt-0.5">{b.sub}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <p className="text-[10px] text-slate-400 leading-snug">
-                                                Si fallas aunque sea uno de los picks de la fase, <span className="font-semibold text-slate-500">no obtienes el bono</span> de esa ronda.
-                                            </p>
+                                            <span className="text-sm font-black text-lime-600">{rule.value}</span>
                                         </div>
-                                    </div>
-
-                                    {/* ── Panel: Desempate ── */}
-                                    <div
-                                        role="tabpanel"
-                                        id="scoring-panel-desempate"
-                                        aria-labelledby="scoring-tab-desempate"
-                                        hidden={scoringTab !== 'desempate'}
-                                        className="space-y-2"
-                                    >
-                                        <p className="text-xs text-slate-500 leading-relaxed">
-                                            Cuando dos o más jugadores tienen los mismos puntos, el ranking se define con estos criterios <span className="font-bold text-slate-700">en orden</span> — se pasa al siguiente solo si aún hay empate.
-                                        </p>
-                                        <div className="space-y-1.5">
-                                            {[
-                                                { n: 1, icon: '🏅', label: 'Mayor puntaje total',       desc: 'El que más puntos acumuló gana.' },
-                                                { n: 2, icon: '🏆', label: 'Campeón acertado',           desc: 'Predijiste correctamente al campeón del torneo.' },
-                                                { n: 3, icon: '🎯', label: 'Más marcadores exactos',     desc: 'Cantidad de veces que acertaste el resultado completo.' },
-                                                { n: 4, icon: '✅', label: 'Más ganadores acertados',    desc: 'Cuántos ganadores o empates predijiste bien.' },
-                                                { n: 5, icon: '⚽', label: 'Más goles acertados',        desc: 'Cuántos marcadores individuales coincidieron.' },
-                                                { n: 6, icon: '⭐', label: 'Más predicciones únicas',    desc: 'Cuántas veces fuiste el único con ese marcador exacto.' },
-                                            ].map((c) => (
-                                                <div key={c.n} className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3.5 py-3">
-                                                    <div className="flex flex-col items-center gap-1 pt-0.5 shrink-0">
-                                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[9px] font-black text-slate-600 tabular-nums">
-                                                            {c.n}
-                                                        </span>
-                                                        <span className="text-sm leading-none" aria-hidden="true">{c.icon}</span>
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-700 leading-tight">{c.label}</p>
-                                                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{c.desc}</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    ))}
                                 </article>
                             </motion.div>
                         )}
