@@ -1,4 +1,4 @@
-�import React from 'react';
+import React from 'react';
 import { Button, Card, Badge, Input, Checkbox, EmailAutocompleteInput } from '../components/UI';
 import { PrizeWinner, StageType, LeagueData } from '@polla-2026/shared';
 import { useLeagueStore } from '../stores/league.store';
@@ -50,7 +50,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
 
-// Props eliminadas � navegación via useNavigate
+// Props eliminadas — navegación via useNavigate
 
 interface InvitedUser {
   id: string;
@@ -497,7 +497,7 @@ const CreateLeague: React.FC = () => {
         {/* Formulario */}
         <div className="p-4 md:p-12 flex flex-col h-full relative overflow-hidden">
 
-          {/* Cabecera Pasos RE-DISE�ADA */}
+          {/* Cabecera Pasos RE-DISEÑADA */}
           <div className="mb-6 flex items-end justify-between">
             <div>
               <h3 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
@@ -569,7 +569,7 @@ const CreateLeague: React.FC = () => {
                       {!tournamentsLoaded ? (
                         <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">Cargando torneos...</div>
                       ) : tournaments.length === 0 ? (
-                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">No hay torneos importados a�n</div>
+                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">No hay torneos importados aún</div>
                       ) : (
                         <div className="relative">
                           <Trophy size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -582,7 +582,7 @@ const CreateLeague: React.FC = () => {
                             <option value="">Sin torneo (opcional)</option>
                             {tournaments.map((t) => (
                               <option key={t.id} value={t.id}>
-                                {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? `  ${t.country}` : ''}
+                                {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? ` — ${t.country}` : ''}
                               </option>
                             ))}
                           </select>
@@ -644,7 +644,7 @@ const CreateLeague: React.FC = () => {
             {step === 3 && (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 flex flex-col h-full">
 
-                {/* Indicador de Plan de Suscripción RE-DISE�ADO */}
+                {/* Indicador de Plan de Suscripción RE-DISEÑADO */}
                 <div className="border border-slate-200 rounded-3xl p-4 flex items-center justify-between bg-white shadow-sm">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
@@ -663,7 +663,7 @@ const CreateLeague: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* PARTICIPANTES - NUEVO DISE�O */}
+                  {/* PARTICIPANTES - NUEVO DISEÑO */}
                   <Card className="p-4 flex flex-col items-center justify-center gap-3 rounded-[2rem] border-slate-100 shadow-sm border">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Participantes</span>
                     <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-1.5 border border-slate-100">
@@ -679,7 +679,7 @@ const CreateLeague: React.FC = () => {
                     )}
                   </Card>
 
-                  {/* % ADMIN - NUEVO DISE�O */}
+                  {/* % ADMIN - NUEVO DISEÑO */}
                   <Card className="p-4 flex flex-col justify-center gap-4 rounded-[2rem] border-slate-100 shadow-sm border">
                     <div className="flex justify-between w-full px-1 items-center">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">% Admin</span>
@@ -697,7 +697,7 @@ const CreateLeague: React.FC = () => {
                   </Card>
                 </div>
 
-                {/* Pestañas Filtradas - DISE�O CAPSULA */}
+                {/* Pestañas Filtradas - DISEÑO CAPSULA */}
                 <div className="flex p-1 bg-white rounded-[2rem] gap-1 border border-slate-100 shadow-sm overflow-x-auto scrollbar-hide">
                   {([
                     { id: 'general', label: 'GENERAL', active: leagueData.includeBaseFee },
@@ -872,7 +872,7 @@ const CreateLeague: React.FC = () => {
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
                   <div className="grid grid-cols-1 gap-2 overflow-y-auto scrollbar-hide pb-2">
                     {invitedUsers.map(user => (
-                      <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14} />}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} ⬢ {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14} /></button></div>
+                      <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14} />}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} • {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14} /></button></div>
                     ))}
                   </div>
                 </div>
@@ -897,7 +897,7 @@ const CreateLeague: React.FC = () => {
                       <Badge color={leagueData.privacy === 'private' ? 'bg-slate-800 text-slate-200 border border-slate-700 pl-2 pr-3' : 'bg-lime-400 text-black border border-lime-300 pl-2 pr-3'}>
                         <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
                           {leagueData.privacy === 'private' ? <Lock size={10} className="shrink-0" /> : <Globe size={10} className="shrink-0" />}
-                          <span className="text-[9px] leading-none">{leagueData.privacy === 'private' ? 'PRIVADA' : 'P�BLICA'}</span>
+                          <span className="text-[9px] leading-none">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</span>
                         </div>
                       </Badge>
                     </div>
@@ -927,7 +927,7 @@ const CreateLeague: React.FC = () => {
                       </div>
                       <div className="bg-slate-50 rounded-xl p-1 space-y-1">
                         {!leagueData.includeBaseFee && !leagueData.includeStageFees ? (
-                          <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCI�N</div>
+                          <div className="p-2 text-center text-xs font-black text-lime-600 uppercase">SIN COSTO DE INSCRIPCIÓN</div>
                         ) : (
                           <>
                             {leagueData.includeBaseFee && (
@@ -964,7 +964,7 @@ const CreateLeague: React.FC = () => {
                       <div className="relative z-10 space-y-3">
                         <div className="flex items-center gap-2 mb-2">
                           <Calculator size={14} className="text-lime-400" />
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCI�N DE FONDOS</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">DISTRIBUCIÓN DE FONDOS</span>
                         </div>
 
                         <div className="flex justify-between items-center text-xs opacity-80">
@@ -986,7 +986,7 @@ const CreateLeague: React.FC = () => {
                     </div>
 
                     <button onClick={() => setStep(2)} className="w-full text-center text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 pt-2">
-                      <Eye size={12} /> REVISAR CONFIGURACI�N
+                      <Eye size={12} /> REVISAR CONFIGURACIÓN
                     </button>
                   </div>
                 </div>
@@ -997,9 +997,9 @@ const CreateLeague: React.FC = () => {
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 flex flex-col items-center">
                 <div className="text-center space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
-                    �LIGA <span className="text-lime-600">LISTA!</span>
+                    ¡LIGA <span className="text-lime-600">LISTA!</span>
                   </h4>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACI�N.</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">COMPARTE TU TICKET DE INVITACIÓN.</p>
                 </div>
 
                 {/* Ticket Card - EXTENDED VERSION */}
@@ -1020,7 +1020,7 @@ const CreateLeague: React.FC = () => {
                       <h3 className="text-2xl font-black font-brand uppercase leading-tight tracking-tight text-white">
                         {leagueData.name || 'POLLA MUNDIALISTA'}
                       </h3>
-                      <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACI�N EXCLUSIVA</p>
+                      <p className="text-[10px] font-black text-lime-500 uppercase tracking-[0.2em]">INVITACIÓN EXCLUSIVA</p>
                     </div>
 
                     {/* Grid Info High Level */}
@@ -1047,7 +1047,7 @@ const CreateLeague: React.FC = () => {
                       <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center gap-1">
                         {leagueData.privacy === 'private' ? <Lock size={14} className="text-slate-400 mb-1" /> : <Globe size={14} className="text-slate-400 mb-1" />}
                         <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">TIPO</p>
-                        <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'P�BLICA'}</p>
+                        <p className="text-xs font-bold text-white">{leagueData.privacy === 'private' ? 'PRIVADA' : 'PÚBLICA'}</p>
                       </div>
                     </div>
 
@@ -1094,7 +1094,7 @@ const CreateLeague: React.FC = () => {
                       <div className="bg-white/5 rounded-2xl p-4 border border-white/10 text-left">
                         <div className="flex items-center gap-2 mb-3">
                           <Calculator size={12} className="text-lime-400" />
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCI�N ESTIMADA</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DISTRIBUCIÓN ESTIMADA</span>
                         </div>
                         <div className="space-y-2">
                           <div className="flex justify-between text-[10px] font-bold">
@@ -1126,11 +1126,11 @@ const CreateLeague: React.FC = () => {
                   {/* Bottom Part */}
                   <div className="p-8 pt-6 flex items-center justify-between gap-4 bg-slate-900 relative">
                     <div className="min-w-0">
-                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">C�DIGO DE ACCESO</p>
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">CÓDIGO DE ACCESO</p>
                       <p className="text-3xl font-black font-brand text-white tracking-widest">{leagueId}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white">A</div>
-                        <p className="text-[10px] font-bold text-slate-400">Admin: T�</p>
+                        <p className="text-[10px] font-bold text-slate-400">Admin: Tú</p>
                       </div>
                     </div>
                     <div className="shrink-0 bg-white p-2 rounded-xl">
