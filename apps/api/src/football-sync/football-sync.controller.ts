@@ -22,7 +22,7 @@ import {
   MatchLinkCandidateDto,
   TeamCatalogBackfillResultDto,
 } from './dto/api-football.dto';
-import { IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Query } from '@nestjs/common';
 import { TournamentImportService } from './services/tournament-import.service';
@@ -41,7 +41,7 @@ class ImportTournamentDto {
 }
 
 class ImportFixturesDto {
-  fixtureIds: number[];
+  @IsArray() @IsNumber({}, { each: true }) @Type(() => Number) fixtureIds: number[];
   @IsBoolean() @IsOptional() createTeams?: boolean;
   @IsBoolean() @IsOptional() overwriteExisting?: boolean;
   @IsString() @IsOptional() tournamentName?: string;
