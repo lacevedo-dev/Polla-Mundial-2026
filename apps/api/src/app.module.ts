@@ -22,6 +22,7 @@ import { InsightsModule } from './insights/insights.module';
 import { FootballSyncModule } from './football-sync/football-sync.module';
 import { AiCreditsModule } from './ai-credits/ai-credits.module';
 import { ParticipationModule } from './participation/participation.module';
+import { PredictionReportModule } from './prediction-report/prediction-report.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ParticipationModule } from './participation/participation.module';
     HealthModule,
     FootballSyncModule,
     ParticipationModule,
+    PredictionReportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

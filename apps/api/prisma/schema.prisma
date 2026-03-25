@@ -201,10 +201,11 @@ model Match {
   status      MatchStatus       @default(SCHEDULED)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
-  externalId    String?           @unique
-  lastSyncAt    DateTime?
-  syncCount     Int               @default(0)
-  tournamentId  String?
+  externalId              String?           @unique
+  lastSyncAt              DateTime?
+  syncCount               Int               @default(0)
+  predictionReportSentAt  DateTime?
+  tournamentId            String?
   round         String?
   syncLogs      FootballSyncLog[]
   tournament    Tournament?       @relation(fields: [tournamentId], references: [id])
