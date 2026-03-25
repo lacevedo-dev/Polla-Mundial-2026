@@ -65,4 +65,4 @@ WORKDIR /app/apps/api
 EXPOSE 3000
 
 # Comando para ejecutar la aplicación
-CMD ["node", "dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
