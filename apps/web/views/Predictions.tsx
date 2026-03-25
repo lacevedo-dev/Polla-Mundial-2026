@@ -108,6 +108,34 @@ function buildDrafts(matches: MatchViewModel[]): DraftMap {
     );
 }
 
+function areDraftMapsEqual(left: DraftMap, right: DraftMap): boolean {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+
+    if (leftKeys.length !== rightKeys.length) {
+        return false;
+    }
+
+    for (const key of leftKeys) {
+        const leftDraft = left[key];
+        const rightDraft = right[key];
+
+        if (!rightDraft) {
+            return false;
+        }
+
+        if (
+            leftDraft.home !== rightDraft.home ||
+            leftDraft.away !== rightDraft.away ||
+            leftDraft.advanceTeamId !== rightDraft.advanceTeamId
+        ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function normalizePhase(phase?: string | null): 'GROUP' | 'KNOCKOUT' {
     return phase?.toUpperCase() === 'GROUP' ? 'GROUP' : 'KNOCKOUT';
 }
@@ -1938,7 +1966,7 @@ const Predictions: React.FC = () => {
                     nextDrafts[matchId] = currentDrafts[matchId];
                 }
             });
-            return nextDrafts;
+            return areDraftMapsEqual(currentDrafts, nextDrafts) ? currentDrafts : nextDrafts;
         });
     }, [dirtyMatchIds, matches]);
 
@@ -2005,6 +2033,14 @@ const Predictions: React.FC = () => {
             return acc;
         }, {});
     }, [filteredMatches]);
+
+    const cachedInsightsByMatch = React.useMemo(
+        () =>
+            Object.fromEntries(
+                matches.map((match) => [match.id, insightsData[match.id] ?? getCachedInsights(match.id)]),
+            ) as Record<string, object | null>,
+        [insightsData, matches],
+    );
 
     const nextMatchId = React.useMemo(() => {
         const openMatch = matches
@@ -2402,11 +2438,30 @@ const Predictions: React.FC = () => {
 
     // Scroll detection for sticky header
     React.useEffect(() => {
-        const handleScroll = () => {
-            setIsScrolled(window.scrollY > 20);
+        let frameId: number | null = null;
+
+        const updateScrollState = () => {
+            frameId = null;
+            const nextIsScrolled = window.scrollY > 20;
+            setIsScrolled((current) => (current === nextIsScrolled ? current : nextIsScrolled));
         };
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
+
+        const handleScroll = () => {
+            if (frameId !== null) {
+                return;
+            }
+
+            frameId = window.requestAnimationFrame(updateScrollState);
+        };
+
+        handleScroll();
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            if (frameId !== null) {
+                window.cancelAnimationFrame(frameId);
+            }
+        };
     }, []);
 
     const handleTeamMove = (groupIndex: number, teamIndex: number, direction: 'up' | 'down') => {
@@ -2773,7 +2828,7 @@ const Predictions: React.FC = () => {
                                                         currentTime,
                                                     );
                                                 const isDirty = dirtyMatchIds.includes(match.id);
-                                                const cachedInsights = insightsData[match.id] ?? getCachedInsights(match.id);
+                                                const cachedInsights = cachedInsightsByMatch[match.id] ?? null;
                                                 const matchParticipationOptions = participationOptionsByMatch[match.id] ?? [];
                                                 const principalParticipationOption =
                                                     matchParticipationOptions.find((option) => option.category === 'PRINCIPAL');
