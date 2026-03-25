@@ -16,20 +16,13 @@ import { PrismaClient, Phase } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 /* ── IDs a reimportar ─────────────────────────────────────────────────────── */
 // Agrega aquí los IDs que quieras forzar su importación/actualización
-const FIXTURE_IDS: number[] = [
-  // WC Qual Europe (2 faltaban del import anterior + los que fallaron por rate limit)
-  1487923, // Czech Republic vs Rep. Of Ireland
-  1487927, // Slovakia vs Kosovo
-  // Ya existían pero fallaron por rate limit — solo se actualizarán
-  1487924, 1487925, 1487926, 1487928, 1487929,
-  1501815, // Brazil vs France
-  1512757, // Colombia vs Croatia
-  1514462, // Chile vs Cape Verde Islands
-];
+const FIXTURE_IDS: number[] = [];
 
 // Fechas a buscar en API-Football e importar todos los fixtures encontrados
 // Formato: 'YYYY-MM-DD'
-const SEARCH_DATES: string[] = [];
+const SEARCH_DATES: string[] = [
+  '2026-03-24', // primer día de la ventana FIFA — aún no importado
+];
 
 // IDs de ligas de API-Football a importar en búsquedas por fecha.
 // Si está vacío, importa todos los encontrados en la fecha.
