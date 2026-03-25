@@ -32,9 +32,29 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString('es-CO', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
 
+const formatDateShort = (d: string) =>
+  new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+
+const formatTime = (d: string) =>
+  new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
 const formatDateTime = (value?: string | null) => value
   ? new Date(value).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : 'Sin sync';
+
+function resolveFlagUrl(flagUrl?: string | null, code?: string | null): string {
+  if (flagUrl) return flagUrl;
+  if (code) return `https://flagcdn.com/w80/${code.toLowerCase()}.png`;
+  return '';
+}
+
+const STATUS_CARD_BORDER: Record<string, string> = {
+  LIVE: 'border-l-rose-500',
+  FINISHED: 'border-l-emerald-400',
+  SCHEDULED: 'border-l-blue-400',
+  POSTPONED: 'border-l-amber-400',
+  CANCELLED: 'border-l-slate-300',
+};
 
 const getSyncBadge = (status?: string | null) => {
   switch (status) {
@@ -66,6 +86,42 @@ const summaryCardClassName = (active: boolean, tone: 'emerald' | 'rose' | 'amber
     slate: active ? 'border-slate-400 ring-2 ring-slate-200 bg-slate-50/80' : 'hover:border-slate-300 focus:ring-slate-300',
   };
   return `rounded-[1.5rem] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none ${tones[tone]}`;
+};
+
+const MatchupRow: React.FC<{ match: any; showScore?: boolean }> = ({ match, showScore = false }) => {
+  const homeFlag = resolveFlagUrl(match.homeTeam?.flagUrl, match.homeTeam?.code);
+  const awayFlag = resolveFlagUrl(match.awayTeam?.flagUrl, match.awayTeam?.code);
+  const hasScore = showScore && match.homeScore != null;
+  const isLive = match.status === 'LIVE';
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="flex flex-1 items-center gap-2 min-w-0">
+        {homeFlag && <img src={homeFlag} alt={match.homeTeam?.name} className="h-6 w-9 shrink-0 rounded object-cover border border-slate-200 shadow-sm" />}
+        <div className="min-w-0">
+          <p className="text-sm font-black text-slate-900 truncate leading-tight">{match.homeTeam?.name}</p>
+          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{match.homeTeam?.code}</p>
+        </div>
+      </div>
+      <div className="shrink-0 flex flex-col items-center min-w-[52px]">
+        {hasScore ? (
+          <p className={`text-base font-black ${isLive ? 'text-rose-600' : 'text-slate-900'}`}>{match.homeScore} – {match.awayScore}</p>
+        ) : (
+          <>
+            <p className="text-[10px] font-black text-slate-300">VS</p>
+            {!isLive && <p className="text-[9px] text-slate-400">{formatTime(match.matchDate)}</p>}
+          </>
+        )}
+        {isLive && <span className="inline-flex rounded-full bg-rose-500 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-white">LIVE</span>}
+      </div>
+      <div className="flex flex-1 items-center gap-2 min-w-0 justify-end">
+        <div className="min-w-0 text-right">
+          <p className="text-sm font-black text-slate-900 truncate leading-tight">{match.awayTeam?.name}</p>
+          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{match.awayTeam?.code}</p>
+        </div>
+        {awayFlag && <img src={awayFlag} alt={match.awayTeam?.name} className="h-6 w-9 shrink-0 rounded object-cover border border-slate-200 shadow-sm" />}
+      </div>
+    </div>
+  );
 };
 
 const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
@@ -605,17 +661,21 @@ const AdminMatches: React.FC = () => {
           const syncBadge = getSyncBadge(match.lastSyncStatus);
           const riskBadge = getRiskBadge(match);
           return (
-            <article key={`${match.id}-mobile`} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">{match.homeTeam.name} <span className="font-normal text-slate-400">vs</span> {match.awayTeam.name}</h2>
-                  <p className="mt-1 text-xs text-slate-500">{formatDate(match.matchDate)} · {match.phase}</p>
-                  {(match.tournamentName || match.round) && (
-                    <p className="mt-0.5 text-[11px] text-amber-700 font-medium">
-                      {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
-                    </p>
-                  )}
+            <article key={`${match.id}-mobile`} className={`rounded-[1.5rem] border-l-4 border border-slate-200 bg-white p-4 shadow-sm ${STATUS_CARD_BORDER[match.status] || 'border-l-slate-300'}`}>
+              {/* Tournament header */}
+              {(match.tournamentName || match.round) && (
+                <div className="flex items-center gap-1.5 mb-3">
+                  {match.tournamentLogo && <img src={match.tournamentLogo} alt="" className="h-4 w-4 object-contain" />}
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 truncate">
+                    {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
+                  </p>
                 </div>
+              )}
+              {/* Visual matchup */}
+              <MatchupRow match={match} showScore />
+              {/* Date + phase + status */}
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-400">{formatDateShort(match.matchDate)} · {match.phase}</p>
                 <StatusBadge status={match.status} />
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -686,7 +746,28 @@ const AdminMatches: React.FC = () => {
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acciones</p>
         </div>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-400">Cargando...</div>
+          <div className="divide-y divide-slate-100">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-4 md:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-9 rounded bg-slate-100 animate-pulse" />
+                    <div className="h-4 w-24 rounded bg-slate-100 animate-pulse" />
+                    <div className="h-4 w-8 rounded bg-slate-100 animate-pulse mx-1" />
+                    <div className="h-4 w-24 rounded bg-slate-100 animate-pulse" />
+                    <div className="h-6 w-9 rounded bg-slate-100 animate-pulse" />
+                  </div>
+                  <div className="h-3 w-40 rounded bg-slate-100 animate-pulse" />
+                </div>
+                <div className="hidden h-5 w-16 rounded bg-slate-100 animate-pulse md:block" />
+                <div className="hidden h-5 w-20 rounded bg-slate-100 animate-pulse md:block" />
+                <div className="hidden h-5 w-28 rounded bg-slate-100 animate-pulse md:block" />
+                <div className="flex gap-1">
+                  {[1,2,3,4,5,6].map((j) => <div key={j} className="h-7 w-7 rounded-lg bg-slate-100 animate-pulse" />)}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : matches.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-400">No se encontraron partidos</div>
         ) : (
@@ -696,16 +777,17 @@ const AdminMatches: React.FC = () => {
               const riskBadge = getRiskBadge(match);
               return (
                 <div key={match.id} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 md:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{match.homeTeam.name} <span className="font-normal text-slate-400">vs</span> {match.awayTeam.name}</p>
-                    <p className="text-xs text-slate-400">{formatDate(match.matchDate)} · {match.phase}</p>
+                  <div className="min-w-0">
                     {(match.tournamentName || match.round) && (
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        {match.tournamentName && <span className="font-medium text-amber-700">{match.tournamentName}</span>}
-                        {match.tournamentName && match.round && <span className="text-slate-300"> · </span>}
-                        {match.round && <span>{match.round}</span>}
-                      </p>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        {match.tournamentLogo && <img src={match.tournamentLogo} alt="" className="h-3.5 w-3.5 object-contain" />}
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 truncate">
+                          {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
+                        </p>
+                      </div>
                     )}
+                    <MatchupRow match={match} showScore />
+                    <p className="mt-1.5 text-[11px] text-slate-400">{formatDate(match.matchDate)} · {match.phase}</p>
                   </div>
                   <p className="hidden text-sm font-black text-slate-700 md:block">{match.homeScore != null ? `${match.homeScore} - ${match.awayScore}` : '- - -'}</p>
                   <div className="hidden md:block"><StatusBadge status={match.status} /></div>
