@@ -293,8 +293,8 @@ export class PredictionReportService {
       const realAway = match.awayScore!;
 
       const results = predictions.map(p => {
-        const member    = members.find(m => m.userId === p.userId);
-        const { outcome, points } = this.calcOutcome(p.homeScore, p.awayScore, realHome, realAway);
+        const member  = members.find(m => m.userId === p.userId);
+        const outcome = this.parseOutcomeFromDetail(p.pointDetail, p.points);
         return {
           userId:       p.userId,
           name:         p.user.name,
@@ -303,7 +303,7 @@ export class PredictionReportService {
           awayScore:    p.awayScore,
           submittedAt:  p.submittedAt,
           outcome,
-          pointsEarned: points,
+          pointsEarned: p.points ?? 0,
           prevPosition: prevStandings.get(p.userId)?.position ?? 99,
           newPosition:  afterStandings.get(p.userId)?.position ?? 99,
         };
@@ -332,18 +332,21 @@ export class PredictionReportService {
     }
   }
 
-  private calcOutcome(
-    predHome: number, predAway: number,
-    realHome: number, realAway: number,
-  ): { outcome: ResultOutcome; points: number } {
-    if (predHome === realHome && predAway === realAway) return { outcome: 'EXACT',  points: 5 };
-    const predDiff = predHome - predAway;
-    const realDiff = realHome - realAway;
-    if (predDiff === realDiff) return { outcome: 'DIFF', points: 3 };
-    const predWinner = predDiff > 0 ? 'H' : predDiff < 0 ? 'A' : 'D';
-    const realWinner = realDiff > 0 ? 'H' : realDiff < 0 ? 'A' : 'D';
-    if (predWinner === realWinner) return { outcome: 'WINNER', points: 2 };
-    return { outcome: 'WRONG', points: 0 };
+  private parseOutcomeFromDetail(pointDetail: string | null, points: number | null): ResultOutcome {
+    if (pointDetail) {
+      try {
+        const detail = JSON.parse(pointDetail) as { type: string; uniqueBonus?: number };
+        if (detail.type === 'EXACT_SCORE' && (detail.uniqueBonus ?? 0) > 0) return 'EXACT_UNIQUE';
+        if (detail.type === 'EXACT_SCORE')         return 'EXACT';
+        if (detail.type === 'CORRECT_WINNER_GOAL') return 'WINNER_GOAL';
+        if (detail.type === 'CORRECT_WINNER')      return 'WINNER';
+        if (detail.type === 'TEAM_GOALS')          return 'GOAL';
+        // Legacy: CORRECT_DIFF was old name for winner+diff, treat as WINNER
+        if (detail.type === 'CORRECT_DIFF')        return 'WINNER';
+      } catch (_) { /* pointDetail malformado */ }
+    }
+    // Fallback for predictions without pointDetail
+    return (points ?? 0) > 0 ? 'WINNER' : 'WRONG';
   }
 
   private async getStandings(leagueId: string): Promise<Map<string, { points: number; position: number }>> {

@@ -28,7 +28,7 @@ export interface SendReportParams {
   sentAt:      Date;
 }
 
-export type ResultOutcome = 'EXACT' | 'DIFF' | 'WINNER' | 'WRONG';
+export type ResultOutcome = 'EXACT_UNIQUE' | 'EXACT' | 'WINNER_GOAL' | 'WINNER' | 'GOAL' | 'WRONG';
 
 export interface ResultEntry extends PredictorEntry {
   outcome:      ResultOutcome;
@@ -321,10 +321,12 @@ export class PredictionReportEmailService {
     });
 
     const OUTCOME_CONFIG: Record<ResultOutcome, { label: string; bg: string; color: string; icon: string }> = {
-      EXACT:  { label: 'Marcador exacto', bg: '#14532d', color: '#4ade80', icon: '🎯' },
-      DIFF:   { label: 'Diferencia correcta', bg: '#1e3a5f', color: '#60a5fa', icon: '✅' },
-      WINNER: { label: 'Ganador correcto', bg: '#3b2f00', color: '#fbbf24', icon: '👍' },
-      WRONG:  { label: 'Incorrecto', bg: '#1e1e1e', color: '#6b7280', icon: '❌' },
+      EXACT_UNIQUE: { label: 'Exacto · único ⭐',  bg: '#78350f', color: '#fcd34d', icon: '🥇' },
+      EXACT:        { label: 'Marcador exacto',     bg: '#14532d', color: '#4ade80', icon: '🎯' },
+      WINNER_GOAL:  { label: 'Ganador + gol',       bg: '#1e3a5f', color: '#60a5fa', icon: '✅' },
+      WINNER:       { label: 'Ganador correcto',    bg: '#3b2f00', color: '#fbbf24', icon: '👍' },
+      GOAL:         { label: 'Gol acertado',        bg: '#2e1065', color: '#a78bfa', icon: '⚽' },
+      WRONG:        { label: 'Incorrecto',           bg: '#1e1e1e', color: '#6b7280', icon: '❌' },
     };
 
     // Sort by points earned desc, then prev position
@@ -371,10 +373,11 @@ export class PredictionReportEmailService {
         </tr>`;
     }).join('');
 
-    const exactCount  = results.filter(r => r.outcome === 'EXACT').length;
-    const diffCount   = results.filter(r => r.outcome === 'DIFF').length;
-    const winnerCount = results.filter(r => r.outcome === 'WINNER').length;
-    const wrongCount  = results.filter(r => r.outcome === 'WRONG').length;
+    const exactCount   = results.filter(r => r.outcome === 'EXACT' || r.outcome === 'EXACT_UNIQUE').length;
+    const winnerGoalCount = results.filter(r => r.outcome === 'WINNER_GOAL').length;
+    const winnerCount  = results.filter(r => r.outcome === 'WINNER').length;
+    const goalCount    = results.filter(r => r.outcome === 'GOAL').length;
+    const wrongCount   = results.filter(r => r.outcome === 'WRONG').length;
     const topScorer   = sorted[0];
 
     // Detect actual result label
@@ -447,8 +450,9 @@ export class PredictionReportEmailService {
   <!-- STATS STRIP -->
   <div style="background:#1e293b;padding:14px 28px;display:table;width:100%;box-sizing:border-box">
     ${resultStatCell('🎯 Exacto', exactCount, '#4ade80')}
-    ${resultStatCell('✅ Diferencia', diffCount, '#60a5fa')}
+    ${resultStatCell('✅ Gan+Gol', winnerGoalCount, '#60a5fa')}
     ${resultStatCell('👍 Ganador', winnerCount, '#fbbf24')}
+    ${resultStatCell('⚽ Gol', goalCount, '#a78bfa')}
     ${resultStatCell('❌ Incorrecto', wrongCount, '#6b7280')}
   </div>
 

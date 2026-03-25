@@ -18,14 +18,16 @@ function calcOutcome(
 ): { outcome: ResultOutcome; points: number } {
   if (predHome === realHome && predAway === realAway)
     return { outcome: 'EXACT', points: 5 };
-  const predDiff = predHome - predAway;
-  const realDiff = realHome - realAway;
-  if (predDiff === realDiff)
-    return { outcome: 'DIFF', points: 3 };
-  const predWinner = predDiff > 0 ? 'H' : predDiff < 0 ? 'A' : 'D';
-  const realWinner = realDiff > 0 ? 'H' : realDiff < 0 ? 'A' : 'D';
+  const predWinner = predHome > predAway ? 'H' : predHome < predAway ? 'A' : 'D';
+  const realWinner = realHome > realAway ? 'H' : realHome < realAway ? 'A' : 'D';
+  const homeGoal = predHome === realHome;
+  const awayGoal = predAway === realAway;
+  if (predWinner === realWinner && (homeGoal || awayGoal))
+    return { outcome: 'WINNER_GOAL', points: 3 };
   if (predWinner === realWinner)
     return { outcome: 'WINNER', points: 2 };
+  if (homeGoal || awayGoal)
+    return { outcome: 'GOAL', points: 1 };
   return { outcome: 'WRONG', points: 0 };
 }
 

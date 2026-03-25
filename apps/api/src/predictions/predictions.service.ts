@@ -20,21 +20,29 @@ type PredictionScoreLike = {
     awayScore: number;
 };
 
-type PointType = 'EXACT_SCORE' | 'CORRECT_DIFF' | 'CORRECT_WINNER' | 'NONE';
+export type PointType = 'EXACT_SCORE' | 'CORRECT_WINNER_GOAL' | 'CORRECT_WINNER' | 'TEAM_GOALS' | 'NONE';
 
-interface PredictionPointDetail {
+export interface PredictionPointDetail {
     type: PointType;
+    exactPoints: number;
+    winnerPoints: number;
+    goalPoints: number;
+    uniqueBonus: number;
     basePoints: number;
     phase: Phase;
     multiplier: number;
+    total: number;
 }
+
+type CalculatePointsResult = { total: number; detail: PredictionPointDetail };
 
 @Injectable()
 export class PredictionsService {
     private static readonly DEFAULT_POINTS = {
-        EXACT_SCORE: 5,
-        CORRECT_DIFF: 3,
-        CORRECT_WINNER: 2,
+        EXACT_SCORE:       5,
+        CORRECT_WINNER:    2,
+        TEAM_GOALS:        1,
+        UNIQUE_PREDICTION: 5,
     } as const;
 
     // Regla vigente: en eliminatorias se aplica un factor adicional al puntaje base.
@@ -136,22 +144,55 @@ export class PredictionsService {
             },
         });
 
-        // 3. Procesar cada predicción
         const matchForScoring: MatchScoreLike = {
             homeScore: match.homeScore,
             awayScore: match.awayScore,
             phase: match.phase,
         };
 
+        // 3. Calcular y persistir puntos base por predicción
+        const scoredItems: Array<{ pred: (typeof predictions)[0]; result: CalculatePointsResult }> = [];
+
         for (const pred of predictions) {
-            const points = this.calculatePointsForOne(matchForScoring, pred, pred.league.scoringRules);
+            const result = this.calculatePointsForOne(matchForScoring, pred, pred.league.scoringRules);
+            scoredItems.push({ pred, result });
 
             await this.prisma.prediction.update({
                 where: { id: pred.id },
                 data: {
-                    points: points.total,
-                    // Contrato pointDetail: { type, basePoints, phase, multiplier }
-                    pointDetail: points.detail as any,
+                    points: result.total,
+                    pointDetail: JSON.stringify(result.detail),
+                },
+            });
+        }
+
+        // 4. Aplicar bono de Predicción Única por liga (solo si exactamente 1 persona acertó el marcador exacto)
+        const byLeague = new Map<string, typeof scoredItems>();
+        for (const item of scoredItems) {
+            const arr = byLeague.get(item.pred.leagueId) ?? [];
+            arr.push(item);
+            byLeague.set(item.pred.leagueId, arr);
+        }
+
+        for (const leaguePreds of byLeague.values()) {
+            const exactPreds = leaguePreds.filter(({ result }) => result.detail.type === 'EXACT_SCORE');
+            if (exactPreds.length !== 1) continue; // El bono solo aplica cuando hay UN único acertador
+
+            const { pred, result } = exactPreds[0];
+            const uniqueBonus = this.getRulePoints(
+                pred.league.scoringRules,
+                ScoringType.UNIQUE_PREDICTION,
+                PredictionsService.DEFAULT_POINTS.UNIQUE_PREDICTION,
+            );
+            const newTotal = result.total + uniqueBonus;
+            result.detail.uniqueBonus = uniqueBonus;
+            result.detail.total = newTotal;
+
+            await this.prisma.prediction.update({
+                where: { id: pred.id },
+                data: {
+                    points: newTotal,
+                    pointDetail: JSON.stringify(result.detail),
                 },
             });
         }
@@ -165,72 +206,65 @@ export class PredictionsService {
         match: MatchScoreLike,
         pred: PredictionScoreLike,
         rules: ScoringRuleLike[],
-    ) {
-        let basePoints = 0;
-        let type: PointType = 'NONE';
-
+    ): CalculatePointsResult {
         const actualHome = match.homeScore;
         const actualAway = match.awayScore;
         const predHome = pred.homeScore;
         const predAway = pred.awayScore;
 
         const actualWinner = actualHome > actualAway ? 'HOME' : actualHome < actualAway ? 'AWAY' : 'DRAW';
-        const predWinner = predHome > predAway ? 'HOME' : predHome < predAway ? 'AWAY' : 'DRAW';
+        const predWinner   = predHome  > predAway   ? 'HOME' : predHome  < predAway   ? 'AWAY' : 'DRAW';
 
-        const ruleExact = this.getRulePoints(
-            rules,
-            ScoringType.EXACT_SCORE,
-            PredictionsService.DEFAULT_POINTS.EXACT_SCORE,
-        );
-        const ruleDiff = this.getRulePoints(
-            rules,
-            ScoringType.CORRECT_DIFF,
-            PredictionsService.DEFAULT_POINTS.CORRECT_DIFF,
-        );
-        const ruleWinner = this.getRulePoints(
-            rules,
-            ScoringType.CORRECT_WINNER,
-            PredictionsService.DEFAULT_POINTS.CORRECT_WINNER,
-        );
+        const ruleExact  = this.getRulePoints(rules, ScoringType.EXACT_SCORE,    PredictionsService.DEFAULT_POINTS.EXACT_SCORE);
+        const ruleWinner = this.getRulePoints(rules, ScoringType.CORRECT_WINNER, PredictionsService.DEFAULT_POINTS.CORRECT_WINNER);
+        const ruleGoal   = this.getRulePoints(rules, ScoringType.TEAM_GOALS,     PredictionsService.DEFAULT_POINTS.TEAM_GOALS);
 
-        // 1. Determinar puntos base según jerarquía (sin acumulación doble)
+        let type: PointType = 'NONE';
+        let exactPoints  = 0;
+        let winnerPoints = 0;
+        let goalPoints   = 0;
+
         if (actualHome === predHome && actualAway === predAway) {
-            basePoints = ruleExact;
+            // Marcador exacto: puntaje plano, no acumulativo
+            exactPoints = ruleExact;
             type = 'EXACT_SCORE';
         } else {
-            const actualDiff = actualHome - actualAway;
-            const predDiff = predHome - predAway;
-
+            // Ganador acertado (+2 pts)
             if (actualWinner === predWinner) {
-                if (actualDiff === predDiff && actualWinner !== 'DRAW') {
-                    basePoints = ruleDiff;
-                    type = 'CORRECT_DIFF';
-                } else {
-                    basePoints = ruleWinner;
-                    type = 'CORRECT_WINNER';
-                }
+                winnerPoints = ruleWinner;
             }
+            // Gol acertado: al menos un equipo tiene los goles correctos (+1 pt)
+            if (actualHome === predHome || actualAway === predAway) {
+                goalPoints = ruleGoal;
+            }
+
+            if (winnerPoints > 0 && goalPoints > 0) type = 'CORRECT_WINNER_GOAL';
+            else if (winnerPoints > 0) type = 'CORRECT_WINNER';
+            else if (goalPoints > 0) type = 'TEAM_GOALS';
         }
 
-        // 2. Aplicar multiplicador de fase (grupos 1.0, eliminatorias > 1.0)
-        let phaseMultiplier = 1.0;
-        if (match.phase !== Phase.GROUP) {
-            phaseMultiplier = PredictionsService.KNOCKOUT_PHASE_MULTIPLIER;
-        }
+        const basePoints = exactPoints > 0 ? exactPoints : (winnerPoints + goalPoints);
 
+        // Multiplicador de fase: grupos x1.0, eliminatorias x1.5
+        const phaseMultiplier = match.phase !== Phase.GROUP ? PredictionsService.KNOCKOUT_PHASE_MULTIPLIER : 1.0;
         const total = basePoints * phaseMultiplier;
+
         const detail: PredictionPointDetail = {
             type,
+            exactPoints,
+            winnerPoints,
+            goalPoints,
+            uniqueBonus: 0,
             basePoints,
             phase: match.phase,
             multiplier: phaseMultiplier,
+            total,
         };
 
         return { total, detail };
     }
 
     async getLeaderboard(leagueId: string) {
-        // Ranking basado en la suma de puntos (incluye decimales para fases eliminatorias)
         const members = await this.prisma.leagueMember.findMany({
             where: { leagueId, status: MemberStatus.ACTIVE },
             include: {
@@ -245,24 +279,58 @@ export class PredictionsService {
             },
         });
 
-        const predictions = await this.prisma.prediction.groupBy({
-            by: ['userId'],
-            _sum: {
-                points: true,
-            },
-            where: { leagueId },
+        const predictions = await this.prisma.prediction.findMany({
+            where: { leagueId, points: { not: null } },
+            select: { userId: true, points: true, pointDetail: true },
         });
 
-        const leaderboard = members
-            .map((member) => {
-                const predSum = predictions.find((prediction) => prediction.userId === member.userId);
-                return {
-                    ...member.user,
-                    points: predSum?._sum?.points || 0,
-                };
-            })
-            .sort((a, b) => b.points - a.points);
+        // Acumular estadísticas por usuario para criterios de desempate
+        const userStats = new Map<string, {
+            points: number;
+            exactCount:  number;  // marcadores exactos
+            winnerCount: number;  // ganadores acertados (sin exacto)
+            goalCount:   number;  // goles acertados (sin exacto)
+            uniqueCount: number;  // predicciones únicas
+        }>();
 
-        return leaderboard;
+        for (const pred of predictions) {
+            const stats = userStats.get(pred.userId) ?? {
+                points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0,
+            };
+            stats.points += pred.points ?? 0;
+
+            if (pred.pointDetail) {
+                try {
+                    const detail = JSON.parse(pred.pointDetail) as PredictionPointDetail;
+                    if (detail.type === 'EXACT_SCORE')                                   stats.exactCount++;
+                    if (detail.type === 'CORRECT_WINNER' || detail.type === 'CORRECT_WINNER_GOAL') stats.winnerCount++;
+                    if (detail.type === 'TEAM_GOALS'     || detail.type === 'CORRECT_WINNER_GOAL') stats.goalCount++;
+                    if ((detail.uniqueBonus ?? 0) > 0)                                   stats.uniqueCount++;
+                } catch (_) { /* ignorar pointDetail malformado */ }
+            }
+
+            userStats.set(pred.userId, stats);
+        }
+
+        // Criterios de desempate según reglas (en orden de prioridad):
+        // 1. Puntos totales
+        // 2. Marcadores exactos
+        // 3. Ganadores acertados
+        // 4. Goles acertados
+        // 5. Predicciones únicas
+        return members
+            .map((member) => {
+                const stats = userStats.get(member.userId) ?? {
+                    points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0,
+                };
+                return { ...member.user, ...stats };
+            })
+            .sort((a, b) => {
+                if (b.points      !== a.points)      return b.points      - a.points;
+                if (b.exactCount  !== a.exactCount)  return b.exactCount  - a.exactCount;
+                if (b.winnerCount !== a.winnerCount) return b.winnerCount - a.winnerCount;
+                if (b.goalCount   !== a.goalCount)   return b.goalCount   - a.goalCount;
+                return b.uniqueCount - a.uniqueCount;
+            });
     }
 }
