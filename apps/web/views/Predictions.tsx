@@ -116,8 +116,33 @@ function toDisplayPhase(phase?: string | null): string {
     return normalizePhase(phase) === 'GROUP' ? 'Fase de grupos' : 'Eliminatorias';
 }
 
-function summarizeCloseTime(matchDate: string): string {
-    const diffMs = new Date(matchDate).getTime() - Date.now();
+function getClosePredictionMinutes(closePredictionMinutes?: number | null): number {
+    if (typeof closePredictionMinutes !== 'number' || !Number.isFinite(closePredictionMinutes)) {
+        return 15;
+    }
+
+    return Math.max(0, closePredictionMinutes);
+}
+
+function getPredictionCloseTime(matchDate: string, closePredictionMinutes?: number | null): number {
+    return new Date(matchDate).getTime() - getClosePredictionMinutes(closePredictionMinutes) * 60_000;
+}
+
+function isPredictionWindowClosed(
+    matchDate: string,
+    closePredictionMinutes?: number | null,
+    now = Date.now(),
+): boolean {
+    const closeTime = getPredictionCloseTime(matchDate, closePredictionMinutes);
+    return !Number.isFinite(closeTime) || now > closeTime;
+}
+
+function summarizeCloseTime(
+    matchDate: string,
+    closePredictionMinutes?: number | null,
+    now = Date.now(),
+): string {
+    const diffMs = getPredictionCloseTime(matchDate, closePredictionMinutes) - now;
     if (!Number.isFinite(diffMs) || diffMs <= 0) {
         return 'Cerrado';
     }
@@ -700,6 +725,8 @@ interface CompactMatchRowProps {
     isSaving: boolean;
     isDirty: boolean;
     canEdit: boolean;
+    closePredictionMinutes?: number | null;
+    currentTime?: number;
     speedMode: boolean;
     cachedInsights: object | null;
     insightsLoading: boolean;
@@ -729,6 +756,8 @@ function CompactMatchRow({
     isSaving,
     isDirty,
     canEdit,
+    closePredictionMinutes,
+    currentTime = Date.now(),
     speedMode,
     cachedInsights,
     insightsLoading,
@@ -762,7 +791,7 @@ function CompactMatchRow({
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</span>
                             <span className="text-[8px] font-black uppercase tracking-wider text-amber-500">
-                                {summarizeCloseTime(match.date)}
+                                {summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -1222,7 +1251,7 @@ function CompactMatchRow({
                                 Grupo {match.group}
                             </span>
                         )}
-                        <span className="text-slate-400">• {summarizeCloseTime(match.date)}</span>
+                        <span className="text-slate-400">• {summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
                         {match.saved && (
                             <span className="ml-auto font-bold text-lime-600">
                                 ✓ {match.prediction.home}-{match.prediction.away}
@@ -1804,6 +1833,7 @@ const Predictions: React.FC = () => {
     const [manualPaymentMethod, setManualPaymentMethod] = React.useState('');
     const [manualPaymentSending, setManualPaymentSending] = React.useState(false);
     const [manualPaymentDone, setManualPaymentDone] = React.useState(false);
+    const [currentTime, setCurrentTime] = React.useState(() => Date.now());
 
     const applyParticipationBatch = React.useCallback(
         (batch: ParticipationOptionsBatch | null) => {
@@ -1826,7 +1856,10 @@ const Predictions: React.FC = () => {
     const dirtyMatchIds = React.useMemo(() =>
         matches
             .filter((match) => {
-                if (match.status !== 'open' && match.status !== 'live') return false;
+                if (match.status !== 'open') return false;
+                if (isPredictionWindowClosed(match.date, activeLeague?.settings?.closePredictionMinutes, currentTime)) {
+                    return false;
+                }
                 const draft = drafts[match.id];
                 if (!draft || draft.home === '' || draft.away === '') return false;
                 const scoreChanged = draft.home !== match.prediction.home || draft.away !== match.prediction.away;
@@ -1834,7 +1867,7 @@ const Predictions: React.FC = () => {
                 return scoreChanged || advanceChanged;
             })
             .map((m) => m.id),
-    [matches, drafts]);
+    [activeLeague?.settings?.closePredictionMinutes, currentTime, drafts, matches]);
     const hasDirtyChanges = dirtyMatchIds.length > 0;
     // Plan for credits: user's own subscription plan takes priority over league plan
     const resolvedPlan = React.useMemo(() =>
@@ -1846,6 +1879,14 @@ const Predictions: React.FC = () => {
     const [activeGroup, setActiveGroup] = React.useState<string>('ALL');
     const [activeGroupModal, setActiveGroupModal] = React.useState<string | null>(null);
     const [groups, setGroups] = React.useState<SimulatorGroup[]>(INITIAL_GROUPS);
+
+    React.useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            setCurrentTime(Date.now());
+        }, 30_000);
+
+        return () => window.clearInterval(intervalId);
+    }, []);
 
     React.useEffect(() => {
         void request<{ stripeEnabled: boolean }>('/payments/config')
@@ -2047,6 +2088,20 @@ const Predictions: React.FC = () => {
             return;
         }
 
+        const match = matches.find((candidate) => candidate.id === matchId);
+        if (!match) {
+            setError('No fue posible encontrar el partido a guardar.');
+            return;
+        }
+
+        if (
+            match.status !== 'open' ||
+            isPredictionWindowClosed(match.date, activeLeague.settings?.closePredictionMinutes, currentTime)
+        ) {
+            setError('Este partido ya cerró su ventana de predicción y no admite cambios.');
+            return;
+        }
+
         const nextDraft = drafts[matchId];
         if (!nextDraft || nextDraft.home === '' || nextDraft.away === '') {
             setError('Debes ingresar ambos marcadores antes de guardar el pronóstico.');
@@ -2077,6 +2132,15 @@ const Predictions: React.FC = () => {
         setError(null);
         let failed = 0;
         for (const matchId of dirtyMatchIds) {
+            const match = matches.find((candidate) => candidate.id === matchId);
+            if (
+                !match ||
+                match.status !== 'open' ||
+                isPredictionWindowClosed(match.date, activeLeague.settings?.closePredictionMinutes, currentTime)
+            ) {
+                failed++;
+                continue;
+            }
             const draft = drafts[matchId];
             if (!draft || draft.home === '' || draft.away === '') continue;
             try {
@@ -2681,7 +2745,13 @@ const Predictions: React.FC = () => {
                                                 const isSaving = savingMatchId === match.id;
                                                 const isAnalysisOpen = analysisMatchId === match.id;
                                                 const isNext = nextMatchId === match.id;
-                                                const canEdit = match.status === 'open' || match.status === 'live';
+                                                const canEdit =
+                                                    match.status === 'open' &&
+                                                    !isPredictionWindowClosed(
+                                                        match.date,
+                                                        activeLeague?.settings?.closePredictionMinutes,
+                                                        currentTime,
+                                                    );
                                                 const isDirty = dirtyMatchIds.includes(match.id);
                                                 const cachedInsights = insightsData[match.id] ?? getCachedInsights(match.id);
                                                 const matchParticipationOptions = participationOptionsByMatch[match.id] ?? [];
@@ -2723,6 +2793,8 @@ const Predictions: React.FC = () => {
                                                                 isSaving={isSaving}
                                                                 isDirty={isDirty}
                                                                 canEdit={canEdit}
+                                                                closePredictionMinutes={activeLeague?.settings?.closePredictionMinutes}
+                                                                currentTime={currentTime}
                                                                 speedMode={speedEntryMode}
                                                                 cachedInsights={cachedInsights}
                                                                 insightsLoading={insightsLoading}
@@ -2838,7 +2910,11 @@ const Predictions: React.FC = () => {
                                                                     <div className="shrink-0">
                                                                         <p className="text-xs font-black text-slate-900 sm:text-sm">{formatMatchTime(match.date)}</p>
                                                                         <p className={`mt-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:text-[9px] sm:tracking-[0.18em] ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
-                                                                            {summarizeCloseTime(match.date)}
+                                                                            {summarizeCloseTime(
+                                                                                match.date,
+                                                                                activeLeague?.settings?.closePredictionMinutes,
+                                                                                currentTime,
+                                                                            )}
                                                                         </p>
                                                                     </div>
                                                                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em] ${getMatchStatusClasses(match.status)}`}>
