@@ -13,6 +13,7 @@ import { AdaptiveSyncScheduler } from './schedulers/adaptive-sync.scheduler';
 import { FootballSyncController } from './football-sync.controller';
 import { AdminMonitoringController } from './controllers/admin-monitoring.controller';
 import { TournamentImportService } from './services/tournament-import.service';
+import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TournamentImportService } from './services/tournament-import.service';
     }),
     PrismaModule,
     PredictionsModule,
+    PredictionReportModule,
   ],
   controllers: [FootballSyncController, AdminMonitoringController],
   providers: [

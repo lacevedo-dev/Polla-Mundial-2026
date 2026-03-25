@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PredictionReportEmailService } from './prediction-report-email.service';
+import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
 
 @Injectable()
 export class PredictionReportService {
@@ -228,6 +228,122 @@ export class PredictionReportService {
       standings,
       sentAt: new Date(),
     });
+  }
+
+  /**
+   * Envía el correo de resultados automáticamente cuando un partido termina.
+   * Llamado desde MatchSyncService después de calcular los puntos.
+   */
+  async sendMatchResultsReport(matchId: string): Promise<void> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (!match || match.homeScore === null || match.awayScore === null) return;
+
+    // Encontrar todas las ligas que tienen predicciones en este partido
+    const leagueIds = await this.prisma.prediction.findMany({
+      where: { matchId },
+      select: { leagueId: true },
+      distinct: ['leagueId'],
+    });
+
+    for (const { leagueId } of leagueIds) {
+      const league = await this.prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { name: true, code: true },
+      });
+      if (!league) continue;
+
+      const members = await this.prisma.leagueMember.findMany({
+        where: { leagueId, status: 'ACTIVE' },
+        include: { user: { select: { id: true, name: true, email: true } } },
+      });
+
+      const recipients = members
+        .map(m => m.user.email)
+        .filter(Boolean) as string[];
+      if (recipients.length === 0) continue;
+
+      const predictions = await this.prisma.prediction.findMany({
+        where: { matchId, leagueId, points: { not: null } },
+        include: { user: { select: { id: true, name: true } } },
+        orderBy: { submittedAt: 'asc' },
+      });
+      if (predictions.length === 0) continue;
+
+      // Standings ANTES de este partido
+      const prevPreds = await this.prisma.prediction.findMany({
+        where: { leagueId, points: { not: null }, matchId: { not: matchId } },
+        select: { userId: true, points: true },
+      });
+      const prevTotals = new Map<string, number>();
+      for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+      // Standings DESPUÉS (incluyendo este partido)
+      const afterTotals = new Map<string, number>(prevTotals);
+      for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+      const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
+      const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
+      const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
+      const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
+
+      const realHome = match.homeScore!;
+      const realAway = match.awayScore!;
+
+      const results = predictions.map(p => {
+        const member    = members.find(m => m.userId === p.userId);
+        const { outcome, points } = this.calcOutcome(p.homeScore, p.awayScore, realHome, realAway);
+        return {
+          userId:       p.userId,
+          name:         p.user.name,
+          isAdmin:      member?.role === 'ADMIN',
+          homeScore:    p.homeScore,
+          awayScore:    p.awayScore,
+          submittedAt:  p.submittedAt,
+          outcome,
+          pointsEarned: points,
+          prevPosition: prevStandings.get(p.userId)?.position ?? 99,
+          newPosition:  afterStandings.get(p.userId)?.position ?? 99,
+        };
+      });
+
+      this.logger.log(
+        `Enviando correo de resultados: ${match.homeTeam.name} ${realHome}-${realAway} ${match.awayTeam.name} | ${league.code} | ${recipients.length} destinatarios`,
+      );
+
+      await this.emailService.sendResultsReport({
+        recipients,
+        leagueName: league.name,
+        leagueCode: league.code,
+        match: {
+          homeTeam:  match.homeTeam.name,
+          awayTeam:  match.awayTeam.name,
+          matchDate: match.matchDate,
+          homeScore: realHome,
+          awayScore: realAway,
+          venue:     match.venue ?? undefined,
+          round:     match.round ?? undefined,
+        },
+        results,
+        sentAt: new Date(),
+      });
+    }
+  }
+
+  private calcOutcome(
+    predHome: number, predAway: number,
+    realHome: number, realAway: number,
+  ): { outcome: ResultOutcome; points: number } {
+    if (predHome === realHome && predAway === realAway) return { outcome: 'EXACT',  points: 5 };
+    const predDiff = predHome - predAway;
+    const realDiff = realHome - realAway;
+    if (predDiff === realDiff) return { outcome: 'DIFF', points: 3 };
+    const predWinner = predDiff > 0 ? 'H' : predDiff < 0 ? 'A' : 'D';
+    const realWinner = realDiff > 0 ? 'H' : realDiff < 0 ? 'A' : 'D';
+    if (predWinner === realWinner) return { outcome: 'WINNER', points: 2 };
+    return { outcome: 'WRONG', points: 0 };
   }
 
   private async getStandings(leagueId: string): Promise<Map<string, { points: number; position: number }>> {

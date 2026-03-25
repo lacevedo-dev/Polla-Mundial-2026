@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PredictionsService } from '../../predictions/predictions.service';
+import { PredictionReportService } from '../../prediction-report/prediction-report.service';
 import { ApiFootballClient } from './api-football-client.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
@@ -36,6 +37,7 @@ export class MatchSyncService {
     private readonly syncPlan: SyncPlanService,
     private readonly predictionsService: PredictionsService,
     private readonly monitoring: MonitoringService,
+    private readonly predictionReport: PredictionReportService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -402,10 +404,13 @@ export class MatchSyncService {
         `Updated match ${match.id}: ${fixture.teams.home.name} ${fixture.goals.home ?? '-'} - ${fixture.goals.away ?? '-'} ${fixture.teams.away.name} (${status})`,
       );
 
-      // If score changed and match is finished, calculate points
+      // If score changed and match is finished, calculate points and send results email
       if (scoreChanged && status === MatchStatus.FINISHED) {
         this.logger.log(`Match ${match.id} finished, calculating points`);
         await this.predictionsService.calculateMatchPoints(match.id);
+        this.predictionReport.sendMatchResultsReport(match.id).catch(err =>
+          this.logger.error(`Error sending results email for match ${match.id}: ${err.message}`),
+        );
       }
 
       return true;
