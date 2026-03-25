@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { ApiFootballResponse } from '../dto/api-football.dto';
-import { RateLimiterService } from './rate-limiter.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class ApiFootballClient {
@@ -18,7 +18,7 @@ export class ApiFootballClient {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-    private readonly rateLimiter: RateLimiterService,
+    private readonly prisma: PrismaService,
   ) {
     this.baseUrl = this.configService.get<string>(
       'API_FOOTBALL_BASE_URL',
@@ -42,38 +42,27 @@ export class ApiFootballClient {
     date: string,
     timezone: string = 'America/Bogota',
   ): Promise<ApiFootballResponse> {
-    const endpoint = '/fixtures';
-    const params = { date, timezone };
-
-    return this.makeRequest(endpoint, params);
+    return this.makeRequest('/fixtures', { date, timezone });
   }
 
   /**
    * Get live fixtures
-   * @param timezone e.g., "America/Bogota"
    */
   async getLiveFixtures(
     timezone: string = 'America/Bogota',
   ): Promise<ApiFootballResponse> {
-    const endpoint = '/fixtures';
-    const params = { live: 'all', timezone };
-
-    return this.makeRequest(endpoint, params);
+    return this.makeRequest('/fixtures', { live: 'all', timezone });
   }
 
   /**
    * Get fixture by ID
-   * @param fixtureId API-Football fixture ID
    */
   async getFixtureById(fixtureId: number): Promise<ApiFootballResponse> {
-    const endpoint = '/fixtures';
-    const params = { id: fixtureId };
-
-    return this.makeRequest(endpoint, params);
+    return this.makeRequest('/fixtures', { id: fixtureId });
   }
 
   /**
-   * Make HTTP request to API-Football
+   * Make HTTP request to API-Football and log usage to DB
    */
   private async makeRequest(
     endpoint: string,
@@ -85,7 +74,6 @@ export class ApiFootballClient {
 
     try {
       const url = `${this.baseUrl}${endpoint}`;
-
       this.logger.debug(`API-Football request: ${endpoint}`, params);
 
       const response = await firstValueFrom(
@@ -100,7 +88,7 @@ export class ApiFootballClient {
 
       if (response.data.errors && response.data.errors.length > 0) {
         this.logger.error('API-Football errors:', response.data.errors);
-        await this.rateLimiter.logRequest(endpoint, params, 500, 0);
+        await this.logUsage(endpoint, params, 500, 0);
         throw new HttpException(
           `API-Football error: ${JSON.stringify(response.data.errors)}`,
           500,
@@ -118,8 +106,7 @@ export class ApiFootballClient {
         `API-Football success: ${resultsCount} results from ${endpoint} — remaining: ${this.lastKnownRemaining ?? 'unknown'}`,
       );
 
-      // Log every API call to the DB for usage tracking
-      await this.rateLimiter.logRequest(endpoint, params, response.status, resultsCount);
+      await this.logUsage(endpoint, params, response.status, resultsCount);
 
       return response.data;
     } catch (error: any) {
@@ -129,7 +116,6 @@ export class ApiFootballClient {
       if (error.response?.status === 429) {
         throw new HttpException('API-Football rate limit exceeded', 429);
       }
-
       if (error.response?.status === 401 || error.response?.status === 403) {
         throw new HttpException('API-Football authentication failed', 401);
       }
@@ -138,6 +124,22 @@ export class ApiFootballClient {
         `API-Football request failed: ${error.message}`,
         error.response?.status || 500,
       );
+    }
+  }
+
+  /** Log API call directly to DB — avoids circular dependency through RateLimiterService */
+  private async logUsage(
+    endpoint: string,
+    params: Record<string, unknown>,
+    responseStatus: number,
+    matchesFetched: number,
+  ): Promise<void> {
+    try {
+      await this.prisma.apiFootballRequest.create({
+        data: { endpoint, params: params as any, responseStatus, matchesFetched },
+      });
+    } catch (err: any) {
+      this.logger.warn(`Failed to log API-Football usage: ${err.message}`);
     }
   }
 
@@ -151,19 +153,15 @@ export class ApiFootballClient {
     season?: number;
     id?: number;
   }): Promise<ApiFootballResponse> {
-    const endpoint = '/leagues';
     const p: Record<string, unknown> = {};
     if (params.search) p.search = params.search;
     if (params.country) p.country = params.country;
     if (params.current !== undefined) p.current = params.current;
     if (params.season) p.season = params.season;
     if (params.id) p.id = params.id;
-    return this.makeRequest(endpoint, p);
+    return this.makeRequest('/leagues', p);
   }
 
-  /**
-   * Get all fixtures for a league + season
-   */
   async getFixturesByLeague(
     leagueId: number,
     season: number,
@@ -172,45 +170,26 @@ export class ApiFootballClient {
     return this.makeRequest('/fixtures', { league: leagueId, season, timezone });
   }
 
-  /**
-   * Get teams for a league + season
-   */
   async getTeamsByLeague(leagueId: number, season: number): Promise<ApiFootballResponse> {
     return this.makeRequest('/teams', { league: leagueId, season });
   }
 
-  /**
-   * Search teams by name
-   */
   async searchTeams(name: string): Promise<ApiFootballResponse> {
     return this.makeRequest('/teams', { search: name });
   }
 
-  /**
-   * Get fixtures for a specific team + season
-   */
   async getFixturesByTeam(teamId: number, season: number, timezone = 'America/Bogota'): Promise<ApiFootballResponse> {
     return this.makeRequest('/fixtures', { team: teamId, season, timezone });
   }
 
-  /**
-   * Check if API key is configured
-   */
   isConfigured(): boolean {
     return !!this.apiKey;
   }
 
-  /**
-   * Get the last known remaining requests from API-Football response headers.
-   * Returns null if no request has been made yet this session.
-   */
   getLastKnownRemaining(): number | null {
     return this.lastKnownRemaining;
   }
 
-  /**
-   * Get the last known total limit from API-Football response headers.
-   */
   getLastKnownLimit(): number | null {
     return this.lastKnownLimit;
   }
