@@ -1888,6 +1888,7 @@ const Predictions: React.FC = () => {
     const [manualPaymentSending, setManualPaymentSending] = React.useState(false);
     const [manualPaymentDone, setManualPaymentDone] = React.useState(false);
     const [currentTime, setCurrentTime] = React.useState(() => Date.now());
+    const refreshInFlightRef = React.useRef(false);
 
     const applyParticipationBatch = React.useCallback(
         (batch: ParticipationOptionsBatch | null) => {
@@ -1923,6 +1924,10 @@ const Predictions: React.FC = () => {
             .map((m) => m.id),
     [activeLeague?.settings?.closePredictionMinutes, currentTime, drafts, matches]);
     const hasDirtyChanges = dirtyMatchIds.length > 0;
+    const hasLiveMatches = React.useMemo(
+        () => matches.some((match) => match.status === 'live'),
+        [matches],
+    );
     // Plan for credits: user's own subscription plan takes priority over league plan
     const resolvedPlan = React.useMemo(() =>
         (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase(),
@@ -1936,7 +1941,14 @@ const Predictions: React.FC = () => {
 
     React.useEffect(() => {
         const intervalId = window.setInterval(() => {
-            setCurrentTime(Date.now());
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                return;
+            }
+
+            setCurrentTime((current) => {
+                const next = Date.now();
+                return Math.abs(next - current) >= 30_000 ? next : current;
+            });
         }, 30_000);
 
         return () => window.clearInterval(intervalId);
@@ -2001,12 +2013,46 @@ const Predictions: React.FC = () => {
             return;
         }
 
-        const intervalId = window.setInterval(() => {
-            void fetchLeagueMatches(activeLeague.id).catch(() => undefined);
-        }, 60_000);
+        let timeoutId: number | null = null;
+        let cancelled = false;
 
-        return () => window.clearInterval(intervalId);
-    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches]);
+        const scheduleRefresh = () => {
+            if (cancelled) {
+                return;
+            }
+
+            const delay = hasLiveMatches ? 60_000 : 180_000;
+            timeoutId = window.setTimeout(async () => {
+                if (
+                    cancelled ||
+                    refreshInFlightRef.current ||
+                    (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+                ) {
+                    scheduleRefresh();
+                    return;
+                }
+
+                refreshInFlightRef.current = true;
+                try {
+                    await fetchLeagueMatches(activeLeague.id, { background: true });
+                } catch {
+                    // silent background refresh
+                } finally {
+                    refreshInFlightRef.current = false;
+                    scheduleRefresh();
+                }
+            }, delay);
+        };
+
+        scheduleRefresh();
+
+        return () => {
+            cancelled = true;
+            if (timeoutId !== null) {
+                window.clearTimeout(timeoutId);
+            }
+        };
+    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches, hasLiveMatches]);
 
     const loadParticipationOptions = React.useCallback(
         async (matchId: string) => {

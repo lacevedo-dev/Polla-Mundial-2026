@@ -86,6 +86,31 @@ describe('usePredictionStore', () => {
         expect(requestMock).toHaveBeenCalledWith('/predictions/leaderboard/league-1?category=MATCH');
     });
 
+    it('keeps loading state untouched during background match refreshes', async () => {
+        requestMock
+            .mockResolvedValueOnce([
+                {
+                    id: 'match-1',
+                    matchDate: '2026-06-11T18:00:00.000Z',
+                    status: 'SCHEDULED',
+                    phase: 'GROUP',
+                    homeTeam: { name: 'Colombia', code: 'CO', shortCode: 'COL' },
+                    awayTeam: { name: 'Argentina', code: 'AR', shortCode: 'ARG' },
+                },
+            ])
+            .mockResolvedValueOnce([]);
+
+        usePredictionStore.setState({
+            matches: [],
+            leaderboard: [],
+            isLoading: false,
+        });
+
+        await usePredictionStore.getState().fetchLeagueMatches('league-1', { background: true });
+
+        expect(usePredictionStore.getState().isLoading).toBe(false);
+    });
+
     it('persists predictions using the backend DTO and marks them as saved on success', async () => {
         usePredictionStore.setState({
             matches: [
