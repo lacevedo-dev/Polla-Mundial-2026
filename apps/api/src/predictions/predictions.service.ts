@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePredictionDto } from './dto/prediction.dto';
 import { MemberStatus, Phase, ScoringType } from '@prisma/client';
@@ -38,11 +38,18 @@ type CalculatePointsResult = { total: number; detail: PredictionPointDetail };
 
 @Injectable()
 export class PredictionsService {
+    private readonly logger = new Logger(PredictionsService.name);
+
     private static readonly DEFAULT_POINTS = {
-        EXACT_SCORE:       5,
-        CORRECT_WINNER:    2,
-        TEAM_GOALS:        1,
-        UNIQUE_PREDICTION: 5,
+        EXACT_SCORE:        5,
+        CORRECT_WINNER:     2,
+        TEAM_GOALS:         1,
+        UNIQUE_PREDICTION:  5,
+        PHASE_BONUS_R32:    0,
+        PHASE_BONUS_R16:    8,
+        PHASE_BONUS_QF:     4,
+        PHASE_BONUS_SF:     2,
+        PHASE_BONUS_FINAL:  5,
     } as const;
 
     // Regla vigente: en eliminatorias se aplica un factor adicional al puntaje base.
@@ -89,6 +96,7 @@ export class PredictionsService {
             update: {
                 homeScore,
                 awayScore,
+                advanceTeamId: createPredictionDto.advanceTeamId ?? null,
                 submittedAt: now,
             },
             create: {
@@ -97,6 +105,7 @@ export class PredictionsService {
                 leagueId,
                 homeScore,
                 awayScore,
+                advanceTeamId: createPredictionDto.advanceTeamId ?? null,
                 submittedAt: now,
             },
         });
@@ -196,6 +205,108 @@ export class PredictionsService {
                 },
             });
         }
+    }
+
+    async calculatePhaseBonuses(matchId: string): Promise<void> {
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            include: { homeTeam: true, awayTeam: true },
+        });
+
+        if (!match || match.phase === Phase.GROUP || (match.phase as string) === 'THIRD_PLACE') return;
+
+        // Get all leagues with predictions on knockout matches in this phase
+        const leagueEntries = await this.prisma.prediction.findMany({
+            where: { matchId },
+            select: { leagueId: true },
+            distinct: ['leagueId'],
+        });
+
+        for (const { leagueId } of leagueEntries) {
+            // All matches in this phase for this league
+            const phaseMatches = await this.prisma.match.findMany({
+                where: {
+                    phase: match.phase,
+                    predictions: { some: { leagueId } },
+                },
+                select: { id: true, status: true, homeTeamId: true, awayTeamId: true, advancingTeamId: true },
+            });
+
+            // Only proceed if ALL phase matches are finished AND have advancingTeamId set
+            const allDone = phaseMatches.every(
+                m => m.status === 'FINISHED' && m.advancingTeamId !== null,
+            );
+            if (!allDone) continue;
+
+            const league = await this.prisma.league.findUnique({
+                where: { id: leagueId },
+                include: { scoringRules: { where: { active: true } } },
+            });
+            if (!league) continue;
+
+            const bonusPoints = this.getPhaseBonusPoints(match.phase, league.scoringRules);
+            if (bonusPoints === 0) continue;
+
+            // Users who made predictions in this league
+            const userIds = await this.prisma.prediction.findMany({
+                where: { leagueId, match: { phase: match.phase } },
+                select: { userId: true },
+                distinct: ['userId'],
+            });
+
+            for (const { userId } of userIds) {
+                // Check if user predicted ALL phase matches advancement
+                const userAdvancePreds = await this.prisma.prediction.findMany({
+                    where: {
+                        userId,
+                        leagueId,
+                        match: { phase: match.phase },
+                        advanceTeamId: { not: null },
+                    },
+                    select: { matchId: true, advanceTeamId: true },
+                });
+
+                // Must have predicted ALL matches
+                if (userAdvancePreds.length !== phaseMatches.length) continue;
+
+                // Check all were correct
+                const allCorrect = userAdvancePreds.every(pred => {
+                    const pm = phaseMatches.find(m => m.id === pred.matchId);
+                    return pm && pred.advanceTeamId === pm.advancingTeamId;
+                });
+
+                if (allCorrect) {
+                    await this.prisma.phaseBonus.upsert({
+                        where: { userId_leagueId_phase: { userId, leagueId, phase: match.phase } },
+                        update: { points: bonusPoints, awardedAt: new Date() },
+                        create: { userId, leagueId, phase: match.phase, points: bonusPoints },
+                    });
+                    this.logger.log(`Bono de fase ${match.phase} otorgado a ${userId} en liga ${leagueId}`);
+                }
+            }
+        }
+    }
+
+    private getPhaseBonusPoints(phase: Phase, rules: ScoringRuleLike[]): number {
+        const phaseToScoringType: Partial<Record<Phase, ScoringType>> = {
+            [Phase.ROUND_OF_32]: ScoringType.PHASE_BONUS_R32,
+            [Phase.ROUND_OF_16]: ScoringType.PHASE_BONUS_R16,
+            [Phase.QUARTER]:     ScoringType.PHASE_BONUS_QF,
+            [Phase.SEMI]:        ScoringType.PHASE_BONUS_SF,
+            [Phase.FINAL]:       ScoringType.PHASE_BONUS_FINAL,
+        };
+        const scoringType = phaseToScoringType[phase];
+        if (!scoringType) return 0;
+
+        const defaultKey = {
+            [ScoringType.PHASE_BONUS_R32]:   'PHASE_BONUS_R32',
+            [ScoringType.PHASE_BONUS_R16]:   'PHASE_BONUS_R16',
+            [ScoringType.PHASE_BONUS_QF]:    'PHASE_BONUS_QF',
+            [ScoringType.PHASE_BONUS_SF]:    'PHASE_BONUS_SF',
+            [ScoringType.PHASE_BONUS_FINAL]: 'PHASE_BONUS_FINAL',
+        }[scoringType] as keyof typeof PredictionsService.DEFAULT_POINTS;
+
+        return this.getRulePoints(rules, scoringType, PredictionsService.DEFAULT_POINTS[defaultKey]);
     }
 
     private getRulePoints(rules: ScoringRuleLike[], ruleType: ScoringType, fallback: number): number {
@@ -312,24 +423,53 @@ export class PredictionsService {
             userStats.set(pred.userId, stats);
         }
 
+        // Phase bonuses
+        const phaseBonuses = await this.prisma.phaseBonus.findMany({
+            where: { leagueId },
+            select: { userId: true, points: true, phase: true },
+        });
+
+        const bonusByUser = new Map<string, { total: number; hasChampion: boolean }>();
+        for (const b of phaseBonuses) {
+            const curr = bonusByUser.get(b.userId) ?? { total: 0, hasChampion: false };
+            curr.total += b.points;
+            if (b.phase === Phase.FINAL) curr.hasChampion = true;
+            bonusByUser.set(b.userId, curr);
+        }
+
         // Criterios de desempate según reglas (en orden de prioridad):
-        // 1. Puntos totales
-        // 2. Marcadores exactos
-        // 3. Ganadores acertados
-        // 4. Goles acertados
-        // 5. Predicciones únicas
+        // 1. Puntos totales (predicciones + bonos de fase)
+        // 2. Acertó el campeón (bono FINAL)
+        // 3. Marcadores exactos
+        // 4. Ganadores acertados
+        // 5. Goles acertados
+        // 6. Predicciones únicas
         return members
             .map((member) => {
                 const stats = userStats.get(member.userId) ?? {
                     points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0,
                 };
-                return { ...member.user, ...stats };
+                const bonus = bonusByUser.get(member.userId) ?? { total: 0, hasChampion: false };
+                return {
+                    ...member.user,
+                    points:           stats.points + bonus.total,
+                    predictionPoints: stats.points,
+                    phaseBonusPoints: bonus.total,
+                    hasChampion:      bonus.hasChampion,
+                    exactCount:       stats.exactCount,
+                    winnerCount:      stats.winnerCount,
+                    goalCount:        stats.goalCount,
+                    uniqueCount:      stats.uniqueCount,
+                };
             })
             .sort((a, b) => {
-                if (b.points      !== a.points)      return b.points      - a.points;
-                if (b.exactCount  !== a.exactCount)  return b.exactCount  - a.exactCount;
-                if (b.winnerCount !== a.winnerCount) return b.winnerCount - a.winnerCount;
-                if (b.goalCount   !== a.goalCount)   return b.goalCount   - a.goalCount;
+                if (b.points      !== a.points)       return b.points      - a.points;
+                // Tiebreaker 1: acertó el campeón
+                if (b.hasChampion !== a.hasChampion)  return b.hasChampion ? 1 : -1;
+                // Tiebreaker 2-5
+                if (b.exactCount  !== a.exactCount)   return b.exactCount  - a.exactCount;
+                if (b.winnerCount !== a.winnerCount)  return b.winnerCount - a.winnerCount;
+                if (b.goalCount   !== a.goalCount)    return b.goalCount   - a.goalCount;
                 return b.uniqueCount - a.uniqueCount;
             });
     }

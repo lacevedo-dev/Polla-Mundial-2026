@@ -18,6 +18,7 @@ export const matchWithTeamsSelect = Prisma.validator<Prisma.MatchSelect>()({
   homeScore: true,
   awayScore: true,
   externalId: true,
+  advancingTeamId: true,
   homeTeam: {
     select: matchTeamSelect,
   },
@@ -41,6 +42,7 @@ export function toMatchResponse(match: MatchWithTeams) {
     homeScore: match.homeScore,
     awayScore: match.awayScore,
     externalId: match.externalId,
+    advancingTeamId: match.advancingTeamId,
     homeTeam: {
       id: match.homeTeam.id,
       name: match.homeTeam.name,

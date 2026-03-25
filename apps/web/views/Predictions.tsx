@@ -41,7 +41,7 @@ import {
     type ParticipationSummaryBar,
 } from '../types/participation';
 
-type DraftMap = Record<string, { home: string; away: string }>;
+type DraftMap = Record<string, { home: string; away: string; advanceTeamId?: string }>;
 type PhaseFilter = 'ALL' | 'GROUP' | 'KNOCKOUT';
 
 interface SimulatorTeam {
@@ -102,6 +102,7 @@ function buildDrafts(matches: MatchViewModel[]): DraftMap {
             {
                 home: match.prediction.home,
                 away: match.prediction.away,
+                advanceTeamId: match.prediction.advanceTeamId,
             },
         ]),
     );
@@ -694,7 +695,7 @@ function ParticipationConfigurator({
 
 interface CompactMatchRowProps {
     match: MatchViewModel;
-    draft: { home: string; away: string };
+    draft: { home: string; away: string; advanceTeamId?: string };
     isExpanded: boolean;
     isSaving: boolean;
     isDirty: boolean;
@@ -718,6 +719,7 @@ interface CompactMatchRowProps {
     hasParticipationOptions: boolean;
     isParticipationOpen: boolean;
     onToggleParticipation: () => void;
+    onAdvanceTeamSelect: (matchId: string, teamId: string) => void;
 }
 
 function CompactMatchRow({
@@ -746,6 +748,7 @@ function CompactMatchRow({
     hasParticipationOptions,
     isParticipationOpen,
     onToggleParticipation,
+    onAdvanceTeamSelect,
 }: CompactMatchRowProps) {
     const [insightsLevel, setInsightsLevel] = React.useState<'none' | 'suggestions' | 'full'>('none');
     const hasBeenConsulted = cachedInsights !== null;
@@ -816,6 +819,50 @@ function CompactMatchRow({
                             <span className="text-xs font-black uppercase text-slate-900">{match.awayTeamCode}</span>
                         </div>
                     </div>
+
+                    {/* Advance team selector for knockout rounds (non-speedMode) */}
+                    {match.isKnockout && canEdit && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Clasifica:</span>
+                            <button
+                                type="button"
+                                onClick={() => onAdvanceTeamSelect(match.id, match.homeTeamId)}
+                                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                                    draft.advanceTeamId === match.homeTeamId
+                                        ? 'bg-lime-400 text-slate-900'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {match.homeTeamCode}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onAdvanceTeamSelect(match.id, match.awayTeamId)}
+                                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                                    draft.advanceTeamId === match.awayTeamId
+                                        ? 'bg-lime-400 text-slate-900'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {match.awayTeamCode}
+                            </button>
+                        </div>
+                    )}
+                    {match.isKnockout && !canEdit && match.advancingTeamId && (
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-black uppercase text-slate-400">Clasificó:</span>
+                            <span className="text-[11px] font-bold text-lime-600">
+                                {match.advancingTeamId === match.homeTeamId ? match.homeTeamCode : match.awayTeamCode}
+                            </span>
+                            {draft.advanceTeamId && (
+                                <span className={`text-[9px] font-black uppercase ${
+                                    draft.advanceTeamId === match.advancingTeamId ? 'text-lime-500' : 'text-rose-500'
+                                }`}>
+                                    {draft.advanceTeamId === match.advancingTeamId ? '✓ Acertaste' : '✗ Fallaste'}
+                                </span>
+                            )}
+                        </div>
+                    )}
 
                     {/* Info y botones de acción */}
                     <div className="flex items-center justify-between gap-2">
@@ -1165,6 +1212,49 @@ function CompactMatchRow({
                             </span>
                         )}
                     </div>
+                    {/* Advance team selector for knockout rounds (speed mode expanded) */}
+                    {match.isKnockout && canEdit && (
+                        <div className="mt-2 flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Clasifica:</span>
+                            <button
+                                type="button"
+                                onClick={() => onAdvanceTeamSelect(match.id, match.homeTeamId)}
+                                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                                    draft.advanceTeamId === match.homeTeamId
+                                        ? 'bg-lime-400 text-slate-900'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {match.homeTeamCode}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onAdvanceTeamSelect(match.id, match.awayTeamId)}
+                                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                                    draft.advanceTeamId === match.awayTeamId
+                                        ? 'bg-lime-400 text-slate-900'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {match.awayTeamCode}
+                            </button>
+                        </div>
+                    )}
+                    {match.isKnockout && !canEdit && match.advancingTeamId && (
+                        <div className="mt-1 flex items-center gap-1.5">
+                            <span className="text-[9px] font-black uppercase text-slate-400">Clasificó:</span>
+                            <span className="text-[11px] font-bold text-lime-600">
+                                {match.advancingTeamId === match.homeTeamId ? match.homeTeamCode : match.awayTeamCode}
+                            </span>
+                            {draft.advanceTeamId && (
+                                <span className={`text-[9px] font-black uppercase ${
+                                    draft.advanceTeamId === match.advancingTeamId ? 'text-lime-500' : 'text-rose-500'
+                                }`}>
+                                    {draft.advanceTeamId === match.advancingTeamId ? '✓ Acertaste' : '✗ Fallaste'}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1722,7 +1812,9 @@ const Predictions: React.FC = () => {
                 if (match.status !== 'open' && match.status !== 'live') return false;
                 const draft = drafts[match.id];
                 if (!draft || draft.home === '' || draft.away === '') return false;
-                return draft.home !== match.prediction.home || draft.away !== match.prediction.away;
+                const scoreChanged = draft.home !== match.prediction.home || draft.away !== match.prediction.away;
+                const advanceChanged = match.isKnockout && draft.advanceTeamId !== match.prediction.advanceTeamId;
+                return scoreChanged || advanceChanged;
             })
             .map((m) => m.id),
     [matches, drafts]);
@@ -1915,12 +2007,23 @@ const Predictions: React.FC = () => {
         setDrafts((currentDrafts) => ({
             ...currentDrafts,
             [matchId]: {
+                ...currentDrafts[matchId],
                 home: currentDrafts[matchId]?.home ?? '',
                 away: currentDrafts[matchId]?.away ?? '',
                 [field]: value,
             },
         }));
     };
+
+    const handleAdvanceTeamSelect = React.useCallback((matchId: string, teamId: string) => {
+        setDrafts((currentDrafts) => ({
+            ...currentDrafts,
+            [matchId]: {
+                ...currentDrafts[matchId],
+                advanceTeamId: currentDrafts[matchId]?.advanceTeamId === teamId ? undefined : teamId,
+            },
+        }));
+    }, []);
 
     const handleSave = async (matchId: string) => {
         if (!activeLeague?.id) {
@@ -1942,6 +2045,7 @@ const Predictions: React.FC = () => {
                 matchId,
                 Number.parseInt(nextDraft.home, 10),
                 Number.parseInt(nextDraft.away, 10),
+                nextDraft.advanceTeamId,
             );
         } catch (nextError) {
             setError(nextError instanceof Error ? nextError.message : 'No fue posible guardar el pronóstico.');
@@ -1964,6 +2068,7 @@ const Predictions: React.FC = () => {
                     matchId,
                     Number.parseInt(draft.home, 10),
                     Number.parseInt(draft.away, 10),
+                    draft.advanceTeamId,
                 );
             } catch {
                 failed++;
@@ -2687,6 +2792,7 @@ const Predictions: React.FC = () => {
                                                                 hasParticipationOptions={hasParticipationOptions}
                                                                 isParticipationOpen={activeParticipationMatchId === match.id}
                                                                 onToggleParticipation={() => void handleToggleParticipation(match.id)}
+                                                                onAdvanceTeamSelect={handleAdvanceTeamSelect}
                                                             />
                                                             {activeParticipationMatchId === match.id ? (
                                                                 <div className="border-t border-slate-100 bg-white p-3 sm:hidden">

@@ -193,9 +193,30 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     }, [fixtureResults, dateTeamFilter]);
 
     const importableDateFixtures = useMemo(
-        () => filteredDateFixtures.filter(f => !f.alreadyImported),
-        [filteredDateFixtures]
+        () => filteredDateFixtures.filter(f => !f.alreadyImported || dateOverwrite),
+        [filteredDateFixtures, dateOverwrite]
     );
+
+    const isFixtureSelectable = useCallback((fixture: FixtureResult) => (
+        !fixture.alreadyImported || dateOverwrite
+    ), [dateOverwrite]);
+
+    const selectableFixtureIds = useMemo(() => {
+        const source =
+            mode === 'date' ? filteredDateFixtures :
+            mode === 'team' ? teamFixtures :
+            mode === 'id' ? idFixtures :
+            [];
+
+        return new Set(source.filter(isFixtureSelectable).map((fixture) => fixture.fixtureId));
+    }, [mode, filteredDateFixtures, teamFixtures, idFixtures, isFixtureSelectable]);
+
+    useEffect(() => {
+        setSelectedFixtures((prev) => {
+            const next = new Set([...prev].filter((fixtureId) => selectableFixtureIds.has(fixtureId)));
+            return next.size === prev.size ? prev : next;
+        });
+    }, [selectableFixtureIds]);
 
     /* ─ search ─ */
     const handleSearch = useCallback(async (overrideQuery?: string) => {
@@ -547,7 +568,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                         <label
                                                             key={f.fixtureId}
                                                             className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
-                                                                f.alreadyImported
+                                                                f.alreadyImported && !dateOverwrite
                                                                     ? 'border-lime-200 bg-lime-50/50 opacity-70'
                                                                     : selectedFixtures.has(f.fixtureId)
                                                                     ? 'border-slate-900 bg-slate-50'
@@ -556,8 +577,8 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                         >
                                                             <input
                                                                 type="checkbox"
-                                                                checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
-                                                                disabled={f.alreadyImported}
+                                                                checked={selectedFixtures.has(f.fixtureId)}
+                                                                disabled={!isFixtureSelectable(f)}
                                                                 onChange={() => toggleFixture(f.fixtureId)}
                                                                 className="w-4 h-4 accent-amber-500 shrink-0"
                                                             />
@@ -573,7 +594,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                             <div className="shrink-0 text-right">
                                                                 <p className="text-[10px] text-slate-400 truncate max-w-[100px]">{f.league.name}</p>
                                                                 {f.alreadyImported
-                                                                    ? <span className="text-[10px] font-black text-lime-600">Ya importado</span>
+                                                                    ? <span className="text-[10px] font-black text-lime-600">{dateOverwrite ? 'Reimportar / actualizar' : 'Ya importado'}</span>
                                                                     : <span className="text-[10px] text-slate-400">{new Date(f.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })} BOG</span>
                                                                 }
                                                             </div>
@@ -752,9 +773,9 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{teamFixtures.length} partidos temporada {teamSeason}</p>
                                                             <button
                                                                 onClick={() => setSelectedFixtures(
-                                                                    selectedFixtures.size === teamFixtures.filter(f => !f.alreadyImported).length
+                                                                    selectedFixtures.size === teamFixtures.filter(isFixtureSelectable).length
                                                                         ? new Set()
-                                                                        : new Set(teamFixtures.filter(f => !f.alreadyImported).map(f => f.fixtureId))
+                                                                        : new Set(teamFixtures.filter(isFixtureSelectable).map(f => f.fixtureId))
                                                                 )}
                                                                 className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
                                                             >
@@ -767,7 +788,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                                 <label
                                                                     key={f.fixtureId}
                                                                     className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
-                                                                        f.alreadyImported
+                                                                        f.alreadyImported && !dateOverwrite
                                                                             ? 'border-lime-200 bg-lime-50/50 opacity-70'
                                                                             : selectedFixtures.has(f.fixtureId)
                                                                             ? 'border-slate-900 bg-slate-50'
@@ -776,8 +797,8 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                                 >
                                                                     <input
                                                                         type="checkbox"
-                                                                        checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
-                                                                        disabled={f.alreadyImported}
+                                                                        checked={selectedFixtures.has(f.fixtureId)}
+                                                                        disabled={!isFixtureSelectable(f)}
                                                                         onChange={() => toggleFixture(f.fixtureId)}
                                                                         className="w-4 h-4 accent-amber-500 shrink-0"
                                                                     />
@@ -793,7 +814,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                                     <div className="shrink-0 text-right">
                                                                         <p className="text-[10px] text-slate-400 truncate max-w-[100px]">{f.league.name}</p>
                                                                         {f.alreadyImported
-                                                                            ? <span className="text-[10px] font-black text-lime-600">Ya importado</span>
+                                                                            ? <span className="text-[10px] font-black text-lime-600">{dateOverwrite ? 'Reimportar / actualizar' : 'Ya importado'}</span>
                                                                             : <span className="text-[10px] text-slate-400">{new Date(f.date).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })}</span>
                                                                         }
                                                                     </div>
@@ -907,9 +928,9 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{idFixtures.length} fixture{idFixtures.length !== 1 ? 's' : ''} encontrado{idFixtures.length !== 1 ? 's' : ''}</p>
                                                     <button
                                                         onClick={() => setSelectedFixtures(
-                                                            selectedFixtures.size === idFixtures.filter(f => !f.alreadyImported).length
+                                                            selectedFixtures.size === idFixtures.filter(isFixtureSelectable).length
                                                                 ? new Set()
-                                                                : new Set(idFixtures.filter(f => !f.alreadyImported).map(f => f.fixtureId))
+                                                                : new Set(idFixtures.filter(isFixtureSelectable).map(f => f.fixtureId))
                                                         )}
                                                         className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
                                                     >
@@ -922,7 +943,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                         <label
                                                             key={f.fixtureId}
                                                             className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
-                                                                f.alreadyImported
+                                                                f.alreadyImported && !dateOverwrite
                                                                     ? 'border-lime-200 bg-lime-50/50 opacity-70'
                                                                     : selectedFixtures.has(f.fixtureId)
                                                                     ? 'border-slate-900 bg-slate-50'
@@ -931,8 +952,8 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                         >
                                                             <input
                                                                 type="checkbox"
-                                                                checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
-                                                                disabled={f.alreadyImported}
+                                                                checked={selectedFixtures.has(f.fixtureId)}
+                                                                disabled={!isFixtureSelectable(f)}
                                                                 onChange={() => toggleFixture(f.fixtureId)}
                                                                 className="w-4 h-4 accent-amber-500 shrink-0"
                                                             />
@@ -946,7 +967,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                             <div className="shrink-0 text-right">
                                                                 <p className="text-[10px] text-slate-500 font-mono">ID: {f.fixtureId}</p>
                                                                 <p className="text-[10px] text-slate-400">{new Date(f.date).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                                                                {f.alreadyImported && <span className="text-[10px] font-black text-lime-600">Ya importado</span>}
+                                                                {f.alreadyImported && <span className="text-[10px] font-black text-lime-600">{dateOverwrite ? 'Reimportar / actualizar' : 'Ya importado'}</span>}
                                                             </div>
                                                         </label>
                                                     ))}

@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreatePredictionDto {
     @IsNotEmpty()
@@ -16,4 +16,8 @@ export class CreatePredictionDto {
     @IsInt()
     @Min(0)
     awayScore: number;
+
+    @IsOptional()
+    @IsString()
+    advanceTeamId?: string;
 }

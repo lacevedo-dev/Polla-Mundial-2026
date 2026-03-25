@@ -9,6 +9,7 @@ export interface MatchResponse {
     venue?: string | null;
     homeScore?: number | null;
     awayScore?: number | null;
+    advancingTeamId?: string | null;
     homeTeam: {
         id?: string;
         name: string;
@@ -31,6 +32,7 @@ export interface LeaguePredictionResponse {
     homeScore: number;
     awayScore: number;
     points?: number | null;
+    advanceTeamId?: string | null;
 }
 
 export interface LeaderboardApiEntry {
@@ -39,6 +41,9 @@ export interface LeaderboardApiEntry {
     name: string;
     avatar?: string | null;
     points: number;
+    phaseBonusPoints?: number;
+    hasChampion?: boolean;
+    exactCount?: number;
 }
 
 export interface MatchViewModel {
@@ -47,6 +52,8 @@ export interface MatchViewModel {
     awayTeam: string;
     homeTeamCode: string;
     awayTeamCode: string;
+    homeTeamId: string;
+    awayTeamId: string;
     homeFlag: string;
     awayFlag: string;
     date: string;
@@ -55,9 +62,12 @@ export interface MatchViewModel {
     phase: string;
     group?: string;
     venue: string;
+    isKnockout: boolean;
+    advancingTeamId?: string;
     prediction: {
         home: string;
         away: string;
+        advanceTeamId?: string;
     };
     result?: {
         home: number;
@@ -74,6 +84,8 @@ export interface LeaderboardRow {
     name: string;
     avatar: string;
     points: number;
+    phaseBonusPoints?: number;
+    hasChampion?: boolean;
     trend: 'same';
 }
 
@@ -148,6 +160,7 @@ export function toMatchViewModel(
     prediction?: LeaguePredictionResponse,
 ): MatchViewModel {
     const hasPrediction = Boolean(prediction);
+    const isKnockout = match.phase?.toUpperCase() !== 'GROUP';
 
     return {
         id: match.id,
@@ -163,6 +176,8 @@ export function toMatchViewModel(
             match.awayTeam.code,
             match.awayTeam.name,
         ),
+        homeTeamId: match.homeTeam.id ?? '',
+        awayTeamId: match.awayTeam.id ?? '',
         homeFlag: resolveFlagUrl(match.homeTeam.flagUrl, match.homeTeam.code),
         awayFlag: resolveFlagUrl(match.awayTeam.flagUrl, match.awayTeam.code),
         date: match.matchDate,
@@ -171,9 +186,12 @@ export function toMatchViewModel(
         phase: match.phase,
         group: match.group ?? undefined,
         venue: match.venue ?? 'Por definir',
+        isKnockout,
+        advancingTeamId: match.advancingTeamId ?? undefined,
         prediction: {
             home: hasPrediction ? String(prediction?.homeScore ?? '') : '',
             away: hasPrediction ? String(prediction?.awayScore ?? '') : '',
+            advanceTeamId: prediction?.advanceTeamId ?? undefined,
         },
         result:
             typeof match.homeScore === 'number' && typeof match.awayScore === 'number'
@@ -208,6 +226,8 @@ export function toLeaderboardRows(entries: LeaderboardApiEntry[]): LeaderboardRo
             name: entry.name,
             avatar: resolveApiAssetUrl(entry.avatar) ?? toAvatar(entry.name),
             points: entry.points,
+            phaseBonusPoints: entry.phaseBonusPoints,
+            hasChampion: entry.hasChampion,
             trend: 'same',
         }));
 }

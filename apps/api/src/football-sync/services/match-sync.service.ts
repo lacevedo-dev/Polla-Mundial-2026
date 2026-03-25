@@ -8,6 +8,7 @@ import { SyncPlanService } from './sync-plan.service';
 import { MonitoringService } from './monitoring.service';
 import {
   MatchStatus,
+  Phase,
   Prisma,
   SyncAlertLevel,
   SyncAlertType,
@@ -387,7 +388,7 @@ export class MatchSyncService {
         match.awayScore !== fixture.goals.away;
 
       // Update match
-      await this.prisma.match.update({
+      const updatedMatch = await this.prisma.match.update({
         where: { id: match.id },
         data: {
           ...(homeTeamId !== match.homeTeamId ? { homeTeamId } : {}),
@@ -410,6 +411,25 @@ export class MatchSyncService {
         await this.predictionsService.calculateMatchPoints(match.id);
         this.predictionReport.sendMatchResultsReport(match.id).catch(err =>
           this.logger.error(`Error sending results email for match ${match.id}: ${err.message}`),
+        );
+
+        // Set advancingTeamId for knockout matches
+        if (match.phase !== Phase.GROUP) {
+          const h = fixture.goals.home ?? 0;
+          const a = fixture.goals.away ?? 0;
+          if (h !== a) {
+            const advancingTeamId = h > a
+              ? (updatedMatch.homeTeamId ?? match.homeTeamId)
+              : (updatedMatch.awayTeamId ?? match.awayTeamId);
+            await this.prisma.match.update({
+              where: { id: match.id },
+              data: { advancingTeamId },
+            });
+          }
+        }
+        // Calculate phase bonuses after advancement is set
+        this.predictionsService.calculatePhaseBonuses(match.id).catch(err =>
+          this.logger.error(`Error calculating phase bonuses for match ${match.id}: ${err.message}`),
         );
       }
 

@@ -31,6 +31,7 @@ model User {
   predictions        Prediction[]
   verificationTokens VerificationToken[]
   aiUsageRecords     AiUsageRecord[]
+  phaseBonuses       PhaseBonus[]
 
   @@index([email])
   @@index([username])
@@ -79,6 +80,7 @@ model League {
   distributions          PrizeDistribution[]
   scoringRules           ScoringRule[]
   stageFees              StageFee[]
+  phaseBonuses           PhaseBonus[]
 
   @@index([code])
   @@index([status])
@@ -183,6 +185,8 @@ model Team {
   apiFootballTeamId Int?    @unique
   awayMatches       Match[] @relation("AwayTeam")
   homeMatches       Match[] @relation("HomeTeam")
+  advancePredictions Prediction[] @relation("AdvancePredictions")
+  advancingInMatches Match[]      @relation("AdvancingTeam")
 
   @@index([shortCode])
 }
@@ -205,6 +209,8 @@ model Match {
   lastSyncAt              DateTime?
   syncCount               Int               @default(0)
   predictionReportSentAt  DateTime?
+  advancingTeamId String?
+  advancingTeam   Team?   @relation("AdvancingTeam", fields: [advancingTeamId], references: [id])
   tournamentId            String?
   round         String?
   syncLogs      FootballSyncLog[]
@@ -220,6 +226,7 @@ model Match {
   @@index([externalId])
   @@index([awayTeamId], map: "Match_awayTeamId_fkey")
   @@index([homeTeamId], map: "Match_homeTeamId_fkey")
+  @@index([advancingTeamId])
 }
 
 model Prediction {
@@ -231,6 +238,8 @@ model Prediction {
   awayScore   Int
   points      Float?
   pointDetail String?  @db.LongText
+  advanceTeamId String?
+  advanceTeam   Team?   @relation("AdvancePredictions", fields: [advanceTeamId], references: [id])
   submittedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
   league      League   @relation(fields: [leagueId], references: [id])
@@ -242,6 +251,7 @@ model Prediction {
   @@index([userId, leagueId])
   @@index([userId, submittedAt(sort: Desc)])
   @@index([matchId], map: "Prediction_matchId_fkey")
+  @@index([advanceTeamId])
 }
 
 model Payment {
@@ -586,6 +596,11 @@ enum ScoringType {
   CORRECT_WINNER
   UNIQUE_PREDICTION
   TEAM_GOALS
+  PHASE_BONUS_R32
+  PHASE_BONUS_R16
+  PHASE_BONUS_QF
+  PHASE_BONUS_SF
+  PHASE_BONUS_FINAL
 }
 
 enum DistributionCategory {
@@ -672,6 +687,22 @@ enum SyncAlertLevel {
   WARNING
   ERROR
   CRITICAL
+}
+
+model PhaseBonus {
+  id        String   @id @default(cuid())
+  userId    String
+  leagueId  String
+  phase     Phase
+  points    Float
+  awardedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  league League @relation(fields: [leagueId], references: [id])
+
+  @@unique([userId, leagueId, phase])
+  @@index([leagueId])
+  @@index([userId])
 }
 
 model AiUsageRecord {

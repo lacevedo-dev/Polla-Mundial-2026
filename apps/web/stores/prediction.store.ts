@@ -18,7 +18,7 @@ interface PredictionState {
     isLoading: boolean;
     fetchLeagueMatches: (leagueId: string) => Promise<MatchViewModel[]>;
     fetchLeaderboard: (leagueId: string) => Promise<LeaderboardRow[]>;
-    savePrediction: (leagueId: string, matchId: string, home: number, away: number) => Promise<void>;
+    savePrediction: (leagueId: string, matchId: string, home: number, away: number, advanceTeamId?: string) => Promise<void>;
     resetLeagueData: () => void;
 }
 
@@ -84,7 +84,7 @@ export const usePredictionStore = create<PredictionState>((set) => ({
         }
     },
 
-    savePrediction: async (leagueId, matchId, home, away) => {
+    savePrediction: async (leagueId, matchId, home, away, advanceTeamId) => {
         await request('/predictions', {
             method: 'POST',
             body: JSON.stringify({
@@ -92,6 +92,7 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                 matchId,
                 homeScore: home,
                 awayScore: away,
+                ...(advanceTeamId !== undefined ? { advanceTeamId } : {}),
             }),
         });
 
@@ -103,6 +104,7 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                           prediction: {
                               home: String(home),
                               away: String(away),
+                              advanceTeamId,
                           },
                           saved: true,
                       }

@@ -3,6 +3,7 @@ import { Phase } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApiFootballClient } from './api-football-client.service';
 import { RateLimiterService } from './rate-limiter.service';
+import { WORLD_CUP_TEAM_CATALOG } from '../catalog/world-cup-team-catalog';
 
 /* ─── helpers ──────────────────────────────────────────────────────────── */
 
@@ -609,11 +610,27 @@ export class TournamentImportService {
   ): Promise<string | null> {
     if (!teamData?.id) return null;
 
+    const normalizedApiName = normalizeTeamName(teamData.name ?? '');
+    const normalizedApiCode = String(teamData.code ?? '').toUpperCase().slice(0, 3);
+    const catalogEntry = WORLD_CUP_TEAM_CATALOG.find((entry) =>
+      entry.apiFootballTeamId === teamData.id ||
+      entry.apiFootballCode === normalizedApiCode ||
+      normalizeTeamName(entry.apiFootballName) === normalizedApiName ||
+      normalizeTeamName(entry.name) === normalizedApiName,
+    );
+
     const existing = await this.prisma.team.findFirst({
       where: {
         OR: [
           { apiFootballTeamId: teamData.id },
           { name: { equals: teamData.name } },
+          ...(catalogEntry
+            ? [
+                { code: { equals: catalogEntry.code } },
+                { shortCode: { equals: catalogEntry.shortCode } },
+                { name: { equals: catalogEntry.name } },
+              ]
+            : []),
         ],
       },
     });
@@ -622,7 +639,17 @@ export class TournamentImportService {
       if (!existing.apiFootballTeamId) {
         await this.prisma.team.update({
           where: { id: existing.id },
-          data: { apiFootballTeamId: teamData.id, flagUrl: teamData.logo ?? existing.flagUrl },
+          data: {
+            apiFootballTeamId: teamData.id,
+            flagUrl: teamData.logo ?? existing.flagUrl,
+            ...(catalogEntry
+              ? {
+                  code: catalogEntry.code,
+                  shortCode: catalogEntry.shortCode,
+                  group: catalogEntry.group,
+                }
+              : {}),
+          },
         });
         result.teamsLinked++;
       }
@@ -637,11 +664,12 @@ export class TournamentImportService {
 
     const newTeam = await this.prisma.team.create({
       data: {
-        name: safeName,
-        code: safeCode,
-        shortCode: teamCode.slice(0, 8),
-        flagUrl: teamData.logo,
+        name: catalogEntry?.name ?? safeName,
+        code: catalogEntry?.code ?? safeCode,
+        shortCode: catalogEntry?.shortCode ?? teamCode.slice(0, 8),
+        flagUrl: teamData.logo ?? catalogEntry?.flagUrl,
         apiFootballTeamId: teamData.id,
+        group: catalogEntry?.group,
       },
     });
     result.teamsCreated++;
