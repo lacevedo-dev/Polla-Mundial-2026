@@ -18,8 +18,19 @@ export interface InvitationItem {
     id: string;
     leagueId: string;
     leagueName: string;
+    leagueCode?: string;
+    leagueDescription?: string;
+    privacy?: 'PUBLIC' | 'PRIVATE';
+    plan?: string;
+    memberCount?: number;
+    maxParticipants?: number | null;
+    baseFee?: number | null;
+    currency?: string | null;
+    primaryTournamentName?: string;
+    closePredictionMinutes?: number | null;
     leagueCover?: string;
     inviterName: string;
+    inviterUsername?: string;
     expiresAt?: string | null;
 }
 
@@ -204,8 +215,19 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
                 id: inv.id,
                 leagueId: inv.league?.id ?? inv.leagueId,
                 leagueName: inv.league?.name ?? '—',
+                leagueCode: inv.league?.code ?? undefined,
+                leagueDescription: inv.league?.description ?? undefined,
+                privacy: inv.league?.privacy ?? 'PRIVATE',
+                plan: inv.league?.plan ?? undefined,
+                memberCount: inv.league?._count?.members ?? 0,
+                maxParticipants: inv.league?.maxParticipants ?? null,
+                baseFee: inv.league?.baseFee ?? null,
+                currency: inv.league?.currency ?? null,
+                primaryTournamentName: inv.league?.primaryTournament?.name ?? undefined,
+                closePredictionMinutes: inv.league?.closePredictionMinutes ?? null,
                 leagueCover: inv.league?.cover ?? undefined,
                 inviterName: inv.inviter?.name ?? 'Alguien',
+                inviterUsername: inv.inviter?.username ?? undefined,
                 expiresAt: inv.expiresAt ?? null,
             }));
             set({ invitations });

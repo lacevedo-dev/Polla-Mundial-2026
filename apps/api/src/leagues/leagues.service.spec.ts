@@ -98,6 +98,47 @@ describe('LeaguesService', () => {
         expect(result.status).toBe(MemberStatus.PENDING_PAYMENT);
     });
 
+    it('creates pending-payment membership and principal obligation when joining a paid public league', async () => {
+        const participationMock = { createPrincipalObligationForInvitation: jest.fn().mockResolvedValue({}) };
+        const prismaMock = {
+            league: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: 'league-2',
+                    code: 'ABCD12',
+                    privacy: 'PUBLIC',
+                    includeBaseFee: true,
+                    baseFee: 18000,
+                    maxParticipants: 10,
+                    _count: { members: 2 },
+                }),
+            },
+            leagueMember: {
+                findUnique: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue({
+                    id: 'member-1',
+                    status: MemberStatus.PENDING_PAYMENT,
+                }),
+            },
+        };
+
+        const service = createService(prismaMock, participationMock);
+        const result = await service.joinLeagueByCode('user-22', 'abcd12');
+
+        expect(prismaMock.leagueMember.create).toHaveBeenCalledWith({
+            data: {
+                userId: 'user-22',
+                leagueId: 'league-2',
+                role: MemberRole.PLAYER,
+                status: MemberStatus.PENDING_PAYMENT,
+            },
+        });
+        expect(participationMock.createPrincipalObligationForInvitation).toHaveBeenCalledWith({
+            userId: 'user-22',
+            leagueId: 'league-2',
+        });
+        expect(result.status).toBe(MemberStatus.PENDING_PAYMENT);
+    });
+
     it('rejects creating a league with a duplicated name', async () => {
         const prismaMock = {
             league: {

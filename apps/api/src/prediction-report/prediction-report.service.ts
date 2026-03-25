@@ -1,10 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { MemberStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
 
 @Injectable()
 export class PredictionReportService {
   private readonly logger = new Logger(PredictionReportService.name);
+  private static readonly REPORTABLE_MEMBER_STATUSES = [
+    MemberStatus.ACTIVE,
+    MemberStatus.PENDING_PAYMENT,
+  ] as const;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -53,16 +58,7 @@ export class PredictionReportService {
         if (match.predictions.length === 0) continue;
 
         // Miembros activos de la liga con email
-        const members = await this.prisma.leagueMember.findMany({
-          where: { leagueId: league.id, status: 'ACTIVE' },
-          include: {
-            user: { select: { id: true, name: true, email: true } },
-          },
-        });
-
-        const recipients = members
-          .map(m => m.user.email)
-          .filter(Boolean) as string[];
+        const { members, recipients } = await this.getLeagueReportAudience(league.id);
 
         if (recipients.length === 0) continue;
 
@@ -136,10 +132,7 @@ export class PredictionReportService {
       select: { name: true, code: true },
     });
 
-    const members = await this.prisma.leagueMember.findMany({
-      where: { leagueId, status: 'ACTIVE' },
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
+    const { members, recipients: allRecipients } = await this.getLeagueReportAudience(leagueId);
 
     const predictors = match.predictions.map(p => {
       const member = members.find(m => m.userId === p.userId);
@@ -155,9 +148,7 @@ export class PredictionReportService {
 
     const standings = await this.getStandings(leagueId);
 
-    const recipients = testEmail
-      ? [testEmail]
-      : (members.map(m => m.user.email).filter(Boolean) as string[]);
+    const recipients = testEmail ? [testEmail] : allRecipients;
 
     await this.emailService.sendPredictionsReport({
       recipients,
@@ -195,10 +186,7 @@ export class PredictionReportService {
       select: { name: true, code: true },
     });
 
-    const members = await this.prisma.leagueMember.findMany({
-      where: { leagueId, status: 'ACTIVE' },
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
+    const { members } = await this.getLeagueReportAudience(leagueId);
 
     const predictors = match.predictions.map(p => {
       const member = members.find(m => m.userId === p.userId);
@@ -255,14 +243,7 @@ export class PredictionReportService {
       });
       if (!league) continue;
 
-      const members = await this.prisma.leagueMember.findMany({
-        where: { leagueId, status: 'ACTIVE' },
-        include: { user: { select: { id: true, name: true, email: true } } },
-      });
-
-      const recipients = members
-        .map(m => m.user.email)
-        .filter(Boolean) as string[];
+      const { members, recipients } = await this.getLeagueReportAudience(leagueId);
       if (recipients.length === 0) continue;
 
       const predictions = await this.prisma.prediction.findMany({
@@ -332,6 +313,46 @@ export class PredictionReportService {
     }
   }
 
+  async resendPredictionsReport(matchId: string): Promise<{ leagues: number; recipients: number }> {
+    const leagueIds = await this.prisma.prediction.findMany({
+      where: { matchId },
+      select: { leagueId: true },
+      distinct: ['leagueId'],
+    });
+
+    let recipients = 0;
+    for (const { leagueId } of leagueIds) {
+      const { recipients: leagueRecipients } = await this.getLeagueReportAudience(leagueId);
+      if (!leagueRecipients.length) continue;
+      await this.sendReportForMatch(matchId, leagueId);
+      recipients += leagueRecipients.length;
+    }
+
+    return { leagues: leagueIds.length, recipients };
+  }
+
+  async resendResultsReport(matchId: string): Promise<{ leagues: number; recipients: number }> {
+    const leagueIds = await this.prisma.prediction.findMany({
+      where: { matchId },
+      select: { leagueId: true },
+      distinct: ['leagueId'],
+    });
+
+    const recipientCounts = await Promise.all(
+      leagueIds.map(async ({ leagueId }) => {
+        const { recipients } = await this.getLeagueReportAudience(leagueId);
+        return recipients.length;
+      }),
+    );
+
+    await this.sendMatchResultsReport(matchId);
+
+    return {
+      leagues: leagueIds.length,
+      recipients: recipientCounts.reduce((sum, count) => sum + count, 0),
+    };
+  }
+
   private parseOutcomeFromDetail(pointDetail: string | null, points: number | null): ResultOutcome {
     if (pointDetail) {
       try {
@@ -366,5 +387,23 @@ export class PredictionReportService {
       result.set(userId, { points, position: idx + 1 });
     });
     return result;
+  }
+
+  private async getLeagueReportAudience(leagueId: string) {
+    const members = await this.prisma.leagueMember.findMany({
+      where: {
+        leagueId,
+        status: { in: [...PredictionReportService.REPORTABLE_MEMBER_STATUSES] },
+      },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    const recipients = [...new Set(
+      members
+        .map((member) => member.user.email)
+        .filter(Boolean) as string[],
+    )];
+
+    return { members, recipients };
   }
 }

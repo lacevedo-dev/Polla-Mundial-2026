@@ -27,7 +27,7 @@ export class PredictionReportController {
   }
 
   /**
-   * Envía el reporte a un email de prueba (sin marcar el match como enviado).
+   * EnvÃ­a el reporte a un email de prueba (sin marcar el match como enviado).
    * POST /admin/prediction-report/send-test
    * Body: { matchId, leagueId, email }
    */
@@ -40,7 +40,7 @@ export class PredictionReportController {
   }
 
   /**
-   * Fuerza el envío del reporte a todos los miembros activos de la liga
+   * Fuerza el envÃ­o del reporte a todos los miembros activos de la liga
    * (marca el match como enviado).
    * POST /admin/prediction-report/send-now
    * Body: { matchId, leagueId }
@@ -54,12 +54,28 @@ export class PredictionReportController {
   }
 
   /**
-   * Dispara manualmente el scheduler (útil para testing).
+   * Dispara manualmente el scheduler (Ãºtil para testing).
    * POST /admin/prediction-report/trigger
    */
   @Post('trigger')
   async trigger(): Promise<{ message: string }> {
     await this.reportService.sendPendingReports();
-    return { message: 'Revisión de reportes pendientes completada' };
+    return { message: 'RevisiÃ³n de reportes pendientes completada' };
+  }
+
+  @Post('resend-start/:matchId')
+  async resendStart(
+    @Param('matchId') matchId: string,
+  ): Promise<{ message: string; leagues: number; recipients: number }> {
+    const result = await this.reportService.resendPredictionsReport(matchId);
+    return { message: 'Correo de arranque reenviado', ...result };
+  }
+
+  @Post('resend-results/:matchId')
+  async resendResults(
+    @Param('matchId') matchId: string,
+  ): Promise<{ message: string; leagues: number; recipients: number }> {
+    const result = await this.reportService.resendResultsReport(matchId);
+    return { message: 'Correo de cierre reenviado', ...result };
   }
 }

@@ -31,6 +31,10 @@ function leagueInitials(name: string): string {
         .toUpperCase();
 }
 
+function formatInvitationPrivacy(privacy?: 'PUBLIC' | 'PRIVATE'): string {
+    return privacy === 'PUBLIC' ? 'Pública' : 'Privada';
+}
+
 const MyLeagues: React.FC = () => {
     const navigate = useNavigate();
     const {
@@ -105,7 +109,7 @@ const MyLeagues: React.FC = () => {
                         {invitations.map((inv) => (
                             <div
                                 key={inv.id}
-                                className="flex items-center gap-4 rounded-2xl bg-slate-900 px-5 py-4 text-white"
+                                className="flex items-start gap-4 rounded-2xl bg-slate-900 px-5 py-4 text-white"
                             >
                                 {/* League avatar */}
                                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-700 text-sm font-black">
@@ -117,16 +121,58 @@ const MyLeagues: React.FC = () => {
                                     <p className="truncate font-black uppercase tracking-wide text-white">
                                         {inv.leagueName}
                                     </p>
+                                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300">
+                                        {inv.leagueCode ? (
+                                            <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5">
+                                                {inv.leagueCode}
+                                            </span>
+                                        ) : null}
+                                        <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5">
+                                            {formatInvitationPrivacy(inv.privacy)}
+                                        </span>
+                                        {inv.plan ? (
+                                            <span className="rounded-full border border-lime-500/30 bg-lime-500/10 px-2 py-0.5 text-lime-300">
+                                                {inv.plan}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                     <p className="mt-0.5 text-xs text-slate-400">
                                         Invitado por{' '}
                                         <span className="font-bold text-lime-400">{inv.inviterName}</span>
+                                        {inv.inviterUsername ? <span className="text-slate-500"> · @{inv.inviterUsername}</span> : null}
                                     </p>
+                                    {inv.leagueDescription ? (
+                                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">
+                                            {inv.leagueDescription}
+                                        </p>
+                                    ) : null}
+                                    <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+                                        <span className="inline-flex items-center gap-1">
+                                            <Users size={11} className="text-slate-500" />
+                                            {inv.memberCount ?? 0}/{inv.maxParticipants ?? '∞'} participantes
+                                        </span>
+                                        <span className="inline-flex items-center gap-1">
+                                            <Wallet size={11} className={inv.baseFee ? 'text-amber-300' : 'text-slate-500'} />
+                                            {formatCurrency(inv.baseFee, inv.currency)}
+                                        </span>
+                                        {inv.primaryTournamentName ? (
+                                            <span className="inline-flex items-center gap-1">
+                                                <Trophy size={11} className="text-slate-500" />
+                                                {inv.primaryTournamentName}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                     {inv.expiresAt && (
                                         <p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500">
                                             <Clock size={10} />
                                             {timeUntilExpiry(inv.expiresAt)}
                                         </p>
                                     )}
+                                    {typeof inv.closePredictionMinutes === 'number' ? (
+                                        <p className="mt-1 text-[10px] text-slate-500">
+                                            Cierre de pronósticos: {inv.closePredictionMinutes} min antes
+                                        </p>
+                                    ) : null}
                                 </div>
 
                                 {/* Actions */}

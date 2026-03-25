@@ -109,6 +109,8 @@ interface AdminMatchesState {
     createMatch: (data: Partial<AdminMatch>) => Promise<void>;
     updateMatch: (id: string, data: Partial<AdminMatch>) => Promise<void>;
     updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
+    resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
+    resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     syncMatch: (id: string) => Promise<void>;
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
     fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
@@ -210,6 +212,36 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
                 matches: state.matches.map((m) => (m.id === id ? { ...m, ...updated, homeScore, awayScore, status: 'FINISHED' } : m)),
                 isSaving: false,
             }));
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    resendPredictionReport: async (id) => {
+        set({ isSaving: true, error: null });
+        try {
+            const result = await request<{ message: string; leagues: number; recipients: number }>(
+                `/admin/prediction-report/resend-start/${id}`,
+                { method: 'POST' },
+            );
+            set({ isSaving: false });
+            return result;
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    resendResultsReport: async (id) => {
+        set({ isSaving: true, error: null });
+        try {
+            const result = await request<{ message: string; leagues: number; recipients: number }>(
+                `/admin/prediction-report/resend-results/${id}`,
+                { method: 'POST' },
+            );
+            set({ isSaving: false });
+            return result;
         } catch (error) {
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;

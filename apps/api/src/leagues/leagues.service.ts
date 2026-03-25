@@ -445,8 +445,24 @@ export class LeaguesService {
                 OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
             },
             include: {
-                league: { select: { id: true, name: true, privacy: true, includeBaseFee: true, baseFee: true } },
-                inviter: { select: { id: true, name: true } },
+                league: {
+                    select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        description: true,
+                        privacy: true,
+                        includeBaseFee: true,
+                        baseFee: true,
+                        currency: true,
+                        plan: true,
+                        maxParticipants: true,
+                        closePredictionMinutes: true,
+                        primaryTournament: { select: { id: true, name: true, season: true } },
+                        _count: { select: { members: { where: { status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING_PAYMENT] } } } } },
+                    },
+                },
+                inviter: { select: { id: true, name: true, username: true } },
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -557,17 +573,35 @@ export class LeaguesService {
             throw new BadRequestException('Ya eres miembro (o tienes una solicitud pendiente) en esta liga');
         }
 
+        const requiresPayment =
+            league.privacy === 'PUBLIC' &&
+            league.includeBaseFee &&
+            (league.baseFee ?? 0) > 0;
+
         const newMember = await this.prisma.leagueMember.create({
             data: {
                 userId,
                 leagueId: league.id,
                 role: MemberRole.PLAYER,
-                status: league.privacy === 'PUBLIC' ? MemberStatus.ACTIVE : MemberStatus.PENDING,
+                status: league.privacy === 'PUBLIC'
+                    ? (requiresPayment ? MemberStatus.PENDING_PAYMENT : MemberStatus.ACTIVE)
+                    : MemberStatus.PENDING,
             },
         });
 
+        if (requiresPayment) {
+            await this.participationService.createPrincipalObligationForInvitation({
+                userId,
+                leagueId: league.id,
+            });
+        }
+
         return {
-            message: newMember.status === 'ACTIVE' ? 'Te has unido exitosamente a la liga' : 'Solicitud de unión enviada. Espera aprobación del administrador.',
+            message: newMember.status === MemberStatus.ACTIVE
+                ? 'Te has unido exitosamente a la liga'
+                : newMember.status === MemberStatus.PENDING_PAYMENT
+                ? 'Tu cupo fue reservado. Solo falta pagar la polla general para activarte.'
+                : 'Solicitud de unión enviada. Espera aprobación del administrador.',
             leagueId: league.id,
             status: newMember.status,
         };

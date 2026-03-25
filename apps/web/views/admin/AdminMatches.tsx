@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Edit3, Link2, Loader2, Plus, RefreshCw, Search, Trash2, Trophy, Unlink2 } from 'lucide-react';
+import { ChevronDown, Edit3, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Trash2, Trophy, Unlink2 } from 'lucide-react';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
@@ -402,13 +402,14 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
   const [showImportTournament, setShowImportTournament] = React.useState(false);
   const [recalculating, setRecalculating] = React.useState(false);
   const [recalcResult, setRecalcResult] = React.useState<{ total: number; processed: number; errors: { matchId: string; error: string }[] } | null>(null);
+  const [reportFeedback, setReportFeedback] = React.useState<string | null>(null);
 
   const handleRecalculateAll = React.useCallback(async () => {
     if (!window.confirm('¿Recalcular puntos de todos los partidos finalizados? Esto puede tomar unos segundos.')) return;
@@ -425,6 +426,15 @@ const AdminMatches: React.FC = () => {
       setRecalculating(false);
     }
   }, []);
+  const handleResendStart = React.useCallback(async (match: any) => {
+    const result = await resendPredictionReport(match.id);
+    setReportFeedback(`Arranque reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
+  }, [resendPredictionReport]);
+
+  const handleResendResults = React.useCallback(async (match: any) => {
+    const result = await resendResultsReport(match.id);
+    setReportFeedback(`Cierre reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
+  }, [resendResultsReport]);
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
 
   React.useEffect(() => {
@@ -469,6 +479,11 @@ const AdminMatches: React.FC = () => {
           <div className={`mt-2 rounded-xl px-4 py-2.5 text-sm font-medium ${recalcResult.errors.length ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-lime-50 text-lime-700 border border-lime-200'}`}>
             ✓ {recalcResult.processed}/{recalcResult.total} partidos recalculados.
             {recalcResult.errors.length > 0 && ` ${recalcResult.errors.length} errores.`}
+          </div>
+        )}
+        {reportFeedback && (
+          <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700">
+            {reportFeedback}
           </div>
         )}
       </div>
@@ -629,9 +644,11 @@ const AdminMatches: React.FC = () => {
                   <p><span className="font-black text-slate-800">Tipo de vínculo:</span> {match.currentLinkSource === 'suggested' ? 'Sugerido' : match.currentLinkSource === 'manual' ? 'Manual' : 'Sin dato'}</p>
                 </div>
               </details>
-              <div className="mt-4 grid grid-cols-4 gap-2">
+              <div className="mt-4 grid grid-cols-6 gap-2">
                 <button onClick={() => setLinkMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Gestionar vínculo de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Link2 size={14} className="mx-auto" /></button>
                 <button onClick={() => syncMatch(match.id)} disabled={isSaving || !match.externalId} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
+                <button onClick={() => void handleResendStart(match)} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Reenviar correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
+                <button onClick={() => void handleResendResults(match)} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Reenviar correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
                 <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
                 <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-rose-600" aria-label={`Eliminar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Trash2 size={14} className="mx-auto" /></button>
               </div>
@@ -706,6 +723,8 @@ const AdminMatches: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <button onClick={() => setLinkMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-violet-50 hover:text-violet-600" title={match.externalId ? 'Gestionar vinculo' : 'Vincular'}><Link2 size={14} /></button>
                     <button onClick={() => syncMatch(match.id)} disabled={isSaving || !match.externalId} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title="Sincronizar ahora"><RefreshCw size={14} /></button>
+                    <button onClick={() => void handleResendStart(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Reenviar correo de arranque"><Mail size={14} /></button>
+                    <button onClick={() => void handleResendResults(match)} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Reenviar correo de cierre"><MailCheck size={14} /></button>
                     <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>
                     <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600" title="Eliminar"><Trash2 size={14} /></button>
                   </div>
