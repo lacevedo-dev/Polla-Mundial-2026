@@ -151,6 +151,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [fixtureResults, setFixtureResults] = useState<FixtureResult[]>([]);
     const [searchingDate, setSearchingDate] = useState(false);
     const [dateError, setDateError] = useState('');
+    const [dateTeamFilter, setDateTeamFilter] = useState('');
     const [selectedFixtures, setSelectedFixtures] = useState<Set<number>>(new Set());
     const [dateCreateTeams, setDateCreateTeams] = useState(true);
     const [dateOverwrite, setDateOverwrite] = useState(false);
@@ -488,58 +489,97 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                         {!searchingDate && fixtureResults.length > 0 && (
                                             <div className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{fixtureResults.length} partidos encontrados</p>
-                                                    <button
-                                                        onClick={() => setSelectedFixtures(
-                                                            selectedFixtures.size === fixtureResults.filter(f => !f.alreadyImported).length
-                                                                ? new Set()
-                                                                : new Set(fixtureResults.filter(f => !f.alreadyImported).map(f => f.fixtureId))
-                                                        )}
-                                                        className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
-                                                    >
-                                                        {selectedFixtures.size > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                                                    </button>
+                                                {/* Team filter */}
+                                                <div className="relative">
+                                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Filtrar por equipo (ej: Colombia)"
+                                                        value={dateTeamFilter}
+                                                        onChange={(e) => setDateTeamFilter(e.target.value)}
+                                                        className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                                    />
+                                                    {dateTeamFilter && (
+                                                        <button onClick={() => setDateTeamFilter('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                            <X size={13} />
+                                                        </button>
+                                                    )}
                                                 </div>
 
-                                                <div className="space-y-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                                                    {fixtureResults.map((f) => (
-                                                        <label
-                                                            key={f.fixtureId}
-                                                            className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
-                                                                f.alreadyImported
-                                                                    ? 'border-lime-200 bg-lime-50/50 opacity-70'
-                                                                    : selectedFixtures.has(f.fixtureId)
-                                                                    ? 'border-slate-900 bg-slate-50'
-                                                                    : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50/30'
-                                                            }`}
-                                                        >
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
-                                                                disabled={f.alreadyImported}
-                                                                onChange={() => toggleFixture(f.fixtureId)}
-                                                                className="w-4 h-4 accent-amber-500 shrink-0"
-                                                            />
-                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                {f.homeTeam.logo && <img src={f.homeTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
-                                                                <span className="text-xs font-bold text-slate-800 truncate">{f.homeTeam.name}</span>
-                                                                <span className="text-xs text-slate-400 shrink-0">
-                                                                    {f.homeScore != null ? `${f.homeScore} - ${f.awayScore}` : 'vs'}
-                                                                </span>
-                                                                <span className="text-xs font-bold text-slate-800 truncate">{f.awayTeam.name}</span>
-                                                                {f.awayTeam.logo && <img src={f.awayTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                {(() => {
+                                                    const q = dateTeamFilter.toLowerCase().trim();
+                                                    const filtered = q
+                                                        ? fixtureResults.filter(f =>
+                                                            f.homeTeam.name.toLowerCase().includes(q) ||
+                                                            f.awayTeam.name.toLowerCase().includes(q)
+                                                          )
+                                                        : fixtureResults;
+                                                    const importable = filtered.filter(f => !f.alreadyImported);
+                                                    return (
+                                                        <>
+                                                            <div className="flex items-center justify-between">
+                                                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                                                    {filtered.length} de {fixtureResults.length} partidos
+                                                                    {q && <span className="ml-1 normal-case font-normal">· filtrando "{dateTeamFilter}"</span>}
+                                                                </p>
+                                                                <button
+                                                                    onClick={() => setSelectedFixtures(
+                                                                        selectedFixtures.size === importable.length && importable.length > 0
+                                                                            ? new Set()
+                                                                            : new Set(importable.map(f => f.fixtureId))
+                                                                    )}
+                                                                    className="text-[10px] font-bold text-amber-600 hover:text-amber-700"
+                                                                >
+                                                                    {selectedFixtures.size > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                                                </button>
                                                             </div>
-                                                            <div className="shrink-0 text-right">
-                                                                <p className="text-[10px] text-slate-400 truncate max-w-[100px]">{f.league.name}</p>
-                                                                {f.alreadyImported
-                                                                    ? <span className="text-[10px] font-black text-lime-600">Ya importado</span>
-                                                                    : <span className="text-[10px] text-slate-400">{new Date(f.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                                }
+
+                                                            {filtered.length === 0 && (
+                                                                <p className="text-center text-sm text-slate-400 py-3">Sin partidos con "{dateTeamFilter}"</p>
+                                                            )}
+
+                                                            <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                                                {filtered.map((f) => (
+                                                                    <label
+                                                                        key={f.fixtureId}
+                                                                        className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${
+                                                                            f.alreadyImported
+                                                                                ? 'border-lime-200 bg-lime-50/50 opacity-70'
+                                                                                : selectedFixtures.has(f.fixtureId)
+                                                                                ? 'border-slate-900 bg-slate-50'
+                                                                                : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50/30'
+                                                                        }`}
+                                                                    >
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={selectedFixtures.has(f.fixtureId) || f.alreadyImported}
+                                                                            disabled={f.alreadyImported}
+                                                                            onChange={() => toggleFixture(f.fixtureId)}
+                                                                            className="w-4 h-4 accent-amber-500 shrink-0"
+                                                                        />
+                                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                            {f.homeTeam.logo && <img src={f.homeTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                                            <span className="text-xs font-bold text-slate-800 truncate">{f.homeTeam.name}</span>
+                                                                            <span className="text-xs text-slate-400 shrink-0">
+                                                                                {f.homeScore != null ? `${f.homeScore} - ${f.awayScore}` : 'vs'}
+                                                                            </span>
+                                                                            <span className="text-xs font-bold text-slate-800 truncate">{f.awayTeam.name}</span>
+                                                                            {f.awayTeam.logo && <img src={f.awayTeam.logo} className="w-5 h-5 object-contain shrink-0" alt="" />}
+                                                                        </div>
+                                                                        <div className="shrink-0 text-right">
+                                                                            <p className="text-[10px] text-slate-400 truncate max-w-[100px]">{f.league.name}</p>
+                                                                            {f.alreadyImported
+                                                                                ? <span className="text-[10px] font-black text-lime-600">Ya importado</span>
+                                                                                : <span className="text-[10px] text-slate-400">{new Date(f.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })} BOG</span>
+                                                                            }
+                                                                        </div>
+                                                                    </label>
+                                                                ))}
                                                             </div>
-                                                        </label>
-                                                    ))}
-                                                </div>
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
 
                                                 {/* Options */}
                                                 <div className="flex gap-4 text-sm">
