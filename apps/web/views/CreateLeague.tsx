@@ -222,7 +222,7 @@ const CreateLeague: React.FC = () => {
     if (step !== 1 || tournamentsLoaded) return;
     request<{ id: string; name: string; country?: string; season: number; logoUrl?: string; active: boolean }[]>('/leagues/tournaments')
       .then((data) => { setTournaments(data); setTournamentsLoaded(true); })
-      .catch(() => setTournamentsLoaded(true));
+      .catch((err) => { console.error('[CreateLeague] Error cargando torneos:', err); setTournamentsLoaded(true); });
   }, [step, tournamentsLoaded]);
 
   // Click outside for country selector

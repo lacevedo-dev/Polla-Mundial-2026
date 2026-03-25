@@ -659,6 +659,8 @@ interface LeagueFullResponse {
     adminFeePercent?: number;
     includeStageFees?: boolean;
     closePredictionMinutes?: number | null;
+    primaryTournamentId?: string | null;
+    primaryTournament?: { id: string; name: string; season: number; logoUrl?: string } | null;
     members?: Array<{
         role: 'ADMIN' | 'PLAYER';
         status: string;
@@ -730,6 +732,11 @@ const LeagueConfigModal: React.FC<{
         return tabs;
     }, [includeStageFees, stageFees]);
 
+    // ── Tournament ──
+    const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
+    const [tournaments, setTournaments] = useState<Array<{ id: string; name: string; country?: string; season: number; active: boolean }>>([]);
+    const [tournamentsLoaded, setTournamentsLoaded] = useState(false);
+
     // ── Participants ──
     const [maxPart, setMaxPart] = useState(50);
     const [members, setMembers] = useState<LeagueFullResponse['members']>([]);
@@ -751,6 +758,7 @@ const LeagueConfigModal: React.FC<{
                 setAdminPct(data.adminFeePercent ?? 10);
                 setMaxPart(data.maxParticipants ?? 50);
                 setMembers(data.members ?? []);
+                setSelectedTournamentId(data.primaryTournamentId ?? '');
 
                 // Stage fees — only show rows for types that were configured
                 if (data.stageFees?.length) {
@@ -780,6 +788,14 @@ const LeagueConfigModal: React.FC<{
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [open, leagueId]);
+
+    // Cargar lista de torneos disponibles al abrir el modal
+    useEffect(() => {
+        if (!open || tournamentsLoaded) return;
+        request<Array<{ id: string; name: string; country?: string; season: number; active: boolean }>>('/leagues/tournaments')
+            .then((data) => { setTournaments(data); setTournamentsLoaded(true); })
+            .catch(() => setTournamentsLoaded(true));
+    }, [open, tournamentsLoaded]);
 
     // If active prizeTab becomes unavailable (user deactivated that fee), reset to GENERAL
     useEffect(() => {
@@ -833,6 +849,11 @@ const LeagueConfigModal: React.FC<{
                     })) : undefined,
                 }),
             });
+            // Guardar torneo (no bloquea si la migración aún no está aplicada)
+            await request(`/leagues/${leagueId}/tournament`, {
+                method: 'PATCH',
+                body: JSON.stringify({ tournamentId: selectedTournamentId || null }),
+            }).catch(() => {});
             setSaved(true);
             setTimeout(() => setSaved(false), 2500);
             onSaved?.();
@@ -966,6 +987,33 @@ const LeagueConfigModal: React.FC<{
                                                         </button>
                                                     ))}
                                                 </div>
+                                            </div>
+
+                                            {/* Torneo vinculado */}
+                                            <div>
+                                                <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400 mb-1.5">Torneo</p>
+                                                {!tournamentsLoaded ? (
+                                                    <div className={`${inputCls} text-slate-400 text-xs cursor-default`}>Cargando torneos...</div>
+                                                ) : tournaments.length === 0 ? (
+                                                    <div className={`${inputCls} text-slate-400 text-xs cursor-default`}>Sin torneos importados en el sistema</div>
+                                                ) : (
+                                                    <div className="relative">
+                                                        <Trophy size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                                        <select
+                                                            value={selectedTournamentId}
+                                                            onChange={(e) => setSelectedTournamentId(e.target.value)}
+                                                            className="w-full appearance-none pl-9 pr-8 py-3 text-[13px] font-medium rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-500 transition-all text-slate-900 bg-white"
+                                                        >
+                                                            <option value="">Sin torneo</option>
+                                                            {tournaments.map((t) => (
+                                                                <option key={t.id} value={t.id}>
+                                                                    {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? ` — ${t.country}` : ''}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* Configuración financiera */}

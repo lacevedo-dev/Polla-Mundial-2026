@@ -61,6 +61,16 @@ export class LeaguesController {
         return this.leaguesService.getLeagueDetails(userId, leagueId);
     }
 
+    @HttpCode(HttpStatus.OK)
+    @Patch(':id/tournament')
+    async setLeagueTournament(
+        @Request() req,
+        @Param('id') leagueId: string,
+        @Body('tournamentId') tournamentId: string | undefined,
+    ) {
+        return this.leaguesService.setLeagueTournament(req.user.userId, leagueId, tournamentId ?? null);
+    }
+
     @Patch(':id')
     async updateLeague(@Request() req, @Param('id') leagueId: string, @Body() dto: UpdateLeagueDto) {
         return this.leaguesService.updateLeague(req.user.userId, leagueId, dto);

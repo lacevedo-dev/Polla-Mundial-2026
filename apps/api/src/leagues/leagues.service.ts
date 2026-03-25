@@ -32,6 +32,37 @@ export class LeaguesService {
         });
     }
 
+    async setLeagueTournament(userId: string, leagueId: string, tournamentId: string | null): Promise<{ ok: boolean }> {
+        const member = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId, leagueId } },
+        });
+        if (!member || member.role !== MemberRole.ADMIN) {
+            throw new ForbiddenException('Solo el administrador puede cambiar el torneo de la polla');
+        }
+
+        if (tournamentId) {
+            const tournament = await this.prisma.tournament.findUnique({ where: { id: tournamentId } });
+            if (!tournament) throw new NotFoundException('Torneo no encontrado');
+
+            await this.prisma.leagueTournament.upsert({
+                where: { leagueId_tournamentId: { leagueId, tournamentId } },
+                create: { leagueId, tournamentId },
+                update: {},
+            });
+            await this.prisma.league.update({
+                where: { id: leagueId },
+                data: { primaryTournamentId: tournamentId },
+            });
+        } else {
+            await this.prisma.league.update({
+                where: { id: leagueId },
+                data: { primaryTournamentId: null },
+            });
+        }
+
+        return { ok: true };
+    }
+
     async create(userId: string, createLeagueDto: CreateLeagueDto) {
         let code = this.generateUniqueCode();
         let isCodeUnique = false;
@@ -164,6 +195,7 @@ export class LeaguesService {
                 distributions: true,
                 stageFees: true,
                 scoringRules: true,
+                primaryTournament: { select: { id: true, name: true, season: true, logoUrl: true } },
             },
         });
 
