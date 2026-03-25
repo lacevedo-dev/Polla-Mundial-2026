@@ -456,8 +456,8 @@ const AdminMatches: React.FC = () => {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-brand text-2xl font-black uppercase tracking-tight text-slate-900">Partidos</h1>
-          <p className="mt-1 text-sm text-slate-500">{total.toLocaleString()} partidos</p>
+          <h1 className="font-brand text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900 leading-tight">Partidos</h1>
+          <p className="mt-1 text-xs text-slate-400">{total.toLocaleString('es-CO')} partidos en el sistema</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
@@ -510,6 +510,25 @@ const AdminMatches: React.FC = () => {
           <p className="mt-1 text-xs text-slate-500">Aún sin estado claro</p>
         </button>
       </section>
+
+      {/* Status quick-filter chips */}
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { label: 'Todos', value: '', color: 'bg-slate-900 text-white', inactive: 'bg-white text-slate-500 border border-slate-200' },
+          { label: 'Programados', value: 'SCHEDULED', color: 'bg-blue-500 text-white', inactive: 'bg-white text-slate-500 border border-slate-200' },
+          { label: 'En Vivo', value: 'LIVE', color: 'bg-rose-500 text-white', inactive: 'bg-white text-slate-500 border border-slate-200' },
+          { label: 'Finalizados', value: 'FINISHED', color: 'bg-lime-500 text-white', inactive: 'bg-white text-slate-500 border border-slate-200' },
+          { label: 'Cancelados', value: 'CANCELLED', color: 'bg-slate-500 text-white', inactive: 'bg-white text-slate-500 border border-slate-200' },
+        ].map((chip) => (
+          <button
+            key={chip.value}
+            onClick={() => setFilters({ status: chip.value || undefined, page: 1 })}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${(filters.status ?? '') === chip.value ? chip.color : chip.inactive}`}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
 
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
