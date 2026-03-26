@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Observable, map } from 'rxjs';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -87,7 +87,7 @@ export class FootballSyncController {
       map((event): MessageEvent => ({
         type: event.type,
         data: JSON.stringify(event.data),
-        lastEventId: event.timestamp,
+        id: String(event.timestamp),
       })),
     );
   }
