@@ -44,7 +44,8 @@ describe('Ranking view', () => {
                 settings: { includeBaseFee: true },
                 stageFees: [
                     { type: 'MATCH', label: 'Partido', amount: 5000, active: true },
-                    { type: 'ROUND', label: 'Ronda', amount: 10000, active: true },
+                    { type: 'ROUND', label: 'Ronda', amount: 0, active: false },
+                    { type: 'PHASE', label: 'Fase', amount: 0, active: false },
                 ],
             },
             myLeagues: [
@@ -91,6 +92,8 @@ describe('Ranking view', () => {
 
         expect(screen.getAllByRole('option', { name: 'Liga Uno' }).length).toBeGreaterThan(0);
         expect(screen.queryByRole('option', { name: /C?digo/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Por grupo/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Por ronda/i })).toBeNull();
 
         await user.click(screen.getByRole('button', { name: /Por partido/i }));
 

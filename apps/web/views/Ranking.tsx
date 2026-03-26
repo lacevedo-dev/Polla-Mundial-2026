@@ -251,9 +251,9 @@ const Ranking: React.FC = () => {
     }, [activeCategory, activeLeague?.id, fetchLeaderboard]);
 
     React.useEffect(() => {
-        if (!activeLeague?.id || activeLeague.stageFees) return;
+        if (!activeLeague?.id) return;
         void fetchLeagueDetails(activeLeague.id);
-    }, [activeLeague?.id, activeLeague?.stageFees, fetchLeagueDetails]);
+    }, [activeLeague?.id, fetchLeagueDetails]);
 
     const availableCategories = React.useMemo(() => {
         const categories: LeaderboardCategory[] = [];
@@ -264,7 +264,7 @@ const Ranking: React.FC = () => {
 
         const activeStageFeeTypes = new Set(
             (activeLeague?.stageFees ?? [])
-                .filter((fee) => fee.active)
+                .filter((fee) => fee.active && Number(fee.amount ?? 0) > 0)
                 .map((fee) => fee.type.toUpperCase()),
         );
 
