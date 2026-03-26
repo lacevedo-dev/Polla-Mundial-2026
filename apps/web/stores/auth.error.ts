@@ -12,7 +12,9 @@ const GENERIC_OPERATIONAL_MESSAGES = new Set([
     'network error',
 ]);
 
-export function normalizeAuthError(error: unknown, action: 'register' | 'login'): Error {
+export type AuthAction = 'register' | 'login' | 'verifyEmail' | 'resendVerification';
+
+export function normalizeAuthError(error: unknown, action: AuthAction): Error {
     if (error instanceof ApiError) {
         if (shouldPreserveApiError(error, action)) {
             return new Error(error.message);
@@ -39,7 +41,7 @@ export function normalizeAuthError(error: unknown, action: 'register' | 'login')
     return new Error(getOperationalMessage(action));
 }
 
-function shouldPreserveApiError(error: ApiError, action: 'register' | 'login'): boolean {
+function shouldPreserveApiError(error: ApiError, action: AuthAction): boolean {
     if (action === 'login' && error.status === 401) {
         return true;
     }
@@ -49,7 +51,7 @@ function shouldPreserveApiError(error: ApiError, action: 'register' | 'login'): 
         && error.code !== 'NETWORK_ERROR';
 }
 
-function isOperationalApiError(error: ApiError, action: 'register' | 'login'): boolean {
+function isOperationalApiError(error: ApiError, action: AuthAction): boolean {
     const normalizedMessage = error.message.trim().toLowerCase();
 
     if (action === 'register' && error.code === 'REGISTER_TEMPORARILY_UNAVAILABLE') {
@@ -61,7 +63,7 @@ function isOperationalApiError(error: ApiError, action: 'register' | 'login'): b
         || GENERIC_OPERATIONAL_MESSAGES.has(normalizedMessage);
 }
 
-function getOperationalMessage(action: 'register' | 'login'): string {
+function getOperationalMessage(action: AuthAction): string {
     return action === 'register'
         ? REGISTER_TEMPORARILY_UNAVAILABLE_MESSAGE
         : LOGIN_TEMPORARILY_UNAVAILABLE_MESSAGE;

@@ -28,6 +28,7 @@ interface CheckoutProps {
 interface CheckoutResponse {
   sessionId: string;
   url: string;
+  redirectUrl?: string;
 }
 
 const Checkout: React.FC<CheckoutProps> = ({ initialPlan = 'gold' }) => {

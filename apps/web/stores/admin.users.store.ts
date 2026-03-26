@@ -10,6 +10,7 @@ export interface AdminUser {
     plan: string;
     systemRole: string;
     emailVerified: boolean;
+    status?: string;
     createdAt: string;
     _count?: { leagues: number; predictions: number };
 }
