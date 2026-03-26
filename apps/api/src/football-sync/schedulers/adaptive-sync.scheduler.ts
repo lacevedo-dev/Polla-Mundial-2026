@@ -104,10 +104,17 @@ export class AdaptiveSyncScheduler {
 
     try {
       const plan = await this.syncPlan.calculateDailyPlan();
+      const potentiallyLive = plan.hasLiveMatches
+        ? 0
+        : await this.syncPlan.countPotentiallyLiveMatches();
 
-      // Only sync during peak hours if there are live matches
-      if (plan.hasLiveMatches && plan.requestBudget > 0) {
-        this.logger.log('Peak hours sync triggered (live matches detected)');
+      // Sync if there are live matches OR SCHEDULED matches that already started (with externalId)
+      if ((plan.hasLiveMatches || potentiallyLive > 0) && plan.requestBudget > 0) {
+        this.logger.log(
+          plan.hasLiveMatches
+            ? 'Peak hours sync triggered (live matches detected)'
+            : `Peak hours sync triggered (${potentiallyLive} potentially live matches)`,
+        );
         await this.executeSyncWithLock();
       }
     } catch (error) {

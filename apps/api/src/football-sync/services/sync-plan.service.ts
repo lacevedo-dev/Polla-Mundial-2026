@@ -307,9 +307,14 @@ export class SyncPlanService {
 
     const plan = await this.calculateDailyPlan();
 
-    // No live matches = no sync needed
+    // No live matches — check if any SCHEDULED match with externalId already started
+    // (chicken-and-egg: they can't become LIVE without a sync)
     if (!plan.hasLiveMatches) {
-      return false;
+      const potentiallyLive = await this.countPotentiallyLiveMatches();
+      if (potentiallyLive === 0) {
+        return false;
+      }
+      this.logger.debug(`No LIVE matches but ${potentiallyLive} potentially live — triggering sync`);
     }
 
     // No requests available = can't sync
@@ -330,6 +335,22 @@ export class SyncPlanService {
     }
 
     return true;
+  }
+
+  /**
+   * Count SCHEDULED matches with externalId that already started (within match duration window).
+   * Used to break the chicken-and-egg: no LIVE → no sync → never becomes LIVE.
+   */
+  async countPotentiallyLiveMatches(): Promise<number> {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 130 * 60 * 1000); // match + 10min buffer
+    return this.prisma.match.count({
+      where: {
+        status: MatchStatus.SCHEDULED,
+        externalId: { not: null },
+        matchDate: { gte: windowStart, lte: now },
+      },
+    });
   }
 
   /**
