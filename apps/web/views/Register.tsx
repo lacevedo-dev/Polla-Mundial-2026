@@ -544,6 +544,7 @@ const Register: React.FC = () => {
                     placeholder="tu@email.com"
                     value={formData.email}
                     onValueChange={(val) => handleInputChange('email', val)}
+                    autoComplete="email"
                     className={emailStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : emailStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
                     rightIcon={emailStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
                   />
@@ -565,6 +566,7 @@ const Register: React.FC = () => {
                     placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
                     value={formData.password}
                     onChange={e => handleInputChange('password', e.target.value)}
+                    autoComplete="new-password"
                     leftIcon={<Lock size={16} />}
                     rightIcon={renderPasswordVisibilityToggle(showPassword, () => setShowPassword(prev => !prev), 'contraseña')}
                   />
@@ -577,6 +579,7 @@ const Register: React.FC = () => {
                     placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
                     value={formData.confirmPassword}
                     onChange={e => handleInputChange('confirmPassword', e.target.value)}
+                    autoComplete="new-password"
                     leftIcon={<Lock size={16} />}
                     rightIcon={renderPasswordVisibilityToggle(showConfirmPassword, () => setShowConfirmPassword(prev => !prev), 'confirmación de contraseña')}
                   />

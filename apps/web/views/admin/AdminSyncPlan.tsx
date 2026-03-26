@@ -180,7 +180,7 @@ const AdminSyncPlan: React.FC = () => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const url = `${BASE_URL}/admin/football/events`;
+    const url = `${BASE_URL}/admin/football/events?token=${encodeURIComponent(token)}`;
     const es = new EventSource(url);
     esRef.current = es;
 
