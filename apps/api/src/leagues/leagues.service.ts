@@ -749,6 +749,41 @@ export class LeaguesService {
         return { confirmed: true };
     }
 
+    async getInfoByCode(code: string) {
+        const league = await this.prisma.league.findUnique({
+            where: { code: code.toUpperCase() },
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                _count: {
+                    select: { members: { where: { status: MemberStatus.ACTIVE } } },
+                },
+                members: {
+                    where: { role: MemberRole.ADMIN },
+                    select: {
+                        user: { select: { name: true } },
+                    },
+                    take: 1,
+                },
+            },
+        });
+
+        if (!league) {
+            throw new NotFoundException('Código de liga inválido o liga no encontrada');
+        }
+
+        const adminMember = league.members[0];
+
+        return {
+            id: league.id,
+            name: league.name,
+            description: league.description,
+            memberCount: league._count.members,
+            adminName: adminMember?.user?.name ?? null,
+        };
+    }
+
     async resetObligation(requestingUserId: string, leagueId: string, obligationId: string) {
         await this.assertLeagueAdmin(requestingUserId, leagueId);
 
