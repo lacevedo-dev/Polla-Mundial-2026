@@ -464,7 +464,7 @@ const Register: React.FC = () => {
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Paso {step} de 3</span>
             </div>
             <div className="flex gap-2 h-1.5 mb-6">
-              {[1, 2, 3].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-400' : 'bg-slate-100'}`}></div>)}
+              {[1, 2, 3].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${typeof step === 'number' && step >= s ? 'bg-lime-400' : 'bg-slate-100'}`}></div>)}
             </div>
             {joinCode && (
               <div className="mb-4 flex items-start gap-3 rounded-2xl border border-lime-300 bg-lime-50 px-4 py-3">

@@ -66,7 +66,7 @@ interface SidebarItemProps {
 const SidebarItem: React.FC<SidebarItemProps> = ({ item, collapsed, usageSummary }) => (
     <NavLink
         to={item.to}
-        end={'end' in item ? item.end : undefined}
+        end={'end' in item ? Boolean(item.end) : undefined}
         className={({ isActive }) => sidebarLink(isActive, collapsed)}
         title={collapsed ? item.label : undefined}
     >
@@ -126,13 +126,16 @@ const AdminLayout: React.FC = () => {
         return () => window.clearInterval(id);
     }, [fetchUsageSummary]);
 
-    /* Auth guard */
+    /* Auth guard — run once on mount, not on every user change */
     React.useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) { navigate('/login'); return; }
-        void checkAuth().then((ok) => { if (!ok) navigate('/login'); });
-        if (user && !isSuperAdmin()) navigate('/dashboard');
-    }, [navigate, user, isSuperAdmin, checkAuth]);
+        void checkAuth().then((ok) => {
+            if (!ok) { navigate('/login'); return; }
+            if (!useAuthStore.getState().isSuperAdmin()) navigate('/dashboard');
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [navigate, checkAuth]);
 
     /* Close drawer on route change */
     React.useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
@@ -305,7 +308,7 @@ const AdminLayout: React.FC = () => {
                             <NavLink
                                 key={item.to}
                                 to={item.to}
-                                end={'end' in item ? item.end : undefined}
+                                end={'end' in item ? Boolean(item.end) : undefined}
                                 className={({ isActive }) =>
                                     `flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold tracking-wide transition-colors ${
                                         isActive ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'
