@@ -26,9 +26,11 @@ function parseParams(params: Record<string, unknown> | string | null): string {
     return JSON.stringify(params, null, 2);
 }
 
-function formatTime(iso: string) {
+function formatDateTime(iso: string) {
     const d = new Date(iso);
-    return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = d.toLocaleDateString('es-CO', { month: '2-digit', day: '2-digit' });
+    const timeStr = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return { date: dateStr, time: timeStr };
 }
 
 function ResponseBody({ body }: { body: string | null }) {
@@ -127,7 +129,9 @@ export default function FootballSyncApiLogs() {
 
             {error && (
                 <div className="rounded-[1.75rem] border border-rose-200 bg-rose-50 p-4">
-                    <p className="text-sm font-medium text-rose-700">{error}</p>
+                    <p className="text-sm font-black text-rose-700">Error al cargar</p>
+                    <p className="mt-1 font-mono text-xs text-rose-600">{error}</p>
+                    <p className="mt-2 text-xs text-rose-500">Verifica que el backend esté corriendo y que tenés sesión activa.</p>
                 </div>
             )}
 
@@ -169,24 +173,29 @@ export default function FootballSyncApiLogs() {
 
                 {data && data.requests.length === 0 && (
                     <div className="p-8 text-center text-sm text-slate-400">
-                        No hay requests registrados hoy
+                        No hay requests registrados. El sync aún no se ha ejecutado.
                     </div>
                 )}
 
                 {data && data.requests.length > 0 && (
                     <div className="divide-y divide-slate-100">
                         {/* Header row */}
-                        <div className="grid grid-cols-[80px_100px_1fr_120px_80px] gap-3 bg-slate-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                            <span>Hora</span>
+                        <div className="grid grid-cols-[100px_80px_1fr_140px_60px] gap-3 bg-slate-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                            <span>Fecha / Hora</span>
                             <span>Estado</span>
                             <span>Endpoint / Params</span>
                             <span>Respuesta</span>
-                            <span>Fixtures</span>
+                            <span>Fix.</span>
                         </div>
 
-                        {data.requests.map((req) => (
-                            <div key={req.id} className="grid grid-cols-[80px_100px_1fr_120px_80px] items-start gap-3 px-5 py-3 hover:bg-slate-50">
-                                <span className="pt-0.5 font-mono text-xs text-slate-500">{formatTime(req.timestamp)}</span>
+                        {data.requests.map((req) => {
+                            const { date, time } = formatDateTime(req.timestamp);
+                            return (
+                            <div key={req.id} className="grid grid-cols-[100px_80px_1fr_140px_60px] items-start gap-3 px-5 py-3 hover:bg-slate-50">
+                                <div className="pt-0.5">
+                                    <p className="font-mono text-[10px] text-slate-400">{date}</p>
+                                    <p className="font-mono text-xs font-bold text-slate-700">{time}</p>
+                                </div>
 
                                 <span className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-black ${req.status === 200 ? 'bg-lime-100 text-lime-700' : 'bg-rose-100 text-rose-700'}`}>
                                     {req.status}
@@ -208,7 +217,8 @@ export default function FootballSyncApiLogs() {
                                     {req.matchesFetched ?? 0}
                                 </span>
                             </div>
-                        ))}
+                        );
+                        })}
                     </div>
                 )}
             </div>

@@ -121,6 +121,16 @@ export class RateLimiterService {
   }
 
   /**
+   * Get the most recent N requests regardless of date
+   */
+  async getRecentRequests(limit = 100) {
+    return this.prisma.apiFootballRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
+  /**
    * Get daily limit
    */
   async getDailyLimit(): Promise<number> {
