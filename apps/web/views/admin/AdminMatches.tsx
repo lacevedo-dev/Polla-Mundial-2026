@@ -466,6 +466,24 @@ const AdminMatches: React.FC = () => {
   const [recalculating, setRecalculating] = React.useState(false);
   const [recalcResult, setRecalcResult] = React.useState<{ total: number; processed: number; errors: { matchId: string; error: string }[] } | null>(null);
   const [reportFeedback, setReportFeedback] = React.useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState('');
+
+  const filteredMatches = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return matches;
+    return matches.filter((m) => {
+      const dateStr = new Date(m.matchDate).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).toLowerCase();
+      return (
+        m.homeTeam?.name?.toLowerCase().includes(q) ||
+        m.awayTeam?.name?.toLowerCase().includes(q) ||
+        m.tournamentName?.toLowerCase().includes(q) ||
+        m.round?.toLowerCase().includes(q) ||
+        m.phase?.toLowerCase().includes(q) ||
+        (m as any).group?.toLowerCase().includes(q) ||
+        dateStr.includes(q)
+      );
+    });
+  }, [matches, searchQuery]);
 
   const handleRecalculateAll = React.useCallback(async () => {
     if (!window.confirm('¿Recalcular puntos de todos los partidos finalizados? Esto puede tomar unos segundos.')) return;
@@ -606,6 +624,16 @@ const AdminMatches: React.FC = () => {
       )}
 
       <div className="flex flex-wrap gap-3 rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar equipo, torneo, grupo, fecha…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-8 pr-3 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </div>
         <div className="relative">
           <select value={filters.phase ?? ''} onChange={(e) => setFilters({ phase: e.target.value || undefined, page: 1 })} className="appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-8 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
             <option value="">Todas las fases</option>
@@ -651,13 +679,13 @@ const AdminMatches: React.FC = () => {
         )}
       </div>
 
-      {isLoading ? null : matches.length === 0 ? (
+      {isLoading ? null : filteredMatches.length === 0 ? (
         <div className="rounded-[1.5rem] border border-slate-200 bg-white p-8 text-center text-sm text-slate-400 md:hidden">
-          No se encontraron partidos
+          {searchQuery ? 'Sin resultados para la búsqueda' : 'No se encontraron partidos'}
         </div>
       ) : (
       <div className="grid gap-3 md:hidden">
-        {matches.map((match) => {
+        {filteredMatches.map((match) => {
           const syncBadge = getSyncBadge(match.lastSyncStatus);
           const riskBadge = getRiskBadge(match);
           return (
@@ -693,10 +721,6 @@ const AdminMatches: React.FC = () => {
                 )}
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Resultado</dt>
-                  <dd className="mt-1 font-bold text-slate-800">{match.homeScore != null ? `${match.homeScore} - ${match.awayScore}` : '- - -'}</dd>
-                </div>
                 <div>
                   <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Sync</dt>
                   <dd className="mt-1 text-slate-600">{formatDateTime(match.lastSyncAt)}</dd>
@@ -738,9 +762,8 @@ const AdminMatches: React.FC = () => {
       )}
 
       <div className="hidden overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm md:block">
-        <div className="grid grid-cols-[2fr_auto] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 md:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
+        <div className="grid grid-cols-[2fr_auto] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 md:grid-cols-[2fr_1fr_1.2fr_auto]">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Partido</p>
-          <p className="hidden text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 md:block">Resultado</p>
           <p className="hidden text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 md:block">Estado</p>
           <p className="hidden text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 md:block">Vinculo API</p>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Acciones</p>
@@ -748,7 +771,7 @@ const AdminMatches: React.FC = () => {
         {isLoading ? (
           <div className="divide-y divide-slate-100">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-4 md:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
+              <div key={i} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-4 md:grid-cols-[2fr_1fr_1.2fr_auto]">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="h-6 w-9 rounded bg-slate-100 animate-pulse" />
@@ -759,7 +782,6 @@ const AdminMatches: React.FC = () => {
                   </div>
                   <div className="h-3 w-40 rounded bg-slate-100 animate-pulse" />
                 </div>
-                <div className="hidden h-5 w-16 rounded bg-slate-100 animate-pulse md:block" />
                 <div className="hidden h-5 w-20 rounded bg-slate-100 animate-pulse md:block" />
                 <div className="hidden h-5 w-28 rounded bg-slate-100 animate-pulse md:block" />
                 <div className="flex gap-1">
@@ -768,15 +790,15 @@ const AdminMatches: React.FC = () => {
               </div>
             ))}
           </div>
-        ) : matches.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-400">No se encontraron partidos</div>
+        ) : filteredMatches.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-400">{searchQuery ? 'Sin resultados para la búsqueda' : 'No se encontraron partidos'}</div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {matches.map((match) => {
+            {filteredMatches.map((match) => {
               const syncBadge = getSyncBadge(match.lastSyncStatus);
               const riskBadge = getRiskBadge(match);
               return (
-                <div key={match.id} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 md:grid-cols-[2fr_1fr_1fr_1.2fr_auto]">
+                <div key={match.id} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 md:grid-cols-[2fr_1fr_1.2fr_auto]">
                   <div className="min-w-0">
                     {(match.tournamentName || match.round) && (
                       <div className="flex items-center gap-1.5 mb-2">
@@ -789,7 +811,6 @@ const AdminMatches: React.FC = () => {
                     <MatchupRow match={match} showScore />
                     <p className="mt-1.5 text-[11px] text-slate-400">{formatDate(match.matchDate)} · {match.phase}</p>
                   </div>
-                  <p className="hidden text-sm font-black text-slate-700 md:block">{match.homeScore != null ? `${match.homeScore} - ${match.awayScore}` : '- - -'}</p>
                   <div className="hidden md:block"><StatusBadge status={match.status} /></div>
                   <div className="hidden md:block">
                     {match.externalId ? (
