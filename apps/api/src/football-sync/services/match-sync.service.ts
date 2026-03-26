@@ -185,6 +185,7 @@ export class MatchSyncService {
 
       // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
+      let skippedCount = 0;
       const CONCURRENT = 4;
       for (let i = 0; i < response.response.length; i += CONCURRENT) {
         const batch = response.response.slice(i, i + CONCURRENT);
@@ -192,12 +193,15 @@ export class MatchSyncService {
           batch.map(f => this.updateMatchFromFixture(f)),
         );
         for (const r of results) {
-          if (r.status === 'fulfilled' && r.value) updatedCount++;
+          if (r.status === 'fulfilled') {
+            if (r.value) updatedCount++;
+            else skippedCount++;
+          }
         }
       }
 
       this.logger.log(
-        `Sync completed: ${updatedCount} matches updated from ${response.results} fixtures`,
+        `Sync completed: ${updatedCount} updated, ${skippedCount} skipped (no match in DB) from ${response.results} fixtures`,
       );
 
       await this.monitoring.createLog({
@@ -369,9 +373,6 @@ export class MatchSyncService {
       });
 
       if (!match) {
-        this.logger.debug(
-          `No match found for external ID: ${fixture.fixture.id}`,
-        );
         return false;
       }
 

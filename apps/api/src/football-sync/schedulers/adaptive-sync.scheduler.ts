@@ -24,27 +24,22 @@ export class AdaptiveSyncScheduler {
    */
   @Cron('*/1 * * * *') // Every minute
   async adaptiveSyncTick() {
-    // Prevent concurrent syncs
-    if (this.isSyncing) {
-      this.logger.debug('Sync already in progress, skipping tick');
-      return;
-    }
-
-    if (!(await this.footballConfigService.isAutoSyncEnabled())) {
-      this.logger.debug('Auto sync disabled, skipping adaptive tick');
-      return;
-    }
-
+    if (this.isSyncing) return;
+    this.isSyncing = true; // Claim lock before any await to prevent race condition
     try {
-      // Check if we should sync now
-      const shouldSync = await this.syncPlan.shouldSyncNow();
+      if (!(await this.footballConfigService.isAutoSyncEnabled())) {
+        return;
+      }
 
+      const shouldSync = await this.syncPlan.shouldSyncNow();
       if (shouldSync) {
         this.logger.log('Adaptive sync triggered');
         await this.executeSyncWithLock();
       }
     } catch (error) {
       this.logger.error(`Adaptive sync tick error: ${error.message}`);
+    } finally {
+      this.isSyncing = false;
     }
   }
 
@@ -92,23 +87,18 @@ export class AdaptiveSyncScheduler {
    */
   @Cron('*/5 9-23 * * *') // Every 5 minutes from 9 AM to 11 PM
   async peakHoursSync() {
-    // Prevent concurrent syncs
-    if (this.isSyncing) {
-      return;
-    }
-
-    if (!(await this.footballConfigService.isPeakHoursSyncEnabled())) {
-      this.logger.debug('Peak-hours sync disabled, skipping peak-hours tick');
-      return;
-    }
-
+    if (this.isSyncing) return;
+    this.isSyncing = true; // Claim lock before any await to prevent race condition
     try {
+      if (!(await this.footballConfigService.isPeakHoursSyncEnabled())) {
+        return;
+      }
+
       const plan = await this.syncPlan.calculateDailyPlan();
       const potentiallyLive = plan.hasLiveMatches
         ? 0
         : await this.syncPlan.countPotentiallyLiveMatches();
 
-      // Sync if there are live matches OR SCHEDULED matches that already started (with externalId)
       if ((plan.hasLiveMatches || potentiallyLive > 0) && plan.requestBudget > 0) {
         this.logger.log(
           plan.hasLiveMatches
@@ -119,6 +109,8 @@ export class AdaptiveSyncScheduler {
       }
     } catch (error) {
       this.logger.error(`Peak hours sync error: ${error.message}`);
+    } finally {
+      this.isSyncing = false;
     }
   }
 
