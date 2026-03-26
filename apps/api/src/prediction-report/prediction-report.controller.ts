@@ -91,6 +91,7 @@ export class PredictionReportController {
   }
 
   @Get('preview-start/:matchId')
+  async previewStart(
     @Param('matchId') matchId: string,
     @Res() res: Response,
   ): Promise<void> {
