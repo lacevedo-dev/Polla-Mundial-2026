@@ -9,8 +9,13 @@ import {
   HttpException,
   HttpStatus,
   Req,
+  Sse,
+  MessageEvent,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Observable, map } from 'rxjs';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -18,6 +23,7 @@ import { SyncPlanService } from './services/sync-plan.service';
 import { RateLimiterService } from './services/rate-limiter.service';
 import { MatchSyncService } from './services/match-sync.service';
 import { AdaptiveSyncScheduler } from './schedulers/adaptive-sync.scheduler';
+import { SyncEventsService } from './services/sync-events.service';
 import {
   SyncUsageDto,
   MatchLinkCandidateDto,
@@ -60,7 +66,40 @@ export class FootballSyncController {
     private readonly matchSync: MatchSyncService,
     private readonly scheduler: AdaptiveSyncScheduler,
     private readonly tournamentImport: TournamentImportService,
+    private readonly syncEvents: SyncEventsService,
   ) {}
+
+  /**
+   * SSE stream — admin receives live sync events without polling
+   */
+  @Sse('events')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'SSE stream of live sync events' })
+  syncEventStream(@Res() res: Response): Observable<MessageEvent> {
+    // Keep connection alive with heartbeat
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 25000);
+    res.on('close', () => clearInterval(heartbeat));
+
+    return this.syncEvents.getObservable().pipe(
+      map((event): MessageEvent => ({
+        type: event.type,
+        data: JSON.stringify(event.data),
+        lastEventId: event.timestamp,
+      })),
+    );
+  }
+
+  /**
+   * Get detailed per-match sync timeline for today
+   */
+  @Get('plan/timeline')
+  @ApiOperation({ summary: 'Get per-match sync timeline for today with notification schedule' })
+  async getSyncTimeline() {
+    return this.syncPlan.getDetailedTimeline();
+  }
 
   /**
    * Get a simple API-Football usage summary (used / remaining / limit)

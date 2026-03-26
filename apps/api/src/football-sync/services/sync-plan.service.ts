@@ -6,6 +6,43 @@ import { MatchStatus, SyncStrategy } from '@prisma/client';
 import { DailySyncPlanDto } from '../dto/api-football.dto';
 import { ConfigService as FootballConfigService } from './config.service';
 
+export interface MatchSyncSlot {
+  matchId: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeFlag?: string | null;
+  awayFlag?: string | null;
+  matchDate: string;
+  status: string;
+  externalId: string | null;
+  syncSlots: string[];        // ISO timestamps when this match will be synced
+  notificationSchedule: {
+    type: 'MATCH_REMINDER' | 'PREDICTION_CLOSED' | 'RESULT_PUBLISHED';
+    label: string;
+    scheduledAt: string;
+  }[];
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  requestsAssigned: number;
+}
+
+export interface DetailedSyncTimeline {
+  date: string;
+  strategy: SyncStrategy;
+  intervalMinutes: number;
+  requestsUsed: number;
+  requestsBudget: number;
+  requestsLimit: number;
+  nextSyncAt: string | null;
+  matches: MatchSyncSlot[];
+  requestLog: {
+    hour: number;        // 0-23
+    requests: number;    // calls in that hour
+    slots: string[];     // ISO timestamps of calls planned that hour
+  }[];
+  totalSlotsPlanned: number;
+}
+
 @Injectable()
 export class SyncPlanService {
   private readonly logger = new Logger(SyncPlanService.name);
@@ -335,6 +372,152 @@ export class SyncPlanService {
         ),
       };
     }
+  }
+
+  /**
+   * Build a detailed per-match sync timeline for today including
+   * exact sync slots and notification schedule.
+   */
+  async getDetailedTimeline(): Promise<DetailedSyncTimeline> {
+    const plan = await this.calculateDailyPlan();
+    const [used, limit] = await Promise.all([
+      this.rateLimiter.getUsedRequestsToday(),
+      this.rateLimiter.getDailyLimit(),
+    ]);
+    const available = limit - used;
+
+    const todayStart = this.getTodayStart();
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const matches = await this.prisma.match.findMany({
+      where: {
+        matchDate: { gte: todayStart, lt: todayEnd },
+      },
+      include: {
+        homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+        awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+        syncLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { createdAt: true, status: true },
+        },
+      },
+      orderBy: { matchDate: 'asc' },
+    });
+
+    const intervalMs = plan.intervalMinutes * 60 * 1000;
+    const now = new Date();
+
+    // Build sync slots starting from now until end of day
+    const buildSyncSlots = (matchDate: Date): string[] => {
+      const slots: string[] = [];
+      const matchStart = matchDate;
+      const matchEnd = new Date(matchDate.getTime() + 130 * 60 * 1000); // match + 10min buffer
+
+      let cursor = new Date(Math.max(now.getTime(), matchStart.getTime() - 5 * 60 * 1000));
+
+      while (cursor <= matchEnd && cursor < todayEnd) {
+        slots.push(cursor.toISOString());
+        cursor = new Date(cursor.getTime() + intervalMs);
+      }
+
+      return slots.slice(0, 30); // cap to prevent huge payloads
+    };
+
+    const buildNotifications = (matchDate: Date, status: string, closePredictionMinutes = 15) => {
+      const notifications: MatchSyncSlot['notificationSchedule'] = [];
+      const md = matchDate.getTime();
+
+      if (status === 'SCHEDULED' || status === 'LIVE') {
+        // Reminder 1 hour before
+        if (md - 60 * 60 * 1000 > now.getTime()) {
+          notifications.push({
+            type: 'MATCH_REMINDER',
+            label: 'Aviso 1h antes del partido',
+            scheduledAt: new Date(md - 60 * 60 * 1000).toISOString(),
+          });
+        }
+        // Prediction close warning
+        if (md - closePredictionMinutes * 60 * 1000 > now.getTime()) {
+          notifications.push({
+            type: 'PREDICTION_CLOSED',
+            label: `Cierre de predicciones (${closePredictionMinutes} min antes)`,
+            scheduledAt: new Date(md - closePredictionMinutes * 60 * 1000).toISOString(),
+          });
+        }
+      }
+
+      if (status === 'FINISHED') {
+        notifications.push({
+          type: 'RESULT_PUBLISHED',
+          label: 'Resultado publicado',
+          scheduledAt: new Date(md + 10 * 60 * 1000).toISOString(),
+        });
+      }
+
+      return notifications;
+    };
+
+    // Distribute available requests across matches
+    const requestsPerMatch = matches.length > 0
+      ? Math.max(1, Math.floor(available / matches.length))
+      : 0;
+
+    const matchSlots: MatchSyncSlot[] = matches.map((m) => {
+      const slots = buildSyncSlots(m.matchDate);
+      return {
+        matchId: m.id,
+        homeTeam: m.homeTeam.name,
+        awayTeam: m.awayTeam.name,
+        homeFlag: m.homeTeam.flagUrl,
+        awayFlag: m.awayTeam.flagUrl,
+        matchDate: m.matchDate.toISOString(),
+        status: m.status,
+        externalId: m.externalId,
+        syncSlots: slots,
+        notificationSchedule: buildNotifications(m.matchDate, m.status),
+        lastSyncAt: m.syncLogs[0]?.createdAt?.toISOString() ?? null,
+        lastSyncStatus: m.syncLogs[0]?.status ?? null,
+        requestsAssigned: Math.min(slots.length, requestsPerMatch),
+      };
+    });
+
+    // Build hourly request distribution
+    const hourBuckets: Record<number, string[]> = {};
+    for (let h = 0; h < 24; h++) hourBuckets[h] = [];
+
+    matchSlots.forEach((m) =>
+      m.syncSlots.forEach((slot) => {
+        const h = new Date(slot).getHours();
+        hourBuckets[h].push(slot);
+      }),
+    );
+
+    const requestLog = Object.entries(hourBuckets).map(([hour, slots]) => ({
+      hour: Number(hour),
+      requests: slots.length,
+      slots,
+    }));
+
+    const totalSlotsPlanned = matchSlots.reduce((s, m) => s + m.syncSlots.length, 0);
+    const nextSyncAt = matchSlots
+      .flatMap((m) => m.syncSlots)
+      .sort()
+      .find((s) => s > now.toISOString()) ?? null;
+
+    return {
+      date: plan.date,
+      strategy: plan.strategy,
+      intervalMinutes: plan.intervalMinutes,
+      requestsUsed: used,
+      requestsBudget: available,
+      requestsLimit: limit,
+      nextSyncAt,
+      matches: matchSlots,
+      requestLog,
+      totalSlotsPlanned,
+    };
   }
 
   /**

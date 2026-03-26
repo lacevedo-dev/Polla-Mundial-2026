@@ -32,6 +32,7 @@ model User {
   verificationTokens VerificationToken[]
   aiUsageRecords     AiUsageRecord[]
   phaseBonuses       PhaseBonus[]
+  pushSubscriptions  PushSubscription[]
 
   @@index([email])
   @@index([username])
@@ -726,6 +727,20 @@ model AiUsageRecord {
   @@index([leagueId, createdAt(sort: Desc)])
   @@index([feature, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model UserAiCredits {

@@ -23,6 +23,7 @@ import { FootballSyncModule } from './football-sync/football-sync.module';
 import { AiCreditsModule } from './ai-credits/ai-credits.module';
 import { ParticipationModule } from './participation/participation.module';
 import { PredictionReportModule } from './prediction-report/prediction-report.module';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { PredictionReportModule } from './prediction-report/prediction-report.mo
     FootballSyncModule,
     ParticipationModule,
     PredictionReportModule,
+    PushNotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

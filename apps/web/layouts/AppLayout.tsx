@@ -4,6 +4,7 @@ import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle
 import { useAuthStore } from '../stores/auth.store';
 import { useConfigStore } from '../stores/config.store';
 import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
+import { PWAInstallBanner, NotificationToggle } from '../components/PWAPrompt';
 
 const primaryNavItems = [
     { to: '/dashboard', label: 'Inicio', icon: Home },
@@ -104,6 +105,7 @@ const AppLayout: React.FC = () => {
                             Panel Admin
                         </NavLink>
                     )}
+                    <NotificationToggle className="mb-4" />
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
@@ -243,6 +245,7 @@ const AppLayout: React.FC = () => {
                             <LogOut size={18} />
                             <span>Cerrar Sesión</span>
                         </button>
+                        <NotificationToggle className="px-4 pb-2" />
                     </div>
                 </div>
             )}
@@ -253,6 +256,9 @@ const AppLayout: React.FC = () => {
                     <Outlet />
                 </div>
             </main>
+
+            {/* PWA install banner */}
+            <PWAInstallBanner />
 
             {/* Mobile Bottom Nav */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">

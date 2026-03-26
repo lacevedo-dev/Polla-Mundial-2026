@@ -24,6 +24,7 @@ const secondaryNavItems = [
     { to: '/admin/payments', label: 'Pagos', icon: Coins },
     { to: '/admin/ai-usage', label: 'Consultas IA', icon: Sparkles },
     { to: '/admin/football-sync', label: 'Football Sync', icon: RefreshCw },
+    { to: '/admin/football-sync/plan', label: 'Plan de Sync', icon: BarChart3 },
     { to: '/admin/settings', label: 'Sistema', icon: Settings },
 ];
 

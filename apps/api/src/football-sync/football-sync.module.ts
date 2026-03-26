@@ -14,6 +14,8 @@ import { FootballSyncController } from './football-sync.controller';
 import { AdminMonitoringController } from './controllers/admin-monitoring.controller';
 import { TournamentImportService } from './services/tournament-import.service';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
+import { SyncEventsService } from './services/sync-events.service';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { PredictionReportModule } from '../prediction-report/prediction-report.m
     PrismaModule,
     PredictionsModule,
     PredictionReportModule,
+    PushNotificationsModule,
   ],
   controllers: [FootballSyncController, AdminMonitoringController],
   providers: [
@@ -36,7 +39,8 @@ import { PredictionReportModule } from '../prediction-report/prediction-report.m
     FootballConfigService,
     AdaptiveSyncScheduler,
     TournamentImportService,
+    SyncEventsService,
   ],
-  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService],
+  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService, SyncEventsService],
 })
 export class FootballSyncModule {}
