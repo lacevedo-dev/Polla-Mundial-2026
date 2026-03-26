@@ -13,6 +13,7 @@ export interface User {
     avatar?: string;
     emailVerified?: boolean;
     creditResetAt?: string | null;
+    createdAt?: string;
 }
 
 interface AuthState {

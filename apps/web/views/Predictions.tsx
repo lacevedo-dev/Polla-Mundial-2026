@@ -33,6 +33,7 @@ import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
 import { useAuthStore } from '../stores/auth.store';
 import { useAiCredits } from '../hooks/useAiCredits';
+import { useToast } from '../hooks/useToast';
 import {
     ParticipationCategoryLabels,
     ParticipationStatusColors,
@@ -1855,6 +1856,7 @@ const Predictions: React.FC = () => {
     const savePrediction = usePredictionStore((state) => state.savePrediction);
     const resetLeagueData = usePredictionStore((state) => state.resetLeagueData);
     const aiCredits = useAiCredits();
+    const { toasts, showToast, dismissToast } = useToast();
 
     const [drafts, setDrafts] = React.useState<DraftMap>({});
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -2247,8 +2249,11 @@ const Predictions: React.FC = () => {
                 Number.parseInt(nextDraft.away, 10),
                 nextDraft.advanceTeamId,
             );
+            showToast('✓ Guardado — podrías ganar hasta 3 pts si aciertas el marcador exacto', 'success');
         } catch (nextError) {
-            setError(nextError instanceof Error ? nextError.message : 'No fue posible guardar el pronóstico.');
+            const msg = nextError instanceof Error ? nextError.message : 'No fue posible guardar el pronóstico.';
+            setError(msg);
+            showToast(msg, 'error');
         } finally {
             setSavingMatchId(null);
         }
@@ -3694,6 +3699,29 @@ const Predictions: React.FC = () => {
                 </div>
             </div>
         ) : null}
+        {/* Toast notifications */}
+        <div className="pointer-events-none fixed bottom-20 right-4 z-50 flex flex-col gap-2">
+            {toasts.map((toast) => (
+                <div
+                    key={toast.id}
+                    className={`pointer-events-auto flex items-start gap-3 rounded-2xl px-4 py-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+                        toast.type === 'success'
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-rose-600 text-white'
+                    }`}
+                >
+                    <span className="flex-1 text-sm font-medium leading-snug">{toast.message}</span>
+                    <button
+                        type="button"
+                        onClick={() => dismissToast(toast.id)}
+                        className="mt-0.5 shrink-0 rounded-full p-0.5 opacity-60 hover:opacity-100"
+                        aria-label="Cerrar notificación"
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            ))}
+        </div>
         </>
     );
 };

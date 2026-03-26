@@ -1,8 +1,8 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Trophy, Plus, Globe, Users, Clock, CheckCircle2, X,
-    ChevronRight, Wallet, Crown,
+    ChevronRight, Wallet, Crown, ArrowRight,
 } from 'lucide-react';
 import { useLeagueStore } from '../stores/league.store';
 
@@ -37,6 +37,10 @@ function formatInvitationPrivacy(privacy?: 'PUBLIC' | 'PRIVATE'): string {
 
 const MyLeagues: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const justJoined: boolean = (location.state as any)?.justJoined === true;
+    const joinedLeagueName: string | undefined = (location.state as any)?.leagueName;
+
     const {
         myLeagues, invitations, publicLeagues, isLoading,
         fetchMyLeagues, fetchInvitations, fetchPublicLeagues,
@@ -46,6 +50,7 @@ const MyLeagues: React.FC = () => {
     const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
     const [decliningId, setDecliningId] = React.useState<string | null>(null);
     const [joiningId, setJoiningId] = React.useState<string | null>(null);
+    const [joinBannerVisible, setJoinBannerVisible] = React.useState(justJoined);
 
     React.useEffect(() => {
         void fetchMyLeagues();
@@ -89,6 +94,33 @@ const MyLeagues: React.FC = () => {
 
     return (
         <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 pb-24">
+
+            {/* Post-join welcome banner */}
+            {joinBannerVisible && (
+                <div className="flex items-center justify-between gap-4 rounded-2xl bg-lime-400 px-5 py-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <CheckCircle2 size={20} className="shrink-0 text-slate-900" />
+                        <p className="text-sm font-bold text-slate-900">
+                            ¡Bienvenido{joinedLeagueName ? ` a ${joinedLeagueName}` : ''}! Ya puedes hacer tus pronósticos.
+                        </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <button
+                            onClick={() => navigate('/predictions')}
+                            className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-lime-400 hover:bg-slate-800 transition-colors whitespace-nowrap"
+                        >
+                            Hacer pronóstico <ArrowRight size={12} />
+                        </button>
+                        <button
+                            onClick={() => setJoinBannerVisible(false)}
+                            className="rounded-xl p-1.5 text-slate-700 hover:bg-lime-300 transition-colors"
+                            aria-label="Cerrar"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Header */}
             <div>

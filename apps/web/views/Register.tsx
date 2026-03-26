@@ -1,7 +1,7 @@
 ﻿
 import React from 'react';
 import { Button, Input, EmailAutocompleteInput, AutocompleteInput, Checkbox } from '../components/UI';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
   CheckCircle,
@@ -61,6 +61,8 @@ const EXISTING_USERS = [
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const joinCode = searchParams.get('joinCode');
   const [step, setStep] = React.useState<RegisterStep>(1);
   const { register, isLoading } = useAuthStore();
   const [isNavigating, setIsNavigating] = React.useState(false);
@@ -325,7 +327,7 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (emailStatus === 'taken' || phoneStatus === 'taken') return;
+    if (emailStatus === 'taken' || (phoneStatus === 'taken' && formData.celular)) return;
 
     if (step < 3) {
       setIsNavigating(true);
@@ -362,8 +364,8 @@ const Register: React.FC = () => {
   const metCount = requirements.filter(r => r.test(formData.password)).length;
 
   const isStepValid = () => {
-    if (step === 1) return nombreStatus === 'valid' && phoneStatus === 'valid' && emailStatus === 'valid' && birthDateStatus === 'valid';
-    if (step === 2) return metCount === requirements.length && usernameStatus === 'available';
+    if (step === 1) return nombreStatus === 'valid' && emailStatus === 'valid' && metCount === requirements.length && formData.rememberMe;
+    if (step === 2) return usernameStatus === 'available';
     if (step === 3) return !uploadError && !isProcessingFile;
     return true;
   };
@@ -464,6 +466,14 @@ const Register: React.FC = () => {
             <div className="flex gap-2 h-1.5 mb-6">
               {[1, 2, 3].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-400' : 'bg-slate-100'}`}></div>)}
             </div>
+            {joinCode && (
+              <div className="mb-4 flex items-start gap-3 rounded-2xl border border-lime-300 bg-lime-50 px-4 py-3">
+                <Sparkles size={16} className="mt-0.5 shrink-0 text-lime-600" />
+                <p className="text-xs font-bold text-lime-800">
+                  Te estás uniendo a una liga — termina el registro para ver tus pronósticos.
+                </p>
+              </div>
+            )}
             {error && (
               <div role="alert" aria-live="polite" className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm flex items-center gap-2 rounded-r-xl">
                 <AlertIcon size={18} /> {error}
@@ -529,19 +539,118 @@ const Register: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center ml-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fecha de Nacimiento *</label>
-                    <span className="text-[9px] font-bold text-slate-400">18+ años</span>
-                  </div>
-                  <Input type="date" value={formData.fechaNacimiento} onChange={e => handleInputChange('fechaNacimiento', e.target.value)} leftIcon={<Calendar size={16} />}
-                    className={birthDateStatus === 'underage' || birthDateStatus === 'invalid' ? 'border-rose-400 bg-rose-50/20' : birthDateStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
-                    rightIcon={birthDateStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Email *</label>
+                  <EmailAutocompleteInput
+                    placeholder="tu@email.com"
+                    value={formData.email}
+                    onValueChange={(val) => handleInputChange('email', val)}
+                    className={emailStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : emailStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
+                    rightIcon={emailStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
                   />
-                  {birthDateStatus === 'underage' && <p className="text-[9px] font-bold text-rose-500 ml-1">Debes ser mayor de 18 años.</p>}
+                  {emailStatus === 'taken' && existingUser && (
+                    <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
+                      <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
+                      <div>
+                        <p className="text-[10px] font-bold text-rose-700">Este correo ya está registrado.</p>
+                        <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña *</label>
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                    value={formData.password}
+                    onChange={e => handleInputChange('password', e.target.value)}
+                    leftIcon={<Lock size={16} />}
+                    rightIcon={renderPasswordVisibilityToggle(showPassword, () => setShowPassword(prev => !prev), 'contraseña')}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar contraseña *</label>
+                  <Input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                    value={formData.confirmPassword}
+                    onChange={e => handleInputChange('confirmPassword', e.target.value)}
+                    leftIcon={<Lock size={16} />}
+                    rightIcon={renderPasswordVisibilityToggle(showConfirmPassword, () => setShowConfirmPassword(prev => !prev), 'confirmación de contraseña')}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {requirements.map((req, i) => (
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${req.test(formData.password) ? 'bg-lime-50 border-lime-200 text-lime-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                      {req.test(formData.password) ? <CheckCircle2 size={12} /> : <div className="w-3 h-3 rounded-full border-2 border-slate-300" />}
+                      <span className="text-[9px] font-bold uppercase tracking-wide">{req.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-3xl border border-slate-100 bg-slate-50 p-3.5">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="terms"
+                      label="Acepto los documentos legales"
+                      checked={formData.rememberMe}
+                      onChange={(c) => setFormData({ ...formData, rememberMe: c })}
+                    />
+                  </div>
+                  <div className="mt-3 pl-0 sm:pl-8">
+                    <p id="register-legal-description" className="text-[10px] leading-4 text-slate-500">
+                      Confirmas mayoría de edad y aceptas el uso básico de tus datos. Consulta{' '}
+                      <button
+                        type="button"
+                        className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
+                        onClick={() => openLegalDocument('terms')}
+                      >
+                        Términos y Condiciones
+                      </button>{' '}
+                      y{' '}
+                      <button
+                        type="button"
+                        className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
+                        onClick={() => openLegalDocument('privacy')}
+                      >
+                        Política de Privacidad
+                      </button>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center ml-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Usuario único *</label>
+                    <span className={`text-[9px] font-bold uppercase ${usernameStatus === 'available' ? 'text-lime-600' : usernameStatus === 'taken' ? 'text-rose-500' : 'text-slate-400'}`}>
+                      {usernameStatus === 'checking' ? 'Verificando...' : usernameStatus === 'available' ? '¡Disponible!' : usernameStatus === 'taken' ? 'No disponible' : ''}
+                    </span>
+                  </div>
+                  <AutocompleteInput
+                    placeholder="@usuario"
+                    value={formData.usuario}
+                    onValueChange={(val) => handleInputChange('usuario', val.replace(/\s/g, '').toLowerCase())}
+                    suggestions={usernameSuggestions}
+                    suggestionTitle="Sugerencias Disponibles"
+                    leftIcon={<User size={16} />}
+                    className={usernameStatus === 'available' ? 'border-lime-400 bg-lime-50/20' : usernameStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : ''}
+                    rightIcon={usernameStatus === 'available' ? <CheckCircle size={16} className="text-lime-500" /> : usernameStatus === 'taken' ? <XCircle size={16} className="text-rose-500" /> : null}
+                  />
+                  <p className="text-[9px] text-slate-400 pl-1">Será tu identidad en los rankings y grupos.</p>
                 </div>
 
                 <div className={`space-y-2 relative ${isCountrySelectorOpen ? 'z-50' : 'z-0'}`} ref={selectorRef}>
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Celular *</label>
+                  <div className="flex justify-between items-center ml-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Celular</label>
+                    <span className="text-[9px] font-bold text-slate-400 italic">Opcional</span>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -568,7 +677,7 @@ const Register: React.FC = () => {
                   </div>
 
                   {isCountrySelectorOpen && (
-                    <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl w-72 p-2 animate-in fade-in slide-in-from-top-2">
+                    <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl w-[min(18rem,calc(100vw-2rem))] p-2 animate-in fade-in slide-in-from-top-2">
                       <div className="relative mb-2">
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
@@ -615,80 +724,15 @@ const Register: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Email *</label>
-                  <EmailAutocompleteInput
-                    placeholder="tu@email.com"
-                    value={formData.email}
-                    onValueChange={(val) => handleInputChange('email', val)}
-                    className={emailStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : emailStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
-                    rightIcon={emailStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
-                  />
-                  {emailStatus === 'taken' && existingUser && (
-                    <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100 animate-in fade-in slide-in-from-top-1">
-                      <img src={existingUser.avatar} className="w-8 h-8 rounded-full" alt="User" />
-                      <div>
-                        <p className="text-[10px] font-bold text-rose-700">Este correo ya está registrado.</p>
-                        <p className="text-[9px] text-rose-500">Pertenece a {existingUser.name}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                <div className="space-y-2">
                   <div className="flex justify-between items-center ml-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Usuario único *</label>
-                    <span className={`text-[9px] font-bold uppercase ${usernameStatus === 'available' ? 'text-lime-600' : usernameStatus === 'taken' ? 'text-rose-500' : 'text-slate-400'}`}>
-                      {usernameStatus === 'checking' ? 'Verificando...' : usernameStatus === 'available' ? '¡Disponible!' : usernameStatus === 'taken' ? 'No disponible' : ''}
-                    </span>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fecha de Nacimiento</label>
+                    <span className="text-[9px] font-bold text-slate-400 italic">Opcional · para personalizar tu experiencia</span>
                   </div>
-                  <AutocompleteInput
-                    placeholder="@usuario"
-                    value={formData.usuario}
-                    onValueChange={(val) => handleInputChange('usuario', val.replace(/\s/g, '').toLowerCase())}
-                    suggestions={usernameSuggestions}
-                    suggestionTitle="Sugerencias Disponibles"
-                    leftIcon={<User size={16} />}
-                    className={usernameStatus === 'available' ? 'border-lime-400 bg-lime-50/20' : usernameStatus === 'taken' ? 'border-rose-400 bg-rose-50/20' : ''}
-                    rightIcon={usernameStatus === 'available' ? <CheckCircle size={16} className="text-lime-500" /> : usernameStatus === 'taken' ? <XCircle size={16} className="text-rose-500" /> : null}
+                  <Input type="date" value={formData.fechaNacimiento} onChange={e => handleInputChange('fechaNacimiento', e.target.value)} leftIcon={<Calendar size={16} />}
+                    className={birthDateStatus === 'underage' || birthDateStatus === 'invalid' ? 'border-rose-400 bg-rose-50/20' : birthDateStatus === 'valid' ? 'border-lime-400 bg-lime-50/20' : ''}
+                    rightIcon={birthDateStatus === 'valid' ? <CheckCircle size={16} className="text-lime-500" /> : null}
                   />
-                  <p className="text-[9px] text-slate-400 pl-1">Será tu identidad en los rankings y grupos.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña *</label>
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-                    value={formData.password}
-                    onChange={e => handleInputChange('password', e.target.value)}
-                    leftIcon={<Lock size={16} />}
-                    rightIcon={renderPasswordVisibilityToggle(showPassword, () => setShowPassword(prev => !prev), 'contrase\u00f1a')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Confirmar contraseña *</label>
-                  <Input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-                    value={formData.confirmPassword}
-                    onChange={e => handleInputChange('confirmPassword', e.target.value)}
-                    leftIcon={<Lock size={16} />}
-                    rightIcon={renderPasswordVisibilityToggle(showConfirmPassword, () => setShowConfirmPassword(prev => !prev), 'confirmaci\u00f3n de contrase\u00f1a')}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {requirements.map((req, i) => (
-                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${req.test(formData.password) ? 'bg-lime-50 border-lime-200 text-lime-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
-                      {req.test(formData.password) ? <CheckCircle2 size={12} /> : <div className="w-3 h-3 rounded-full border-2 border-slate-300" />}
-                      <span className="text-[9px] font-bold uppercase tracking-wide">{req.label}</span>
-                    </div>
-                  ))}
+                  {birthDateStatus === 'underage' && <p className="text-[9px] font-bold text-rose-500 ml-1">Debes ser mayor de 18 años.</p>}
                 </div>
               </div>
             )}
@@ -773,39 +817,8 @@ const Register: React.FC = () => {
 
                   <div className="w-full max-w-sm space-y-2 justify-self-center xl:max-w-none">
                     <p className="text-center text-[11px] text-slate-500 leading-4">
-                      Foto visible en rankings y posiciones.
+                      Foto visible en rankings y posiciones. Puedes omitirla y agregarla después.
                     </p>
-
-                    <div className="w-full rounded-3xl border border-slate-100 bg-slate-50 p-3.5">
-                      <div className="flex items-start gap-3">
-                        <Checkbox
-                          id="terms"
-                          label="Acepto los documentos legales"
-                          checked={formData.rememberMe}
-                          onChange={(c) => setFormData({ ...formData, rememberMe: c })}
-                        />
-                      </div>
-                      <div className="mt-3 pl-0 sm:pl-8">
-                        <p id="register-legal-description" className="text-[10px] leading-4 text-slate-500">
-                          Confirmas mayoría de edad y aceptas el uso básico de tus datos. Consulta{' '}
-                          <button
-                            type="button"
-                            className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
-                            onClick={() => openLegalDocument('terms')}
-                          >
-                            Términos y Condiciones
-                          </button>{' '}
-                          y{' '}
-                          <button
-                            type="button"
-                            className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-black focus:outline-none focus:ring-2 focus:ring-lime-400 focus:ring-offset-2 rounded-sm"
-                            onClick={() => openLegalDocument('privacy')}
-                          >
-                            Política de Privacidad
-                          </button>.
-                        </p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -822,7 +835,7 @@ const Register: React.FC = () => {
               )}
               <Button
                 onClick={handleSubmit}
-                disabled={!isStepValid() || (step === 3 && !formData.rememberMe) || isLoading}
+                disabled={!isStepValid() || isLoading}
                 isLoading={isLoading}
                 className="flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] shadow-xl hover:shadow-2xl transition-all"
                 variant="secondary"
