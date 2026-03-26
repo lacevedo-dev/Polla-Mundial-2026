@@ -18,7 +18,7 @@ vi.mock('../stores/auth.store', () => {
     const useAuthStore = vi.fn(() => ({
         login: loginMock,
         isLoading: isLoadingState,
-    }));
+    })) as ReturnType<typeof vi.fn> & { getState: ReturnType<typeof vi.fn> };
 
     useAuthStore.getState = vi.fn(() => ({
         user: userState,
