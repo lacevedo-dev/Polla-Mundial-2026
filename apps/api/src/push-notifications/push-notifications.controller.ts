@@ -10,7 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsObject, ValidateNested } from 'class-validator';
+import { IsString, IsObject, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PushNotificationsService } from './push-notifications.service';
@@ -22,6 +22,7 @@ class PushKeysDto {
 
 class SaveSubscriptionDto {
   @IsString() endpoint: string;
+  @IsOptional() expirationTime?: number | null;
   @IsObject() @ValidateNested() @Type(() => PushKeysDto) keys: PushKeysDto;
 }
 
