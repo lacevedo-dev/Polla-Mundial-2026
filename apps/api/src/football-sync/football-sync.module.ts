@@ -41,6 +41,6 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     TournamentImportService,
     SyncEventsService,
   ],
-  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService, SyncEventsService],
+  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService, SyncEventsService, SyncPlanService],
 })
 export class FootballSyncModule {}

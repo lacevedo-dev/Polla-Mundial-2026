@@ -41,6 +41,7 @@ import { usePredictionStore, type MatchViewModel } from '../stores/prediction.st
 import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
+import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
@@ -1372,8 +1373,10 @@ const Dashboard: React.FC = () => {
     })();
     const isAdmin = isRealAdmin && !spectatorMode;
 
+    const liveMatches = useMemo(() => matches.filter((m) => m.status === 'live'), [matches]);
     const upcomingMatches = useMemo(() => matches.filter((m) => m.status === 'open').slice(0, 3), [matches]);
     const nextUnsaved = useMemo(() => matches.find((m) => m.status === 'open' && !m.saved), [matches]);
+    const liveSync = useLiveSyncEvents();
     const topPlayers = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
 
     // My position in leaderboard
@@ -2290,6 +2293,49 @@ const Dashboard: React.FC = () => {
                             Ver ranking completo <ArrowRight size={12} />
                         </button>
                     </motion.article>
+
+                    {/* Partidos en vivo */}
+                    {liveMatches.length > 0 && (
+                        <motion.article {...fade(0.11)} className="rounded-[1.5rem] border border-rose-200 bg-rose-50 p-4 shadow-sm">
+                            <div className="mb-3 flex items-center gap-2">
+                                <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-400 animate-pulse" />
+                                <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">En vivo ahora</p>
+                                <span className="ml-auto text-[10px] text-rose-500">
+                                    {liveSync.lastSyncAt
+                                        ? `Act. hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)} min`
+                                        : `Cada ~${liveSync.syncIntervalMinutes} min`}
+                                </span>
+                            </div>
+                            <div className="space-y-2">
+                                {liveMatches.map((match) => (
+                                    <div key={match.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm border border-rose-100">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            {match.homeFlag && <img src={match.homeFlag} alt={match.homeTeam} className="h-4 w-6 rounded object-cover border border-slate-200" />}
+                                            <span className="text-xs font-bold text-slate-800 truncate">{match.homeTeam}</span>
+                                        </div>
+                                        <div className="flex flex-col items-center mx-2 shrink-0">
+                                            {match.result ? (
+                                                <span className="rounded-lg bg-rose-600 px-2.5 py-1 text-sm font-black text-white tabular-nums">
+                                                    {match.result.home} : {match.result.away}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs font-black text-rose-600">vs</span>
+                                            )}
+                                            {match.saved && (
+                                                <span className="mt-0.5 text-[9px] font-bold text-slate-400 tabular-nums">
+                                                    Tu pred: {match.prediction.home}−{match.prediction.away}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 min-w-0 justify-end">
+                                            <span className="text-xs font-bold text-slate-800 truncate">{match.awayTeam}</span>
+                                            {match.awayFlag && <img src={match.awayFlag} alt={match.awayTeam} className="h-4 w-6 rounded object-cover border border-slate-200" />}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.article>
+                    )}
 
                     {/* Próximos partidos con inputs rápidos */}
                     <motion.article {...fade(0.12)} className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-4 shadow-sm">

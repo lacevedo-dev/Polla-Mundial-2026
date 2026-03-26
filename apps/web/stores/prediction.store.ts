@@ -26,6 +26,7 @@ interface PredictionState {
     fetchLeaderboardBreakdown: (leagueId: string, userId: string, category?: LeaderboardCategory) => Promise<LeaderboardBreakdown>;
     savePrediction: (leagueId: string, matchId: string, home: number, away: number, advanceTeamId?: string) => Promise<void>;
     resetLeagueData: () => void;
+    updateMatchLiveScore: (matchId: string, homeScore: number | null, awayScore: number | null, status: string) => void;
 }
 
 function sortMatchesByDate(matches: MatchViewModel[]): MatchViewModel[] {
@@ -194,4 +195,20 @@ export const usePredictionStore = create<PredictionState>((set) => ({
             leaderboard: [],
             leaderboardBreakdowns: {},
         }),
+
+    updateMatchLiveScore: (matchId, homeScore, awayScore, status) => {
+        set((state) => ({
+            matches: state.matches.map((m) => {
+                if (m.id !== matchId) return m;
+                const normalizedStatus = status === 'LIVE' ? 'live' : status === 'FINISHED' ? 'finished' : status === 'SCHEDULED' ? 'open' : m.status;
+                return {
+                    ...m,
+                    status: normalizedStatus as MatchViewModel['status'],
+                    result: homeScore !== null && awayScore !== null
+                        ? { home: homeScore, away: awayScore }
+                        : m.result,
+                };
+            }),
+        }));
+    },
 }));

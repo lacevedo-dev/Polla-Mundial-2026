@@ -34,6 +34,7 @@ import { usePredictionStore, type MatchViewModel } from '../stores/prediction.st
 import { useAuthStore } from '../stores/auth.store';
 import { useAiCredits } from '../hooks/useAiCredits';
 import { useToast } from '../hooks/useToast';
+import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 import {
     ParticipationCategoryLabels,
     ParticipationStatusColors,
@@ -820,7 +821,7 @@ function CompactMatchRow({
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</span>
                             <span className="text-[8px] font-black uppercase tracking-wider text-amber-500">
-                                {match.status === 'live' ? 'Act. ~1m' : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
+                                {match.status === 'live' ? `Act. ~${liveSync.syncIntervalMinutes}m` : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -1306,7 +1307,7 @@ function CompactMatchRow({
                                 Grupo {match.group}
                             </span>
                         )}
-                        <span className="text-slate-400">• {match.status === 'live' ? 'Act. ~1m' : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
+                        <span className="text-slate-400">• {match.status === 'live' ? `Act. ~${liveSync.syncIntervalMinutes}m` : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
                         {match.saved && (
                             <span className="ml-auto font-bold text-lime-600">
                                 ✓ {match.prediction.home}-{match.prediction.away}
@@ -1930,6 +1931,7 @@ const Predictions: React.FC = () => {
         () => matches.some((match) => match.status === 'live'),
         [matches],
     );
+    const liveSync = useLiveSyncEvents();
     // Plan for credits: user's own subscription plan takes priority over league plan
     const resolvedPlan = React.useMemo(() =>
         (user?.plan ?? activeLeague?.settings?.plan ?? 'FREE').toUpperCase(),
@@ -2023,7 +2025,7 @@ const Predictions: React.FC = () => {
                 return;
             }
 
-            const delay = hasLiveMatches ? 60_000 : 180_000;
+            const delay = hasLiveMatches ? 180_000 : 300_000;
             timeoutId = window.setTimeout(async () => {
                 if (
                     cancelled ||
@@ -2868,6 +2870,21 @@ const Predictions: React.FC = () => {
                         {/* MATCH LIST */}
                         {!isLoading ? (
                             <div className="space-y-3">
+                                {hasLiveMatches && (
+                                    <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs">
+                                        <span className="inline-block h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
+                                        <span className="font-bold text-rose-700">Partidos en curso</span>
+                                        <span className="text-rose-500">·</span>
+                                        <span className="text-rose-600">
+                                            {liveSync.lastSyncAt
+                                                ? `Actualizado hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)} min · cada ~${liveSync.syncIntervalMinutes} min`
+                                                : `Actualización cada ~${liveSync.syncIntervalMinutes} min`}
+                                        </span>
+                                        {liveSync.isConnected && (
+                                            <span className="ml-auto text-[10px] font-black text-lime-600">● EN VIVO</span>
+                                        )}
+                                    </div>
+                                )}
                                 {Object.entries(groupedMatches).map(([date, dateMatches]) => (
                                     <div key={date} className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white">
                                         {/* Date header */}
@@ -3063,7 +3080,7 @@ const Predictions: React.FC = () => {
                                                                         <p className="text-xs font-black text-slate-900 sm:text-sm">{formatMatchTime(match.date)}</p>
                                                                         <p className={`mt-0.5 text-[8px] font-black uppercase tracking-[0.14em] sm:text-[9px] sm:tracking-[0.18em] ${match.status === 'live' ? 'text-rose-500' : 'text-amber-500'}`}>
                                                                             {match.status === 'live'
-                                                                                ? 'Act. ~1m'
+                                                                                ? `Act. ~${liveSync.syncIntervalMinutes}m`
                                                                                 : summarizeCloseTime(
                                                                                     match.date,
                                                                                     activeLeague?.settings?.closePredictionMinutes,

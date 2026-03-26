@@ -146,7 +146,7 @@ export class AdaptiveSyncScheduler {
           type: 'sync_completed',
           data: {
             matchesUpdated: result.matchesUpdated,
-            requestsUsed: plan?.requestsUsed ?? 0,
+            requestsUsed: plan?.estimatedRequestsUsed ?? 0,
             duration: Date.now() - startedAt,
           },
           timestamp: new Date().toISOString(),
@@ -159,21 +159,21 @@ export class AdaptiveSyncScheduler {
             data: {
               strategy: plan.strategy,
               intervalMinutes: plan.intervalMinutes,
-              requestsUsed: plan.requestsUsed,
+              requestsUsed: plan.estimatedRequestsUsed,
               requestsAvailable: plan.requestBudget,
             },
             timestamp: new Date().toISOString(),
           });
 
           // Emit rate_limit_warning if >= 80% used
-          const limit = plan.requestBudget + plan.requestsUsed;
-          if (limit > 0 && plan.requestsUsed / limit >= 0.8) {
+          const limit = plan.requestBudget + plan.estimatedRequestsUsed;
+          if (limit > 0 && plan.estimatedRequestsUsed / limit >= 0.8) {
             this.syncEvents.emit({
               type: 'rate_limit_warning',
               data: {
                 remaining: plan.requestBudget,
                 limit,
-                percentage: Math.round((plan.requestsUsed / limit) * 100),
+                percentage: Math.round((plan.estimatedRequestsUsed / limit) * 100),
               },
               timestamp: new Date().toISOString(),
             });
