@@ -4,6 +4,7 @@ import { SyncLogType } from '@prisma/client';
 import { SyncPlanService } from '../services/sync-plan.service';
 import { MatchSyncService } from '../services/match-sync.service';
 import { ConfigService as FootballConfigService } from '../services/config.service';
+import { SyncEventsService } from '../services/sync-events.service';
 
 @Injectable()
 export class AdaptiveSyncScheduler {
@@ -14,6 +15,7 @@ export class AdaptiveSyncScheduler {
     private readonly syncPlan: SyncPlanService,
     private readonly matchSync: MatchSyncService,
     private readonly footballConfigService: FootballConfigService,
+    private readonly syncEvents: SyncEventsService,
   ) {}
 
   /**
@@ -118,8 +120,17 @@ export class AdaptiveSyncScheduler {
    */
   private async executeSyncWithLock() {
     this.isSyncing = true;
+    const startedAt = Date.now();
 
     try {
+      // Emit sync_started before sync
+      const todayMatchCount = await this.syncPlan.calculateDailyPlan().then(p => p.totalMatches).catch(() => 0);
+      this.syncEvents.emit({
+        type: 'sync_started',
+        data: { trigger: 'auto', matchCount: todayMatchCount },
+        timestamp: new Date().toISOString(),
+      });
+
       const result = await this.matchSync.syncTodayMatchesForTrigger({
         logType: SyncLogType.CRON_SYNC,
         summaryLabel: 'Cron sync',
@@ -130,11 +141,59 @@ export class AdaptiveSyncScheduler {
         this.logger.log(
           `Sync successful: ${result.matchesUpdated} matches updated`,
         );
+        const plan = await this.syncPlan.calculateDailyPlan().catch(() => null);
+        this.syncEvents.emit({
+          type: 'sync_completed',
+          data: {
+            matchesUpdated: result.matchesUpdated,
+            requestsUsed: plan?.requestsUsed ?? 0,
+            duration: Date.now() - startedAt,
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        // Emit plan_updated after recalculation
+        if (plan) {
+          this.syncEvents.emit({
+            type: 'plan_updated',
+            data: {
+              strategy: plan.strategy,
+              intervalMinutes: plan.intervalMinutes,
+              requestsUsed: plan.requestsUsed,
+              requestsAvailable: plan.requestBudget,
+            },
+            timestamp: new Date().toISOString(),
+          });
+
+          // Emit rate_limit_warning if >= 80% used
+          const limit = plan.requestBudget + plan.requestsUsed;
+          if (limit > 0 && plan.requestsUsed / limit >= 0.8) {
+            this.syncEvents.emit({
+              type: 'rate_limit_warning',
+              data: {
+                remaining: plan.requestBudget,
+                limit,
+                percentage: Math.round((plan.requestsUsed / limit) * 100),
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
       } else {
         this.logger.warn(`Sync completed with issues: ${result.error}`);
+        this.syncEvents.emit({
+          type: 'sync_failed',
+          data: { error: result.error ?? 'Unknown error' },
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (error) {
       this.logger.error(`Sync execution failed: ${error.message}`);
+      this.syncEvents.emit({
+        type: 'sync_failed',
+        data: { error: error.message },
+        timestamp: new Date().toISOString(),
+      });
     } finally {
       this.isSyncing = false;
     }

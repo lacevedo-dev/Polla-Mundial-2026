@@ -6,6 +6,8 @@ import { ApiFootballClient } from './api-football-client.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
 import { MonitoringService } from './monitoring.service';
+import { SyncEventsService } from './sync-events.service';
+import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import {
   MatchStatus,
   Phase,
@@ -39,6 +41,8 @@ export class MatchSyncService {
     private readonly predictionsService: PredictionsService,
     private readonly monitoring: MonitoringService,
     private readonly predictionReport: PredictionReportService,
+    private readonly syncEvents: SyncEventsService,
+    private readonly push: PushNotificationsService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -187,11 +191,17 @@ export class MatchSyncService {
       await this.syncPlan.updateLastSyncTime();
       await this.syncPlan.incrementRequestsUsed();
 
-      // Process each fixture
+      // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
-      for (const fixture of response.response) {
-        const updated = await this.updateMatchFromFixture(fixture);
-        if (updated) updatedCount++;
+      const CONCURRENT = 4;
+      for (let i = 0; i < response.response.length; i += CONCURRENT) {
+        const batch = response.response.slice(i, i + CONCURRENT);
+        const results = await Promise.allSettled(
+          batch.map(f => this.updateMatchFromFixture(f)),
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value) updatedCount++;
+        }
       }
 
       this.logger.log(
@@ -297,11 +307,17 @@ export class MatchSyncService {
       await this.syncPlan.updateLastSyncTime();
       await this.syncPlan.incrementRequestsUsed();
 
-      // Process each fixture
+      // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
-      for (const fixture of response.response) {
-        const updated = await this.updateMatchFromFixture(fixture);
-        if (updated) updatedCount++;
+      const CONCURRENT = 4;
+      for (let i = 0; i < response.response.length; i += CONCURRENT) {
+        const batch = response.response.slice(i, i + CONCURRENT);
+        const results = await Promise.allSettled(
+          batch.map(f => this.updateMatchFromFixture(f)),
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value) updatedCount++;
+        }
       }
 
       this.logger.log(
@@ -405,12 +421,30 @@ export class MatchSyncService {
         `Updated match ${match.id}: ${fixture.teams.home.name} ${fixture.goals.home ?? '-'} - ${fixture.goals.away ?? '-'} ${fixture.teams.away.name} (${status})`,
       );
 
+      // Emit match_updated event
+      this.syncEvents.emit({
+        type: 'match_updated',
+        data: {
+          matchId: match.id,
+          homeScore: fixture.goals.home,
+          awayScore: fixture.goals.away,
+          status,
+          externalId: fixture.fixture.id.toString(),
+        },
+        timestamp: new Date().toISOString(),
+      });
+
       // If score changed and match is finished, calculate points and send results email
       if (scoreChanged && status === MatchStatus.FINISHED) {
         this.logger.log(`Match ${match.id} finished, calculating points`);
         await this.predictionsService.calculateMatchPoints(match.id);
         this.predictionReport.sendMatchResultsReport(match.id).catch(err =>
           this.logger.error(`Error sending results email for match ${match.id}: ${err.message}`),
+        );
+
+        // Send push notifications for match result + points (CAMBIO 3)
+        this.sendResultPushNotifications(match.id, fixture.goals.home, fixture.goals.away).catch(err =>
+          this.logger.error(`Error sending result push for match ${match.id}: ${err.message}`),
         );
 
         // Set advancingTeamId for knockout matches
@@ -439,6 +473,47 @@ export class MatchSyncService {
         `Failed to update match from fixture ${fixture.fixture.id}: ${error.message}`,
       );
       return false;
+    }
+  }
+
+  /**
+   * Send push notifications to all league members with predictions for this match (CAMBIO 3)
+   */
+  private async sendResultPushNotifications(
+    matchId: string,
+    homeScore: number | null,
+    awayScore: number | null,
+  ): Promise<void> {
+    try {
+      const predictions = await this.prisma.prediction.findMany({
+        where: { matchId },
+        include: {
+          match: { include: { homeTeam: true, awayTeam: true } },
+        },
+      });
+
+      for (const prediction of predictions) {
+        const pts = Math.round(prediction.points ?? 0);
+        const home = prediction.match.homeTeam.name;
+        const away = prediction.match.awayTeam.name;
+        const score = `${homeScore ?? '-'}-${awayScore ?? '-'}`;
+
+        if (pts >= 5) {
+          await this.push.sendToUser(prediction.userId, {
+            title: '🎯 ¡Marcador exacto!',
+            body: `${home} ${score} ${away} — +${pts} pts`,
+            data: { matchId, points: pts },
+          });
+        } else {
+          await this.push.sendToUser(prediction.userId, {
+            title: '✅ Resultado publicado',
+            body: `${home} ${score} ${away} — ganaste ${pts} pts`,
+            data: { matchId, points: pts },
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error(`sendResultPushNotifications failed: ${error.message}`);
     }
   }
 

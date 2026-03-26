@@ -209,7 +209,8 @@ model Match {
   externalId              String?           @unique
   lastSyncAt              DateTime?
   syncCount               Int               @default(0)
-  predictionReportSentAt  DateTime?
+  predictionReportSentAt       DateTime?
+  resultNotificationSentAt     DateTime?
   advancingTeamId String?
   advancingTeam   Team?   @relation("AdvancingTeam", fields: [advancingTeamId], references: [id])
   tournamentId            String?
@@ -650,6 +651,7 @@ enum NotifChannel {
   PUSH
   EMAIL
   SMS
+  WHATSAPP
 }
 
 enum SyncStrategy {
