@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Edit3, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Trash2, Trophy, Unlink2 } from 'lucide-react';
+import { ChevronDown, Edit3, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Trash2, Trophy, Unlink2, X } from 'lucide-react';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
@@ -458,7 +458,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport, getEmailPreviewHtml } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -467,6 +467,9 @@ const AdminMatches: React.FC = () => {
   const [recalcResult, setRecalcResult] = React.useState<{ total: number; processed: number; errors: { matchId: string; error: string }[] } | null>(null);
   const [reportFeedback, setReportFeedback] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [previewMatch, setPreviewMatch] = React.useState<{ match: any; type: 'start' | 'results' } | null>(null);
+  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
 
   const filteredMatches = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -500,15 +503,33 @@ const AdminMatches: React.FC = () => {
       setRecalculating(false);
     }
   }, []);
-  const handleResendStart = React.useCallback(async (match: any) => {
-    const result = await resendPredictionReport(match.id);
-    setReportFeedback(`Arranque reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
-  }, [resendPredictionReport]);
+  const handleOpenPreview = React.useCallback(async (match: any, type: 'start' | 'results') => {
+    setPreviewMatch({ match, type });
+    setPreviewHtml(null);
+    setPreviewLoading(true);
+    try {
+      const html = await getEmailPreviewHtml(match.id, type);
+      setPreviewHtml(html);
+    } catch {
+      setPreviewHtml('<p style="font-family:sans-serif;padding:2rem;color:red">Error al cargar el preview del correo.</p>');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [getEmailPreviewHtml]);
 
-  const handleResendResults = React.useCallback(async (match: any) => {
-    const result = await resendResultsReport(match.id);
-    setReportFeedback(`Cierre reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
-  }, [resendResultsReport]);
+  const handleConfirmSend = React.useCallback(async () => {
+    if (!previewMatch) return;
+    const { match, type } = previewMatch;
+    setPreviewMatch(null);
+    setPreviewHtml(null);
+    if (type === 'start') {
+      const result = await resendPredictionReport(match.id);
+      setReportFeedback(`Arranque reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
+    } else {
+      const result = await resendResultsReport(match.id);
+      setReportFeedback(`Cierre reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
+    }
+  }, [previewMatch, resendPredictionReport, resendResultsReport]);
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
 
   React.useEffect(() => {
@@ -750,8 +771,8 @@ const AdminMatches: React.FC = () => {
               <div className="mt-4 grid grid-cols-6 gap-2">
                 <button onClick={() => setLinkMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Gestionar vínculo de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Link2 size={14} className="mx-auto" /></button>
                 <button onClick={() => syncMatch(match.id)} disabled={isSaving || !match.externalId} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
-                <button onClick={() => void handleResendStart(match)} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Reenviar correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
-                <button onClick={() => void handleResendResults(match)} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Reenviar correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
+                <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
+                <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
                 <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
                 <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-rose-600" aria-label={`Eliminar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Trash2 size={14} className="mx-auto" /></button>
               </div>
@@ -845,8 +866,8 @@ const AdminMatches: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <button onClick={() => setLinkMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-violet-50 hover:text-violet-600" title={match.externalId ? 'Gestionar vinculo' : 'Vincular'}><Link2 size={14} /></button>
                     <button onClick={() => syncMatch(match.id)} disabled={isSaving || !match.externalId} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title="Sincronizar ahora"><RefreshCw size={14} /></button>
-                    <button onClick={() => void handleResendStart(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Reenviar correo de arranque"><Mail size={14} /></button>
-                    <button onClick={() => void handleResendResults(match)} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Reenviar correo de cierre"><MailCheck size={14} /></button>
+                    <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Ver y enviar correo de arranque"><Mail size={14} /></button>
+                    <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Ver y enviar correo de cierre"><MailCheck size={14} /></button>
                     <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>
                     <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600" title="Eliminar"><Trash2 size={14} /></button>
                   </div>
@@ -882,6 +903,54 @@ const AdminMatches: React.FC = () => {
           }
         }}
       />
+
+      <DialogPrimitive.Root open={!!previewMatch} onOpenChange={(open) => { if (!open) { setPreviewMatch(null); setPreviewHtml(null); } }}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
+          <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 flex h-[90vh] w-[95vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  {previewMatch?.type === 'start' ? 'Correo de arranque' : 'Correo de cierre'}
+                </p>
+                <DialogPrimitive.Title className="text-base font-black text-slate-900">
+                  {previewMatch?.match.homeTeam.name} vs {previewMatch?.match.awayTeam.name}
+                </DialogPrimitive.Title>
+              </div>
+              <DialogPrimitive.Close className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                <X size={18} />
+              </DialogPrimitive.Close>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {previewLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 size={28} className="animate-spin text-slate-300" />
+                </div>
+              ) : previewHtml ? (
+                <iframe
+                  srcDoc={previewHtml}
+                  className="h-full w-full border-0"
+                  title="Preview del correo"
+                  sandbox="allow-same-origin"
+                />
+              ) : null}
+            </div>
+            <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
+              <DialogPrimitive.Close className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">
+                Cancelar
+              </DialogPrimitive.Close>
+              <button
+                onClick={() => void handleConfirmSend()}
+                disabled={isSaving || previewLoading}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-500 py-2.5 text-sm font-bold text-white transition-all hover:bg-sky-600 disabled:opacity-60"
+              >
+                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                Enviar correo
+              </button>
+            </div>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </div>
   );
 };

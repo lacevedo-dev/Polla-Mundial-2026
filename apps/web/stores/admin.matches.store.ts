@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { request } from '../api';
+import { request, resolveBaseUrl } from '../api';
 import type { FootballMatchLinkCandidate } from '../types/football-sync';
 
 export interface AdminTeam {
@@ -111,6 +111,7 @@ interface AdminMatchesState {
     updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
     resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
+    getEmailPreviewHtml: (id: string, type: 'start' | 'results') => Promise<string>;
     syncMatch: (id: string) => Promise<void>;
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
     fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
@@ -246,6 +247,19 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;
         }
+    },
+
+    getEmailPreviewHtml: async (id, type) => {
+        const token = localStorage.getItem('token');
+        const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
+        const path = type === 'start'
+            ? `/admin/prediction-report/preview-start/${id}`
+            : `/admin/prediction-report/preview-results/${id}`;
+        const response = await fetch(`${BASE_URL}${path}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) throw new Error('Error al cargar preview del correo');
+        return response.text();
     },
 
     syncMatch: async (id) => {

@@ -63,6 +63,26 @@ export class PredictionReportController {
     return { message: 'RevisiÃ³n de reportes pendientes completada' };
   }
 
+  @Get('preview-start/:matchId')
+  async previewStart(
+    @Param('matchId') matchId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const html = await this.reportService.getPreviewStartHtml(matchId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Get('preview-results/:matchId')
+  async previewResults(
+    @Param('matchId') matchId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const html = await this.reportService.getPreviewResultsHtml(matchId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
   @Post('resend-start/:matchId')
   async resendStart(
     @Param('matchId') matchId: string,
