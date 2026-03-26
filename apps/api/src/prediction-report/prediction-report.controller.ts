@@ -63,8 +63,25 @@ export class PredictionReportController {
     return { message: 'RevisiÃ³n de reportes pendientes completada' };
   }
 
+  @Get('leagues/:matchId')
+  async getMatchLeagues(
+    @Param('matchId') matchId: string,
+  ): Promise<{ id: string; name: string; code: string }[]> {
+    return this.reportService.getMatchLeagues(matchId);
+  }
+
+  @Get('preview-results/:matchId/:leagueId')
+  async previewResultsForLeague(
+    @Param('matchId') matchId: string,
+    @Param('leagueId') leagueId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const html = await this.reportService.getPreviewResultsHtmlForLeague(matchId, leagueId);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
   @Get('preview-start/:matchId')
-  async previewStart(
     @Param('matchId') matchId: string,
     @Res() res: Response,
   ): Promise<void> {

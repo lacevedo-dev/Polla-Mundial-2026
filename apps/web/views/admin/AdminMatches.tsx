@@ -458,7 +458,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport, getEmailPreviewHtml } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getEmailPreviewHtml } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -468,6 +468,8 @@ const AdminMatches: React.FC = () => {
   const [reportFeedback, setReportFeedback] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [previewMatch, setPreviewMatch] = React.useState<{ match: any; type: 'start' | 'results' } | null>(null);
+  const [previewLeagues, setPreviewLeagues] = React.useState<{ id: string; name: string; code: string }[]>([]);
+  const [previewLeagueId, setPreviewLeagueId] = React.useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
 
@@ -503,12 +505,11 @@ const AdminMatches: React.FC = () => {
       setRecalculating(false);
     }
   }, []);
-  const handleOpenPreview = React.useCallback(async (match: any, type: 'start' | 'results') => {
-    setPreviewMatch({ match, type });
-    setPreviewHtml(null);
+  const loadPreviewHtml = React.useCallback(async (matchId: string, type: 'start' | 'results', leagueId: string) => {
     setPreviewLoading(true);
+    setPreviewHtml(null);
     try {
-      const html = await getEmailPreviewHtml(match.id, type);
+      const html = await getEmailPreviewHtml(matchId, type, leagueId);
       setPreviewHtml(html);
     } catch {
       setPreviewHtml('<p style="font-family:sans-serif;padding:2rem;color:red">Error al cargar el preview del correo.</p>');
@@ -517,10 +518,35 @@ const AdminMatches: React.FC = () => {
     }
   }, [getEmailPreviewHtml]);
 
+  const handleOpenPreview = React.useCallback(async (match: any, type: 'start' | 'results') => {
+    setPreviewMatch({ match, type });
+    setPreviewLeagues([]);
+    setPreviewLeagueId(null);
+    setPreviewHtml(null);
+    try {
+      const leagues = await getMatchPreviewLeagues(match.id);
+      setPreviewLeagues(leagues);
+      if (leagues.length > 0) {
+        setPreviewLeagueId(leagues[0].id);
+        void loadPreviewHtml(match.id, type, leagues[0].id);
+      }
+    } catch {
+      setPreviewHtml('<p style="font-family:sans-serif;padding:2rem;color:red">Error al cargar las pollas del partido.</p>');
+    }
+  }, [getMatchPreviewLeagues, loadPreviewHtml]);
+
+  const handleLeagueChange = React.useCallback((leagueId: string) => {
+    if (!previewMatch) return;
+    setPreviewLeagueId(leagueId);
+    void loadPreviewHtml(previewMatch.match.id, previewMatch.type, leagueId);
+  }, [previewMatch, loadPreviewHtml]);
+
   const handleConfirmSend = React.useCallback(async () => {
     if (!previewMatch) return;
     const { match, type } = previewMatch;
     setPreviewMatch(null);
+    setPreviewLeagues([]);
+    setPreviewLeagueId(null);
     setPreviewHtml(null);
     if (type === 'start') {
       const result = await resendPredictionReport(match.id);
@@ -904,20 +930,34 @@ const AdminMatches: React.FC = () => {
         }}
       />
 
-      <DialogPrimitive.Root open={!!previewMatch} onOpenChange={(open) => { if (!open) { setPreviewMatch(null); setPreviewHtml(null); } }}>
+      <DialogPrimitive.Root open={!!previewMatch} onOpenChange={(open) => { if (!open) { setPreviewMatch(null); setPreviewLeagues([]); setPreviewLeagueId(null); setPreviewHtml(null); } }}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
           <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 flex h-[90vh] w-[95vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <div>
+            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4 gap-4">
+              <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                   {previewMatch?.type === 'start' ? 'Correo de arranque' : 'Correo de cierre'}
                 </p>
                 <DialogPrimitive.Title className="text-base font-black text-slate-900">
                   {previewMatch?.match.homeTeam.name} vs {previewMatch?.match.awayTeam.name}
                 </DialogPrimitive.Title>
+                {previewLeagues.length > 0 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 shrink-0">Polla</label>
+                    <select
+                      value={previewLeagueId ?? ''}
+                      onChange={(e) => handleLeagueChange(e.target.value)}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      {previewLeagues.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <DialogPrimitive.Close className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              <DialogPrimitive.Close className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0">
                 <X size={18} />
               </DialogPrimitive.Close>
             </div>

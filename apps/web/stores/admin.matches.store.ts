@@ -111,7 +111,8 @@ interface AdminMatchesState {
     updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
     resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
-    getEmailPreviewHtml: (id: string, type: 'start' | 'results') => Promise<string>;
+    getMatchPreviewLeagues: (id: string) => Promise<{ id: string; name: string; code: string }[]>;
+    getEmailPreviewHtml: (id: string, type: 'start' | 'results', leagueId: string) => Promise<string>;
     syncMatch: (id: string) => Promise<void>;
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
     fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
@@ -249,12 +250,18 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
         }
     },
 
-    getEmailPreviewHtml: async (id, type) => {
+    getMatchPreviewLeagues: async (id) => {
+        return request<{ id: string; name: string; code: string }[]>(
+            `/admin/prediction-report/leagues/${id}`,
+        );
+    },
+
+    getEmailPreviewHtml: async (id, type, leagueId) => {
         const token = localStorage.getItem('token');
         const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
         const path = type === 'start'
-            ? `/admin/prediction-report/preview-start/${id}`
-            : `/admin/prediction-report/preview-results/${id}`;
+            ? `/admin/prediction-report/preview/${id}/${leagueId}`
+            : `/admin/prediction-report/preview-results/${id}/${leagueId}`;
         const response = await fetch(`${BASE_URL}${path}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
         });

@@ -322,6 +322,23 @@ export class PredictionReportService {
     return this.getPreviewHtml(matchId, firstPrediction.leagueId);
   }
 
+  async getMatchLeagues(matchId: string): Promise<{ id: string; name: string; code: string }[]> {
+    const leagueIds = await this.prisma.prediction.findMany({
+      where: { matchId },
+      select: { leagueId: true },
+      distinct: ['leagueId'],
+    });
+    const leagues = await Promise.all(
+      leagueIds.map(({ leagueId }) =>
+        this.prisma.league.findUnique({
+          where: { id: leagueId },
+          select: { id: true, name: true, code: true },
+        }),
+      ),
+    );
+    return leagues.filter(Boolean) as { id: string; name: string; code: string }[];
+  }
+
   async getPreviewResultsHtml(matchId: string): Promise<string> {
     const match = await this.prisma.match.findUniqueOrThrow({
       where: { id: matchId },
@@ -352,6 +369,79 @@ export class PredictionReportService {
       include: { user: { select: { id: true, name: true } } },
       orderBy: { submittedAt: 'asc' },
     });
+
+    const prevPreds = await this.prisma.prediction.findMany({
+      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
+      select: { userId: true, points: true },
+    });
+    const prevTotals = new Map<string, number>();
+    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+    const afterTotals = new Map<string, number>(prevTotals);
+    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+    const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
+    const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
+    const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
+    const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
+
+    const results = predictions.map(p => {
+      const member = members.find(m => m.userId === p.userId);
+      return {
+        userId:       p.userId,
+        name:         p.user.name,
+        isAdmin:      member?.role === 'ADMIN',
+        homeScore:    p.homeScore,
+        awayScore:    p.awayScore,
+        submittedAt:  p.submittedAt,
+        outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
+        pointsEarned: p.points ?? 0,
+        prevPosition: prevStandings.get(p.userId)?.position ?? 99,
+        newPosition:  afterStandings.get(p.userId)?.position ?? 99,
+      };
+    });
+
+    return this.emailService.buildResultHtml({
+      leagueName: league.name,
+      leagueCode: league.code,
+      match: {
+        homeTeam:  match.homeTeam.name,
+        awayTeam:  match.awayTeam.name,
+        matchDate: match.matchDate,
+        homeScore: match.homeScore,
+        awayScore: match.awayScore,
+        venue:     match.venue ?? undefined,
+        round:     match.round ?? undefined,
+      },
+      results,
+      sentAt: new Date(),
+    });
+  }
+
+  async getPreviewResultsHtmlForLeague(matchId: string, leagueId: string): Promise<string> {
+    const match = await this.prisma.match.findUniqueOrThrow({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (match.homeScore === null || match.awayScore === null) {
+      return '<p style="font-family:sans-serif;padding:2rem">Este partido no tiene resultado registrado.</p>';
+    }
+
+    const league = await this.prisma.league.findUniqueOrThrow({
+      where: { id: leagueId },
+      select: { name: true, code: true },
+    });
+
+    const { members } = await this.getLeagueReportAudience(leagueId);
+
+    const predictions = await this.prisma.prediction.findMany({
+      where: { matchId, leagueId, points: { not: null } },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { submittedAt: 'asc' },
+    });
+    if (predictions.length === 0) {
+      return '<p style="font-family:sans-serif;padding:2rem">No hay predicciones con puntos calculados para esta polla.</p>';
+    }
 
     const prevPreds = await this.prisma.prediction.findMany({
       where: { leagueId, points: { not: null }, matchId: { not: matchId } },
