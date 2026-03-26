@@ -6,14 +6,19 @@ export interface AdminPrediction {
     homeScore: number;
     awayScore: number;
     points?: number;
+    pointDetail?: string | null;
+    advanceTeamId?: string | null;
     submittedAt: string;
     user: { id: string; name: string; username: string; avatar?: string };
     match: {
         id: string;
+        matchDate: string;
+        phase?: string | null;
+        status?: string | null;
         homeScore?: number;
         awayScore?: number;
-        homeTeam: { name: string; flagUrl?: string };
-        awayTeam: { name: string; flagUrl?: string };
+        homeTeam: { name: string; flagUrl?: string; code?: string | null };
+        awayTeam: { name: string; flagUrl?: string; code?: string | null };
     };
     league: { id: string; name: string };
 }
