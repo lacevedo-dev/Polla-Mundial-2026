@@ -248,6 +248,29 @@ const AdminSyncPlan: React.FC = () => {
         </div>
       )}
 
+      {/* Auto-notification schedulers strip */}
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Procesos automáticos de notificación (siempre activos)</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {[
+            { icon: <Bell size={13} className="text-sky-500" />, label: 'Recordatorio 1h', desc: 'Avisa a todos los miembros de la liga 1 hora antes del partido', color: 'bg-sky-50 border-sky-200' },
+            { icon: <AlertTriangle size={13} className="text-amber-500" />, label: 'Cierre predicciones', desc: 'Alerta a quien no ha pronosticado cuando quedan ≤5 min para cierre', color: 'bg-amber-50 border-amber-200' },
+            { icon: <CheckCircle2 size={13} className="text-emerald-500" />, label: 'Resultado publicado', desc: 'Notifica puntos obtenidos tras finalizar el partido', color: 'bg-emerald-50 border-emerald-200' },
+          ].map((item) => (
+            <div key={item.label} className={`flex items-start gap-2.5 rounded-xl border p-3 ${item.color}`}>
+              <span className="mt-0.5 shrink-0">{item.icon}</span>
+              <div>
+                <p className="text-xs font-black text-slate-800">{item.label}</p>
+                <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{item.desc}</p>
+              </div>
+              <span className="ml-auto shrink-0 flex items-center gap-1 text-[9px] font-black uppercase text-lime-600 bg-lime-50 border border-lime-200 rounded-full px-1.5 py-0.5">
+                <Activity size={8} /> Activo
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Summary cards */}
       {timeline && (
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
