@@ -329,9 +329,9 @@ const Register: React.FC = () => {
     e.preventDefault();
     if (emailStatus === 'taken' || (phoneStatus === 'taken' && formData.celular)) return;
 
-    if (step < 3) {
+    if (typeof step === 'number' && step < 3) {
       setIsNavigating(true);
-      setTimeout(() => { setStep((step + 1) as RegisterStep); setIsNavigating(false); }, 400);
+      setTimeout(() => { setStep(((step as number) + 1) as RegisterStep); setIsNavigating(false); }, 400);
       return;
     }
 
@@ -829,7 +829,7 @@ const Register: React.FC = () => {
           {step !== 'verification' && (
             <div className="mt-6 md:mt-4 flex items-center gap-4 relative z-0">
               {step > 1 && (
-                <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep((step - 1) as RegisterStep)}>
+                <Button variant="outline" className="w-14 h-14 rounded-2xl border-slate-200 text-slate-400 hover:text-slate-900" onClick={() => setStep(((step as number) - 1) as RegisterStep)}>
                   <ArrowLeft size={20} />
                 </Button>
               )}
