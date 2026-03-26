@@ -27,4 +27,13 @@ export class PredictionsController {
     ) {
         return this.predictionsService.getLeaderboard(leagueId, category);
     }
+
+    @Get('leaderboard/:leagueId/user/:userId')
+    async getLeaderboardUserBreakdown(
+        @Param('leagueId') leagueId: string,
+        @Param('userId') userId: string,
+        @Query('category') category?: string,
+    ) {
+        return this.predictionsService.getLeaderboardUserBreakdown(leagueId, userId, category);
+    }
 }

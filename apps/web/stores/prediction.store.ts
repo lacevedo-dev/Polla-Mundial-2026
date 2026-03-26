@@ -2,7 +2,10 @@ import { create } from 'zustand';
 import { request } from '../api';
 import {
     mergeLeaguePredictions,
+    toLeaderboardBreakdown,
     toLeaderboardRows,
+    type LeaderboardBreakdown,
+    type LeaderboardBreakdownApiResponse,
     type LeaderboardCategory,
     type LeaderboardApiEntry,
     type LeaderboardRow,
@@ -16,9 +19,11 @@ export type { LeaderboardRow, MatchViewModel } from './prediction.adapters';
 interface PredictionState {
     matches: MatchViewModel[];
     leaderboard: LeaderboardRow[];
+    leaderboardBreakdowns: Record<string, LeaderboardBreakdown>;
     isLoading: boolean;
     fetchLeagueMatches: (leagueId: string, options?: { background?: boolean }) => Promise<MatchViewModel[]>;
     fetchLeaderboard: (leagueId: string, category?: LeaderboardCategory) => Promise<LeaderboardRow[]>;
+    fetchLeaderboardBreakdown: (leagueId: string, userId: string, category?: LeaderboardCategory) => Promise<LeaderboardBreakdown>;
     savePrediction: (leagueId: string, matchId: string, home: number, away: number, advanceTeamId?: string) => Promise<void>;
     resetLeagueData: () => void;
 }
@@ -69,6 +74,7 @@ function arePredictionPayloadsEqual(
 export const usePredictionStore = create<PredictionState>((set) => ({
     matches: [],
     leaderboard: [],
+    leaderboardBreakdowns: {},
     isLoading: false,
 
     fetchLeagueMatches: async (leagueId, options) => {
@@ -133,6 +139,26 @@ export const usePredictionStore = create<PredictionState>((set) => ({
         }
     },
 
+    fetchLeaderboardBreakdown: async (leagueId, userId, category = 'GENERAL') => {
+        const query = category !== 'GENERAL'
+            ? `?category=${encodeURIComponent(category)}`
+            : '';
+        const breakdown = toLeaderboardBreakdown(
+            await request<LeaderboardBreakdownApiResponse>(
+                `/predictions/leaderboard/${leagueId}/user/${userId}${query}`,
+            ),
+        );
+
+        set((state) => ({
+            leaderboardBreakdowns: {
+                ...state.leaderboardBreakdowns,
+                [`${leagueId}:${category}:${userId}`]: breakdown,
+            },
+        }));
+
+        return breakdown;
+    },
+
     savePrediction: async (leagueId, matchId, home, away, advanceTeamId) => {
         await request('/predictions', {
             method: 'POST',
@@ -166,5 +192,6 @@ export const usePredictionStore = create<PredictionState>((set) => ({
         set({
             matches: [],
             leaderboard: [],
+            leaderboardBreakdowns: {},
         }),
 }));

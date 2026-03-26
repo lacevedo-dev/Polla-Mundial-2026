@@ -2,7 +2,7 @@ jest.mock('../prisma/prisma.service', () => ({
     PrismaService: class PrismaService { },
 }));
 
-import { Phase, ScoringType } from '@prisma/client';
+import { MemberStatus, Phase, ScoringType } from '@prisma/client';
 import { PredictionsService } from './predictions.service';
 
 describe('PredictionsService', () => {
@@ -340,6 +340,84 @@ describe('PredictionsService', () => {
             const lb = await service.getLeaderboard('league-1', 'ROUND');
 
             expect(lb[0]).toMatchObject({ id: 'u1', points: 14, phaseBonusPoints: 8 });
+        });
+    });
+
+    describe('getLeaderboardUserBreakdown', () => {
+        it('devuelve el detalle por partido y bonos de un participante en la categoria activa', async () => {
+            const prismaMock = {
+                leagueMember: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        userId: 'u1',
+                        leagueId: 'league-1',
+                        status: MemberStatus.ACTIVE,
+                        user: { id: 'u1', username: 'ana', name: 'Ana', avatar: null },
+                    }),
+                },
+                participationObligation: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', matchId: 'm1', referenceId: 'm1' },
+                    ]),
+                },
+                prediction: {
+                    findMany: jest.fn().mockResolvedValue([
+                        {
+                            id: 'pred-1',
+                            leagueId: 'league-1',
+                            userId: 'u1',
+                            matchId: 'm1',
+                            points: 5,
+                            pointDetail: JSON.stringify({
+                                type: 'EXACT_SCORE',
+                                exactPoints: 5,
+                                winnerPoints: 0,
+                                goalPoints: 0,
+                                uniqueBonus: 0,
+                                basePoints: 5,
+                                phase: 'GROUP',
+                                multiplier: 1,
+                                total: 5,
+                            }),
+                            homeScore: 2,
+                            awayScore: 1,
+                            advanceTeamId: null,
+                            submittedAt: new Date('2026-06-11T18:00:00.000Z'),
+                            match: {
+                                id: 'm1',
+                                matchDate: new Date('2026-06-11T18:00:00.000Z'),
+                                phase: Phase.GROUP,
+                                group: 'A',
+                                venue: 'Bogota',
+                                homeScore: 2,
+                                awayScore: 1,
+                                homeTeam: { id: 't1', name: 'Colombia', code: 'CO', shortCode: 'COL', flagUrl: null },
+                                awayTeam: { id: 't2', name: 'Argentina', code: 'AR', shortCode: 'ARG', flagUrl: null },
+                            },
+                        },
+                    ]),
+                },
+                phaseBonus: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { id: 'bonus-1', leagueId: 'league-1', userId: 'u1', phase: Phase.GROUP, points: 3, awardedAt: new Date('2026-06-12T18:00:00.000Z') },
+                    ]),
+                },
+            };
+
+            const service = createService(prismaMock);
+            const breakdown = await service.getLeaderboardUserBreakdown('league-1', 'u1', 'MATCH');
+
+            expect(prismaMock.participationObligation.findMany).toHaveBeenCalled();
+            expect(breakdown.summary).toMatchObject({
+                points: 5,
+                exactCount: 1,
+                phaseBonusPoints: 0,
+            });
+            expect(breakdown.matches[0]).toMatchObject({
+                id: 'pred-1',
+                points: 5,
+                prediction: { homeScore: 2, awayScore: 1 },
+            });
+            expect(breakdown.bonuses).toEqual([]);
         });
     });
 });

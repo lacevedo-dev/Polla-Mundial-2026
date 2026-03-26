@@ -103,6 +103,7 @@ describe('usePredictionStore', () => {
         usePredictionStore.setState({
             matches: [],
             leaderboard: [],
+            leaderboardBreakdowns: {},
             isLoading: false,
         });
 
@@ -135,6 +136,7 @@ describe('usePredictionStore', () => {
                 },
             ],
             leaderboard: [],
+            leaderboardBreakdowns: {},
             isLoading: false,
         });
         requestMock.mockResolvedValueOnce({});
@@ -180,6 +182,7 @@ describe('usePredictionStore', () => {
                 },
             ],
             leaderboard: [],
+            leaderboardBreakdowns: {},
             isLoading: false,
         });
         requestMock.mockRejectedValueOnce(new Error('Tiempo expirado'));
@@ -191,6 +194,65 @@ describe('usePredictionStore', () => {
         expect(usePredictionStore.getState().matches[0]).toMatchObject({
             prediction: { home: '', away: '' },
             saved: false,
+        });
+    });
+
+    it('loads leaderboard breakdown details and caches them by league, category and user', async () => {
+        requestMock.mockResolvedValueOnce({
+            user: { id: 'user-1', username: 'juan', name: 'Juan', avatar: null },
+            summary: {
+                points: 8,
+                exactCount: 1,
+                winnerCount: 1,
+                goalCount: 0,
+                uniqueCount: 0,
+                phaseBonusPoints: 3,
+            },
+            matches: [
+                {
+                    id: 'prediction-1',
+                    points: 5,
+                    submittedAt: '2026-06-11T18:00:00.000Z',
+                    pointDetail: {
+                        type: 'EXACT_SCORE',
+                        exactPoints: 5,
+                        winnerPoints: 0,
+                        goalPoints: 0,
+                        uniqueBonus: 0,
+                        basePoints: 5,
+                        phase: 'GROUP',
+                        multiplier: 1,
+                        total: 5,
+                    },
+                    prediction: { homeScore: 2, awayScore: 1 },
+                    match: {
+                        id: 'match-1',
+                        matchDate: '2026-06-11T18:00:00.000Z',
+                        phase: 'GROUP',
+                        group: 'A',
+                        venue: 'Bogota',
+                        homeScore: 2,
+                        awayScore: 1,
+                        homeTeam: { name: 'Colombia', code: 'CO', shortCode: 'COL' },
+                        awayTeam: { name: 'Argentina', code: 'AR', shortCode: 'ARG' },
+                    },
+                },
+            ],
+            bonuses: [
+                { id: 'bonus-1', phase: 'GROUP', points: 3, awardedAt: '2026-06-12T18:00:00.000Z' },
+            ],
+        });
+
+        const breakdown = await usePredictionStore.getState().fetchLeaderboardBreakdown('league-1', 'user-1', 'MATCH');
+
+        expect(requestMock).toHaveBeenCalledWith('/predictions/leaderboard/league-1/user/user-1?category=MATCH');
+        expect(breakdown.matches[0]).toMatchObject({
+            summaryLabel: 'Marcador exacto +5',
+            predictionHome: 2,
+            predictionAway: 1,
+        });
+        expect(usePredictionStore.getState().leaderboardBreakdowns['league-1:MATCH:user-1']).toMatchObject({
+            summary: { points: 8 },
         });
     });
 });

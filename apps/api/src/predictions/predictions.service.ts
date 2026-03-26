@@ -37,6 +37,14 @@ export interface PredictionPointDetail {
 type CalculatePointsResult = { total: number; detail: PredictionPointDetail };
 type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
 
+type LeaderboardSummaryStats = {
+    points: number;
+    exactCount: number;
+    winnerCount: number;
+    goalCount: number;
+    uniqueCount: number;
+};
+
 @Injectable()
 export class PredictionsService {
     private readonly logger = new Logger(PredictionsService.name);
@@ -513,6 +521,150 @@ export class PredictionsService {
             });
     }
 
+    async getLeaderboardUserBreakdown(leagueId: string, userId: string, category?: string) {
+        const leaderboardCategory = this.normalizeLeaderboardCategory(category);
+        const participationKeys = await this.getParticipationScopeKeys(leagueId, leaderboardCategory);
+
+        const member = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId, leagueId } },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        name: true,
+                        avatar: true,
+                    },
+                },
+            },
+        });
+
+        if (!member || member.status !== MemberStatus.ACTIVE) {
+            throw new NotFoundException('Participante no encontrado en esta liga');
+        }
+
+        const eligibleUserIds =
+            leaderboardCategory === 'GENERAL'
+                ? new Set([userId])
+                : new Set(
+                    [...participationKeys]
+                        .map((key) => key.split(':', 1)[0])
+                        .filter((candidate) => candidate === userId),
+                );
+
+        if (leaderboardCategory !== 'GENERAL' && !eligibleUserIds.has(userId)) {
+            return {
+                user: member.user,
+                summary: {
+                    points: 0,
+                    exactCount: 0,
+                    winnerCount: 0,
+                    goalCount: 0,
+                    uniqueCount: 0,
+                    phaseBonusPoints: 0,
+                },
+                matches: [],
+                bonuses: [],
+            };
+        }
+
+        const predictions = await this.prisma.prediction.findMany({
+            where: {
+                leagueId,
+                userId,
+                points: { not: null },
+            },
+            orderBy: { submittedAt: 'desc' },
+            include: {
+                match: {
+                    include: {
+                        homeTeam: { select: matchTeamSelect },
+                        awayTeam: { select: matchTeamSelect },
+                    },
+                },
+            },
+        });
+
+        const filteredPredictions = predictions.filter((prediction) =>
+            this.matchesLeaderboardScope(
+                leaderboardCategory,
+                {
+                    userId: prediction.userId,
+                    matchId: prediction.matchId,
+                    match: {
+                        group: prediction.match.group,
+                        phase: prediction.match.phase,
+                    },
+                },
+                participationKeys,
+            ),
+        );
+
+        const phaseBonuses = await this.prisma.phaseBonus.findMany({
+            where: { leagueId, userId },
+            orderBy: { awardedAt: 'desc' },
+        });
+
+        const filteredBonuses = phaseBonuses.filter((bonus) =>
+            this.matchesPhaseBonusScope(leaderboardCategory, bonus, participationKeys),
+        );
+
+        const summary = filteredPredictions.reduce<LeaderboardSummaryStats>(
+            (acc, prediction) => {
+                acc.points += prediction.points ?? 0;
+                const detail = this.parsePointDetail(prediction.pointDetail);
+                if (!detail) {
+                    return acc;
+                }
+                if (detail.type === 'EXACT_SCORE') acc.exactCount += 1;
+                if (detail.type === 'CORRECT_WINNER' || detail.type === 'CORRECT_WINNER_GOAL') acc.winnerCount += 1;
+                if (detail.type === 'TEAM_GOALS' || detail.type === 'CORRECT_WINNER_GOAL') acc.goalCount += 1;
+                if ((detail.uniqueBonus ?? 0) > 0) acc.uniqueCount += 1;
+                return acc;
+            },
+            { points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0 },
+        );
+
+        const bonusTotal = filteredBonuses.reduce((sum, bonus) => sum + bonus.points, 0);
+
+        return {
+            user: member.user,
+            summary: {
+                ...summary,
+                points: summary.points + bonusTotal,
+                phaseBonusPoints: bonusTotal,
+            },
+            matches: filteredPredictions.map((prediction) => ({
+                id: prediction.id,
+                points: prediction.points ?? 0,
+                submittedAt: prediction.submittedAt,
+                pointDetail: this.parsePointDetail(prediction.pointDetail),
+                prediction: {
+                    homeScore: prediction.homeScore,
+                    awayScore: prediction.awayScore,
+                    advanceTeamId: prediction.advanceTeamId,
+                },
+                match: {
+                    id: prediction.match.id,
+                    matchDate: prediction.match.matchDate,
+                    phase: prediction.match.phase,
+                    group: prediction.match.group,
+                    venue: prediction.match.venue,
+                    homeScore: prediction.match.homeScore,
+                    awayScore: prediction.match.awayScore,
+                    homeTeam: prediction.match.homeTeam,
+                    awayTeam: prediction.match.awayTeam,
+                },
+            })),
+            bonuses: filteredBonuses.map((bonus) => ({
+                id: bonus.id,
+                phase: bonus.phase,
+                points: bonus.points,
+                awardedAt: bonus.awardedAt,
+            })),
+        };
+    }
+
     private normalizeLeaderboardCategory(category?: string): LeaderboardCategory {
         const normalized = category?.trim().toUpperCase();
         if (normalized === 'MATCH' || normalized === 'GROUP' || normalized === 'ROUND') {
@@ -520,6 +672,18 @@ export class PredictionsService {
         }
 
         return 'GENERAL';
+    }
+
+    private parsePointDetail(pointDetail: string | null): PredictionPointDetail | null {
+        if (!pointDetail) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(pointDetail) as PredictionPointDetail;
+        } catch {
+            return null;
+        }
     }
 
     private async getParticipationScopeKeys(

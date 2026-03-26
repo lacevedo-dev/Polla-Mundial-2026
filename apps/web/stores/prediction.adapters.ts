@@ -44,6 +44,9 @@ export interface LeaderboardApiEntry {
     phaseBonusPoints?: number;
     hasChampion?: boolean;
     exactCount?: number;
+    winnerCount?: number;
+    goalCount?: number;
+    uniqueCount?: number;
 }
 
 export type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
@@ -88,7 +91,113 @@ export interface LeaderboardRow {
     points: number;
     phaseBonusPoints?: number;
     hasChampion?: boolean;
+    exactCount?: number;
+    winnerCount?: number;
+    goalCount?: number;
+    uniqueCount?: number;
     trend: 'same';
+}
+
+export interface LeaderboardBreakdownApiResponse {
+    user: {
+        id: string;
+        username: string;
+        name: string;
+        avatar?: string | null;
+    };
+    summary: {
+        points: number;
+        exactCount: number;
+        winnerCount: number;
+        goalCount: number;
+        uniqueCount: number;
+        phaseBonusPoints: number;
+    };
+    matches: Array<{
+        id: string;
+        points: number;
+        submittedAt: string;
+        pointDetail?: {
+            type: string;
+            exactPoints: number;
+            winnerPoints: number;
+            goalPoints: number;
+            uniqueBonus: number;
+            basePoints: number;
+            phase: string;
+            multiplier: number;
+            total: number;
+        } | null;
+        prediction: {
+            homeScore: number;
+            awayScore: number;
+            advanceTeamId?: string | null;
+        };
+        match: MatchResponse;
+    }>;
+    bonuses: Array<{
+        id: string;
+        phase: string;
+        points: number;
+        awardedAt: string;
+    }>;
+}
+
+export interface LeaderboardBreakdownDetail {
+    id: string;
+    points: number;
+    summaryLabel: string;
+    date: string;
+    displayDate: string;
+    phase: string;
+    group?: string;
+    venue: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeTeamCode: string;
+    awayTeamCode: string;
+    homeFlag: string;
+    awayFlag: string;
+    predictionHome: number;
+    predictionAway: number;
+    resultHome?: number;
+    resultAway?: number;
+}
+
+export interface LeaderboardBreakdown {
+    user: {
+        id: string;
+        username: string;
+        name: string;
+        avatar: string;
+    };
+    summary: {
+        points: number;
+        exactCount: number;
+        winnerCount: number;
+        goalCount: number;
+        uniqueCount: number;
+        phaseBonusPoints: number;
+    };
+    matches: LeaderboardBreakdownDetail[];
+    bonuses: Array<{
+        id: string;
+        phase: string;
+        points: number;
+        awardedAt: string;
+    }>;
+}
+
+function toPointSummaryLabel(pointDetail?: LeaderboardBreakdownApiResponse['matches'][number]['pointDetail'] | null): string {
+    if (!pointDetail) return 'Sin puntos';
+
+    const parts: string[] = [];
+    if (pointDetail.exactPoints > 0) parts.push(`Marcador exacto +${pointDetail.exactPoints}`);
+    if (pointDetail.winnerPoints > 0) parts.push(`Ganador +${pointDetail.winnerPoints}`);
+    if (pointDetail.goalPoints > 0) parts.push(`Gol +${pointDetail.goalPoints}`);
+    if (pointDetail.uniqueBonus > 0) parts.push(`Única +${pointDetail.uniqueBonus}`);
+    if (!parts.length) return 'Sin puntos';
+    return parts.join(' · ');
 }
 
 const DEFAULT_FLAG_URL =
@@ -239,6 +348,43 @@ export function toLeaderboardRows(entries: LeaderboardApiEntry[]): LeaderboardRo
             points: entry.points,
             phaseBonusPoints: entry.phaseBonusPoints,
             hasChampion: entry.hasChampion,
+            exactCount: entry.exactCount,
+            winnerCount: entry.winnerCount,
+            goalCount: entry.goalCount,
+            uniqueCount: entry.uniqueCount,
             trend: 'same',
         }));
+}
+
+export function toLeaderboardBreakdown(
+    input: LeaderboardBreakdownApiResponse,
+): LeaderboardBreakdown {
+    return {
+        user: {
+            ...input.user,
+            avatar: resolveApiAssetUrl(input.user.avatar) ?? toAvatar(input.user.name),
+        },
+        summary: input.summary,
+        matches: input.matches.map((item) => ({
+            id: item.id,
+            points: item.points,
+            summaryLabel: toPointSummaryLabel(item.pointDetail),
+            date: item.match.matchDate,
+            displayDate: toDisplayDate(item.match.matchDate),
+            phase: item.match.phase,
+            group: item.match.group ?? undefined,
+            venue: item.match.venue ?? 'Por definir',
+            homeTeam: item.match.homeTeam.name,
+            awayTeam: item.match.awayTeam.name,
+            homeTeamCode: resolveTeamCompactCode(item.match.homeTeam.shortCode, item.match.homeTeam.code, item.match.homeTeam.name),
+            awayTeamCode: resolveTeamCompactCode(item.match.awayTeam.shortCode, item.match.awayTeam.code, item.match.awayTeam.name),
+            homeFlag: resolveFlagUrl(item.match.homeTeam.flagUrl, item.match.homeTeam.code),
+            awayFlag: resolveFlagUrl(item.match.awayTeam.flagUrl, item.match.awayTeam.code),
+            predictionHome: item.prediction.homeScore,
+            predictionAway: item.prediction.awayScore,
+            resultHome: item.match.homeScore ?? undefined,
+            resultAway: item.match.awayScore ?? undefined,
+        })),
+        bonuses: input.bonuses,
+    };
 }
