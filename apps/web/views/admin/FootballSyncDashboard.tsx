@@ -545,6 +545,7 @@ const FootballSyncDashboard: React.FC = () => {
                         { label: 'Historial', description: 'Revisa ejecuciones anteriores y resultados del sync.', path: '/admin/football-sync/history' },
                         { label: 'Alertas', description: 'Abre errores, warnings y eventos por resolver.', path: '/admin/football-sync/alerts' },
                         { label: 'Estadísticas', description: 'Consulta frecuencia, rendimiento y consumo acumulado.', path: '/admin/football-sync/stats' },
+                        { label: 'Requests API', description: 'Ver cada llamada a API-Football con parámetros y respuesta completa.', path: '/admin/football-sync/api-logs' },
                         { label: 'Configuración', description: 'Modifica intervalos, límites y notificaciones.', path: '/admin/football-sync/config' },
                       ].map((item) => (
                         <button key={item.label} type="button" onClick={() => navigate(item.path)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100">

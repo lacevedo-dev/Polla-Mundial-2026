@@ -301,6 +301,8 @@ export class FootballSyncController {
         params: req.params,
         status: req.responseStatus,
         matchesFetched: req.matchesFetched,
+        externalId: req.externalId,
+        responseBody: req.responseBody,
         timestamp: req.createdAt,
       })),
     };

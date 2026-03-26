@@ -175,17 +175,9 @@ export class MatchSyncService {
       // Get today's date
       const today = new Date().toISOString().split('T')[0];
 
-      // Fetch fixtures from API-Football
+      // Fetch fixtures from API-Football (client already logs to ApiFootballRequest internally)
       this.logger.log(`Fetching fixtures for date: ${today}`);
       const response = await this.apiClient.getFixturesByDate(today);
-
-      // Log the request
-      await this.rateLimiter.logRequest(
-        '/fixtures',
-        { date: today },
-        200,
-        response.results,
-      );
 
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
