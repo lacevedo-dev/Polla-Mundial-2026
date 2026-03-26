@@ -47,7 +47,7 @@ export function resolveBaseUrl(mode: string, rawBaseUrl?: string): string {
     return configuredBaseUrl.replace(/\/+$/, '');
 }
 
-const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
+export const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
 
 export function resolveApiAssetUrl(rawPath?: string | null): string | undefined {
     const normalizedPath = rawPath?.trim();

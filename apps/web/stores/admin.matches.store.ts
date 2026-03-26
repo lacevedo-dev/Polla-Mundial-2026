@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { request, resolveBaseUrl } from '../api';
+import { request, BASE_URL } from '../api';
 import type { FootballMatchLinkCandidate } from '../types/football-sync';
 
 export interface AdminTeam {
@@ -258,7 +258,6 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
 
     getEmailPreviewHtml: async (id, type, leagueId) => {
         const token = localStorage.getItem('token');
-        const BASE_URL = resolveBaseUrl(import.meta.env.MODE, import.meta.env.VITE_API_URL);
         const path = type === 'start'
             ? `/admin/prediction-report/preview/${id}/${leagueId}`
             : `/admin/prediction-report/preview-results/${id}/${leagueId}`;
