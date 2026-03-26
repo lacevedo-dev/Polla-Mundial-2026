@@ -777,6 +777,7 @@ interface CompactMatchRowProps {
     isParticipationOpen: boolean;
     onToggleParticipation: () => void;
     onAdvanceTeamSelect: (matchId: string, teamId: string) => void;
+    syncIntervalMinutes?: number;
 }
 
 function CompactMatchRow({
@@ -808,6 +809,7 @@ function CompactMatchRow({
     isParticipationOpen,
     onToggleParticipation,
     onAdvanceTeamSelect,
+    syncIntervalMinutes = 5,
 }: CompactMatchRowProps) {
     const [insightsLevel, setInsightsLevel] = React.useState<'none' | 'suggestions' | 'full'>('none');
     const hasBeenConsulted = cachedInsights !== null;
@@ -821,7 +823,7 @@ function CompactMatchRow({
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-900">{formatMatchTime(match.date)}</span>
                             <span className="text-[8px] font-black uppercase tracking-wider text-amber-500">
-                                {match.status === 'live' ? `Act. ~${liveSync.syncIntervalMinutes}m` : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
+                                {match.status === 'live' ? `Act. ~${syncIntervalMinutes}m` : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -1307,7 +1309,7 @@ function CompactMatchRow({
                                 Grupo {match.group}
                             </span>
                         )}
-                        <span className="text-slate-400">• {match.status === 'live' ? `Act. ~${liveSync.syncIntervalMinutes}m` : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
+                        <span className="text-slate-400">• {match.status === 'live' ? `Act. ~${syncIntervalMinutes}m` : summarizeCloseTime(match.date, closePredictionMinutes, currentTime)}</span>
                         {match.saved && (
                             <span className="ml-auto font-bold text-lime-600">
                                 ✓ {match.prediction.home}-{match.prediction.away}
@@ -2965,6 +2967,7 @@ const Predictions: React.FC = () => {
                                                                 closePredictionMinutes={activeLeague?.settings?.closePredictionMinutes}
                                                                 currentTime={currentTime}
                                                                 speedMode={speedEntryMode}
+                                                                syncIntervalMinutes={liveSync.syncIntervalMinutes}
                                                                 cachedInsights={cachedInsights}
                                                                 insightsLoading={insightsLoading}
                                                                 analysisMatchId={analysisMatchId}
