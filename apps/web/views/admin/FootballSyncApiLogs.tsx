@@ -75,7 +75,7 @@ export default function FootballSyncApiLogs() {
         setIsLoading(true);
         setError(null);
         try {
-            const res = await request<ApiLogsResponse>('/football-sync/requests/today');
+            const res = await request<ApiLogsResponse>('/admin/football/requests/today');
             setData(res);
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : 'Error al cargar logs');
