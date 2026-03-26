@@ -58,7 +58,7 @@ export class ApiFootballClient {
    * Get fixture by ID
    */
   async getFixtureById(fixtureId: number): Promise<ApiFootballResponse> {
-    return this.makeRequest('/fixtures', { id: fixtureId });
+    return this.makeRequest('/fixtures', { id: fixtureId }, String(fixtureId));
   }
 
   /**
@@ -67,6 +67,7 @@ export class ApiFootballClient {
   private async makeRequest(
     endpoint: string,
     params: Record<string, unknown>,
+    externalId?: string,
   ): Promise<ApiFootballResponse> {
     if (!this.apiKey) {
       throw new HttpException('API_FOOTBALL_KEY not configured', 500);
@@ -106,7 +107,8 @@ export class ApiFootballClient {
         `API-Football success: ${resultsCount} results from ${endpoint} — remaining: ${this.lastKnownRemaining ?? 'unknown'}`,
       );
 
-      await this.logUsage(endpoint, params, response.status, resultsCount);
+      const responseBody = JSON.stringify(response.data).slice(0, 60_000);
+      await this.logUsage(endpoint, params, response.status, resultsCount, externalId, responseBody);
 
       return response.data;
     } catch (error: any) {
@@ -133,10 +135,12 @@ export class ApiFootballClient {
     params: Record<string, unknown>,
     responseStatus: number,
     matchesFetched: number,
+    externalId?: string,
+    responseBody?: string,
   ): Promise<void> {
     try {
       await this.prisma.apiFootballRequest.create({
-        data: { endpoint, params: params as any, responseStatus, matchesFetched },
+        data: { endpoint, params: params as any, responseStatus, matchesFetched, externalId, responseBody },
       });
     } catch (err: any) {
       this.logger.warn(`Failed to log API-Football usage: ${err.message}`);

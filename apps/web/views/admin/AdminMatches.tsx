@@ -7,7 +7,7 @@ import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
 import TournamentImportModal from '../../components/admin/TournamentImportModal';
 import { useAdminMatchesStore } from '../../stores/admin.matches.store';
-import type { AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament } from '../../stores/admin.matches.store';
+import type { AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
 
 const PHASES = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
@@ -171,7 +171,7 @@ const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boole
 };
 
 const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
-  const { updateMatch, syncMatch, fetchLinkCandidates, fetchMatchHistory, isSaving } = useAdminMatchesStore();
+  const { updateMatch, syncMatch, fetchLinkCandidates, fetchMatchHistory, getMatchApiHistory, isSaving } = useAdminMatchesStore();
   const [externalId, setExternalId] = React.useState(match?.externalId ?? '');
   const [candidates, setCandidates] = React.useState<FootballMatchLinkCandidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = React.useState('');
@@ -180,6 +180,8 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
   const [localError, setLocalError] = React.useState<string | null>(null);
   const [syncHistory, setSyncHistory] = React.useState<AdminMatchSyncLog[]>([]);
   const [linkAudit, setLinkAudit] = React.useState<AdminMatchLinkAudit[]>([]);
+  const [apiHistory, setApiHistory] = React.useState<ApiCallLog[]>([]);
+  const [expandedApiLog, setExpandedApiLog] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setExternalId(match?.externalId ?? '');
@@ -188,6 +190,8 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
     setLocalError(null);
     setSyncHistory([]);
     setLinkAudit([]);
+    setApiHistory([]);
+    setExpandedApiLog(null);
   }, [match]);
 
   React.useEffect(() => {
@@ -197,10 +201,14 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
     const loadHistory = async () => {
       try {
         setIsLoadingHistory(true);
-        const history = await fetchMatchHistory(match.id);
+        const [history, apiLogs] = await Promise.all([
+          fetchMatchHistory(match.id),
+          getMatchApiHistory(match.id).catch(() => [] as ApiCallLog[]),
+        ]);
         if (!mounted) return;
         setSyncHistory(history.syncLogs);
         setLinkAudit(history.linkAudit);
+        setApiHistory(apiLogs);
       } catch (error: any) {
         if (mounted) setLocalError(error?.message || 'No se pudo cargar el historial');
       } finally {
@@ -212,7 +220,7 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
     return () => {
       mounted = false;
     };
-  }, [open, match?.id, fetchMatchHistory]);
+  }, [open, match?.id, fetchMatchHistory, getMatchApiHistory]);
 
   const handleSearchCandidates = async () => {
     try {
@@ -384,6 +392,45 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
             </div>
           </div>
 
+          {apiHistory.length > 0 && (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Historial de llamadas API ({apiHistory.length})</p>
+              <div className="mt-3 space-y-2">
+                {apiHistory.map((log) => {
+                  const isExpanded = expandedApiLog === log.id;
+                  const statusColor = log.responseStatus >= 200 && log.responseStatus < 300
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : log.responseStatus >= 400
+                      ? 'bg-rose-100 text-rose-700'
+                      : 'bg-amber-100 text-amber-700';
+                  return (
+                    <div key={log.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${statusColor}`}>{log.responseStatus}</span>
+                        <span className="text-[11px] font-bold text-slate-700">{log.endpoint}</span>
+                        <span className="ml-auto text-[11px] text-slate-400">{formatDateTime(log.createdAt)}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-500">{log.matchesFetched} partido{log.matchesFetched !== 1 ? 's' : ''} recibido{log.matchesFetched !== 1 ? 's' : ''}</p>
+                      {log.responseBody && (
+                        <button
+                          onClick={() => setExpandedApiLog(isExpanded ? null : log.id)}
+                          className="mt-2 text-[11px] font-bold text-violet-600 hover:underline"
+                        >
+                          {isExpanded ? 'Ocultar respuesta' : 'Ver respuesta JSON'}
+                        </button>
+                      )}
+                      {isExpanded && log.responseBody && (
+                        <pre className="mt-2 max-h-60 overflow-auto rounded-lg border border-slate-200 bg-slate-900 p-3 text-[11px] text-emerald-300 whitespace-pre-wrap break-words">
+                          {(() => { try { return JSON.stringify(JSON.parse(log.responseBody), null, 2); } catch { return log.responseBody; } })()}
+                        </pre>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <button onClick={handleSave} disabled={isSaving} className="rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 disabled:opacity-60">Guardar</button>
             <button onClick={handleSync} disabled={isSaving || (!match?.externalId && !externalId.trim())} className="rounded-xl border border-lime-300 py-2.5 text-sm font-bold text-lime-700 transition-all hover:bg-lime-50 disabled:opacity-60">Sync ahora</button>
@@ -459,7 +506,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, autoLinkAndSync, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -618,6 +665,25 @@ const AdminMatches: React.FC = () => {
     }
   }, [previewMatch, resendPredictionReport, resendResultsReport]);
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [syncFeedback, setSyncFeedback] = React.useState<string | null>(null);
+
+  const handleSyncOrAutoLink = React.useCallback(async (m: any) => {
+    if (m.externalId) {
+      await syncMatch(m.id);
+    } else {
+      try {
+        const result = await autoLinkAndSync(m.id);
+        if (result.wasLinked && result.candidate) {
+          setSyncFeedback(`Vinculado automáticamente (${result.candidate.fixtureId}) y sincronizado: ${result.message}`);
+        } else {
+          setSyncFeedback(result.message);
+        }
+        await fetchMatches();
+      } catch (e: any) {
+        setSyncFeedback(`Error: ${e?.message ?? 'No se pudo auto-vincular'}`);
+      }
+    }
+  }, [syncMatch, autoLinkAndSync, fetchMatches]);
 
   React.useEffect(() => {
     fetchMatches();
@@ -666,6 +732,12 @@ const AdminMatches: React.FC = () => {
         {reportFeedback && (
           <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700">
             {reportFeedback}
+          </div>
+        )}
+        {syncFeedback && (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-lime-200 bg-lime-50 px-4 py-2.5 text-sm font-medium text-lime-700">
+            <span>{syncFeedback}</span>
+            <button onClick={() => setSyncFeedback(null)} className="ml-2 text-lime-500 hover:text-lime-700"><X size={14} /></button>
           </div>
         )}
       </div>
@@ -857,7 +929,7 @@ const AdminMatches: React.FC = () => {
               </details>
               <div className="mt-4 grid grid-cols-6 gap-2">
                 <button onClick={() => setLinkMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Gestionar vínculo de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Link2 size={14} className="mx-auto" /></button>
-                <button onClick={() => syncMatch(match.id)} disabled={isSaving || !match.externalId} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
+                <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} title={match.externalId ? 'Sincronizar' : 'Auto-vincular y sincronizar'} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
                 <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
                 <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
                 <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
@@ -952,7 +1024,7 @@ const AdminMatches: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => setLinkMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-violet-50 hover:text-violet-600" title={match.externalId ? 'Gestionar vinculo' : 'Vincular'}><Link2 size={14} /></button>
-                    <button onClick={() => syncMatch(match.id)} disabled={isSaving || !match.externalId} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title="Sincronizar ahora"><RefreshCw size={14} /></button>
+                    <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title={match.externalId ? 'Sincronizar ahora' : 'Auto-vincular y sincronizar'}><RefreshCw size={14} /></button>
                     <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Ver y enviar correo de arranque"><Mail size={14} /></button>
                     <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Ver y enviar correo de cierre"><MailCheck size={14} /></button>
                     <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>

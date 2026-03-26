@@ -573,6 +573,96 @@ export class MatchSyncService {
   /**
    * Link a match to an external API-Football fixture ID
    */
+  async autoLinkAndSync(
+    matchId: string,
+    userId?: string,
+  ): Promise<{ wasLinked: boolean; candidate?: MatchLinkCandidateDto; synced: boolean; message: string }> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+
+    if (!match) throw new Error('Partido no encontrado');
+
+    let wasLinked = false;
+    let candidate: MatchLinkCandidateDto | undefined;
+
+    if (!match.externalId) {
+      const candidates = await this.findLinkCandidates(matchId);
+      const best = candidates.find((c) => c.confidence !== 'low');
+
+      if (!best) {
+        return {
+          wasLinked: false,
+          synced: false,
+          message: 'No se encontraron candidatos con suficiente confianza para vincular automáticamente.',
+        };
+      }
+
+      const previousExternalId = match.externalId ?? null;
+      await this.prisma.match.update({
+        where: { id: matchId },
+        data: { externalId: best.fixtureId },
+      });
+
+      if (userId) {
+        await this.prisma.auditLog.create({
+          data: {
+            userId,
+            action: 'MATCH_EXTERNAL_LINK_UPDATED',
+            detail: JSON.stringify({
+              matchId,
+              previousExternalId,
+              externalId: best.fixtureId,
+              linkSource: 'suggested',
+              autoLinked: true,
+            }),
+          },
+        });
+      }
+
+      wasLinked = true;
+      candidate = best;
+      this.logger.log(`Auto-linked match ${matchId} to fixture ${best.fixtureId} (${best.confidence} confidence)`);
+    }
+
+    const synced = await this.syncMatchById(matchId);
+
+    return {
+      wasLinked,
+      candidate,
+      synced,
+      message: wasLinked
+        ? `Auto-vinculado a ${candidate!.homeTeam} vs ${candidate!.awayTeam} (confianza: ${candidate!.confidence}) y ${synced ? 'sincronizado correctamente' : 'sincronización falló'}.`
+        : synced ? 'Sincronizado correctamente.' : 'Sincronización falló.',
+    };
+  }
+
+  async getMatchApiHistory(matchId: string) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: { externalId: true },
+    });
+    if (!match?.externalId) return [];
+
+    return this.prisma.apiFootballRequest.findMany({
+      where: { externalId: match.externalId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        date: true,
+        endpoint: true,
+        params: true,
+        responseStatus: true,
+        matchesFetched: true,
+        externalId: true,
+        responseBody: true,
+        createdAt: true,
+      },
+    });
+  }
+
   async linkMatchToFixture(
     matchId: string,
     externalId: string,
@@ -674,7 +764,8 @@ export class MatchSyncService {
 
       // Update match
       if (response.results > 0) {
-        const updated = await this.updateMatchFromFixture(response.response[0]);
+        const fixture = response.response[0];
+        const updated = await this.updateMatchFromFixture(fixture);
         await this.monitoring.createLog({
           type: SyncLogType.MATCH_SYNC,
           status: updated ? SyncLogStatus.SUCCESS : SyncLogStatus.FAILED,
@@ -683,6 +774,7 @@ export class MatchSyncService {
           message: updated
             ? 'Match sync completed successfully'
             : 'Match sync could not update the linked fixture',
+          details: JSON.stringify({ fixture }),
           requestsUsed: 1,
           matchesUpdated: updated ? 1 : 0,
           duration: Date.now() - startedAt,

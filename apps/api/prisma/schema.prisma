@@ -405,9 +405,12 @@ model ApiFootballRequest {
   params         String?  @db.LongText
   responseStatus Int
   matchesFetched Int      @default(0)
+  externalId     String?
+  responseBody   String?  @db.LongText
   createdAt      DateTime @default(now())
 
   @@index([date])
+  @@index([externalId])
 }
 
 model DailySyncPlan {

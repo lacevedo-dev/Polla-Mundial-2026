@@ -8,6 +8,7 @@ import {
   UseGuards,
   HttpException,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -183,6 +184,24 @@ export class FootballSyncController {
       message: 'Match synced successfully',
       matchId,
     };
+  }
+
+  /**
+   * Auto-link to best candidate (if unlinked) then sync
+   */
+  @Post('auto-link-and-sync/:matchId')
+  @ApiOperation({ summary: 'Auto-link match to best fixture candidate then sync' })
+  async autoLinkAndSync(@Param('matchId') matchId: string, @Req() req: any) {
+    return this.matchSync.autoLinkAndSync(matchId, req.user?.id);
+  }
+
+  /**
+   * Get API-Football request history for a specific match (by externalId)
+   */
+  @Get('match/:matchId/api-history')
+  @ApiOperation({ summary: 'Get API-Football request history for a match' })
+  async getMatchApiHistory(@Param('matchId') matchId: string) {
+    return this.matchSync.getMatchApiHistory(matchId);
   }
 
   /**

@@ -58,8 +58,25 @@ export interface AdminMatchSyncLog {
     status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'SKIPPED';
     type: string;
     message: string;
+    details?: string | null;
+    requestsUsed?: number;
+    matchesUpdated?: number;
+    duration?: number | null;
+    externalId?: string | null;
     error?: string | null;
     triggeredBy?: string | null;
+    createdAt: string;
+}
+
+export interface ApiCallLog {
+    id: string;
+    date: string;
+    endpoint: string;
+    params?: string | null;
+    responseStatus: number;
+    matchesFetched: number;
+    externalId?: string | null;
+    responseBody?: string | null;
     createdAt: string;
 }
 
@@ -117,6 +134,8 @@ interface AdminMatchesState {
     syncMatch: (id: string) => Promise<void>;
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
     fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
+    autoLinkAndSync: (id: string) => Promise<{ wasLinked: boolean; candidate?: any; synced: boolean; message: string }>;
+    getMatchApiHistory: (id: string) => Promise<ApiCallLog[]>;
     deleteMatch: (id: string) => Promise<void>;
     createTeam: (data: Partial<AdminTeam>) => Promise<void>;
     updateTeam: (id: string, data: Partial<AdminTeam>) => Promise<void>;
@@ -311,6 +330,17 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;
         }
+    },
+
+    autoLinkAndSync: async (id) => {
+        return request<{ wasLinked: boolean; candidate?: any; synced: boolean; message: string }>(
+            `/admin/football/auto-link-and-sync/${id}`,
+            { method: 'POST' },
+        );
+    },
+
+    getMatchApiHistory: async (id) => {
+        return request<ApiCallLog[]>(`/admin/football/match/${id}/api-history`);
     },
 
     deleteMatch: async (id) => {
