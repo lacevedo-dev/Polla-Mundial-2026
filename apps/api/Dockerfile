@@ -16,6 +16,7 @@ RUN apk add --no-cache openssl build-base python3
 # Copiar package.json principal y de los workspaces
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 
 # Instalar todas las dependencias (usando npm ci)
