@@ -65,7 +65,7 @@ const PodiumFirst: React.FC<{ player: LeaderboardRow; onSelect?: (id: string) =>
                     <p className="text-[10px] font-black uppercase leading-none text-lime-400">Puntos</p>
                     {(player.phaseBonusPoints ?? 0) > 0
                         ? <p className="text-[9px] font-bold text-amber-400/80">+{player.phaseBonusPoints} bono</p>
-                        : <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">LÃ­der</p>
+                        : <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Líder</p>
                     }
                 </div>
             </div>
@@ -169,7 +169,7 @@ const ParticipantsGrid: React.FC<{ players: LeaderboardRow[] }> = ({ players }) 
         <div className="mb-4 flex items-center gap-2 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
             <Trophy className="h-4 w-4 flex-shrink-0 text-amber-500" />
             <p className="text-xs font-bold text-amber-700">
-                El torneo aÃºn no ha comenzado â€” las posiciones se asignarÃ¡n cuando se disputen los primeros partidos.
+                El torneo aún no ha comenzado — las posiciones se asignarán cuando se disputen los primeros partidos.
             </p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -339,7 +339,7 @@ const Ranking: React.FC = () => {
                 <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.25em] text-lime-600">Ranking</p>
                     <h1 className="mt-1 text-3xl font-black uppercase tracking-tight text-slate-900 lg:text-4xl">
-                        Tabla de LÃ­deres
+                        Tabla de Líderes
                     </h1>
                     <p className="mt-1.5 text-sm text-slate-500">Compite por el primer lugar en tu liga.</p>
                 </div>
@@ -372,7 +372,7 @@ const Ranking: React.FC = () => {
                         {activeLeague && (
                             <p className="text-[10px] font-semibold text-slate-400">
                                 {leaderboard.length} participante{leaderboard.length !== 1 ? 's' : ''}
-                                {tournamentStarted ? '' : ' Â· Torneo aÃºn no iniciado'}
+                                {tournamentStarted ? '' : ' · Torneo aún no iniciado'}
                             </p>
                         )}
                     </div>
@@ -442,7 +442,7 @@ const Ranking: React.FC = () => {
                         <Users className="h-7 w-7 text-slate-200" />
                     </div>
                     <p className="font-black text-slate-900">Sin ligas</p>
-                    <p className="mt-1 text-sm text-slate-400">Ãšnete o crea una liga para ver el ranking.</p>
+                    <p className="mt-1 text-sm text-slate-400">Únete o crea una liga para ver el ranking.</p>
                 </div>
             )}
 
@@ -664,9 +664,9 @@ const Ranking: React.FC = () => {
                                 <span className="text-sm font-black text-slate-900">#{myEntry.rank}</span>
                             </div>
                             <div>
-                                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Tu posiciÃ³n</p>
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Tu posición</p>
                                 <p className="font-black text-white">
-                                    {myEntry.name} <span className="text-lime-400">(TÃº)</span>
+                                    {myEntry.name} <span className="text-lime-400">(Tú)</span>
                                 </p>
                             </div>
                         </div>
