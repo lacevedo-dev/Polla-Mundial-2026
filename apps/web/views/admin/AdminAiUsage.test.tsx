@@ -86,4 +86,19 @@ describe('AdminAiUsage', () => {
         expect(screen.getAllByText(/Colombia/).length).toBeGreaterThan(0);
         expect(screen.getByText(/smartPick/)).toBeInTheDocument();
     });
+
+    it('shows mobile-friendly tabs and copy actions in the detail modal', async () => {
+        const user = userEvent.setup();
+        render(<AdminAiUsage />);
+
+        await user.click(screen.getByRole('button', { name: /Ver consulta/i }));
+
+        expect(screen.getByRole('button', { name: /Solicitud/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Respuesta/i })).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /Copiar/i })).toHaveLength(2);
+
+        await user.click(screen.getByRole('button', { name: /Respuesta/i }));
+
+        expect(screen.getByText(/scores/i)).toBeInTheDocument();
+    });
 });

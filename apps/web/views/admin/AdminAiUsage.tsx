@@ -39,6 +39,44 @@ function parseJson(value?: string | null): unknown {
     }
 }
 
+function stringifyJson(value: unknown): string {
+    return JSON.stringify(value, null, 2);
+}
+
+function JsonPanel({
+    title,
+    payload,
+    emptyState,
+    className = '',
+}: {
+    title: string;
+    payload: unknown;
+    emptyState: Record<string, string>;
+    className?: string;
+}) {
+    const content = stringifyJson(payload ?? emptyState);
+
+    return (
+        <div className={`rounded-2xl border border-slate-200 p-4 ${className}`}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {title}
+                </p>
+                <button
+                    type="button"
+                    onClick={() => void navigator.clipboard?.writeText(content)}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                >
+                    Copiar
+                </button>
+            </div>
+            <pre className="max-h-[48vh] overflow-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100 sm:max-h-[32rem]">
+                {content}
+            </pre>
+        </div>
+    );
+}
+
 function DetailModal({
     record,
     onClose,
@@ -46,17 +84,21 @@ function DetailModal({
     record: AiUsageRecord;
     onClose: () => void;
 }) {
+    const [activeTab, setActiveTab] = React.useState<'request' | 'response'>('request');
+    const requestPayload = parseJson(record.requestData) ?? { detalle: record.clientInfo ?? 'Sin requestData' };
+    const responsePayload = parseJson(record.responseData) ?? { respuesta: 'Sin responseData' };
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-            <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
-                <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+            <div className="flex h-[100dvh] w-full flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:max-h-[90vh] sm:max-w-5xl sm:rounded-[1.75rem]">
+                <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white px-4 py-4 sm:px-6 sm:py-5">
                     <div>
                         <p className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-600">
                             Detalle de consulta IA
                         </p>
                         <h3 className="mt-1 text-xl font-black text-slate-900">{record.user.name}</h3>
                         <p className="mt-1 text-sm text-slate-500">
-                            {formatFeature(record.feature)} · {formatDate(record.createdAt)}
+                            {formatFeature(record.feature)} {'\u00B7'} {formatDate(record.createdAt)}
                         </p>
                     </div>
                     <button
@@ -69,7 +111,7 @@ function DetailModal({
                     </button>
                 </div>
 
-                <div className="grid gap-6 overflow-y-auto px-6 py-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="grid flex-1 gap-4 overflow-y-auto px-4 py-4 sm:gap-6 sm:px-6 sm:py-5 lg:grid-cols-[320px_minmax(0,1fr)]">
                     <div className="space-y-4">
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
@@ -95,7 +137,7 @@ function DetailModal({
                                 {record.clientInfo ? (
                                     <div>
                                         <dt className="font-black text-slate-900">Contexto</dt>
-                                        <dd className="text-slate-600">{record.clientInfo}</dd>
+                                        <dd className="break-words text-slate-600">{record.clientInfo}</dd>
                                     </div>
                                 ) : null}
                                 {record.leagueId ? (
@@ -115,31 +157,44 @@ function DetailModal({
                     </div>
 
                     <div className="space-y-4">
-                        <div className="rounded-2xl border border-slate-200 p-4">
-                            <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                Consulta enviada
-                            </p>
-                            <pre className="overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-                                {JSON.stringify(
-                                    parseJson(record.requestData) ?? { detalle: record.clientInfo ?? 'Sin requestData' },
-                                    null,
-                                    2,
-                                )}
-                            </pre>
+                        <div className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1 lg:hidden">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('request')}
+                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition ${
+                                    activeTab === 'request'
+                                        ? 'bg-white text-slate-900 shadow-sm'
+                                        : 'text-slate-500'
+                                }`}
+                            >
+                                Solicitud
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('response')}
+                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition ${
+                                    activeTab === 'response'
+                                        ? 'bg-white text-slate-900 shadow-sm'
+                                        : 'text-slate-500'
+                                }`}
+                            >
+                                Respuesta
+                            </button>
                         </div>
 
-                        <div className="rounded-2xl border border-slate-200 p-4">
-                            <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                Respuesta registrada
-                            </p>
-                            <pre className="overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-                                {JSON.stringify(
-                                    parseJson(record.responseData) ?? { respuesta: 'Sin responseData' },
-                                    null,
-                                    2,
-                                )}
-                            </pre>
-                        </div>
+                        <JsonPanel
+                            title="Consulta enviada"
+                            payload={requestPayload}
+                            emptyState={{ detalle: record.clientInfo ?? 'Sin requestData' }}
+                            className={activeTab === 'request' ? 'block' : 'hidden lg:block'}
+                        />
+
+                        <JsonPanel
+                            title="Respuesta registrada"
+                            payload={responsePayload}
+                            emptyState={{ respuesta: 'Sin responseData' }}
+                            className={activeTab === 'response' ? 'block' : 'hidden lg:block'}
+                        />
                     </div>
                 </div>
             </div>
