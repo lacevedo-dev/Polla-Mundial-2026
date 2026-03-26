@@ -112,6 +112,7 @@ interface AdminMatchesState {
     resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     getMatchPreviewLeagues: (id: string) => Promise<{ id: string; name: string; code: string }[]>;
+    getMatchLeagueRecipients: (matchId: string, leagueId: string) => Promise<{ emails: string[]; count: number }>;
     getEmailPreviewHtml: (id: string, type: 'start' | 'results', leagueId: string) => Promise<string>;
     syncMatch: (id: string) => Promise<void>;
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
@@ -253,6 +254,12 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
     getMatchPreviewLeagues: async (id) => {
         return request<{ id: string; name: string; code: string }[]>(
             `/admin/prediction-report/leagues/${id}`,
+        );
+    },
+
+    getMatchLeagueRecipients: async (matchId, leagueId) => {
+        return request<{ emails: string[]; count: number }>(
+            `/admin/prediction-report/recipients/${matchId}/${leagueId}`,
         );
     },
 

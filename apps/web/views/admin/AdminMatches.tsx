@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Edit3, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Trash2, Trophy, Unlink2, X } from 'lucide-react';
+import { ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
@@ -458,7 +459,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getEmailPreviewHtml } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -472,6 +473,10 @@ const AdminMatches: React.FC = () => {
   const [previewLeagueId, setPreviewLeagueId] = React.useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewRecipients, setPreviewRecipients] = React.useState<string[]>([]);
+  const [showAllRecipients, setShowAllRecipients] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   const filteredMatches = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -505,41 +510,96 @@ const AdminMatches: React.FC = () => {
       setRecalculating(false);
     }
   }, []);
-  const loadPreviewHtml = React.useCallback(async (matchId: string, type: 'start' | 'results', leagueId: string) => {
+  const loadPreviewForLeague = React.useCallback(async (matchId: string, type: 'start' | 'results', leagueId: string) => {
     setPreviewLoading(true);
     setPreviewHtml(null);
+    setPreviewRecipients([]);
     try {
-      const html = await getEmailPreviewHtml(matchId, type, leagueId);
+      const [html, { emails }] = await Promise.all([
+        getEmailPreviewHtml(matchId, type, leagueId),
+        getMatchLeagueRecipients(matchId, leagueId),
+      ]);
       setPreviewHtml(html);
+      setPreviewRecipients(emails);
     } catch {
       setPreviewHtml('<p style="font-family:sans-serif;padding:2rem;color:red">Error al cargar el preview del correo.</p>');
     } finally {
       setPreviewLoading(false);
     }
-  }, [getEmailPreviewHtml]);
+  }, [getEmailPreviewHtml, getMatchLeagueRecipients]);
 
   const handleOpenPreview = React.useCallback(async (match: any, type: 'start' | 'results') => {
     setPreviewMatch({ match, type });
     setPreviewLeagues([]);
     setPreviewLeagueId(null);
     setPreviewHtml(null);
+    setPreviewRecipients([]);
+    setShowAllRecipients(false);
     try {
       const leagues = await getMatchPreviewLeagues(match.id);
       setPreviewLeagues(leagues);
       if (leagues.length > 0) {
         setPreviewLeagueId(leagues[0].id);
-        void loadPreviewHtml(match.id, type, leagues[0].id);
+        void loadPreviewForLeague(match.id, type, leagues[0].id);
       }
     } catch {
       setPreviewHtml('<p style="font-family:sans-serif;padding:2rem;color:red">Error al cargar las pollas del partido.</p>');
     }
-  }, [getMatchPreviewLeagues, loadPreviewHtml]);
+  }, [getMatchPreviewLeagues, loadPreviewForLeague]);
 
   const handleLeagueChange = React.useCallback((leagueId: string) => {
     if (!previewMatch) return;
     setPreviewLeagueId(leagueId);
-    void loadPreviewHtml(previewMatch.match.id, previewMatch.type, leagueId);
-  }, [previewMatch, loadPreviewHtml]);
+    setShowAllRecipients(false);
+    void loadPreviewForLeague(previewMatch.match.id, previewMatch.type, leagueId);
+  }, [previewMatch, loadPreviewForLeague]);
+
+  const handleExportPdf = React.useCallback(() => {
+    iframeRef.current?.contentWindow?.print();
+  }, []);
+
+  const handleExportImage = React.useCallback(async () => {
+    const iframeDoc = iframeRef.current?.contentDocument;
+    if (!iframeDoc?.body) return;
+    setExporting(true);
+    try {
+      const canvas = await html2canvas(iframeDoc.body, { useCORS: true, scale: 2 });
+      const link = document.createElement('a');
+      const matchName = previewMatch ? `${previewMatch.match.homeTeam.name}_vs_${previewMatch.match.awayTeam.name}` : 'correo';
+      link.download = `${matchName}_${previewMatch?.type ?? 'preview'}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  }, [previewMatch]);
+
+  const handleShareWhatsApp = React.useCallback(async () => {
+    const iframeDoc = iframeRef.current?.contentDocument;
+    if (!iframeDoc?.body) return;
+    setExporting(true);
+    try {
+      const canvas = await html2canvas(iframeDoc.body, { useCORS: true, scale: 1.5 });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], 'correo.png', { type: 'image/png' });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Correo polla' });
+        } else {
+          // Fallback: descargar imagen y abrir WhatsApp Web
+          const url = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = 'correo.png';
+          link.href = url;
+          link.click();
+          window.open('https://web.whatsapp.com/', '_blank');
+        }
+        setExporting(false);
+      }, 'image/png');
+    } catch {
+      setExporting(false);
+    }
+  }, []);
 
   const handleConfirmSend = React.useCallback(async () => {
     if (!previewMatch) return;
@@ -548,6 +608,7 @@ const AdminMatches: React.FC = () => {
     setPreviewLeagues([]);
     setPreviewLeagueId(null);
     setPreviewHtml(null);
+    setPreviewRecipients([]);
     if (type === 'start') {
       const result = await resendPredictionReport(match.id);
       setReportFeedback(`Arranque reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
@@ -930,10 +991,11 @@ const AdminMatches: React.FC = () => {
         }}
       />
 
-      <DialogPrimitive.Root open={!!previewMatch} onOpenChange={(open) => { if (!open) { setPreviewMatch(null); setPreviewLeagues([]); setPreviewLeagueId(null); setPreviewHtml(null); } }}>
+      <DialogPrimitive.Root open={!!previewMatch} onOpenChange={(open) => { if (!open) { setPreviewMatch(null); setPreviewLeagues([]); setPreviewLeagueId(null); setPreviewHtml(null); setPreviewRecipients([]); setShowAllRecipients(false); } }}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
           <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 flex h-[90vh] w-[95vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
+            {/* Header */}
             <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4 gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
@@ -961,6 +1023,32 @@ const AdminMatches: React.FC = () => {
                 <X size={18} />
               </DialogPrimitive.Close>
             </div>
+
+            {/* Lista de destinatarios */}
+            {previewRecipients.length > 0 && (
+              <div className="border-b border-slate-100 bg-slate-50 px-6 py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAllRecipients((v) => !v)}
+                  className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  <Mail size={13} />
+                  {previewRecipients.length} destinatario{previewRecipients.length !== 1 ? 's' : ''}
+                  <ChevronDown size={13} className={`transition-transform ${showAllRecipients ? 'rotate-180' : ''}`} />
+                </button>
+                {showAllRecipients && (
+                  <div className="mt-2 flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                    {previewRecipients.map((email) => (
+                      <span key={email} className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+                        {email}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Preview del correo */}
             <div className="flex-1 overflow-hidden">
               {previewLoading ? (
                 <div className="flex h-full items-center justify-center">
@@ -968,6 +1056,7 @@ const AdminMatches: React.FC = () => {
                 </div>
               ) : previewHtml ? (
                 <iframe
+                  ref={iframeRef}
                   srcDoc={previewHtml}
                   className="h-full w-full border-0"
                   title="Preview del correo"
@@ -975,18 +1064,48 @@ const AdminMatches: React.FC = () => {
                 />
               ) : null}
             </div>
-            <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
-              <DialogPrimitive.Close className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">
-                Cancelar
-              </DialogPrimitive.Close>
-              <button
-                onClick={() => void handleConfirmSend()}
-                disabled={isSaving || previewLoading}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-500 py-2.5 text-sm font-bold text-white transition-all hover:bg-sky-600 disabled:opacity-60"
-              >
-                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                Enviar correo
-              </button>
+
+            {/* Footer de acciones */}
+            <div className="border-t border-slate-100 px-6 py-4 space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExportPdf}
+                  disabled={!previewHtml || previewLoading}
+                  title="Guardar como PDF"
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <Download size={14} /> PDF
+                </button>
+                <button
+                  onClick={() => void handleExportImage()}
+                  disabled={!previewHtml || previewLoading || exporting}
+                  title="Guardar como imagen"
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:opacity-40"
+                >
+                  {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileImage size={14} />} Imagen
+                </button>
+                <button
+                  onClick={() => void handleShareWhatsApp()}
+                  disabled={!previewHtml || previewLoading || exporting}
+                  title="Compartir por WhatsApp"
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition-all hover:bg-emerald-100 disabled:opacity-40"
+                >
+                  {exporting ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />} WhatsApp
+                </button>
+              </div>
+              <div className="flex gap-3">
+                <DialogPrimitive.Close className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">
+                  Cancelar
+                </DialogPrimitive.Close>
+                <button
+                  onClick={() => void handleConfirmSend()}
+                  disabled={isSaving || previewLoading}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-500 py-2.5 text-sm font-bold text-white transition-all hover:bg-sky-600 disabled:opacity-60"
+                >
+                  {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  Enviar a {previewRecipients.length > 0 ? `${previewRecipients.length} correo${previewRecipients.length !== 1 ? 's' : ''}` : 'todos'}
+                </button>
+              </div>
             </div>
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>

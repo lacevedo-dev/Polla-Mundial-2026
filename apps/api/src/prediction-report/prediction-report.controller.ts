@@ -70,6 +70,15 @@ export class PredictionReportController {
     return this.reportService.getMatchLeagues(matchId);
   }
 
+  @Get('recipients/:matchId/:leagueId')
+  async getRecipients(
+    @Param('matchId') matchId: string,
+    @Param('leagueId') leagueId: string,
+  ): Promise<{ emails: string[]; count: number }> {
+    const { recipients } = await this.reportService.getLeagueAudience(leagueId);
+    return { emails: recipients, count: recipients.length };
+  }
+
   @Get('preview-results/:matchId/:leagueId')
   async previewResultsForLeague(
     @Param('matchId') matchId: string,

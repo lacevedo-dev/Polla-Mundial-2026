@@ -567,6 +567,10 @@ export class PredictionReportService {
     return result;
   }
 
+  async getLeagueAudience(leagueId: string) {
+    return this.getLeagueReportAudience(leagueId);
+  }
+
   private async getLeagueReportAudience(leagueId: string) {
     const members = await this.prisma.leagueMember.findMany({
       where: {
