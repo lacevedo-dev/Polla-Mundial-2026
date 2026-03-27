@@ -746,7 +746,7 @@ export class MatchSyncService {
     const unlinked = await this.prisma.match.findMany({
       where: {
         externalId: null,
-        matchStatus: { in: ['SCHEDULED', 'LIVE'] },
+        status: { in: ['SCHEDULED', 'LIVE'] },
       },
       include: { homeTeam: true, awayTeam: true },
       orderBy: { matchDate: 'asc' },

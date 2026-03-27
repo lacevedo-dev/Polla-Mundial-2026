@@ -32,7 +32,6 @@ import {
 } from './dto/api-football.dto';
 import { IsString, IsNumber, IsBoolean, IsOptional, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Query } from '@nestjs/common';
 import { TournamentImportService } from './services/tournament-import.service';
 
 class LinkMatchDto {

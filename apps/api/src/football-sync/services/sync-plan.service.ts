@@ -537,17 +537,24 @@ export class SyncPlanService {
   }
 
   /**
-   * Get today's date string (YYYY-MM-DD)
+   * Get today's date string (YYYY-MM-DD) in Colombia timezone (UTC-5)
    */
   private getToday(): string {
-    return new Date().toISOString().split('T')[0];
+    // Colombia is UTC-5 (no DST). Shift now back 5h to get local COT date.
+    const bogotaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    return bogotaNow.toISOString().split('T')[0];
   }
 
   /**
-   * Get start of today
+   * Get start of today in Colombia timezone (UTC-5).
+   * Returns the UTC equivalent of 00:00:00 COT today, i.e. 05:00:00 UTC.
    */
   private getTodayStart(): Date {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const bogotaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    const y = bogotaNow.getUTCFullYear();
+    const m = bogotaNow.getUTCMonth();
+    const d = bogotaNow.getUTCDate();
+    // Midnight COT = 05:00 UTC
+    return new Date(Date.UTC(y, m, d, 5, 0, 0));
   }
 }

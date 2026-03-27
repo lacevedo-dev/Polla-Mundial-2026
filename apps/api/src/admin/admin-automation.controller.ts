@@ -29,7 +29,7 @@ export class AdminAutomationController {
     const twilioSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
     const twilioToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
     const vapidKey = this.config.get<string>('VAPID_PUBLIC_KEY');
-    const smtpHost = this.config.get<string>('SMTP_HOST') ?? this.config.get<string>('MAIL_HOST');
+    const smtpHost = this.config.get<string>('EMAIL_HOST') ?? this.config.get<string>('SMTP_HOST') ?? this.config.get<string>('MAIL_HOST');
 
     const channels = {
       inApp: { enabled: true, description: 'Siempre activo' },
