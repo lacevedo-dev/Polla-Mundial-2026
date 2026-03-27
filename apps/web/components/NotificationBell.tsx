@@ -85,8 +85,16 @@ export default function NotificationBell() {
   const [loading, setLoading]       = useState(false);
   const [activeFilter, setFilter]   = useState<string | null>(null);
   const [hideRead, setHideRead]     = useState(true);
+  const [isDesktop, setIsDesktop]   = useState(() => window.innerWidth >= 768);
   const containerRef                = useRef<HTMLDivElement>(null);
   const navigate                    = useNavigate();
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -158,9 +166,10 @@ export default function NotificationBell() {
 
   const allNotifs = data?.notifications ?? [];
 
-  // Tipos presentes con sus conteos de no leídas
+  // Tipos presentes respetando hideRead (si "solo nuevas", solo muestro tipos con no leídas)
+  const baseForFilters = hideRead ? allNotifs.filter(n => !n.read) : allNotifs;
   const typesPresent = Array.from(
-    allNotifs.reduce((acc, n) => {
+    baseForFilters.reduce((acc, n) => {
       if (!acc.has(n.type)) acc.set(n.type, 0);
       if (!n.read) acc.set(n.type, acc.get(n.type)! + 1);
       return acc;
@@ -263,8 +272,11 @@ export default function NotificationBell() {
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                 }`}
               >
-                <span className="hidden md:inline">Todos</span>
-                <span className="md:hidden text-base leading-none">🔔</span>
+                {isDesktop ? (
+                  <span>Todos</span>
+                ) : (
+                  <span className="text-base leading-none">🔔</span>
+                )}
                 {unread > 0 && (
                   <span className="min-w-[15px] h-[15px] px-0.5 rounded-full bg-lime-400 text-black text-[9px] font-black flex items-center justify-center">
                     {unread}
@@ -284,7 +296,7 @@ export default function NotificationBell() {
                   }`}
                 >
                   <span className="text-base leading-none">{TYPE_ICONS[type] ?? '🔔'}</span>
-                  <span className="hidden md:inline">{TYPE_LABELS[type] ?? type}</span>
+                  {isDesktop && <span>{TYPE_LABELS[type] ?? type}</span>}
                   {unreadOfType > 0 && (
                     <span className="min-w-[15px] h-[15px] px-0.5 rounded-full bg-lime-400 text-black text-[9px] font-black flex items-center justify-center">
                       {unreadOfType}
