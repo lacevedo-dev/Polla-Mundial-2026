@@ -41,7 +41,9 @@ export class NotificationScheduler {
   }
 
   /**
-   * Cada minuto: partidos que empiezan en ~60 minutos → recordatorio
+   * Cada minuto: partidos que empiezan en ~60 minutos → recordatorio.
+   * Parte desde leagues activas (igual que sendPredictionClosingAlerts) para
+   * garantizar que el traversal retorne miembros aunque tournamentId esté seteado.
    */
   @Cron('* * * * *')
   async sendMatchReminders(): Promise<void> {
@@ -50,67 +52,91 @@ export class NotificationScheduler {
       const from = new Date(now.getTime() + 55 * 60 * 1000);
       const to = new Date(now.getTime() + 65 * 60 * 1000);
 
-      const matches = await this.prisma.match.findMany({
+      const leagues = await this.prisma.league.findMany({
         where: {
-          status: MatchStatus.SCHEDULED,
-          matchDate: { gte: from, lte: to },
-        },
-        include: {
-          homeTeam: true,
-          awayTeam: true,
-          predictions: { select: { userId: true } },
-        },
-      });
-
-      for (const match of matches) {
-        const home = match.homeTeam.name;
-        const away = match.awayTeam.name;
-        const predictedUserIds = new Set(match.predictions.map(p => p.userId));
-
-        // Get all active members across all active leagues that have this match
-        const leagueMembers = await this.prisma.leagueMember.findMany({
-          where: {
-            status: 'ACTIVE',
-            league: {
-              status: 'ACTIVE',
-              leagueTournaments: {
-                some: {
-                  tournament: {
-                    matches: { some: { id: match.id } },
+          status: 'ACTIVE',
+          leagueTournaments: {
+            some: {
+              tournament: {
+                matches: {
+                  some: {
+                    status: MatchStatus.SCHEDULED,
+                    matchDate: { gte: from, lte: to },
                   },
                 },
               },
             },
           },
-          select: { userId: true },
-          distinct: ['userId'],
-        });
-
-        for (const member of leagueMembers) {
-          const userId = member.userId;
-
-          // Check duplicate
-          const alreadySent = await this.prisma.notification.findFirst({
-            where: {
-              userId,
-              type: NotificationType.MATCH_REMINDER,
-              data: { contains: match.id },
+        },
+        select: {
+          id: true,
+          members: {
+            where: { status: 'ACTIVE' },
+            select: { userId: true },
+          },
+          leagueTournaments: {
+            select: {
+              tournament: {
+                select: {
+                  matches: {
+                    where: {
+                      status: MatchStatus.SCHEDULED,
+                      matchDate: { gte: from, lte: to },
+                    },
+                    select: {
+                      id: true,
+                      matchDate: true,
+                      homeTeam: { select: { name: true } },
+                      awayTeam: { select: { name: true } },
+                      predictions: { select: { userId: true } },
+                    },
+                  },
+                },
+              },
             },
-          });
-          if (alreadySent) continue;
+          },
+        },
+      });
 
-          const hasPrediction = predictedUserIds.has(userId);
-          const body = hasPrediction
-            ? `⚽ En 1 hora: ${home} vs ${away} — ya tienes tu pronóstico guardado`
-            : `⚽ 1 hora para ${home} vs ${away} — ¡aún puedes pronosticar!`;
+      // Collect unique matchId+userId pairs to avoid duplicate sends per match
+      const notified = new Set<string>(); // `${matchId}:${userId}`
 
-          await this.notifyUser(
-            userId,
-            NotificationType.MATCH_REMINDER,
-            '⏰ Recordatorio de partido',
-            body,
-            { matchId: match.id },
-          );
+      for (const league of leagues) {
+        const matches = league.leagueTournaments.flatMap(lt => lt.tournament.matches);
+
+        for (const match of matches) {
+          const home = match.homeTeam.name;
+          const away = match.awayTeam.name;
+          const predictedUserIds = new Set(match.predictions.map(p => p.userId));
+
+          for (const member of league.members) {
+            const userId = member.userId;
+            const key = `${match.id}:${userId}`;
+            if (notified.has(key)) continue;
+
+            const alreadySent = await this.prisma.notification.findFirst({
+              where: {
+                userId,
+                type: NotificationType.MATCH_REMINDER,
+                data: { contains: match.id },
+              },
+            });
+            if (alreadySent) { notified.add(key); continue; }
+
+            const hasPrediction = predictedUserIds.has(userId);
+            const body = hasPrediction
+              ? `⚽ En 1 hora: ${home} vs ${away} — ya tienes tu pronóstico guardado`
+              : `⚽ 1 hora para ${home} vs ${away} — ¡aún puedes pronosticar!`;
+
+            await this.notifyUser(
+              userId,
+              NotificationType.MATCH_REMINDER,
+              '⏰ Recordatorio de partido',
+              body,
+              { matchId: match.id, leagueId: league.id },
+            );
+            notified.add(key);
+          }
         }
       }
     } catch (error) {
