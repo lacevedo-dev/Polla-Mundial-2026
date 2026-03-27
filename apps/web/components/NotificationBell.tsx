@@ -190,7 +190,7 @@ export default function NotificationBell() {
   const unread = data?.unreadCount ?? 0;
 
   return (
-    <div ref={containerRef} className="fixed top-3 right-20 md:right-4 z-[100]">
+    <div ref={containerRef} className="fixed top-3 right-3 md:right-4 z-[100]">
       {/* Botón campana */}
       <button
         onClick={handleOpen}
@@ -214,8 +214,12 @@ export default function NotificationBell() {
       {/* Panel */}
       {open && (
         <div
-          className="absolute top-[calc(100%+8px)] right-0 w-[340px] max-w-[calc(100vw-1.5rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-          style={{ maxHeight: 'calc(100vh - 80px)' }}
+          className="
+            fixed inset-x-0 bottom-0 top-[64px] rounded-t-2xl
+            md:absolute md:inset-auto md:top-[calc(100%+8px)] md:right-0 md:bottom-auto md:w-[340px] md:rounded-2xl
+            bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden flex flex-col z-[100]
+          "
+          style={{ maxHeight: 'calc(100vh - 64px)' }}
         >
           {/* ── Header row 1: título + acciones ─────────────────────────── */}
           <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-800">
