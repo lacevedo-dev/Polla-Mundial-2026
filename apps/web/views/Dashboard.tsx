@@ -1497,15 +1497,25 @@ const Dashboard: React.FC = () => {
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
 
     useEffect(() => {
-        if (liveMatches.length === 0) return;
+        // Solo carga eventos (goleadores) en partidos que están en entretiempo o
+        // que ya pasaron el minuto 44 — evita consumir requests de API-Football
+        // en cada actualización durante el juego normal.
+        const htMatches = liveMatches.filter(
+            (m) => m.statusShort === 'HT' || (m.elapsed != null && m.elapsed >= 44),
+        );
+        if (htMatches.length === 0) return;
         void Promise.all(
-            liveMatches.map((m) =>
+            htMatches.map((m) =>
                 request<MatchEventItem[]>(`/matches/${m.id}/events`)
                     .then((events) => ({ id: m.id, events }))
                     .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
             ),
         ).then((results) => {
-            setMatchEvents(new Map(results.map((r) => [r.id, r.events])));
+            setMatchEvents((prev) => {
+                const next = new Map(prev);
+                results.forEach((r) => next.set(r.id, r.events));
+                return next;
+            });
         });
     }, [liveMatches]);
 
@@ -1840,11 +1850,12 @@ const Dashboard: React.FC = () => {
 
                 return (
                     <motion.div {...fade(0.04)} className="space-y-2">
-                        {/* Row de chips */}
-                        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                            <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-rose-500" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-rose-600">En vivo</span>
+                        {/* Row de chips — estilo Google scores */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                            {/* Indicador "en vivo" */}
+                            <div className="flex items-center gap-1 shrink-0 mr-1">
+                                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">Live</span>
                             </div>
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
@@ -1855,35 +1866,57 @@ const Dashboard: React.FC = () => {
                                 const chipStatus = match.saved && !isNaN(pH) && !isNaN(pA) && match.result
                                     ? (pH === rH && pA === rA ? 'exact' : Math.sign(pH - pA) === Math.sign(rH - rA) ? 'winning' : 'losing')
                                     : null;
-                                const chipDot = chipStatus === 'exact' || chipStatus === 'winning' ? 'bg-lime-400' : chipStatus === 'losing' ? 'bg-rose-400' : 'bg-white/20';
+                                const accentColor = chipStatus === 'exact' || chipStatus === 'winning'
+                                    ? 'border-lime-500/40 shadow-lime-900/20'
+                                    : chipStatus === 'losing'
+                                    ? 'border-rose-500/40 shadow-rose-900/20'
+                                    : 'border-white/10';
+                                const scoreColor = chipStatus === 'exact' ? 'text-lime-300' : chipStatus === 'winning' ? 'text-lime-400' : 'text-white';
 
                                 return (
                                     <button
                                         key={match.id}
                                         onClick={() => setExpandedMatchId(isActive ? null : match.id)}
-                                        className={`shrink-0 flex items-center gap-2 rounded-2xl border px-3 py-2 transition-all ${
+                                        className={`shrink-0 flex items-center rounded-2xl border px-2.5 py-1.5 transition-all gap-1.5 ${
                                             isActive
-                                                ? 'bg-slate-900 border-rose-500/60 shadow-lg shadow-rose-900/30'
-                                                : 'bg-slate-900/60 border-white/10 hover:border-white/30'
+                                                ? `bg-slate-900 ${accentColor} shadow-lg`
+                                                : `bg-slate-900/70 ${accentColor} hover:bg-slate-900`
                                         }`}
                                         aria-expanded={isActive}
                                         aria-label={`${match.homeTeam} vs ${match.awayTeam}`}
                                     >
-                                        {/* dot */}
-                                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${chipDot}`} />
-                                        {/* flags + score */}
-                                        {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-5.5 rounded object-cover" />}
-                                        <span className="text-[11px] font-black text-white tabular-nums">
-                                            {match.result ? `${match.result.home}–${match.result.away}` : 'vs'}
-                                        </span>
-                                        {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-5.5 rounded object-cover" />}
-                                        {/* timer inline */}
-                                        <LiveMatchTimerInline
-                                            matchDate={match.date}
-                                            elapsed={match.elapsed ?? null}
-                                            lastSyncAt={liveSync.lastSyncAt}
-                                            statusShort={match.statusShort}
-                                        />
+                                        {/* Equipo local: bandera + código */}
+                                        <div className="flex items-center gap-1 min-w-0">
+                                            {match.homeFlag
+                                                ? <img src={match.homeFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover shrink-0" />
+                                                : null}
+                                            <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide max-w-[3rem] truncate">
+                                                {match.homeTeamCode || match.homeTeam.slice(0, 3)}
+                                            </span>
+                                        </div>
+
+                                        {/* Centro: marcador + tiempo */}
+                                        <div className="flex flex-col items-center shrink-0 min-w-[3.2rem]">
+                                            <span className={`text-[13px] font-black tabular-nums leading-none ${scoreColor}`}>
+                                                {match.result ? `${rH} – ${rA}` : '– –'}
+                                            </span>
+                                            <LiveMatchTimerInline
+                                                matchDate={match.date}
+                                                elapsed={match.elapsed ?? null}
+                                                lastSyncAt={liveSync.lastSyncAt}
+                                                statusShort={match.statusShort}
+                                            />
+                                        </div>
+
+                                        {/* Equipo visitante: código + bandera */}
+                                        <div className="flex items-center gap-1 min-w-0">
+                                            <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide max-w-[3rem] truncate">
+                                                {match.awayTeamCode || match.awayTeam.slice(0, 3)}
+                                            </span>
+                                            {match.awayFlag
+                                                ? <img src={match.awayFlag} alt="" className="h-3.5 w-5 rounded-[3px] object-cover shrink-0" />
+                                                : null}
+                                        </div>
                                     </button>
                                 );
                             })}
