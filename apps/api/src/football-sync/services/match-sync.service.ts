@@ -733,6 +733,81 @@ export class MatchSyncService {
     });
   }
 
+  /**
+   * Bulk auto-link all unlinked matches (no externalId) that are SCHEDULED or LIVE
+   */
+  async bulkAutoLink(userId?: string): Promise<{
+    attempted: number;
+    linked: number;
+    skipped: number;
+    failed: number;
+    results: Array<{ matchId: string; label: string; status: 'linked' | 'skipped' | 'failed'; message: string }>;
+  }> {
+    const unlinked = await this.prisma.match.findMany({
+      where: {
+        externalId: null,
+        matchStatus: { in: ['SCHEDULED', 'LIVE'] },
+      },
+      include: { homeTeam: true, awayTeam: true },
+      orderBy: { matchDate: 'asc' },
+    });
+
+    const results: Array<{ matchId: string; label: string; status: 'linked' | 'skipped' | 'failed'; message: string }> = [];
+    let linked = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const match of unlinked) {
+      const label = `${match.homeTeam.name} vs ${match.awayTeam.name}`;
+      try {
+        if (!(await this.rateLimiter.canMakeRequest())) {
+          results.push({ matchId: match.id, label, status: 'skipped', message: 'Límite de requests alcanzado' });
+          skipped++;
+          continue;
+        }
+
+        const candidates = await this.findLinkCandidates(match.id);
+        const best = candidates.find((c) => c.confidence !== 'low');
+
+        if (!best) {
+          results.push({ matchId: match.id, label, status: 'skipped', message: 'Sin candidatos de alta confianza' });
+          skipped++;
+          continue;
+        }
+
+        await this.prisma.match.update({
+          where: { id: match.id },
+          data: { externalId: best.fixtureId },
+        });
+
+        if (userId) {
+          await this.prisma.auditLog.create({
+            data: {
+              userId,
+              action: 'MATCH_EXTERNAL_LINK_UPDATED',
+              detail: JSON.stringify({
+                matchId: match.id,
+                previousExternalId: null,
+                externalId: best.fixtureId,
+                linkSource: 'bulk-suggested',
+                autoLinked: true,
+              }),
+            },
+          });
+        }
+
+        this.logger.log(`Bulk auto-linked ${match.id} (${label}) to fixture ${best.fixtureId} (${best.confidence})`);
+        results.push({ matchId: match.id, label, status: 'linked', message: `Vinculado a fixture ${best.fixtureId} (${best.confidence})` });
+        linked++;
+      } catch (error) {
+        results.push({ matchId: match.id, label, status: 'failed', message: error.message ?? 'Error desconocido' });
+        failed++;
+      }
+    }
+
+    return { attempted: unlinked.length, linked, skipped, failed, results };
+  }
+
   async linkMatchToFixture(
     matchId: string,
     externalId: string,

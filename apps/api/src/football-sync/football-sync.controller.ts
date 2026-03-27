@@ -236,6 +236,15 @@ export class FootballSyncController {
   }
 
   /**
+   * Bulk auto-link all unlinked SCHEDULED/LIVE matches
+   */
+  @Post('bulk-auto-link')
+  @ApiOperation({ summary: 'Auto-link all unlinked SCHEDULED/LIVE matches to best API-Football candidates' })
+  async bulkAutoLink(@Req() req: any) {
+    return this.matchSync.bulkAutoLink(req.user?.id);
+  }
+
+  /**
    * Get API-Football request history for a specific match (by externalId)
    */
   @Get('match/:matchId/api-history')

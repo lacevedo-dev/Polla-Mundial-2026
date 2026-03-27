@@ -135,6 +135,7 @@ interface AdminMatchesState {
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
     fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
     autoLinkAndSync: (id: string) => Promise<{ wasLinked: boolean; candidate?: any; synced: boolean; message: string }>;
+    bulkAutoLink: () => Promise<{ attempted: number; linked: number; skipped: number; failed: number; results: Array<{ matchId: string; label: string; status: string; message: string }> }>;
     getMatchApiHistory: (id: string) => Promise<ApiCallLog[]>;
     deleteMatch: (id: string) => Promise<void>;
     createTeam: (data: Partial<AdminTeam>) => Promise<void>;
@@ -335,6 +336,13 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
     autoLinkAndSync: async (id) => {
         return request<{ wasLinked: boolean; candidate?: any; synced: boolean; message: string }>(
             `/admin/football/auto-link-and-sync/${id}`,
+            { method: 'POST' },
+        );
+    },
+
+    bulkAutoLink: async () => {
+        return request<{ attempted: number; linked: number; skipped: number; failed: number; results: Array<{ matchId: string; label: string; status: string; message: string }> }>(
+            `/admin/football/bulk-auto-link`,
             { method: 'POST' },
         );
     },

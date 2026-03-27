@@ -506,7 +506,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, autoLinkAndSync, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, autoLinkAndSync, bulkAutoLink, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -666,6 +666,22 @@ const AdminMatches: React.FC = () => {
   }, [previewMatch, resendPredictionReport, resendResultsReport]);
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [syncFeedback, setSyncFeedback] = React.useState<string | null>(null);
+  const [bulkLinking, setBulkLinking] = React.useState(false);
+  const [bulkResult, setBulkResult] = React.useState<{ attempted: number; linked: number; skipped: number; failed: number } | null>(null);
+
+  const handleBulkAutoLink = React.useCallback(async () => {
+    setBulkLinking(true);
+    setBulkResult(null);
+    try {
+      const result = await bulkAutoLink();
+      setBulkResult(result);
+      if (result.linked > 0) fetchMatches();
+    } catch (e: any) {
+      setSyncFeedback(`Error en vincularión masiva: ${e?.message ?? 'Error desconocido'}`);
+    } finally {
+      setBulkLinking(false);
+    }
+  }, [bulkAutoLink, fetchMatches]);
 
   const handleSyncOrAutoLink = React.useCallback(async (m: any) => {
     if (m.externalId) {
@@ -719,10 +735,25 @@ const AdminMatches: React.FC = () => {
           <button onClick={() => setShowImportTournament(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition-all hover:bg-amber-100 sm:w-auto">
             <Trophy size={16} /> Importar torneo
           </button>
+          <button
+            onClick={() => void handleBulkAutoLink()}
+            disabled={bulkLinking}
+            title="Vincular automáticamente todos los partidos sin externalId (SCHEDULED/LIVE)"
+            className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-100 disabled:opacity-60 sm:w-auto"
+          >
+            {bulkLinking ? <Loader2 size={16} className="animate-spin" /> : <Link2 size={16} />}
+            Auto-vincular sin ID
+          </button>
           <button onClick={() => setShowCreate(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 sm:w-auto">
             <Plus size={16} /> Nuevo partido
           </button>
         </div>
+        {bulkResult && (
+          <div className={`mt-2 rounded-xl px-4 py-2.5 text-sm font-medium border ${bulkResult.failed > 0 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
+            Vinculación masiva: {bulkResult.linked} vinculados, {bulkResult.skipped} sin candidato, {bulkResult.failed} errores de {bulkResult.attempted} partidos sin ID.
+            <button onClick={() => setBulkResult(null)} className="ml-2 opacity-60 hover:opacity-100"><X size={13} className="inline" /></button>
+          </div>
+        )}
         {recalcResult && (
           <div className={`mt-2 rounded-xl px-4 py-2.5 text-sm font-medium ${recalcResult.errors.length ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-lime-50 text-lime-700 border border-lime-200'}`}>
             ✓ {recalcResult.processed}/{recalcResult.total} partidos recalculados.
