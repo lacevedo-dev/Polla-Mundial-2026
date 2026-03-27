@@ -83,30 +83,25 @@ export class SyncPlanService {
         maxInterval,
       );
 
-    // Update or create plan
-    if (plan) {
-      plan = await this.prisma.dailySyncPlan.update({
-        where: { id: plan.id },
-        data: {
-          totalMatches: matches.total,
-          requestsUsed: usedRequests,
-          requestsBudget: available,
-          intervalMinutes,
-          strategy,
-        },
-      });
-    } else {
-      plan = await this.prisma.dailySyncPlan.create({
-        data: {
-          date: today,
-          totalMatches: matches.total,
-          requestsUsed: usedRequests,
-          requestsBudget: available,
-          intervalMinutes,
-          strategy,
-        },
-      });
-    }
+    // Upsert plan — avoids unique constraint race condition when two ticks run simultaneously
+    plan = await this.prisma.dailySyncPlan.upsert({
+      where: { date: today },
+      update: {
+        totalMatches: matches.total,
+        requestsUsed: usedRequests,
+        requestsBudget: available,
+        intervalMinutes,
+        strategy,
+      },
+      create: {
+        date: today,
+        totalMatches: matches.total,
+        requestsUsed: usedRequests,
+        requestsBudget: available,
+        intervalMinutes,
+        strategy,
+      },
+    });
 
     // Calculate next sync time
     const nextSyncIn = this.getSecondsUntilNextSync(
