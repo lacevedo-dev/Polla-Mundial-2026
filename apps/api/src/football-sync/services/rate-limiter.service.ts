@@ -158,11 +158,15 @@ export class RateLimiterService {
   }
 
   /**
-   * Get start of today in local timezone
+   * Get start of today in Colombia timezone (UTC-5, no DST).
+   * Returns the UTC equivalent of 00:00:00 COT = 05:00:00 UTC.
    */
   private getTodayStart(): Date {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const bogotaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    const y = bogotaNow.getUTCFullYear();
+    const m = bogotaNow.getUTCMonth();
+    const d = bogotaNow.getUTCDate();
+    return new Date(Date.UTC(y, m, d, 5, 0, 0));
   }
 
   /**

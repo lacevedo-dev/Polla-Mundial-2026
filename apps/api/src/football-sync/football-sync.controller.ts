@@ -295,13 +295,12 @@ export class FootballSyncController {
   }
 
   /**
-   * Get recent API-Football request logs (last 100)
+   * Get API-Football request logs for today (Colombia timezone, UTC-5)
    */
   @Get('requests/today')
-  @ApiOperation({ summary: 'Get recent API-Football request logs' })
-  async getTodayRequests(@Query('limit') limitStr?: string) {
-    const limit = Math.min(parseInt(limitStr ?? '100', 10) || 100, 200);
-    const requests = await this.rateLimiter.getRecentRequests(limit);
+  @ApiOperation({ summary: 'Get today API-Football request logs (COT timezone)' })
+  async getTodayRequests() {
+    const requests = await this.rateLimiter.getTodayRequests();
 
     return {
       total: requests.length,
