@@ -1948,7 +1948,8 @@ const Dashboard: React.FC = () => {
                             })}
                         </div>
 
-                        {/* Panel expandido */}
+                        {/* Panel expandido — ancho de una columna en escritorio */}
+                        <div className="grid grid-cols-1 xl:grid-cols-3">
                         <AnimatePresence>
                             {expandedMatch && (
                                 <motion.div
@@ -1957,9 +1958,9 @@ const Dashboard: React.FC = () => {
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.22, ease: 'easeOut' as const }}
-                                    className="overflow-hidden"
+                                    className="overflow-hidden xl:col-span-1"
                                 >
-                                    <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 p-4">
+                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-4">
                                         {/* Timer + estado predicción + pts */}
                                         <div className="flex items-center justify-between mb-3">
                                             <div className="flex items-center gap-2">
@@ -2048,6 +2049,7 @@ const Dashboard: React.FC = () => {
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                        </div>
                     </motion.div>
                 );
             })()}
