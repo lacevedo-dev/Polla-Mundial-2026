@@ -197,7 +197,7 @@ function Flag({ url, name }: { url?: string | null; name: string }) {
   return <img src={url} alt={name} className="h-4 w-6 rounded border border-slate-200 object-cover" />;
 }
 
-const AdminSyncPlan: React.FC = () => {
+const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const [timeline, setTimeline] = React.useState<SyncTimeline | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -265,8 +265,8 @@ const AdminSyncPlan: React.FC = () => {
   const usagePct = timeline ? Math.round((timeline.requestsUsed / Math.max(1, timeline.requestsLimit)) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:px-6 lg:px-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className={embedded ? 'space-y-6' : 'min-h-screen bg-slate-50 px-4 py-6 md:px-6 lg:px-8'}>
+      <div className={`flex flex-wrap items-center justify-between gap-3 ${embedded ? '' : 'mb-6'}`}>
         <div>
           <h1 className="text-2xl font-black text-slate-900">Plan de sincronizacion</h1>
           <p className="mt-1 text-sm text-slate-500">
