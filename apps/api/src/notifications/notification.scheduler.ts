@@ -41,74 +41,92 @@ export class NotificationScheduler {
   }
 
   /**
+   * Resuelve qué ligas "ven" un partido dado su tournamentId.
+   *
+   * Regla idéntica al fallback de MatchesService.findByLeague:
+   *   - Ligas con torneos asignados → solo ven partidos de esos torneos.
+   *   - Ligas SIN torneos asignados → ven TODOS los partidos.
+   */
+  private async getLeaguesForMatch(tournamentId: string | null): Promise<
+    Array<{ id: string; members: Array<{ userId: string }> }>
+  > {
+    const [leaguesWithTournament, leaguesWithoutTournament] = await Promise.all([
+      // Ligas que tienen este torneo asignado
+      tournamentId
+        ? this.prisma.league.findMany({
+            where: {
+              status: 'ACTIVE',
+              leagueTournaments: { some: { tournamentId } },
+            },
+            select: {
+              id: true,
+              members: { where: { status: 'ACTIVE' }, select: { userId: true } },
+            },
+          })
+        : [],
+      // Ligas sin ningún torneo asignado (ven todos los partidos por fallback)
+      this.prisma.league.findMany({
+        where: {
+          status: 'ACTIVE',
+          leagueTournaments: { none: {} },
+        },
+        select: {
+          id: true,
+          members: { where: { status: 'ACTIVE' }, select: { userId: true } },
+        },
+      }),
+    ]);
+
+    // Deduplicar por leagueId (una liga no debería estar en ambas listas, pero por seguridad)
+    const seen = new Set<string>();
+    const result: Array<{ id: string; members: Array<{ userId: string }> }> = [];
+    for (const l of [...leaguesWithTournament, ...leaguesWithoutTournament]) {
+      if (!seen.has(l.id)) {
+        seen.add(l.id);
+        result.push(l);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Cada minuto: partidos que empiezan en ~60 minutos → recordatorio.
-   * Parte desde leagues activas (igual que sendPredictionClosingAlerts) para
-   * garantizar que el traversal retorne miembros aunque tournamentId esté seteado.
    */
   @Cron('* * * * *')
   async sendMatchReminders(): Promise<void> {
     try {
       const now = new Date();
       const from = new Date(now.getTime() + 55 * 60 * 1000);
-      const to = new Date(now.getTime() + 65 * 60 * 1000);
+      const to   = new Date(now.getTime() + 65 * 60 * 1000);
 
-      const leagues = await this.prisma.league.findMany({
+      const matches = await this.prisma.match.findMany({
         where: {
-          status: 'ACTIVE',
-          leagueTournaments: {
-            some: {
-              tournament: {
-                matches: {
-                  some: {
-                    status: MatchStatus.SCHEDULED,
-                    matchDate: { gte: from, lte: to },
-                  },
-                },
-              },
-            },
-          },
+          status: MatchStatus.SCHEDULED,
+          matchDate: { gte: from, lte: to },
         },
         select: {
           id: true,
-          members: {
-            where: { status: 'ACTIVE' },
-            select: { userId: true },
-          },
-          leagueTournaments: {
-            select: {
-              tournament: {
-                select: {
-                  matches: {
-                    where: {
-                      status: MatchStatus.SCHEDULED,
-                      matchDate: { gte: from, lte: to },
-                    },
-                    select: {
-                      id: true,
-                      matchDate: true,
-                      homeTeam: { select: { name: true } },
-                      awayTeam: { select: { name: true } },
-                      predictions: { select: { userId: true } },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          matchDate: true,
+          tournamentId: true,
+          homeTeam: { select: { name: true } },
+          awayTeam: { select: { name: true } },
+          predictions: { select: { userId: true } },
         },
       });
 
-      // Collect unique matchId+userId pairs to avoid duplicate sends per match
+      if (matches.length === 0) return;
+
       const notified = new Set<string>(); // `${matchId}:${userId}`
 
-      for (const league of leagues) {
-        const matches = league.leagueTournaments.flatMap(lt => lt.tournament.matches);
+      for (const match of matches) {
+        const leagues = await this.getLeaguesForMatch(match.tournamentId ?? null);
+        if (leagues.length === 0) continue;
 
-        for (const match of matches) {
-          const home = match.homeTeam.name;
-          const away = match.awayTeam.name;
-          const predictedUserIds = new Set(match.predictions.map(p => p.userId));
+        const home = match.homeTeam.name;
+        const away = match.awayTeam.name;
+        const predictedUserIds = new Set(match.predictions.map(p => p.userId));
 
+        for (const league of leagues) {
           for (const member of league.members) {
             const userId = member.userId;
             const key = `${match.id}:${userId}`;
@@ -145,84 +163,113 @@ export class NotificationScheduler {
   }
 
   /**
-   * Cada minuto: partidos cuyas predicciones cierran en ~5 minutos
+   * Cada minuto: partidos cuyo cierre de predicción ocurre en los próximos 5 min.
+   * Notifica a TODOS los miembros: si ya predicaron, les recuerda el cierre;
+   * si aún no, los urge a hacerlo.
    */
   @Cron('* * * * *')
   async sendPredictionClosingAlerts(): Promise<void> {
     try {
       const now = new Date();
 
-      // Get all active leagues with their closePredictionMinutes
-      const leagues = await this.prisma.league.findMany({
+      // Obtener ligas activas con su closePredictionMinutes
+      const allLeagues = await this.prisma.league.findMany({
         where: { status: 'ACTIVE' },
         select: {
           id: true,
           closePredictionMinutes: true,
-          members: {
-            where: { status: 'ACTIVE' },
-            select: { userId: true },
-          },
-          leagueTournaments: {
-            select: {
-              tournament: {
-                select: {
-                  matches: {
-                    where: { status: MatchStatus.SCHEDULED },
-                    select: {
-                      id: true,
-                      matchDate: true,
-                      homeTeam: true,
-                      awayTeam: true,
-                      predictions: { select: { userId: true } },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          members: { where: { status: 'ACTIVE' }, select: { userId: true } },
+          leagueTournaments: { select: { tournamentId: true } },
         },
       });
 
-      for (const league of leagues) {
-        const closeMinutes = league.closePredictionMinutes ?? 15;
-        const allMatches = league.leagueTournaments.flatMap(lt =>
-          lt.tournament.matches,
-        );
+      // Agrupar ligas por ventana de cierre (closeMinutes)
+      const closeGroups = new Map<number, typeof allLeagues>();
+      for (const league of allLeagues) {
+        const cm = league.closePredictionMinutes ?? 15;
+        if (!closeGroups.has(cm)) closeGroups.set(cm, []);
+        closeGroups.get(cm)!.push(league);
+      }
 
-        for (const match of allMatches) {
-          const closeTime = new Date(match.matchDate.getTime() - closeMinutes * 60 * 1000);
-          const diffMs = closeTime.getTime() - now.getTime();
+      for (const [closeMinutes, leagues] of closeGroups) {
+        // Ventana de cierre: [matchDate - closeMin - 5min, matchDate - closeMin]
+        const windowStart = new Date(now.getTime() + closeMinutes * 60 * 1000);
+        const windowEnd   = new Date(now.getTime() + (closeMinutes + 5) * 60 * 1000);
 
-          // Close window is within the next 5 minutes
-          if (diffMs < 0 || diffMs > 5 * 60 * 1000) continue;
+        const tournamentIds = [
+          ...new Set(
+            leagues.flatMap(l => l.leagueTournaments.map(lt => lt.tournamentId)),
+          ),
+        ];
+        const leaguesWithoutTournament = leagues.filter(l => l.leagueTournaments.length === 0);
 
+        // Partidos dentro de la ventana
+        const whereMatch =
+          tournamentIds.length > 0
+            ? {
+                status: MatchStatus.SCHEDULED,
+                matchDate: { gte: windowStart, lte: windowEnd },
+                OR: [
+                  { tournamentId: { in: tournamentIds } },
+                  // También incluye matches sin torneo si hay ligas sin torneo
+                  ...(leaguesWithoutTournament.length > 0 ? [{ tournamentId: null as null }] : []),
+                ],
+              }
+            : {
+                status: MatchStatus.SCHEDULED,
+                matchDate: { gte: windowStart, lte: windowEnd },
+              };
+
+        const matches = await this.prisma.match.findMany({
+          where: whereMatch,
+          select: {
+            id: true,
+            matchDate: true,
+            tournamentId: true,
+            homeTeam: { select: { name: true } },
+            awayTeam: { select: { name: true } },
+            predictions: { select: { userId: true } },
+          },
+        });
+
+        for (const match of matches) {
           const predictedUserIds = new Set(match.predictions.map(p => p.userId));
-          const home = (match as any).homeTeam?.name ?? '';
-          const away = (match as any).awayTeam?.name ?? '';
+          const home = match.homeTeam.name;
+          const away = match.awayTeam.name;
 
-          for (const member of league.members) {
-            const userId = member.userId;
-            if (predictedUserIds.has(userId)) continue;
+          // Determinar qué ligas de este grupo "ven" este partido
+          const relevantLeagues = leagues.filter(l =>
+            l.leagueTournaments.length === 0 ||
+            l.leagueTournaments.some(lt => lt.tournamentId === match.tournamentId),
+          );
 
-            // Check duplicate
-            const alreadySent = await this.prisma.notification.findFirst({
-              where: {
+          for (const league of relevantLeagues) {
+            for (const member of league.members) {
+              const userId = member.userId;
+
+              const alreadySent = await this.prisma.notification.findFirst({
+                where: {
+                  userId,
+                  type: NotificationType.PREDICTION_CLOSED,
+                  data: { contains: match.id },
+                },
+              });
+              if (alreadySent) continue;
+
+              const hasPrediction = predictedUserIds.has(userId);
+              // Notificar a TODOS: los que no han predicho con urgencia, los que sí con aviso
+              const body = hasPrediction
+                ? `🔒 Cierre en ${closeMinutes} min: ${home} vs ${away} — pronóstico guardado ✓`
+                : `⚠️ ¡Quedan ${closeMinutes} min! ${home} vs ${away} — haz tu pronóstico ahora`;
+
+              await this.notifyUser(
                 userId,
-                type: NotificationType.PREDICTION_CLOSED,
-                data: { contains: match.id },
-              },
-            });
-            if (alreadySent) continue;
-
-            const body = `⚠️ ¡Quedan ${closeMinutes} min! ${home} vs ${away} — haz tu pronóstico ahora`;
-
-            await this.notifyUser(
-              userId,
-              NotificationType.PREDICTION_CLOSED,
-              '⚠️ ¡Predicciones cerrando pronto!',
-              body,
-              { matchId: match.id, leagueId: league.id },
-            );
+                NotificationType.PREDICTION_CLOSED,
+                hasPrediction ? '🔒 Predicciones cerrando' : '⚠️ ¡Predicciones cerrando pronto!',
+                body,
+                { matchId: match.id, leagueId: league.id },
+              );
+            }
           }
         }
       }
@@ -245,7 +292,9 @@ export class NotificationScheduler {
         include: {
           homeTeam: true,
           awayTeam: true,
-          predictions: { select: { userId: true, points: true } },
+          predictions: {
+            select: { userId: true, points: true, leagueId: true },
+          },
         },
         take: 20,
       });
@@ -255,12 +304,22 @@ export class NotificationScheduler {
         const away = match.awayTeam.name;
         const score = `${match.homeScore ?? '-'}-${match.awayScore ?? '-'}`;
 
-        for (const prediction of match.predictions) {
-          const pts = Math.round(prediction.points ?? 0);
+        // Agrupar predicciones por usuario para evitar notificaciones duplicadas
+        // cuando el usuario está en varias ligas con el mismo partido
+        const byUser = new Map<string, { points: number; leagueId: string | null }>();
+        for (const pred of match.predictions) {
+          if (!byUser.has(pred.userId)) {
+            byUser.set(pred.userId, {
+              points: Math.round(pred.points ?? 0),
+              leagueId: pred.leagueId ?? null,
+            });
+          }
+        }
 
+        for (const [userId, { points: pts, leagueId }] of byUser) {
           const alreadySent = await this.prisma.notification.findFirst({
             where: {
-              userId: prediction.userId,
+              userId,
               type: NotificationType.RESULT_PUBLISHED,
               data: { contains: match.id },
             },
@@ -274,15 +333,15 @@ export class NotificationScheduler {
             : `${home} ${score} ${away} — ganaste ${pts} pts`;
 
           await this.notifyUser(
-            prediction.userId,
+            userId,
             NotificationType.RESULT_PUBLISHED,
             title,
             body,
-            { matchId: match.id, points: pts },
+            // leagueId ahora incluido para navegación directa desde la notificación
+            { matchId: match.id, leagueId, points: pts },
           );
         }
 
-        // Mark as sent
         await this.prisma.match.update({
           where: { id: match.id },
           data: { resultNotificationSentAt: new Date() },
