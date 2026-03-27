@@ -35,6 +35,8 @@ import { useAuthStore } from '../stores/auth.store';
 import { useAiCredits } from '../hooks/useAiCredits';
 import { useToast } from '../hooks/useToast';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
+import { GoalToastContainer } from '../components/live/GoalToast';
+import { LiveMatchTimerInline } from '../components/live/LiveMatchTimer';
 import {
     ParticipationCategoryLabels,
     ParticipationStatusColors,
@@ -778,6 +780,7 @@ interface CompactMatchRowProps {
     onToggleParticipation: () => void;
     onAdvanceTeamSelect: (matchId: string, teamId: string) => void;
     syncIntervalMinutes?: number;
+    lastSyncAt?: number | null;
 }
 
 function CompactMatchRow({
@@ -810,6 +813,7 @@ function CompactMatchRow({
     onToggleParticipation,
     onAdvanceTeamSelect,
     syncIntervalMinutes = 5,
+    lastSyncAt = null,
 }: CompactMatchRowProps) {
     const [insightsLevel, setInsightsLevel] = React.useState<'none' | 'suggestions' | 'full'>('none');
     const hasBeenConsulted = cachedInsights !== null;
@@ -868,9 +872,17 @@ function CompactMatchRow({
                             </div>
                         ) : (match.status === 'finished' || match.status === 'live') && match.result ? (
                             <div className="flex shrink-0 flex-col items-center gap-0.5">
-                                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2">
+                                {match.status === 'live' && (
+                                    <LiveMatchTimerInline
+                                        matchDate={match.date}
+                                        elapsed={match.elapsed ?? null}
+                                        lastSyncAt={lastSyncAt}
+                                        statusShort={match.statusShort}
+                                    />
+                                )}
+                                <div className={`flex items-center gap-1 rounded-xl px-3 py-2 ${match.status === 'live' ? 'border border-rose-200 bg-rose-600' : 'border border-slate-200 bg-slate-900'}`}>
                                     <span className="text-sm font-black text-white">{match.result.home}</span>
-                                    <span className="text-sm font-black text-slate-500">:</span>
+                                    <span className={`text-sm font-black ${match.status === 'live' ? 'text-rose-300' : 'text-slate-500'}`}>:</span>
                                     <span className="text-sm font-black text-white">{match.result.away}</span>
                                 </div>
                                 {match.status === 'finished' && match.pointsEarned !== undefined && (
@@ -2968,6 +2980,7 @@ const Predictions: React.FC = () => {
                                                                 currentTime={currentTime}
                                                                 speedMode={speedEntryMode}
                                                                 syncIntervalMinutes={liveSync.syncIntervalMinutes}
+                                                                lastSyncAt={liveSync.lastSyncAt}
                                                                 cachedInsights={cachedInsights}
                                                                 insightsLoading={insightsLoading}
                                                                 analysisMatchId={analysisMatchId}
@@ -3742,6 +3755,7 @@ const Predictions: React.FC = () => {
                 </div>
             ))}
         </div>
+        <GoalToastContainer />
         </>
     );
 };

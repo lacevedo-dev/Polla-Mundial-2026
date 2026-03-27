@@ -26,7 +26,20 @@ interface PredictionState {
     fetchLeaderboardBreakdown: (leagueId: string, userId: string, category?: LeaderboardCategory) => Promise<LeaderboardBreakdown>;
     savePrediction: (leagueId: string, matchId: string, home: number, away: number, advanceTeamId?: string) => Promise<void>;
     resetLeagueData: () => void;
-    updateMatchLiveScore: (matchId: string, homeScore: number | null, awayScore: number | null, status: string) => void;
+    goalEvents: GoalEvent[];
+    clearGoalEvent: (id: string) => void;
+    updateMatchLiveScore: (matchId: string, homeScore: number | null, awayScore: number | null, status: string, elapsed?: number | null, statusShort?: string | null) => void;
+}
+
+export interface GoalEvent {
+    id: string;
+    matchId: string;
+    team: 'home' | 'away';
+    teamName: string;
+    homeScore: number;
+    awayScore: number;
+    elapsed: number | null;
+    at: number; // timestamp ms
 }
 
 function sortMatchesByDate(matches: MatchViewModel[]): MatchViewModel[] {
@@ -77,6 +90,7 @@ export const usePredictionStore = create<PredictionState>((set) => ({
     leaderboard: [],
     leaderboardBreakdowns: {},
     isLoading: false,
+    goalEvents: [],
 
     fetchLeagueMatches: async (leagueId, options) => {
         if (!options?.background) {
@@ -196,19 +210,59 @@ export const usePredictionStore = create<PredictionState>((set) => ({
             leaderboardBreakdowns: {},
         }),
 
-    updateMatchLiveScore: (matchId, homeScore, awayScore, status) => {
-        set((state) => ({
-            matches: state.matches.map((m) => {
-                if (m.id !== matchId) return m;
-                const normalizedStatus = status === 'LIVE' ? 'live' : status === 'FINISHED' ? 'finished' : status === 'SCHEDULED' ? 'open' : m.status;
-                return {
-                    ...m,
-                    status: normalizedStatus as MatchViewModel['status'],
-                    result: homeScore !== null && awayScore !== null
-                        ? { home: homeScore, away: awayScore }
-                        : m.result,
-                };
-            }),
-        }));
+    clearGoalEvent: (id) =>
+        set((state) => ({ goalEvents: state.goalEvents.filter((g) => g.id !== id) })),
+
+    updateMatchLiveScore: (matchId, homeScore, awayScore, status, elapsed, statusShort) => {
+        set((state) => {
+            const prev = state.matches.find((m) => m.id === matchId);
+            const newGoals: GoalEvent[] = [];
+
+            if (prev && homeScore !== null && awayScore !== null) {
+                const prevHome = prev.result?.home ?? 0;
+                const prevAway = prev.result?.away ?? 0;
+                if (homeScore > prevHome && prev.status === 'live') {
+                    newGoals.push({
+                        id: `${matchId}-h-${homeScore}-${Date.now()}`,
+                        matchId,
+                        team: 'home',
+                        teamName: prev.homeTeam,
+                        homeScore,
+                        awayScore,
+                        elapsed: elapsed ?? null,
+                        at: Date.now(),
+                    });
+                }
+                if (awayScore > prevAway && prev.status === 'live') {
+                    newGoals.push({
+                        id: `${matchId}-a-${awayScore}-${Date.now()}`,
+                        matchId,
+                        team: 'away',
+                        teamName: prev.awayTeam,
+                        homeScore,
+                        awayScore,
+                        elapsed: elapsed ?? null,
+                        at: Date.now(),
+                    });
+                }
+            }
+
+            const normalizedStatus = status === 'LIVE' ? 'live' : status === 'FINISHED' ? 'finished' : status === 'SCHEDULED' ? 'open' : (prev?.status ?? 'open');
+            return {
+                matches: state.matches.map((m) => {
+                    if (m.id !== matchId) return m;
+                    return {
+                        ...m,
+                        status: normalizedStatus as MatchViewModel['status'],
+                        result: homeScore !== null && awayScore !== null
+                            ? { home: homeScore, away: awayScore }
+                            : m.result,
+                        elapsed: elapsed ?? m.elapsed,
+                        statusShort: statusShort ?? m.statusShort,
+                    };
+                }),
+                goalEvents: [...state.goalEvents, ...newGoals],
+            };
+        });
     },
 }));

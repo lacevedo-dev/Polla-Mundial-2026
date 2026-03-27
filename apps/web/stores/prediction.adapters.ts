@@ -78,6 +78,8 @@ export interface MatchViewModel {
         home: number;
         away: number;
     };
+    elapsed?: number | null;
+    statusShort?: string | null;
     pointsEarned?: number;
     saved: boolean;
 }

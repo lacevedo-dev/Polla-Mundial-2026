@@ -55,8 +55,10 @@ export function useLiveSyncEvents(): LiveSyncState {
                     homeScore: number | null;
                     awayScore: number | null;
                     status: string;
+                    elapsed?: number | null;
+                    statusShort?: string | null;
                 };
-                updateMatchLiveScore(data.matchId, data.homeScore, data.awayScore, data.status);
+                updateMatchLiveScore(data.matchId, data.homeScore, data.awayScore, data.status, data.elapsed, data.statusShort);
                 setState((prev) => ({ ...prev, matchesUpdatedCount: prev.matchesUpdatedCount + 1 }));
             } catch { /* silent */ }
         });

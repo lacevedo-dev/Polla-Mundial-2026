@@ -423,6 +423,8 @@ export class MatchSyncService {
           awayScore: fixture.goals.away,
           status,
           externalId: fixture.fixture.id.toString(),
+          elapsed: fixture.fixture.status.elapsed ?? null,
+          statusShort: fixture.fixture.status.short,
         },
         timestamp: new Date().toISOString(),
       });

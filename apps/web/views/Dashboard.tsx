@@ -42,6 +42,8 @@ import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
+import { GoalToastContainer } from '../components/live/GoalToast';
+import { LiveMatchTimer } from '../components/live/LiveMatchTimer';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
@@ -2296,46 +2298,93 @@ const Dashboard: React.FC = () => {
 
                     {/* Partidos en vivo */}
                     {liveMatches.length > 0 && (
-                        <motion.article {...fade(0.11)} className="rounded-[1.5rem] border border-rose-200 bg-rose-50 p-4 shadow-sm">
+                        <motion.article {...fade(0.11)} className="rounded-[1.5rem] border border-rose-200 bg-gradient-to-b from-rose-50 to-white p-4 shadow-sm">
+                            {/* Header */}
                             <div className="mb-3 flex items-center gap-2">
-                                <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-400 animate-pulse" />
+                                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />
                                 <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">En vivo ahora</p>
-                                <span className="ml-auto text-[10px] text-rose-500">
+                                <span className="ml-auto text-[10px] text-rose-400">
                                     {liveSync.lastSyncAt
-                                        ? `Act. hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)} min`
+                                        ? `Sync hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)}m · cada ~${liveSync.syncIntervalMinutes}m`
                                         : `Cada ~${liveSync.syncIntervalMinutes} min`}
                                 </span>
                             </div>
-                            <div className="space-y-2">
-                                {liveMatches.map((match) => (
-                                    <div key={match.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm border border-rose-100">
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                            {match.homeFlag && <img src={match.homeFlag} alt={match.homeTeam} className="h-4 w-6 rounded object-cover border border-slate-200" />}
-                                            <span className="text-xs font-bold text-slate-800 truncate">{match.homeTeam}</span>
+
+                            <div className="space-y-2.5">
+                                {liveMatches.map((match) => {
+                                    const predHome = parseInt(match.prediction.home, 10);
+                                    const predAway = parseInt(match.prediction.away, 10);
+                                    const realHome = match.result?.home ?? 0;
+                                    const realAway = match.result?.away ?? 0;
+                                    const hasPred = match.saved && !isNaN(predHome) && !isNaN(predAway);
+                                    // Determine if prediction is currently winning
+                                    let predStatus: 'winning' | 'losing' | 'drawing' | null = null;
+                                    if (hasPred && match.result) {
+                                        const predResult = predHome - predAway;
+                                        const realResult = realHome - realAway;
+                                        if (predHome === realHome && predAway === realAway) predStatus = 'winning';
+                                        else if (Math.sign(predResult) === Math.sign(realResult) || (predResult === 0 && realResult === 0)) predStatus = 'drawing';
+                                        else predStatus = 'losing';
+                                    }
+
+                                    return (
+                                        <div key={match.id} className="overflow-hidden rounded-2xl border border-rose-100 bg-white shadow-sm">
+                                            {/* Timer bar */}
+                                            <div className="flex items-center justify-between bg-rose-600 px-3 py-1">
+                                                <LiveMatchTimer
+                                                    matchDate={match.date}
+                                                    elapsed={match.elapsed ?? null}
+                                                    lastSyncAt={liveSync.lastSyncAt}
+                                                    statusShort={match.statusShort}
+                                                />
+                                                {hasPred && predStatus && (
+                                                    <span className={`text-[9px] font-black uppercase tracking-wider ${predStatus === 'winning' ? 'text-lime-300' : predStatus === 'drawing' ? 'text-amber-200' : 'text-rose-200'}`}>
+                                                        {predStatus === 'winning' ? '✓ Acertando' : predStatus === 'drawing' ? '~ Tendencia' : '✗ Perdiendo'}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Match row */}
+                                            <div className="flex items-center justify-between px-3 py-2.5">
+                                                {/* Home */}
+                                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                                    {match.homeFlag && <img src={match.homeFlag} alt={match.homeTeamCode} className="h-5 w-7 shrink-0 rounded object-cover border border-slate-200" />}
+                                                    <span className="truncate text-xs font-bold text-slate-900">{match.homeTeam}</span>
+                                                </div>
+
+                                                {/* Score */}
+                                                <div className="mx-3 shrink-0 text-center">
+                                                    {match.result ? (
+                                                        <div className="rounded-xl bg-slate-900 px-3 py-1.5 tabular-nums">
+                                                            <span className="text-base font-black text-white">{match.result.home}</span>
+                                                            <span className="mx-1 text-slate-500">—</span>
+                                                            <span className="text-base font-black text-white">{match.result.away}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-sm font-black text-rose-500">vs</span>
+                                                    )}
+                                                    {hasPred && (
+                                                        <p className={`mt-1 text-center font-mono text-[9px] font-bold ${predStatus === 'winning' ? 'text-lime-600' : predStatus === 'drawing' ? 'text-amber-500' : 'text-rose-400'}`}>
+                                                            pred {predHome}–{predAway}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Away */}
+                                                <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                                                    <span className="truncate text-xs font-bold text-slate-900">{match.awayTeam}</span>
+                                                    {match.awayFlag && <img src={match.awayFlag} alt={match.awayTeamCode} className="h-5 w-7 shrink-0 rounded object-cover border border-slate-200" />}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col items-center mx-2 shrink-0">
-                                            {match.result ? (
-                                                <span className="rounded-lg bg-rose-600 px-2.5 py-1 text-sm font-black text-white tabular-nums">
-                                                    {match.result.home} : {match.result.away}
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs font-black text-rose-600">vs</span>
-                                            )}
-                                            {match.saved && (
-                                                <span className="mt-0.5 text-[9px] font-bold text-slate-400 tabular-nums">
-                                                    Tu pred: {match.prediction.home}−{match.prediction.away}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-1.5 min-w-0 justify-end">
-                                            <span className="text-xs font-bold text-slate-800 truncate">{match.awayTeam}</span>
-                                            {match.awayFlag && <img src={match.awayFlag} alt={match.awayTeam} className="h-4 w-6 rounded object-cover border border-slate-200" />}
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </motion.article>
                     )}
+
+                    {/* Goal toast notifications */}
+                    <GoalToastContainer />
 
                     {/* Próximos partidos con inputs rápidos */}
                     <motion.article {...fade(0.12)} className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
