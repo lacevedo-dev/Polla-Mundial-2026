@@ -30,8 +30,13 @@ export class PushNotificationsService {
     this.vapidPublicKey = publicKey;
 
     if (publicKey && privateKey) {
-      webpush.setVapidDetails(email, publicKey, privateKey);
-      this.logger.log('Web Push VAPID configured');
+      try {
+        webpush.setVapidDetails(email, publicKey, privateKey);
+        this.logger.log('Web Push VAPID configured');
+      } catch (err: any) {
+        this.logger.warn(`VAPID keys invalid — push notifications disabled: ${err.message}`);
+        this.vapidPublicKey = '';
+      }
     } else {
       this.logger.warn('VAPID keys not configured — push notifications disabled');
     }
