@@ -1855,8 +1855,8 @@ const Dashboard: React.FC = () => {
                             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
                             <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
                         </div>
-                        {/* Grid: 1 columna si 1 partido, 2 si 2+, máx 3 por fila */}
-                        <div className={`grid gap-1.5 ${liveMatches.length === 1 ? 'grid-cols-1' : liveMatches.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                        {/* Grid auto-fill: el navegador calcula cuántos chips caben según el ancho real */}
+                        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))' }}>
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
