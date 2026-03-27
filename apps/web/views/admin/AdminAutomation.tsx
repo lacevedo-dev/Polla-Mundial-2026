@@ -9,8 +9,10 @@ import {
   MessageSquare,
   Phone,
   RefreshCw,
+  Search,
   Send,
   Smartphone,
+  X,
   XCircle,
 } from 'lucide-react';
 import { request } from '../../api';
@@ -438,6 +440,10 @@ export default function AdminAutomation() {
   const [historyType, setHistoryType] = useState<string>('');
   const [historyPage, setHistoryPage] = useState(1);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+
+  // Matrix search
+  const [matrixSearch, setMatrixSearch] = useState('');
 
   const loadBase = async () => {
     setLoading(true);
@@ -542,50 +548,80 @@ export default function AdminAutomation() {
       {tab === 'matrix' && (
         <div>
           {matrix && (
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                Partidos del{' '}
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+              <p className="text-xs text-slate-500 shrink-0">
                 <span className="text-slate-300 font-semibold">
                   {new Date(matrix.date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </span>
                 {' — '}{matrix.matches.length} partido{matrix.matches.length !== 1 ? 's' : ''}
               </p>
-              <div className="flex gap-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                <span className="flex items-center gap-1 text-lime-400">✓ Enviado</span>
-                <span className="flex items-center gap-1 text-slate-400"><Clock size={9} /> Pendiente</span>
-                <span className="flex items-center gap-1 text-red-400">Sin enviar</span>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Buscador */}
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Buscar equipo..."
+                    value={matrixSearch}
+                    onChange={e => setMatrixSearch(e.target.value)}
+                    className="pl-8 pr-8 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-44"
+                  />
+                  {matrixSearch && (
+                    <button onClick={() => setMatrixSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <span className="flex items-center gap-1 text-lime-400">✓ Enviado</span>
+                  <span className="flex items-center gap-1 text-slate-400"><Clock size={9} /> Pendiente</span>
+                  <span className="flex items-center gap-1 text-red-400">Sin enviar</span>
+                </div>
               </div>
             </div>
           )}
 
-          {matrix && matrix.matches.length > 0 ? (
-            <div className="rounded-xl border border-slate-800 overflow-hidden">
-              {/* Header de la tabla */}
-              <div
-                className="grid px-4 py-2 bg-slate-800/60 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-700"
-                style={{ gridTemplateColumns: '1fr auto 1fr 1fr 1fr 1.2rem' }}
-              >
-                <span>Partido</span>
-                <span className="px-3">Hora</span>
-                <span className="text-center">⏰ Recordatorio</span>
-                <span className="text-center">⚠️ Cierre</span>
-                <span className="text-center">✅ Resultado</span>
-                <span />
-              </div>
+          {matrix && matrix.matches.length > 0 ? (() => {
+            const q = matrixSearch.toLowerCase().trim();
+            const filtered = q
+              ? matrix.matches.filter(m =>
+                  m.homeTeam.toLowerCase().includes(q) ||
+                  m.awayTeam.toLowerCase().includes(q) ||
+                  (m.tournament ?? '').toLowerCase().includes(q)
+                )
+              : matrix.matches;
 
-              {/* Filas */}
-              <div className="divide-y divide-slate-800/60">
-                {matrix.matches.map(m => (
-                  <MatrixRow
-                    key={m.id}
-                    match={m}
-                    expanded={expandedMatch === m.id}
-                    onExpand={id => setExpandedMatch(prev => prev === id ? null : id)}
-                  />
-                ))}
+            return filtered.length > 0 ? (
+              <div className="rounded-xl border border-slate-800 overflow-hidden">
+                <div
+                  className="grid px-4 py-2 bg-slate-800/60 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-700"
+                  style={{ gridTemplateColumns: '1fr auto 1fr 1fr 1fr 1.2rem' }}
+                >
+                  <span>Partido</span>
+                  <span className="px-3">Hora</span>
+                  <span className="text-center">⏰ Recordatorio</span>
+                  <span className="text-center">⚠️ Cierre</span>
+                  <span className="text-center">✅ Resultado</span>
+                  <span />
+                </div>
+                <div className="divide-y divide-slate-800/60">
+                  {filtered.map(m => (
+                    <MatrixRow
+                      key={m.id}
+                      match={m}
+                      expanded={expandedMatch === m.id}
+                      onExpand={id => setExpandedMatch(prev => prev === id ? null : id)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : (
+            ) : (
+              <div className="flex flex-col items-center py-10 gap-2 text-slate-500">
+                <Search size={22} className="opacity-30" />
+                <p className="text-sm">Sin partidos que coincidan con "{matrixSearch}"</p>
+              </div>
+            );
+          })() : (
             !loading && (
               <div className="flex flex-col items-center py-16 gap-3 text-slate-500">
                 <span className="text-4xl">📅</span>
@@ -599,9 +635,27 @@ export default function AdminAutomation() {
       {/* ─── Tab: Historial ───────────────────────────────────────────────── */}
       {tab === 'history' && (
         <div className="flex flex-col gap-4">
-          {/* Chips de tipo */}
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-1">Filtrar:</span>
+          {/* Buscador + Chips */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Buscador de texto */}
+            <div className="relative flex-1 max-w-xs">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar usuario, mensaje..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                className="w-full pl-8 pr-8 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
+              {historySearch && (
+                <button onClick={() => setHistorySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            {/* Chips de tipo */}
+            <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-1">Tipo:</span>
             {[
               { value: '', label: 'Todos' },
               { value: 'MATCH_REMINDER', label: '⏰ Recordatorio' },
@@ -628,6 +682,7 @@ export default function AdminAutomation() {
                 )}
               </button>
             ))}
+            </div>
           </div>
 
           {/* Lista */}
@@ -635,11 +690,33 @@ export default function AdminAutomation() {
             <div className="flex justify-center py-10">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-amber-400" />
             </div>
-          ) : history && history.recent.length > 0 ? (
+          ) : history && history.recent.length > 0 ? (() => {
+            const q = historySearch.toLowerCase().trim();
+            const filtered = q
+              ? history.recent.filter(n =>
+                  n.body.toLowerCase().includes(q) ||
+                  n.title.toLowerCase().includes(q) ||
+                  n.user.name.toLowerCase().includes(q) ||
+                  n.user.email.toLowerCase().includes(q)
+                )
+              : history.recent;
+            return (
             <>
+              {q && (
+                <p className="text-xs text-slate-500">
+                  {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} para "<span className="text-slate-300">{historySearch}</span>"
+                </p>
+              )}
+              {filtered.length > 0 ? (
               <div className="rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-800">
-                {history.recent.map(n => <HistoryRow key={n.id} n={n} />)}
+                {filtered.map(n => <HistoryRow key={n.id} n={n} />)}
               </div>
+              ) : (
+                <div className="flex flex-col items-center py-8 gap-2 text-slate-500">
+                  <Search size={20} className="opacity-30" />
+                  <p className="text-sm">Sin resultados para "{historySearch}"</p>
+                </div>
+              )}
 
               {/* Paginación */}
               {totalPages > 1 && (
@@ -666,7 +743,8 @@ export default function AdminAutomation() {
                 </div>
               )}
             </>
-          ) : (
+          );
+          })() : (
             <div className="flex flex-col items-center py-12 gap-2 text-slate-500">
               <Bell size={28} className="opacity-30" />
               <p className="text-sm">Sin notificaciones en las últimas 24h</p>

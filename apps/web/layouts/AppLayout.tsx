@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { useConfigStore } from '../stores/config.store';
 import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
 import { PWAInstallBanner, NotificationToggle } from '../components/PWAPrompt';
+import NotificationBell from '../components/NotificationBell';
 
 const primaryNavItems = [
     { to: '/dashboard', label: 'Inicio', icon: Home },
@@ -106,6 +107,10 @@ const AppLayout: React.FC = () => {
                         </NavLink>
                     )}
                     <NotificationToggle className="mb-4" />
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                        <NotificationBell />
+                        <span className="text-[10px] text-slate-500 font-semibold">Notificaciones</span>
+                    </div>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
@@ -140,9 +145,12 @@ const AppLayout: React.FC = () => {
                     <div className="w-8 h-8 bg-white rounded flex items-center justify-center font-brand text-black text-xl font-black">26</div>
                     <span className="font-brand text-sm">POLLA<span className="text-lime-400">2026</span></span>
                 </NavLink>
-                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-                    {isMobileMenuOpen ? <X /> : <Menu />}
-                </button>
+                <div className="flex items-center gap-2">
+                    <NotificationBell />
+                    <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                        {isMobileMenuOpen ? <X /> : <Menu />}
+                    </button>
+                </div>
             </header>
 
             {/* Mobile Menu Overlay */}
