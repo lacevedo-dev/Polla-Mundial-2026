@@ -172,8 +172,8 @@ export class MatchSyncService {
         };
       }
 
-      // Get today's date
-      const today = new Date().toISOString().split('T')[0];
+      // Get today's date in Colombia timezone (UTC-5, no DST)
+      const today = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       // Fetch fixtures from API-Football (client already logs to ApiFootballRequest internally)
       this.logger.log(`Fetching fixtures for date: ${today}`);
