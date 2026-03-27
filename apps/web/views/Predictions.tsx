@@ -2135,7 +2135,7 @@ const Predictions: React.FC = () => {
 
     const nextMatchId = React.useMemo(() => {
         const openMatch = matches
-            .filter((match) => match.status === 'open' || match.status === 'live')
+            .filter((match) => match.status === 'open')
             .sort((left, right) => left.date.localeCompare(right.date))[0];
         return openMatch?.id ?? null;
     }, [matches]);
