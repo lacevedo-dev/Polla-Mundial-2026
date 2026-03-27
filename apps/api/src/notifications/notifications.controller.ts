@@ -70,7 +70,7 @@ export class NotificationsController {
     const unreadCount = deduplicated.filter(n => !n.read).length;
 
     return {
-      notifications: deduplicated.map(({ data: _data, ...rest }) => rest),
+      notifications: deduplicated,
       unreadCount,
       // total real en DB (para contexto)
       totalInDb: raw.length,
