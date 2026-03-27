@@ -61,8 +61,8 @@ export class PushNotificationsService {
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
-          // userAgent is VARCHAR(191) — truncate to avoid MySQL data-too-long error
-          userAgent: userAgent ? userAgent.substring(0, 190) : undefined,
+          // userAgent is VARCHAR(512) — truncate to avoid MySQL data-too-long error
+          userAgent: userAgent ? userAgent.substring(0, 511) : undefined,
         },
       });
       this.logger.log(`Push subscription saved for user ${userId}`);

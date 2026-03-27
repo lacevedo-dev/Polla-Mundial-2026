@@ -759,7 +759,7 @@ model PushSubscription {
   endpoint  String   @db.Text
   p256dh    String   @db.Text
   auth      String   @db.Text
-  userAgent String?
+  userAgent String?  @db.VarChar(512)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
