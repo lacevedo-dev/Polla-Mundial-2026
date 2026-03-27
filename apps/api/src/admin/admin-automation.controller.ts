@@ -347,7 +347,7 @@ export class AdminAutomationController {
   /** Envía push de prueba al superadmin para validar configuración VAPID */
   @Post('test-push')
   async testPush(@Req() req: any) {
-    const result = await this.push.sendTestToUser(req.user.id);
+    const result = await this.push.sendTestToUser(req.user.userId);
     return {
       ok: result.sent > 0,
       sent: result.sent,

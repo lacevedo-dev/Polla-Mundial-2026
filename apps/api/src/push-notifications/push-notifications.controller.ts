@@ -52,7 +52,7 @@ export class PushNotificationsController {
   async subscribe(@Body() dto: SaveSubscriptionDto, @Req() req: any) {
     try {
       const userAgent = req.headers?.['user-agent'];
-      await this.push.saveSubscription(req.user.id, dto, userAgent);
+      await this.push.saveSubscription(req.user.userId, dto, userAgent);
       return { ok: true };
     } catch (err: any) {
       this.logger.error(`subscribe failed for user ${req.user?.id}: ${err.message}`, err.stack);
@@ -71,7 +71,7 @@ export class PushNotificationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a test push notification to the current user' })
   async testPush(@Req() req: any) {
-    const result = await this.push.sendTestToUser(req.user.id);
+    const result = await this.push.sendTestToUser(req.user.userId);
     return {
       ok: result.sent > 0,
       sent: result.sent,
