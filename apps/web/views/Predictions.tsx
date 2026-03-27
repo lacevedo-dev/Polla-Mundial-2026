@@ -2125,7 +2125,22 @@ const Predictions: React.FC = () => {
         }, {});
     }, [filteredMatches]);
 
-    // Smart view: groups ordered by priority
+    const cachedInsightsByMatch = React.useMemo(
+        () =>
+            Object.fromEntries(
+                matches.map((match) => [match.id, insightsData[match.id] ?? getCachedInsights(match.id)]),
+            ) as Record<string, object | null>,
+        [insightsData, matches],
+    );
+
+    const nextMatchId = React.useMemo(() => {
+        const openMatch = matches
+            .filter((match) => match.status === 'open' || match.status === 'live')
+            .sort((left, right) => left.date.localeCompare(right.date))[0];
+        return openMatch?.id ?? null;
+    }, [matches]);
+
+    // Smart view: groups ordered by priority (must come after nextMatchId)
     const smartGroups = React.useMemo(() => {
         const live = filteredMatches.filter((m) => m.status === 'live');
         const openUnsaved = filteredMatches.filter(
@@ -2150,11 +2165,11 @@ const Predictions: React.FC = () => {
     // Unified display groups — smart mode or date mode
     const displayGroups = React.useMemo(() => {
         if (viewMode === 'date') {
-            return Object.entries(groupedMatches).map(([date, matches]) => ({
+            return Object.entries(groupedMatches).map(([date, grpMatches]) => ({
                 key: date,
                 label: date,
                 accent: 'slate' as const,
-                matches,
+                matches: grpMatches,
                 isDate: true,
                 isUnsaved: false,
             }));
@@ -2168,21 +2183,6 @@ const Predictions: React.FC = () => {
             isUnsaved: g.key === 'unsaved',
         }));
     }, [viewMode, groupedMatches, smartGroups]);
-
-    const cachedInsightsByMatch = React.useMemo(
-        () =>
-            Object.fromEntries(
-                matches.map((match) => [match.id, insightsData[match.id] ?? getCachedInsights(match.id)]),
-            ) as Record<string, object | null>,
-        [insightsData, matches],
-    );
-
-    const nextMatchId = React.useMemo(() => {
-        const openMatch = matches
-            .filter((match) => match.status === 'open' || match.status === 'live')
-            .sort((left, right) => left.date.localeCompare(right.date))[0];
-        return openMatch?.id ?? null;
-    }, [matches]);
 
     const groupStandings = React.useMemo(() => {
         if (!activeGroupModal) return [];
