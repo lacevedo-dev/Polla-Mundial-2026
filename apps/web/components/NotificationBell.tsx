@@ -84,7 +84,7 @@ export default function NotificationBell() {
   const [data, setData]             = useState<NotifResponse | null>(null);
   const [loading, setLoading]       = useState(false);
   const [activeFilter, setFilter]   = useState<string | null>(null);
-  const [hideRead, setHideRead]     = useState(false);
+  const [hideRead, setHideRead]     = useState(true);
   const containerRef                = useRef<HTMLDivElement>(null);
   const navigate                    = useNavigate();
 
@@ -177,7 +177,7 @@ export default function NotificationBell() {
   const unread = data?.unreadCount ?? 0;
 
   return (
-    <div ref={containerRef} className="fixed top-3 right-14 md:right-4 z-[100]">
+    <div ref={containerRef} className="fixed top-3 right-20 md:right-4 z-[100]">
       {/* Botón campana */}
       <button
         onClick={handleOpen}
@@ -252,17 +252,19 @@ export default function NotificationBell() {
 
           {/* ── Header row 2: filtros por tipo ──────────────────────────── */}
           {typesPresent.length > 1 && (
-            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-800 overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-800">
               {/* Botón "Todos" */}
               <button
                 onClick={() => setFilter(null)}
-                className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-colors ${
+                title="Todos los tipos"
+                className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-colors ${
                   activeFilter === null
                     ? 'bg-slate-600 text-white'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                 }`}
               >
-                Todos
+                <span className="hidden md:inline">Todos</span>
+                <span className="md:hidden text-base leading-none">🔔</span>
                 {unread > 0 && (
                   <span className="min-w-[15px] h-[15px] px-0.5 rounded-full bg-lime-400 text-black text-[9px] font-black flex items-center justify-center">
                     {unread}
@@ -275,14 +277,14 @@ export default function NotificationBell() {
                   key={type}
                   onClick={() => setFilter(activeFilter === type ? null : type)}
                   title={TYPE_LABELS_FULL[type] ?? type}
-                  className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black transition-colors ${
+                  className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black transition-colors ${
                     activeFilter === type
                       ? 'bg-slate-600 text-white'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
                 >
-                  <span className="text-sm leading-none">{TYPE_ICONS[type] ?? '🔔'}</span>
-                  <span>{TYPE_LABELS[type] ?? type}</span>
+                  <span className="text-base leading-none">{TYPE_ICONS[type] ?? '🔔'}</span>
+                  <span className="hidden md:inline">{TYPE_LABELS[type] ?? type}</span>
                   {unreadOfType > 0 && (
                     <span className="min-w-[15px] h-[15px] px-0.5 rounded-full bg-lime-400 text-black text-[9px] font-black flex items-center justify-center">
                       {unreadOfType}
