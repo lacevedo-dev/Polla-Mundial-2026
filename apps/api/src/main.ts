@@ -25,32 +25,10 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
     }),
   );
 
-  // CORS configuration
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://polla.agildesarrollo.com.co',
-    'https://polla.agildesarrollo.com',
-    'https://tupollamundial.com',
-    'https://www.tupollamundial.com',
-    'https://zonapronosticos.com',
-    'https://www.zonapronosticos.com',
-  ];
-
+  // CORS — reflect the request origin so all configured domains work
+  // Security is enforced by JWT on protected endpoints
   app.enableCors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, Postman, curl)
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`[CORS] Blocked request from origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
