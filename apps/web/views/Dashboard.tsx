@@ -1830,7 +1830,7 @@ const Dashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* ── Partidos en vivo — chips + panel expandible ── */}
+            {/* ── Partidos en vivo — sticky chips ── */}
             {liveMatches.length > 0 && (() => {
                 const expandedMatch = liveMatches.find(m => m.id === expandedMatchId) ?? null;
                 const expandedPredHome = expandedMatch ? parseInt(expandedMatch.prediction.home, 10) : NaN;
@@ -1849,6 +1849,7 @@ const Dashboard: React.FC = () => {
                 const expandedEvents = expandedMatch ? (matchEvents.get(expandedMatch.id) ?? []).filter(e => ['GOAL', 'CARD'].includes(e.type)) : [];
 
                 return (
+                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50 shadow-sm pb-2 pt-2">
                     <motion.div {...fade(0.04)} className="space-y-2">
                         {/* Etiqueta */}
                         <div className="flex items-center gap-1">
@@ -2051,6 +2052,7 @@ const Dashboard: React.FC = () => {
                         </AnimatePresence>
                         </div>
                     </motion.div>
+                    </div>
                 );
             })()}
 
