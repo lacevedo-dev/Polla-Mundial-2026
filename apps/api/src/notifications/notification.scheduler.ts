@@ -67,11 +67,12 @@ export class NotificationScheduler {
         const away = match.awayTeam.name;
         const predictedUserIds = new Set(match.predictions.map(p => p.userId));
 
-        // Get all active members across all leagues that have this match
+        // Get all active members across all active leagues that have this match
         const leagueMembers = await this.prisma.leagueMember.findMany({
           where: {
             status: 'ACTIVE',
             league: {
+              status: 'ACTIVE',
               leagueTournaments: {
                 some: {
                   tournament: {

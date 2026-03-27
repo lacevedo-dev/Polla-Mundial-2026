@@ -406,21 +406,62 @@ export class SyncPlanService {
     const todayEnd = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    const matches = await this.prisma.match.findMany({
-      where: {
-        matchDate: { gte: todayStart, lt: todayEnd },
-      },
-      include: {
-        homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
-        awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
-        syncLogs: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { createdAt: true, status: true },
+    const [matches, activeLeagues] = await Promise.all([
+      this.prisma.match.findMany({
+        where: {
+          matchDate: { gte: todayStart, lt: todayEnd },
         },
-      },
-      orderBy: { matchDate: 'asc' },
-    });
+        include: {
+          homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+          awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+          syncLogs: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { createdAt: true, status: true },
+          },
+        },
+        orderBy: { matchDate: 'asc' },
+      }),
+      this.prisma.league.findMany({
+        where: {
+          status: 'ACTIVE',
+          leagueTournaments: {
+            some: {
+              tournament: {
+                matches: { some: { matchDate: { gte: todayStart, lt: todayEnd } } },
+              },
+            },
+          },
+        },
+        select: {
+          closePredictionMinutes: true,
+          leagueTournaments: {
+            select: {
+              tournament: {
+                select: {
+                  matches: {
+                    where: { matchDate: { gte: todayStart, lt: todayEnd } },
+                    select: { id: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    // Build matchId → minimum closePredictionMinutes across all leagues containing the match
+    const closePredictionMap = new Map<string, number>();
+    for (const league of activeLeagues) {
+      const mins = league.closePredictionMinutes ?? 15;
+      for (const lt of league.leagueTournaments) {
+        for (const m of lt.tournament.matches) {
+          const current = closePredictionMap.get(m.id);
+          closePredictionMap.set(m.id, current === undefined ? mins : Math.min(current, mins));
+        }
+      }
+    }
 
     const intervalMs = plan.intervalMinutes * 60 * 1000;
     const now = new Date();
@@ -492,7 +533,7 @@ export class SyncPlanService {
         status: m.status,
         externalId: m.externalId,
         syncSlots: slots,
-        notificationSchedule: buildNotifications(m.matchDate, m.status),
+        notificationSchedule: buildNotifications(m.matchDate, m.status, closePredictionMap.get(m.id) ?? 15),
         lastSyncAt: m.syncLogs[0]?.createdAt?.toISOString() ?? null,
         lastSyncStatus: m.syncLogs[0]?.status ?? null,
         requestsAssigned: Math.min(slots.length, requestsPerMatch),

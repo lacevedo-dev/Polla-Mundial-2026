@@ -16,6 +16,15 @@ import {
 
 export type { LeaderboardRow, MatchViewModel } from './prediction.adapters';
 
+export interface LiveScoreUpdate {
+    matchId: string;
+    homeScore: number | null;
+    awayScore: number | null;
+    status: string;
+    elapsed?: number | null;
+    statusShort?: string | null;
+}
+
 interface PredictionState {
     matches: MatchViewModel[];
     leaderboard: LeaderboardRow[];
@@ -29,6 +38,7 @@ interface PredictionState {
     goalEvents: GoalEvent[];
     clearGoalEvent: (id: string) => void;
     updateMatchLiveScore: (matchId: string, homeScore: number | null, awayScore: number | null, status: string, elapsed?: number | null, statusShort?: string | null) => void;
+    batchUpdateLiveScores: (updates: LiveScoreUpdate[]) => void;
 }
 
 export interface GoalEvent {
@@ -212,6 +222,43 @@ export const usePredictionStore = create<PredictionState>((set) => ({
 
     clearGoalEvent: (id) =>
         set((state) => ({ goalEvents: state.goalEvents.filter((g) => g.id !== id) })),
+
+    batchUpdateLiveScores: (updates) => {
+        if (updates.length === 0) return;
+        set((state) => {
+            const updateMap = new Map(updates.map((u) => [u.matchId, u]));
+            const newGoals: GoalEvent[] = [];
+            const now = Date.now();
+
+            const matches = state.matches.map((m) => {
+                const upd = updateMap.get(m.id);
+                if (!upd) return m;
+                const { homeScore, awayScore, status, elapsed, statusShort } = upd;
+
+                if (homeScore !== null && awayScore !== null) {
+                    const prevHome = m.result?.home ?? 0;
+                    const prevAway = m.result?.away ?? 0;
+                    if (homeScore > prevHome && m.status === 'live') {
+                        newGoals.push({ id: `${m.id}-h-${homeScore}-${now}`, matchId: m.id, team: 'home', teamName: m.homeTeam, homeScore, awayScore, elapsed: elapsed ?? null, at: now });
+                    }
+                    if (awayScore > prevAway && m.status === 'live') {
+                        newGoals.push({ id: `${m.id}-a-${awayScore}-${now}`, matchId: m.id, team: 'away', teamName: m.awayTeam, homeScore, awayScore, elapsed: elapsed ?? null, at: now });
+                    }
+                }
+
+                const normalizedStatus = status === 'LIVE' ? 'live' : status === 'FINISHED' ? 'finished' : status === 'SCHEDULED' ? 'open' : m.status;
+                return {
+                    ...m,
+                    status: normalizedStatus as MatchViewModel['status'],
+                    result: homeScore !== null && awayScore !== null ? { home: homeScore, away: awayScore } : m.result,
+                    elapsed: elapsed ?? m.elapsed,
+                    statusShort: statusShort ?? m.statusShort,
+                };
+            });
+
+            return { matches, goalEvents: [...state.goalEvents, ...newGoals] };
+        });
+    },
 
     updateMatchLiveScore: (matchId, homeScore, awayScore, status, elapsed, statusShort) => {
         set((state) => {

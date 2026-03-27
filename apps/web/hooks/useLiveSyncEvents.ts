@@ -1,6 +1,6 @@
 import React from 'react';
 import { BASE_URL } from '../api';
-import { usePredictionStore } from '../stores/prediction.store';
+import { usePredictionStore, type LiveScoreUpdate } from '../stores/prediction.store';
 
 export interface LiveSyncState {
     isConnected: boolean;
@@ -10,7 +10,7 @@ export interface LiveSyncState {
 }
 
 export function useLiveSyncEvents(): LiveSyncState {
-    const updateMatchLiveScore = usePredictionStore((s) => s.updateMatchLiveScore);
+    const batchUpdateLiveScores = usePredictionStore((s) => s.batchUpdateLiveScores);
     const [state, setState] = React.useState<LiveSyncState>({
         isConnected: false,
         lastSyncAt: null,
@@ -45,21 +45,31 @@ export function useLiveSyncEvents(): LiveSyncState {
         const url = `${BASE_URL}/matches/live/events?token=${encodeURIComponent(token)}`;
         const es = new EventSource(url);
 
+        // Pending updates buffer — keyed by matchId so rapid duplicates collapse into one
+        const pending = new Map<string, LiveScoreUpdate>();
+        let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const flush = () => {
+            flushTimer = null;
+            if (pending.size === 0) return;
+            const updates = Array.from(pending.values());
+            pending.clear();
+            batchUpdateLiveScores(updates);
+            setState((prev) => ({ ...prev, matchesUpdatedCount: prev.matchesUpdatedCount + updates.length }));
+        };
+
         es.onopen = () => setState((prev) => ({ ...prev, isConnected: true }));
         es.onerror = () => setState((prev) => ({ ...prev, isConnected: false }));
 
         es.addEventListener('match_updated', (e: MessageEvent) => {
             try {
-                const data = JSON.parse(e.data as string) as {
-                    matchId: string;
-                    homeScore: number | null;
-                    awayScore: number | null;
-                    status: string;
-                    elapsed?: number | null;
-                    statusShort?: string | null;
-                };
-                updateMatchLiveScore(data.matchId, data.homeScore, data.awayScore, data.status, data.elapsed, data.statusShort);
-                setState((prev) => ({ ...prev, matchesUpdatedCount: prev.matchesUpdatedCount + 1 }));
+                const data = JSON.parse(e.data as string) as LiveScoreUpdate;
+                // Accumulate in map — same matchId overwrites, keeping only latest
+                pending.set(data.matchId, data);
+                // Schedule a single deferred flush so the message handler returns immediately
+                if (!flushTimer) {
+                    flushTimer = setTimeout(flush, 0);
+                }
             } catch { /* silent */ }
         });
 
@@ -81,10 +91,11 @@ export function useLiveSyncEvents(): LiveSyncState {
         });
 
         return () => {
+            if (flushTimer) clearTimeout(flushTimer);
             es.close();
             setState((prev) => ({ ...prev, isConnected: false }));
         };
-    }, [updateMatchLiveScore]);
+    }, [batchUpdateLiveScores]);
 
     return state;
 }
