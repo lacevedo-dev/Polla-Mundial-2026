@@ -140,7 +140,7 @@ export class ApiFootballClient {
   ): Promise<void> {
     try {
       await this.prisma.apiFootballRequest.create({
-        data: { endpoint, params: params as any, responseStatus, matchesFetched, externalId, responseBody },
+        data: { endpoint, params: JSON.stringify(params), responseStatus, matchesFetched, externalId, responseBody },
       });
     } catch (err: any) {
       this.logger.warn(`Failed to log API-Football usage: ${err.message}`);
