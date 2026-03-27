@@ -1876,6 +1876,7 @@ const Predictions: React.FC = () => {
     const [drafts, setDrafts] = React.useState<DraftMap>({});
     const [searchTerm, setSearchTerm] = React.useState('');
     const [phaseFilter, setPhaseFilter] = React.useState<PhaseFilter>('ALL');
+    const [viewMode, setViewMode] = React.useState<'smart' | 'date'>('smart');
     const [error, setError] = React.useState<string | null>(null);
     const [savingMatchId, setSavingMatchId] = React.useState<string | null>(null);
     const [analysisMatchId, setAnalysisMatchId] = React.useState<string | null>(null);
@@ -2123,6 +2124,50 @@ const Predictions: React.FC = () => {
             return acc;
         }, {});
     }, [filteredMatches]);
+
+    // Smart view: groups ordered by priority
+    const smartGroups = React.useMemo(() => {
+        const live = filteredMatches.filter((m) => m.status === 'live');
+        const openUnsaved = filteredMatches.filter(
+            (m) => m.status === 'open' && !m.saved && m.id !== nextMatchId,
+        ).sort((a, b) => a.date.localeCompare(b.date));
+        const openSaved = filteredMatches.filter(
+            (m) => m.status === 'open' && m.saved && m.id !== nextMatchId,
+        ).sort((a, b) => a.date.localeCompare(b.date));
+        const nextMatch = nextMatchId ? filteredMatches.filter((m) => m.id === nextMatchId) : [];
+        const finished = filteredMatches.filter((m) => m.status === 'finished' || m.status === 'closed')
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+        const groups: { label: string; key: string; matches: typeof filteredMatches; accent: 'rose' | 'amber' | 'lime' | 'slate' }[] = [];
+        if (live.length > 0) groups.push({ label: 'En juego ahora', key: 'live', matches: live, accent: 'rose' });
+        if (nextMatch.length > 0) groups.push({ label: 'Próximo partido', key: 'next', matches: nextMatch, accent: 'lime' });
+        if (openUnsaved.length > 0) groups.push({ label: `Sin pronóstico (${openUnsaved.length})`, key: 'unsaved', matches: openUnsaved, accent: 'amber' });
+        if (openSaved.length > 0) groups.push({ label: `Con pronóstico (${openSaved.length})`, key: 'saved', matches: openSaved, accent: 'slate' });
+        if (finished.length > 0) groups.push({ label: `Finalizados (${finished.length})`, key: 'finished', matches: finished, accent: 'slate' });
+        return groups;
+    }, [filteredMatches, nextMatchId]);
+
+    // Unified display groups — smart mode or date mode
+    const displayGroups = React.useMemo(() => {
+        if (viewMode === 'date') {
+            return Object.entries(groupedMatches).map(([date, matches]) => ({
+                key: date,
+                label: date,
+                accent: 'slate' as const,
+                matches,
+                isDate: true,
+                isUnsaved: false,
+            }));
+        }
+        return smartGroups.map((g) => ({
+            key: g.key,
+            label: g.label,
+            accent: g.accent,
+            matches: g.matches,
+            isDate: false,
+            isUnsaved: g.key === 'unsaved',
+        }));
+    }, [viewMode, groupedMatches, smartGroups]);
 
     const cachedInsightsByMatch = React.useMemo(
         () =>
@@ -2687,6 +2732,17 @@ const Predictions: React.FC = () => {
                                 </button>
                             )}
 
+                            {/* Smart/Date toggle */}
+                            {predictionMode === 'matches' && (
+                                <button
+                                    onClick={() => setViewMode(viewMode === 'smart' ? 'date' : 'smart')}
+                                    className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider transition-all ${viewMode === 'smart' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}
+                                    title={viewMode === 'smart' ? 'Ver por fecha' : 'Vista inteligente'}
+                                >
+                                    {viewMode === 'smart' ? '★ Smart' : '≡ Fecha'}
+                                </button>
+                            )}
+
                             {/* Right: Search */}
                             {predictionMode === 'matches' && (
                                 <div className="flex items-center gap-2">
@@ -2899,31 +2955,39 @@ const Predictions: React.FC = () => {
                                         )}
                                     </div>
                                 )}
-                                {Object.entries(groupedMatches).map(([date, dateMatches]) => (
-                                    <div key={date} className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white">
-                                        {/* Date header */}
-                                        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                                {displayGroups.map(({ key, label, accent, matches: groupMatches, isDate, isUnsaved }) => (
+                                    <div key={key} className={`overflow-hidden rounded-[1.75rem] border bg-white ${isUnsaved ? 'border-amber-300 ring-1 ring-amber-200' : accent === 'rose' ? 'border-rose-200' : accent === 'lime' ? 'border-lime-300' : 'border-slate-200'}`}>
+                                        {/* Group/Date header */}
+                                        <div className={`flex items-center justify-between border-b px-5 py-3 ${isUnsaved ? 'border-amber-100 bg-amber-50' : accent === 'rose' ? 'border-rose-100 bg-rose-50' : accent === 'lime' ? 'border-lime-100 bg-lime-50' : 'border-slate-100'}`}>
                                             <div className="flex items-center gap-2">
-                                                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                                                <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-700">
-                                                    {formatFriendlyDate(date)}
+                                                {isDate ? (
+                                                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                                ) : accent === 'rose' ? (
+                                                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+                                                ) : accent === 'amber' ? (
+                                                    <span className="text-sm">⚠</span>
+                                                ) : accent === 'lime' ? (
+                                                    <span className="text-sm">▶</span>
+                                                ) : null}
+                                                <span className={`text-[11px] font-black uppercase tracking-[0.18em] ${isUnsaved ? 'text-amber-700' : accent === 'rose' ? 'text-rose-700' : accent === 'lime' ? 'text-lime-700' : 'text-slate-700'}`}>
+                                                    {isDate ? formatFriendlyDate(label) : label}
                                                 </span>
                                             </div>
-                                            {dateMatches[0]?.group ? (
+                                            {isDate && groupMatches[0]?.group ? (
                                                 <button
-                                                    onClick={() => setActiveGroupModal(dateMatches[0].group ?? null)}
+                                                    onClick={() => setActiveGroupModal(groupMatches[0].group ?? null)}
                                                     className="flex items-center gap-0.5 text-[10px] font-black uppercase tracking-wider text-lime-600 hover:text-lime-700"
                                                 >
                                                     <span className="hidden sm:inline">Ver Grupo </span>
                                                     <span className="sm:hidden">Ver </span>
-                                                    {dateMatches[0].group} <ChevronRight className="h-3 w-3" />
+                                                    {groupMatches[0].group} <ChevronRight className="h-3 w-3" />
                                                 </button>
                                             ) : null}
                                         </div>
 
                                         {/* Match rows */}
                                         <div className="divide-y divide-slate-50">
-                                            {dateMatches.map((match) => {
+                                            {groupMatches.map((match) => {
                                                 const draft = drafts[match.id] ?? { home: '', away: '' };
                                                 const isSaving = savingMatchId === match.id;
                                                 const isAnalysisOpen = analysisMatchId === match.id;
@@ -2935,6 +2999,7 @@ const Predictions: React.FC = () => {
                                                         activeLeague?.settings?.closePredictionMinutes,
                                                         currentTime,
                                                     );
+                                                const needsPrediction = viewMode === 'smart' && match.status === 'open' && !match.saved && canEdit;
                                                 const isDirty = dirtyMatchIds.includes(match.id);
                                                 const cachedInsights = cachedInsightsByMatch[match.id] ?? null;
                                                 const matchParticipationOptions = participationOptionsByMatch[match.id] ?? [];
@@ -2967,6 +3032,13 @@ const Predictions: React.FC = () => {
 
                                                 return (
                                                     <React.Fragment key={match.id}>
+                                                        {/* Needs prediction banner */}
+                                                        {needsPrediction && (
+                                                            <div className="flex items-center gap-2 bg-amber-50 px-4 py-1.5 sm:px-5">
+                                                                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-600">⚡ Ingresa tu pronóstico</span>
+                                                                <span className="ml-auto text-[9px] text-amber-400">{new Date(match.date).toLocaleDateString('es-CO', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                                            </div>
+                                                        )}
                                                         {/* Mobile: Compact row */}
                                                         <div className="sm:hidden">
                                                             <CompactMatchRow
@@ -3087,7 +3159,7 @@ const Predictions: React.FC = () => {
                                                         </div>
 
                                                         {/* Desktop: Full card */}
-                                                        <div className={`hidden border-l-4 transition-colors sm:block ${isNext ? 'border-l-lime-400 bg-lime-50/30' : 'border-l-transparent'}`}>
+                                                        <div className={`hidden border-l-4 transition-colors sm:block ${isNext ? 'border-l-lime-400 bg-lime-50/30' : needsPrediction ? 'border-l-amber-400 bg-amber-50/40' : 'border-l-transparent'}`}>
                                                         {/* Main row */}
                                                         <div className="space-y-2.5 px-3 py-3 sm:space-y-3 sm:px-5">
                                                             <div className="flex items-start justify-between gap-2">
@@ -3110,6 +3182,10 @@ const Predictions: React.FC = () => {
                                                                     {isNext ? (
                                                                         <span className="shrink-0 rounded-full border border-lime-200 bg-lime-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-lime-700 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
                                                                             Siguiente
+                                                                        </span>
+                                                                    ) : needsPrediction ? (
+                                                                        <span className="shrink-0 animate-pulse rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-amber-700 sm:px-2.5 sm:py-1 sm:text-[9px] sm:tracking-[0.18em]">
+                                                                            ⚡ Sin pronóstico
                                                                         </span>
                                                                     ) : null}
                                                                     {isDirty ? (
