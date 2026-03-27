@@ -43,7 +43,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 import { GoalToastContainer } from '../components/live/GoalToast';
-import { LiveMatchTimer } from '../components/live/LiveMatchTimer';
+import { LiveMatchTimer, MatchProgressBar } from '../components/live/LiveMatchTimer';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
@@ -1379,6 +1379,20 @@ const Dashboard: React.FC = () => {
     const upcomingMatches = useMemo(() => matches.filter((m) => m.status === 'open').slice(0, 3), [matches]);
     const nextUnsaved = useMemo(() => matches.find((m) => m.status === 'open' && !m.saved), [matches]);
     const liveSync = useLiveSyncEvents();
+
+    /** Calcula los puntos que el usuario estaría ganando SI el partido terminara en el marcador actual. */
+    const calcLivePoints = (predHome: number, predAway: number, realHome: number, realAway: number, isKnockout: boolean): number => {
+        const mult = isKnockout ? 1.5 : 1;
+        if (predHome === realHome && predAway === realAway) return 5 * mult;
+        const predSign = Math.sign(predHome - predAway);
+        const realSign = Math.sign(realHome - realAway);
+        if (predSign === realSign) {
+            const bonus = (predHome === realHome || predAway === realAway) ? 1 : 0;
+            return (2 + bonus) * mult;
+        }
+        if (predHome === realHome || predAway === realAway) return 1 * mult;
+        return 0;
+    };
     const topPlayers = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
 
     // My position in leaderboard
@@ -2247,6 +2261,144 @@ const Dashboard: React.FC = () => {
 
                 {/* ── Right column ── */}
                 <div className="space-y-5">
+
+                    {/* ── Partidos en vivo — siempre primero ── */}
+                    {liveMatches.length > 0 && (
+                        <motion.article {...fade(0.06)} className="rounded-[1.5rem] border border-rose-200 bg-gradient-to-br from-rose-950 to-slate-900 p-4 shadow-xl" aria-label="Partidos en vivo">
+                            {/* Header */}
+                            <div className="mb-3 flex items-center gap-2">
+                                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-rose-400" />
+                                <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">En vivo ahora</p>
+                                <span className="ml-auto text-[10px] text-rose-600">
+                                    {liveSync.lastSyncAt
+                                        ? `↻ hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)}m`
+                                        : `~${liveSync.syncIntervalMinutes}m`}
+                                </span>
+                            </div>
+
+                            <div className="space-y-3">
+                                {liveMatches.map((match) => {
+                                    const predHome = parseInt(match.prediction.home, 10);
+                                    const predAway = parseInt(match.prediction.away, 10);
+                                    const realHome = match.result?.home ?? 0;
+                                    const realAway = match.result?.away ?? 0;
+                                    const hasPred  = match.saved && !isNaN(predHome) && !isNaN(predAway);
+
+                                    let predStatus: 'exact' | 'winning' | 'drawing' | 'losing' | null = null;
+                                    let livePoints = 0;
+                                    if (hasPred && match.result) {
+                                        if (predHome === realHome && predAway === realAway) predStatus = 'exact';
+                                        else {
+                                            const ps = Math.sign(predHome - predAway);
+                                            const rs = Math.sign(realHome - realAway);
+                                            predStatus = ps === rs ? 'winning' : 'losing';
+                                        }
+                                        livePoints = calcLivePoints(predHome, predAway, realHome, realAway, match.isKnockout);
+                                    }
+
+                                    const statusColor = predStatus === 'exact'
+                                        ? 'text-lime-300'
+                                        : predStatus === 'winning'
+                                        ? 'text-lime-400'
+                                        : predStatus === 'drawing'
+                                        ? 'text-amber-300'
+                                        : 'text-rose-400';
+
+                                    const statusLabel = predStatus === 'exact'
+                                        ? '⚽ Exacto'
+                                        : predStatus === 'winning'
+                                        ? '✓ Ganando'
+                                        : predStatus === 'drawing'
+                                        ? '~ Tendencia'
+                                        : predStatus === 'losing'
+                                        ? '✗ Perdiendo'
+                                        : null;
+
+                                    return (
+                                        <div key={match.id} className="overflow-hidden rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                                            {/* Timer bar */}
+                                            <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
+                                                <LiveMatchTimer
+                                                    matchDate={match.date}
+                                                    elapsed={match.elapsed ?? null}
+                                                    lastSyncAt={liveSync.lastSyncAt}
+                                                    statusShort={match.statusShort}
+                                                />
+                                                {hasPred && predStatus && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        {livePoints > 0 && (
+                                                            <span className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono text-[10px] font-black text-lime-300">
+                                                                +{livePoints}pts
+                                                            </span>
+                                                        )}
+                                                        <span className={`text-[10px] font-black ${statusColor}`}>
+                                                            {statusLabel}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Progress bar */}
+                                            <div className="px-3 pb-1">
+                                                <MatchProgressBar
+                                                    matchDate={match.date}
+                                                    elapsed={match.elapsed ?? null}
+                                                    lastSyncAt={liveSync.lastSyncAt}
+                                                    statusShort={match.statusShort}
+                                                    finished={false}
+                                                />
+                                            </div>
+
+                                            {/* Match row */}
+                                            <div className="flex items-center justify-between px-3 py-3">
+                                                {/* Home */}
+                                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                    {match.homeFlag && (
+                                                        <img src={match.homeFlag} alt={match.homeTeamCode} className="h-6 w-9 shrink-0 rounded object-cover border border-white/10 shadow" />
+                                                    )}
+                                                    <span className="truncate text-xs font-bold text-white">{match.homeTeam}</span>
+                                                </div>
+
+                                                {/* Score */}
+                                                <div className="mx-3 shrink-0 text-center">
+                                                    {match.result ? (
+                                                        <div className="rounded-xl bg-white/10 px-4 py-1.5 tabular-nums border border-white/10">
+                                                            <span className="text-lg font-black text-white">{match.result.home}</span>
+                                                            <span className="mx-1.5 text-white/30 text-sm">—</span>
+                                                            <span className="text-lg font-black text-white">{match.result.away}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-sm font-black text-rose-300">vs</span>
+                                                    )}
+                                                    {hasPred && (
+                                                        <p className={`mt-1 text-center font-mono text-[9px] font-bold ${statusColor}`}>
+                                                            Mi pred: {predHome}–{predAway}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Away */}
+                                                <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                                                    <span className="truncate text-xs font-bold text-white">{match.awayTeam}</span>
+                                                    {match.awayFlag && (
+                                                        <img src={match.awayFlag} alt={match.awayTeamCode} className="h-6 w-9 shrink-0 rounded object-cover border border-white/10 shadow" />
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Footer: torneo */}
+                                            {match.phase && (
+                                                <div className="px-3 pb-2">
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-white/30">{match.phase}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </motion.article>
+                    )}
+
                     {/* Top ranking */}
                     <motion.article {...fade(0.08)} className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
                         <div className="flex items-center justify-between">
@@ -2297,92 +2449,6 @@ const Dashboard: React.FC = () => {
                     </motion.article>
 
                     {/* Partidos en vivo */}
-                    {liveMatches.length > 0 && (
-                        <motion.article {...fade(0.11)} className="rounded-[1.5rem] border border-rose-200 bg-gradient-to-b from-rose-50 to-white p-4 shadow-sm">
-                            {/* Header */}
-                            <div className="mb-3 flex items-center gap-2">
-                                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />
-                                <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-700">En vivo ahora</p>
-                                <span className="ml-auto text-[10px] text-rose-400">
-                                    {liveSync.lastSyncAt
-                                        ? `Sync hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)}m · cada ~${liveSync.syncIntervalMinutes}m`
-                                        : `Cada ~${liveSync.syncIntervalMinutes} min`}
-                                </span>
-                            </div>
-
-                            <div className="space-y-2.5">
-                                {liveMatches.map((match) => {
-                                    const predHome = parseInt(match.prediction.home, 10);
-                                    const predAway = parseInt(match.prediction.away, 10);
-                                    const realHome = match.result?.home ?? 0;
-                                    const realAway = match.result?.away ?? 0;
-                                    const hasPred = match.saved && !isNaN(predHome) && !isNaN(predAway);
-                                    // Determine if prediction is currently winning
-                                    let predStatus: 'winning' | 'losing' | 'drawing' | null = null;
-                                    if (hasPred && match.result) {
-                                        const predResult = predHome - predAway;
-                                        const realResult = realHome - realAway;
-                                        if (predHome === realHome && predAway === realAway) predStatus = 'winning';
-                                        else if (Math.sign(predResult) === Math.sign(realResult) || (predResult === 0 && realResult === 0)) predStatus = 'drawing';
-                                        else predStatus = 'losing';
-                                    }
-
-                                    return (
-                                        <div key={match.id} className="overflow-hidden rounded-2xl border border-rose-100 bg-white shadow-sm">
-                                            {/* Timer bar */}
-                                            <div className="flex items-center justify-between bg-rose-600 px-3 py-1">
-                                                <LiveMatchTimer
-                                                    matchDate={match.date}
-                                                    elapsed={match.elapsed ?? null}
-                                                    lastSyncAt={liveSync.lastSyncAt}
-                                                    statusShort={match.statusShort}
-                                                />
-                                                {hasPred && predStatus && (
-                                                    <span className={`text-[9px] font-black uppercase tracking-wider ${predStatus === 'winning' ? 'text-lime-300' : predStatus === 'drawing' ? 'text-amber-200' : 'text-rose-200'}`}>
-                                                        {predStatus === 'winning' ? '✓ Acertando' : predStatus === 'drawing' ? '~ Tendencia' : '✗ Perdiendo'}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Match row */}
-                                            <div className="flex items-center justify-between px-3 py-2.5">
-                                                {/* Home */}
-                                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                                    {match.homeFlag && <img src={match.homeFlag} alt={match.homeTeamCode} className="h-5 w-7 shrink-0 rounded object-cover border border-slate-200" />}
-                                                    <span className="truncate text-xs font-bold text-slate-900">{match.homeTeam}</span>
-                                                </div>
-
-                                                {/* Score */}
-                                                <div className="mx-3 shrink-0 text-center">
-                                                    {match.result ? (
-                                                        <div className="rounded-xl bg-slate-900 px-3 py-1.5 tabular-nums">
-                                                            <span className="text-base font-black text-white">{match.result.home}</span>
-                                                            <span className="mx-1 text-slate-500">—</span>
-                                                            <span className="text-base font-black text-white">{match.result.away}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-sm font-black text-rose-500">vs</span>
-                                                    )}
-                                                    {hasPred && (
-                                                        <p className={`mt-1 text-center font-mono text-[9px] font-bold ${predStatus === 'winning' ? 'text-lime-600' : predStatus === 'drawing' ? 'text-amber-500' : 'text-rose-400'}`}>
-                                                            pred {predHome}–{predAway}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                {/* Away */}
-                                                <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-                                                    <span className="truncate text-xs font-bold text-slate-900">{match.awayTeam}</span>
-                                                    {match.awayFlag && <img src={match.awayFlag} alt={match.awayTeamCode} className="h-5 w-7 shrink-0 rounded object-cover border border-slate-200" />}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </motion.article>
-                    )}
-
                     {/* Goal toast notifications */}
                     <GoalToastContainer />
 
