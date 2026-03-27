@@ -4,16 +4,15 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * Extrae el matchId del campo JSON `data` de una notificación.
+ * Parsea el campo JSON `data` de una notificación.
  * data = JSON.stringify({ matchId, leagueId, ... })
  */
-function extractMatchId(data: string | null): string | null {
-  if (!data) return null;
+function parseData(data: string | null): { matchId?: string; leagueId?: string } {
+  if (!data) return {};
   try {
-    const parsed = JSON.parse(data) as Record<string, unknown>;
-    return typeof parsed.matchId === 'string' ? parsed.matchId : null;
+    return JSON.parse(data) as { matchId?: string; leagueId?: string };
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -58,21 +57,42 @@ export class NotificationsController {
     const deduplicated: typeof raw = [];
 
     for (const n of raw) {
-      const matchId = extractMatchId(n.data);
-      const key = matchId ? `${n.type}:${matchId}` : `${n.type}:${n.sentAt.toISOString().slice(0, 13)}`; // hour bucket
+      const { matchId } = parseData(n.data);
+      const key = matchId ? `${n.type}:${matchId}` : `${n.type}:${n.sentAt.toISOString().slice(0, 13)}`;
       if (seen.has(key)) continue;
       seen.add(key);
       deduplicated.push(n);
       if (deduplicated.length >= limit) break;
     }
 
+    // Enriquecer con el nombre de la liga (batch fetch por leagueIds únicos)
+    const leagueIds = [...new Set(
+      deduplicated.map(n => parseData(n.data).leagueId).filter(Boolean) as string[],
+    )];
+
+    const leagues = leagueIds.length
+      ? await this.prisma.league.findMany({
+          where: { id: { in: leagueIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    const leagueMap = new Map(leagues.map(l => [l.id, l.name]));
+
     // Contar no leídas también en base a las deduplicadas
     const unreadCount = deduplicated.filter(n => !n.read).length;
 
     return {
-      notifications: deduplicated,
+      notifications: deduplicated.map(n => {
+        const { leagueId, matchId } = parseData(n.data);
+        return {
+          ...n,
+          leagueId:   leagueId ?? null,
+          leagueName: leagueId ? (leagueMap.get(leagueId) ?? null) : null,
+          matchId:    matchId ?? null,
+        };
+      }),
       unreadCount,
-      // total real en DB (para contexto)
       totalInDb: raw.length,
     };
   }
@@ -94,7 +114,7 @@ export class NotificationsController {
 
     if (!notif) return { ok: false };
 
-    const matchId = extractMatchId(notif.data);
+    const { matchId } = parseData(notif.data);
 
     if (matchId) {
       // Marcar todas las notificaciones del mismo tipo+partido como leídas

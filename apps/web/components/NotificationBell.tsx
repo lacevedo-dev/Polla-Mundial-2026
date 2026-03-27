@@ -13,17 +13,14 @@ interface Notif {
   read: boolean;
   channel: string;
   sentAt: string;
-  data?: string;
+  leagueId:   string | null;
+  leagueName: string | null;
+  matchId:    string | null;
 }
 
 interface NotifResponse {
   notifications: Notif[];
   unreadCount: number;
-}
-
-interface NotifData {
-  matchId?: string;
-  leagueId?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -64,26 +61,14 @@ function fmtRelative(iso: string): string {
   return `Hace ${Math.floor(hrs / 24)}d`;
 }
 
-function parseData(raw?: string): NotifData {
-  if (!raw) return {};
-  try { return JSON.parse(raw) as NotifData; } catch { return {}; }
-}
-
-/** Devuelve la ruta destino según el tipo de notificación y su data. */
-function resolveRoute(type: string, data: NotifData): string | null {
-  const { leagueId } = data;
+/** Devuelve la ruta destino según el tipo de notificación. */
+function resolveRoute(type: string, leagueId: string | null): string | null {
   switch (type) {
     case 'MATCH_REMINDER':
-      // Ir a la liga para ver el partido y hacer/revisar predicción
-      return leagueId ? `/my-leagues/${leagueId}` : '/my-leagues';
     case 'PREDICTION_CLOSED':
-      // Urgente: todavía pueden entrar a predecir en la liga
-      return leagueId ? `/my-leagues/${leagueId}` : '/my-leagues';
     case 'RESULT_PUBLISHED':
-      // Ver resultado y ranking de la liga
-      return leagueId ? `/my-leagues/${leagueId}` : '/ranking';
+      return leagueId ? `/my-leagues/${leagueId}` : '/my-leagues';
     case 'LEAGUE_INVITE':
-      // Ir a mis ligas para aceptar la invitación
       return '/my-leagues';
     case 'PAYMENT_CONFIRMED':
       return '/dashboard';
@@ -162,8 +147,7 @@ export default function NotificationBell() {
 
   const handleNotifClick = async (n: Notif) => {
     void markRead(n.id);
-    const notifData = parseData(n.data);
-    const route = resolveRoute(n.type, notifData);
+    const route = resolveRoute(n.type, n.leagueId);
     if (route) {
       setOpen(false);
       navigate(route);
@@ -327,8 +311,7 @@ export default function NotificationBell() {
             )}
 
             {visible.map(n => {
-              const notifData  = parseData(n.data);
-              const route      = resolveRoute(n.type, notifData);
+              const route       = resolveRoute(n.type, n.leagueId);
               const isClickable = !!route;
 
               return (
@@ -349,14 +332,24 @@ export default function NotificationBell() {
 
                   {/* Contenido */}
                   <div className="flex-1 min-w-0 text-left">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">
-                      {TYPE_LABELS_FULL[n.type] ?? n.type}
-                      {isClickable && (
-                        <span className="ml-1.5 text-slate-600 normal-case tracking-normal font-normal">→ ver</span>
+                    {/* Tipo + liga */}
+                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        {TYPE_LABELS_FULL[n.type] ?? n.type}
+                      </p>
+                      {n.leagueName && (
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400/15 text-amber-400 truncate max-w-[120px]">
+                          {n.leagueName}
+                        </span>
                       )}
-                    </p>
+                    </div>
                     <p className="text-xs text-slate-100 leading-relaxed">{n.body}</p>
-                    <p className="text-[10px] text-slate-500 mt-1.5">{fmtRelative(n.sentAt)}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <p className="text-[10px] text-slate-500">{fmtRelative(n.sentAt)}</p>
+                      {isClickable && (
+                        <span className="text-[10px] text-lime-500 font-bold">→ ir a subsanar</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Indicador lateral de no leída */}
