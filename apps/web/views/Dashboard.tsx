@@ -1850,13 +1850,17 @@ const Dashboard: React.FC = () => {
 
                 return (
                     <motion.div {...fade(0.04)} className="space-y-2">
-                        {/* Row de chips — estilo Google scores, sin scroll */}
-                        <div className="flex items-center gap-1 mb-0.5">
+                        {/* Etiqueta */}
+                        <div className="flex items-center gap-1">
                             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
                             <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
                         </div>
-                        {/* Grid auto-fill: el navegador calcula cuántos chips caben según el ancho real */}
-                        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))' }}>
+
+                        {/*
+                          Móvil: chips compactos, auto-fill minmax(88px) → N por fila según ancho
+                          Escritorio (xl): 3 columnas igual que el main grid → tarjetas completas
+                        */}
+                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))] xl:grid-cols-3">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
@@ -1877,45 +1881,67 @@ const Dashboard: React.FC = () => {
                                     <button
                                         key={match.id}
                                         onClick={() => setExpandedMatchId(isActive ? null : match.id)}
-                                        className={`w-full flex flex-col items-center rounded-2xl border px-2 py-2 transition-all ${
-                                            isActive
+                                        className={`w-full rounded-2xl border transition-all
+                                            flex flex-col items-center px-2 py-2
+                                            xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3 xl:gap-3
+                                            ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900`
-                                        }`}
+                                            }`}
                                         aria-expanded={isActive}
                                         aria-label={`${match.homeTeam} vs ${match.awayTeam}`}
                                     >
-                                        {/* Tiempo centrado arriba */}
-                                        <LiveMatchTimerInline
-                                            matchDate={match.date}
-                                            elapsed={match.elapsed ?? null}
-                                            lastSyncAt={liveSync.lastSyncAt}
-                                            statusShort={match.statusShort}
-                                        />
-                                        {/* Marcador + equipos en fila */}
-                                        <div className="flex items-center justify-between w-full mt-1 gap-1">
-                                            {/* Local */}
+                                        {/* ── MÓVIL: chip compacto vertical ── */}
+                                        {/* Tiempo */}
+                                        <div className="xl:hidden w-full flex justify-center">
+                                            <LiveMatchTimerInline
+                                                matchDate={match.date}
+                                                elapsed={match.elapsed ?? null}
+                                                lastSyncAt={liveSync.lastSyncAt}
+                                                statusShort={match.statusShort}
+                                            />
+                                        </div>
+                                        {/* Equipos + marcador */}
+                                        <div className="xl:hidden flex items-center justify-between w-full mt-1 gap-1">
                                             <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
-                                                {match.homeFlag
-                                                    ? <img src={match.homeFlag} alt="" className="h-4 w-6 rounded-[3px] object-cover" />
-                                                    : null}
+                                                {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-6 rounded-[3px] object-cover" />}
                                                 <span className="text-[9px] font-bold text-white/60 uppercase leading-none truncate w-full text-center">
                                                     {match.homeTeamCode || match.homeTeam.slice(0, 3)}
                                                 </span>
                                             </div>
-                                            {/* Marcador */}
                                             <span className={`text-[15px] font-black tabular-nums leading-none shrink-0 ${scoreColor}`}>
                                                 {match.result ? `${rH}–${rA}` : '–'}
                                             </span>
-                                            {/* Visitante */}
                                             <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
-                                                {match.awayFlag
-                                                    ? <img src={match.awayFlag} alt="" className="h-4 w-6 rounded-[3px] object-cover" />
-                                                    : null}
+                                                {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-6 rounded-[3px] object-cover" />}
                                                 <span className="text-[9px] font-bold text-white/60 uppercase leading-none truncate w-full text-center">
                                                     {match.awayTeamCode || match.awayTeam.slice(0, 3)}
                                                 </span>
                                             </div>
+                                        </div>
+
+                                        {/* ── ESCRITORIO: tarjeta horizontal completa ── */}
+                                        {/* Equipo local */}
+                                        <div className="hidden xl:flex items-center gap-2 min-w-0 flex-1">
+                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-6 w-9 rounded object-cover border border-white/10 shrink-0" />}
+                                            <span className="text-sm font-bold text-white truncate">{match.homeTeam}</span>
+                                        </div>
+                                        {/* Centro: marcador + tiempo */}
+                                        <div className="hidden xl:flex flex-col items-center shrink-0 gap-0.5">
+                                            <span className={`text-xl font-black tabular-nums leading-none ${scoreColor}`}>
+                                                {match.result ? `${rH} – ${rA}` : '– –'}
+                                            </span>
+                                            <LiveMatchTimerInline
+                                                matchDate={match.date}
+                                                elapsed={match.elapsed ?? null}
+                                                lastSyncAt={liveSync.lastSyncAt}
+                                                statusShort={match.statusShort}
+                                            />
+                                        </div>
+                                        {/* Equipo visitante */}
+                                        <div className="hidden xl:flex items-center justify-end gap-2 min-w-0 flex-1">
+                                            <span className="text-sm font-bold text-white truncate text-right">{match.awayTeam}</span>
+                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-6 w-9 rounded object-cover border border-white/10 shrink-0" />}
                                         </div>
                                     </button>
                                 );
