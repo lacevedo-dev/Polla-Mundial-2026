@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Phase } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import * as bcrypt from 'bcrypt';
 
@@ -77,6 +77,24 @@ function parseOptions(): CliOptions {
   };
 }
 
+function buildMariaConfig() {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) {
+    throw new Error('DATABASE_URL no está configurada.');
+  }
+  const url = new URL(raw);
+  return {
+    host: url.hostname,
+    port: Number(url.port || 3306),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ''),
+    connectionLimit: 4,
+    minimumIdle: 1,
+    acquireTimeout: 30000,
+  };
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -111,12 +129,13 @@ function mapStatus(short?: string | null): 'SCHEDULED' | 'LIVE' | 'FINISHED' | '
   return 'SCHEDULED';
 }
 
-function mapPhase(round?: string | null): 'GROUP' | 'R32' | 'R16' | 'QF' | 'SF' | 'FINAL' {
+function mapPhase(round?: string | null): Phase {
   const text = normalize(round);
-  if (text.includes('round of 32') || text.includes('1 16')) return 'R32';
-  if (text.includes('round of 16') || text.includes('octavos')) return 'R16';
-  if (text.includes('quarter') || text.includes('cuartos')) return 'QF';
-  if (text.includes('semi')) return 'SF';
+  if (text.includes('round of 32') || text.includes('1 16')) return 'ROUND_OF_32';
+  if (text.includes('round of 16') || text.includes('octavos')) return 'ROUND_OF_16';
+  if (text.includes('quarter') || text.includes('cuartos')) return 'QUARTER';
+  if (text.includes('semi')) return 'SEMI';
+  if (text.includes('third') || text.includes('tercer')) return 'THIRD_PLACE';
   if (text.includes('final')) return 'FINAL';
   return 'GROUP';
 }
@@ -142,15 +161,13 @@ function mutatePredictionFromResult(home: number, away: number): [number, number
   return randomScore();
 }
 
-async function apiGetFixtures(date: string, timezone: string, leagueId: number, season: number): Promise<Fixture[]> {
+async function apiGetFixtures(date: string, timezone: string): Promise<Fixture[]> {
   const apiKey = (process.env.API_FOOTBALL_KEY ?? '').replace(/^"|"$/g, '');
   if (!apiKey) throw new Error('API_FOOTBALL_KEY no está configurada.');
 
   const params = new URLSearchParams({
     date,
     timezone,
-    league: String(leagueId),
-    season: String(season),
   });
 
   const response = await fetch(`https://v3.football.api-sports.io/fixtures?${params.toString()}`, {
@@ -161,7 +178,7 @@ async function apiGetFixtures(date: string, timezone: string, leagueId: number, 
   });
 
   if (!response.ok) {
-    throw new Error(`API-Football respondió ${response.status} para league=${leagueId}, date=${date}`);
+    throw new Error(`API-Football respondió ${response.status} para date=${date}`);
   }
 
   const payload = await response.json() as { response?: Fixture[] };
@@ -265,7 +282,7 @@ async function ensureDemoUsers(
 
 async function main() {
   const options = parseOptions();
-  const adapter = new PrismaMariaDb({ connectionString: process.env.DATABASE_URL });
+  const adapter = new PrismaMariaDb(buildMariaConfig());
   const prisma = new PrismaClient({ adapter });
 
   const summary = {
@@ -338,14 +355,19 @@ async function main() {
       console.log(`\n👥 Usuarios demo asegurados: ${summary.demoUsersCreated}`);
     }
 
-    const importedMatches: Array<{ id: string; tournamentId: string; status: string; matchDate: Date; homeScore: number | null; awayScore: number | null }> = [];
+    const importedMatches: Array<{ id: string; tournamentId: string | null; status: string; matchDate: Date; homeScore: number | null; awayScore: number | null }> = [];
 
     for (let offset = 0; offset < options.days; offset++) {
       const date = formatDate(addDays(options.baseDate, offset));
       console.log(`\n📅 Consultando fixtures para ${date}...`);
+      const fixturesByDate = await apiGetFixtures(date, options.timezone);
 
       for (const tournament of tournaments) {
-        const fixtures = await apiGetFixtures(date, options.timezone, tournament.apiFootballLeagueId, tournament.season);
+        const fixtures = fixturesByDate.filter(
+          (fixture) =>
+            fixture.league.id === tournament.apiFootballLeagueId &&
+            Number(fixture.league.season ?? 0) === Number(tournament.season),
+        );
         const selected = fixtures
           .filter((fixture) => fixture.teams.home?.id && fixture.teams.away?.id)
           .slice(0, options.maxFixturesPerTournament);
@@ -425,8 +447,8 @@ async function main() {
             data: {
               homeTeamId: sourceMatch.homeTeamId,
               awayTeamId: sourceMatch.awayTeamId,
-              tournamentId: sourceMatch.tournamentId,
-              phase: 'GROUP',
+              tournamentId: sourceMatch.tournamentId!,
+              phase: Phase.GROUP,
               round: `Validación automática ${scenario.label}`,
               venue: `${sourceMatch.venue ?? 'Sin sede'} [VALIDACIÓN]`,
               matchDate: new Date(now.getTime() + scenario.minutes * 60_000),
