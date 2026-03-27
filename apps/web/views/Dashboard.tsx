@@ -43,7 +43,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 import { GoalToastContainer } from '../components/live/GoalToast';
-import { LiveMatchTimer, MatchProgressBar } from '../components/live/LiveMatchTimer';
+import { LiveMatchTimer, LiveMatchTimerInline, MatchProgressBar } from '../components/live/LiveMatchTimer';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
@@ -1401,6 +1401,15 @@ const Dashboard: React.FC = () => {
     };
     const topPlayers = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
 
+    // Partido expandido en el panel de chips en vivo
+    const [expandedMatchId, setExpandedMatchId] = React.useState<string | null>(null);
+    React.useEffect(() => {
+        if (liveMatches.length > 0 && !expandedMatchId) {
+            setExpandedMatchId(liveMatches[0].id);
+        }
+        if (liveMatches.length === 0) setExpandedMatchId(null);
+    }, [liveMatches, expandedMatchId]);
+
     // My position in leaderboard
     const myEntry = useMemo(
         () => leaderboard.find((p) => p.id === user?.id || p.username === user?.username),
@@ -1810,6 +1819,179 @@ const Dashboard: React.FC = () => {
                     <span>{error}</span>
                 </div>
             )}
+
+            {/* ── Partidos en vivo — chips + panel expandible ── */}
+            {liveMatches.length > 0 && (() => {
+                const expandedMatch = liveMatches.find(m => m.id === expandedMatchId) ?? null;
+                const expandedPredHome = expandedMatch ? parseInt(expandedMatch.prediction.home, 10) : NaN;
+                const expandedPredAway = expandedMatch ? parseInt(expandedMatch.prediction.away, 10) : NaN;
+                const expandedRealHome = expandedMatch?.result?.home ?? 0;
+                const expandedRealAway = expandedMatch?.result?.away ?? 0;
+                const expandedHasPred  = !!expandedMatch?.saved && !isNaN(expandedPredHome) && !isNaN(expandedPredAway);
+                let expandedStatus: 'exact' | 'winning' | 'losing' | null = null;
+                let expandedPts = 0;
+                if (expandedHasPred && expandedMatch?.result) {
+                    if (expandedPredHome === expandedRealHome && expandedPredAway === expandedRealAway) expandedStatus = 'exact';
+                    else expandedStatus = Math.sign(expandedPredHome - expandedPredAway) === Math.sign(expandedRealHome - expandedRealAway) ? 'winning' : 'losing';
+                    expandedPts = calcLivePoints(expandedPredHome, expandedPredAway, expandedRealHome, expandedRealAway, !!expandedMatch?.isKnockout);
+                }
+                const expandedStatusColor = expandedStatus === 'exact' ? 'text-lime-300' : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
+                const expandedEvents = expandedMatch ? (matchEvents.get(expandedMatch.id) ?? []).filter(e => ['GOAL', 'CARD'].includes(e.type)) : [];
+
+                return (
+                    <motion.div {...fade(0.04)} className="space-y-2">
+                        {/* Row de chips */}
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-rose-600">En vivo</span>
+                            </div>
+                            {liveMatches.map(match => {
+                                const isActive = match.id === expandedMatchId;
+                                const pH = parseInt(match.prediction.home, 10);
+                                const pA = parseInt(match.prediction.away, 10);
+                                const rH = match.result?.home ?? 0;
+                                const rA = match.result?.away ?? 0;
+                                const chipStatus = match.saved && !isNaN(pH) && !isNaN(pA) && match.result
+                                    ? (pH === rH && pA === rA ? 'exact' : Math.sign(pH - pA) === Math.sign(rH - rA) ? 'winning' : 'losing')
+                                    : null;
+                                const chipDot = chipStatus === 'exact' || chipStatus === 'winning' ? 'bg-lime-400' : chipStatus === 'losing' ? 'bg-rose-400' : 'bg-white/20';
+
+                                return (
+                                    <button
+                                        key={match.id}
+                                        onClick={() => setExpandedMatchId(isActive ? null : match.id)}
+                                        className={`shrink-0 flex items-center gap-2 rounded-2xl border px-3 py-2 transition-all ${
+                                            isActive
+                                                ? 'bg-slate-900 border-rose-500/60 shadow-lg shadow-rose-900/30'
+                                                : 'bg-slate-900/60 border-white/10 hover:border-white/30'
+                                        }`}
+                                        aria-expanded={isActive}
+                                        aria-label={`${match.homeTeam} vs ${match.awayTeam}`}
+                                    >
+                                        {/* dot */}
+                                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${chipDot}`} />
+                                        {/* flags + score */}
+                                        {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-5.5 rounded object-cover" />}
+                                        <span className="text-[11px] font-black text-white tabular-nums">
+                                            {match.result ? `${match.result.home}–${match.result.away}` : 'vs'}
+                                        </span>
+                                        {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-5.5 rounded object-cover" />}
+                                        {/* timer inline */}
+                                        <LiveMatchTimerInline
+                                            matchDate={match.date}
+                                            elapsed={match.elapsed ?? null}
+                                            lastSyncAt={liveSync.lastSyncAt}
+                                            statusShort={match.statusShort}
+                                        />
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Panel expandido */}
+                        <AnimatePresence>
+                            {expandedMatch && (
+                                <motion.div
+                                    key={expandedMatch.id}
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.22, ease: 'easeOut' as const }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 p-4">
+                                        {/* Timer + estado predicción + pts */}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <LiveMatchTimer
+                                                    matchDate={expandedMatch.date}
+                                                    elapsed={expandedMatch.elapsed ?? null}
+                                                    lastSyncAt={liveSync.lastSyncAt}
+                                                    statusShort={expandedMatch.statusShort}
+                                                />
+                                                {liveStandings?.myProvisionalPosition != null && (
+                                                    <span className={`text-[10px] font-black ${liveStandings.myPositionChange > 0 ? 'text-lime-400' : liveStandings.myPositionChange < 0 ? 'text-rose-400' : 'text-white/40'}`}>
+                                                        #{liveStandings.myProvisionalPosition} provisional
+                                                        {liveStandings.myPositionChange > 0 && ` ↑${liveStandings.myPositionChange}`}
+                                                        {liveStandings.myPositionChange < 0 && ` ↓${Math.abs(liveStandings.myPositionChange)}`}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {expandedPts > 0 && (
+                                                    <span className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono text-[10px] font-black text-lime-300">
+                                                        +{expandedPts}pts
+                                                    </span>
+                                                )}
+                                                {expandedStatus && (
+                                                    <span className={`text-[10px] font-black ${expandedStatusColor}`}>
+                                                        {expandedStatus === 'exact' ? '⚽ Exacto' : expandedStatus === 'winning' ? '✓ Ganando' : '✗ Perdiendo'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Barra de progreso */}
+                                        <MatchProgressBar
+                                            matchDate={expandedMatch.date}
+                                            elapsed={expandedMatch.elapsed ?? null}
+                                            lastSyncAt={liveSync.lastSyncAt}
+                                            statusShort={expandedMatch.statusShort}
+                                            finished={false}
+                                        />
+
+                                        {/* Marcador */}
+                                        <div className="flex items-center justify-between mt-3">
+                                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                {expandedMatch.homeFlag && <img src={expandedMatch.homeFlag} alt="" className="h-7 w-10 rounded object-cover border border-white/10" />}
+                                                <span className="text-sm font-bold text-white truncate">{expandedMatch.homeTeam}</span>
+                                            </div>
+                                            <div className="mx-4 shrink-0 text-center">
+                                                <div className="rounded-xl bg-white/10 px-4 py-1.5 tabular-nums border border-white/10">
+                                                    <span className="text-xl font-black text-white">{expandedRealHome}</span>
+                                                    <span className="mx-1.5 text-white/30">—</span>
+                                                    <span className="text-xl font-black text-white">{expandedRealAway}</span>
+                                                </div>
+                                                {expandedHasPred && (
+                                                    <p className={`mt-1 font-mono text-[9px] font-bold ${expandedStatusColor}`}>
+                                                        pred {expandedPredHome}–{expandedPredAway}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                                                <span className="text-sm font-bold text-white truncate">{expandedMatch.awayTeam}</span>
+                                                {expandedMatch.awayFlag && <img src={expandedMatch.awayFlag} alt="" className="h-7 w-10 rounded object-cover border border-white/10" />}
+                                            </div>
+                                        </div>
+
+                                        {/* Goleadores y tarjetas */}
+                                        {expandedEvents.length > 0 && (
+                                            <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-x-4 gap-y-0.5">
+                                                {expandedEvents.map((e, i) => {
+                                                    const isOG = e.detail?.toLowerCase().includes('own goal');
+                                                    const icon = e.type === 'GOAL' ? (isOG ? '⚽ OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
+                                                    const min  = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                    return (
+                                                        <span key={i} className="text-[10px] text-white/40">
+                                                            {icon} {!isOG && e.playerName ? e.playerName : ''} {min}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Fase */}
+                                        {expandedMatch.phase && (
+                                            <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-white/20">{expandedMatch.phase}</p>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
+                );
+            })()}
 
             {/* ── Main grid ── */}
             <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
@@ -2287,175 +2469,6 @@ const Dashboard: React.FC = () => {
 
                 {/* ── Right column ── */}
                 <div className="space-y-5">
-
-                    {/* ── Partidos en vivo — siempre primero ── */}
-                    {liveMatches.length > 0 && (
-                        <motion.article {...fade(0.06)} className="rounded-[1.5rem] border border-rose-200 bg-gradient-to-br from-rose-950 to-slate-900 p-4 shadow-xl" aria-label="Partidos en vivo">
-                            {/* Header */}
-                            <div className="mb-3 flex items-center gap-2">
-                                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-rose-400" />
-                                <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">En vivo ahora</p>
-                                {liveStandings?.myProvisionalPosition != null && (
-                                    <span className={`ml-1 text-[10px] font-black ${liveStandings.myPositionChange > 0 ? 'text-lime-400' : liveStandings.myPositionChange < 0 ? 'text-rose-400' : 'text-white/50'}`}>
-                                        📍 #{liveStandings.myProvisionalPosition}
-                                        {liveStandings.myPositionChange > 0 && ` ↑${liveStandings.myPositionChange}`}
-                                        {liveStandings.myPositionChange < 0 && ` ↓${Math.abs(liveStandings.myPositionChange)}`}
-                                    </span>
-                                )}
-                                <span className="ml-auto text-[10px] text-rose-600">
-                                    {liveSync.lastSyncAt
-                                        ? `↻ hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)}m`
-                                        : `~${liveSync.syncIntervalMinutes}m`}
-                                </span>
-                            </div>
-
-                            <div className="space-y-3">
-                                {liveMatches.map((match) => {
-                                    const predHome = parseInt(match.prediction.home, 10);
-                                    const predAway = parseInt(match.prediction.away, 10);
-                                    const realHome = match.result?.home ?? 0;
-                                    const realAway = match.result?.away ?? 0;
-                                    const hasPred  = match.saved && !isNaN(predHome) && !isNaN(predAway);
-
-                                    let predStatus: 'exact' | 'winning' | 'drawing' | 'losing' | null = null;
-                                    let livePoints = 0;
-                                    if (hasPred && match.result) {
-                                        if (predHome === realHome && predAway === realAway) predStatus = 'exact';
-                                        else {
-                                            const ps = Math.sign(predHome - predAway);
-                                            const rs = Math.sign(realHome - realAway);
-                                            predStatus = ps === rs ? 'winning' : 'losing';
-                                        }
-                                        livePoints = calcLivePoints(predHome, predAway, realHome, realAway, match.isKnockout);
-                                    }
-
-                                    const statusColor = predStatus === 'exact'
-                                        ? 'text-lime-300'
-                                        : predStatus === 'winning'
-                                        ? 'text-lime-400'
-                                        : predStatus === 'drawing'
-                                        ? 'text-amber-300'
-                                        : 'text-rose-400';
-
-                                    const statusLabel = predStatus === 'exact'
-                                        ? '⚽ Exacto'
-                                        : predStatus === 'winning'
-                                        ? '✓ Ganando'
-                                        : predStatus === 'drawing'
-                                        ? '~ Tendencia'
-                                        : predStatus === 'losing'
-                                        ? '✗ Perdiendo'
-                                        : null;
-
-                                    return (
-                                        <div key={match.id} className="overflow-hidden rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                                            {/* Timer bar */}
-                                            <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
-                                                <LiveMatchTimer
-                                                    matchDate={match.date}
-                                                    elapsed={match.elapsed ?? null}
-                                                    lastSyncAt={liveSync.lastSyncAt}
-                                                    statusShort={match.statusShort}
-                                                />
-                                                {hasPred && predStatus && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        {livePoints > 0 && (
-                                                            <span className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono text-[10px] font-black text-lime-300">
-                                                                +{livePoints}pts
-                                                            </span>
-                                                        )}
-                                                        <span className={`text-[10px] font-black ${statusColor}`}>
-                                                            {statusLabel}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Progress bar */}
-                                            <div className="px-3 pb-1">
-                                                <MatchProgressBar
-                                                    matchDate={match.date}
-                                                    elapsed={match.elapsed ?? null}
-                                                    lastSyncAt={liveSync.lastSyncAt}
-                                                    statusShort={match.statusShort}
-                                                    finished={false}
-                                                />
-                                            </div>
-
-                                            {/* Match row */}
-                                            <div className="flex items-center justify-between px-3 py-3">
-                                                {/* Home */}
-                                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                    {match.homeFlag && (
-                                                        <img src={match.homeFlag} alt={match.homeTeamCode} className="h-6 w-9 shrink-0 rounded object-cover border border-white/10 shadow" />
-                                                    )}
-                                                    <span className="truncate text-xs font-bold text-white">{match.homeTeam}</span>
-                                                </div>
-
-                                                {/* Score */}
-                                                <div className="mx-3 shrink-0 text-center">
-                                                    {match.result ? (
-                                                        <div className="rounded-xl bg-white/10 px-4 py-1.5 tabular-nums border border-white/10">
-                                                            <span className="text-lg font-black text-white">{match.result.home}</span>
-                                                            <span className="mx-1.5 text-white/30 text-sm">—</span>
-                                                            <span className="text-lg font-black text-white">{match.result.away}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-sm font-black text-rose-300">vs</span>
-                                                    )}
-                                                    {hasPred && (
-                                                        <p className={`mt-1 text-center font-mono text-[9px] font-bold ${statusColor}`}>
-                                                            Mi pred: {predHome}–{predAway}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                {/* Away */}
-                                                <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-                                                    <span className="truncate text-xs font-bold text-white">{match.awayTeam}</span>
-                                                    {match.awayFlag && (
-                                                        <img src={match.awayFlag} alt={match.awayTeamCode} className="h-6 w-9 shrink-0 rounded object-cover border border-white/10 shadow" />
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Goalscorers / events */}
-                                            {(() => {
-                                                const events = matchEvents.get(match.id) ?? [];
-                                                const notable = events.filter((e) => ['GOAL', 'YELLOW_CARD', 'RED_CARD'].includes(e.type));
-                                                if (notable.length === 0) return null;
-                                                return (
-                                                    <div className="px-3 pb-2 space-y-0.5">
-                                                        {notable.map((e, i) => {
-                                                            const icon = e.type === 'GOAL'
-                                                                ? (e.detail?.toLowerCase().includes('own goal') ? '⚽ OG' : '⚽')
-                                                                : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
-                                                            const name = e.type === 'GOAL' && e.detail?.toLowerCase().includes('own goal')
-                                                                ? null
-                                                                : e.playerName;
-                                                            const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
-                                                            return (
-                                                                <p key={i} className="text-[10px] text-white/30">
-                                                                    {icon}{name ? ` ${name}` : ''} {min}
-                                                                </p>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                );
-                                            })()}
-
-                                            {/* Footer: torneo */}
-                                            {match.phase && (
-                                                <div className="px-3 pb-2">
-                                                    <span className="text-[9px] font-black uppercase tracking-widest text-white/30">{match.phase}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </motion.article>
-                    )}
 
                     {/* Top ranking */}
                     <motion.article {...fade(0.08)} className="rounded-[1.75rem] border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
