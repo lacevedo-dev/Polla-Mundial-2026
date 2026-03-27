@@ -53,7 +53,7 @@ export class AdminAutomationController {
         enabled: !!(twilioSid && twilioToken),
         description:
           twilioSid && twilioToken
-            ? `Twilio activo — ${userWithPhone} usuarios con teléfono`
+            ? `Twilio activo Ã¢â‚¬â€ ${userWithPhone} usuarios con telÃƒÂ©fono`
             : 'TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN no configurados',
         usersWithPhone: userWithPhone,
       },
@@ -74,9 +74,9 @@ export class AdminAutomationController {
         id: 'match_reminder',
         name: 'Recordatorio de partido',
         cron: '* * * * *',
-        description: 'Cada minuto — partidos que empiezan en ~60 min',
+        description: 'Cada minuto Ã¢â‚¬â€ partidos que empiezan en ~60 min',
         notifType: 'MATCH_REMINDER',
-        icon: '⏰',
+        icon: 'Ã¢ÂÂ°',
         audience: 'Todos los miembros activos de ligas con ese partido',
         channels: ['inApp', 'push', 'whatsapp'],
       },
@@ -84,20 +84,20 @@ export class AdminAutomationController {
         id: 'prediction_closing',
         name: 'Cierre de predicciones',
         cron: '* * * * *',
-        description: 'Cada minuto — predicciones que cierran en ≤5 min',
+        description: 'Cada minuto Ã¢â‚¬â€ predicciones que cierran en Ã¢â€°Â¤5 min',
         notifType: 'PREDICTION_CLOSED',
-        icon: '⚠️',
-        audience: 'Miembros activos que aún no han pronosticado',
+        icon: 'Ã¢Å¡Â Ã¯Â¸Â',
+        audience: 'Miembros activos que aÃƒÂºn no han pronosticado',
         channels: ['inApp', 'push', 'whatsapp'],
       },
       {
         id: 'match_result',
         name: 'Resultado de partido',
         cron: '* * * * *',
-        description: 'Cada minuto — partidos finalizados sin notificación enviada',
+        description: 'Cada minuto Ã¢â‚¬â€ partidos finalizados sin notificaciÃƒÂ³n enviada',
         notifType: 'RESULT_PUBLISHED',
-        icon: '✅',
-        audience: 'Usuarios con predicción en el partido',
+        icon: 'Ã¢Å“â€¦',
+        audience: 'Usuarios con predicciÃƒÂ³n en el partido',
         channels: ['inApp', 'push', 'whatsapp'],
       },
     ];
@@ -110,7 +110,7 @@ export class AdminAutomationController {
   }
 
   /**
-   * Matriz del día: partidos de hoy con estado de cada automatización.
+   * Matriz del dÃƒÂ­a: partidos de hoy con estado de cada automatizaciÃƒÂ³n.
    * Cuenta notificaciones por tipo usando el campo JSON `data` que contiene { matchId }.
    */
   @Get('today-matrix')
@@ -120,12 +120,24 @@ export class AdminAutomationController {
     const todayCOT = nowCOT.toISOString().split('T')[0];
     const [yr, mo, dy] = todayCOT.split('-').map(Number);
 
-    // Medianoche COT = 05:00 UTC; fin del día COT = día siguiente 04:59:59 UTC
+    // Medianoche COT = 05:00 UTC; fin del dia COT = dia siguiente 04:59:59 UTC
     const dayStart = new Date(Date.UTC(yr, mo - 1, dy, 5, 0, 0));
     const dayEnd = new Date(Date.UTC(yr, mo - 1, dy + 1, 4, 59, 59));
+    const yesterdayStart = new Date(Date.UTC(yr, mo - 1, dy - 1, 5, 0, 0));
 
     const matches = await this.prisma.match.findMany({
-      where: { matchDate: { gte: dayStart, lte: dayEnd } },
+      where: {
+        OR: [
+          { matchDate: { gte: dayStart, lte: dayEnd } },
+          {
+            matchDate: { gte: yesterdayStart, lt: dayStart },
+            OR: [
+              { status: { in: ['SCHEDULED', 'LIVE'] } },
+              { status: 'FINISHED', resultNotificationSentAt: null },
+            ],
+          },
+        ],
+      },
       select: {
         id: true,
         matchDate: true,
@@ -171,7 +183,7 @@ export class AdminAutomationController {
       }
     }
 
-    // Notificaciones en ventana amplia (2h antes del primero al +4h del último)
+    // Notificaciones en ventana amplia (2h antes del primero al +4h del ÃƒÂºltimo)
     const earliest = matches[0].matchDate;
     const latest = matches[matches.length - 1].matchDate;
     const wideStart = new Date(earliest.getTime() - 2 * 60 * 60 * 1000);
@@ -186,7 +198,7 @@ export class AdminAutomationController {
       orderBy: { sentAt: 'desc' },
     });
 
-    // Agrupar en memoria por matchId (extraído del JSON en data)
+    // Agrupar en memoria por matchId (extraÃƒÂ­do del JSON en data)
     const byMatch = new Map<string, Array<{ type: NotificationType; sentAt: Date }>>();
     for (const n of allNotifs) {
       if (!n.data) continue;
@@ -206,6 +218,7 @@ export class AdminAutomationController {
       const closeMinutes = closeMinByMatch.get(match.id) ?? 15;
       const reminderAt = new Date(match.matchDate.getTime() - 60 * 60 * 1000);
       const closingAt = new Date(match.matchDate.getTime() - closeMinutes * 60 * 1000);
+      const resultAt = new Date(match.matchDate.getTime() + 130 * 60 * 1000);
 
       const notifs = byMatch.get(match.id) ?? [];
       const byType = (t: NotificationType) => notifs.filter(n => n.type === t);
@@ -219,6 +232,7 @@ export class AdminAutomationController {
 
       return {
         id: match.id,
+        trackingScope: match.matchDate < dayStart ? 'CARRY_OVER' : 'TODAY',
         homeTeam: match.homeTeam.name,
         awayTeam: match.awayTeam.name,
         matchDate: match.matchDate.toISOString(),
@@ -241,7 +255,7 @@ export class AdminAutomationController {
             overdue: now > closingAt && clo.length === 0 && isScheduled,
           },
           result: {
-            scheduledAt: isFinished ? match.matchDate.toISOString() : null,
+            scheduledAt: resultAt.toISOString(),
             sentCount: res.length,
             done: res.length > 0,
             lastSentAt: res[0]?.sentAt.toISOString() ?? null,

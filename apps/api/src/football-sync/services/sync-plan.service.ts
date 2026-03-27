@@ -8,6 +8,7 @@ import { ConfigService as FootballConfigService } from './config.service';
 
 export interface MatchSyncSlot {
   matchId: string;
+  trackingScope: 'TODAY' | 'CARRY_OVER';
   homeTeam: string;
   awayTeam: string;
   homeFlag?: string | null;
@@ -226,17 +227,11 @@ export class SyncPlanService {
     finished: number;
   }> {
     const todayStart = this.getTodayStart();
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1);
+    const todayEnd = this.getTodayEnd(todayStart);
 
     const matches = await this.prisma.match.groupBy({
       by: ['status'],
-      where: {
-        matchDate: {
-          gte: todayStart,
-          lt: todayEnd,
-        },
-      },
+      where: this.buildTrackedMatchesWhere(todayStart, todayEnd),
       _count: true,
     });
 
@@ -278,14 +273,14 @@ export class SyncPlanService {
   /**
    * Increment requests used counter
    */
-  async incrementRequestsUsed(): Promise<void> {
+  async incrementRequestsUsed(count = 1): Promise<void> {
     const today = this.getToday();
 
     await this.prisma.dailySyncPlan.updateMany({
       where: { date: today },
       data: {
         requestsUsed: {
-          increment: 1,
+          increment: count,
         },
       },
     });
@@ -348,6 +343,28 @@ export class SyncPlanService {
     });
   }
 
+  async getCarryOverMatches(): Promise<Array<{ id: string; externalId: string | null }>> {
+    const todayStart = this.getTodayStart();
+    const yesterdayStart = this.getYesterdayStart(todayStart);
+
+    return this.prisma.match.findMany({
+      where: {
+        matchDate: {
+          gte: yesterdayStart,
+          lt: todayStart,
+        },
+        OR: [
+          { status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] } },
+          { status: MatchStatus.FINISHED, resultNotificationSentAt: null },
+        ],
+      },
+      select: {
+        id: true,
+        externalId: true,
+      },
+    });
+  }
+
   /**
    * Calculate seconds until next sync
    */
@@ -403,14 +420,12 @@ export class SyncPlanService {
     const available = limit - used;
 
     const todayStart = this.getTodayStart();
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1);
+    const todayEnd = this.getTodayEnd(todayStart);
+    const trackedMatchesWhere = this.buildTrackedMatchesWhere(todayStart, todayEnd);
 
     const [matches, activeLeagues] = await Promise.all([
       this.prisma.match.findMany({
-        where: {
-          matchDate: { gte: todayStart, lt: todayEnd },
-        },
+        where: trackedMatchesWhere,
         include: {
           homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
           awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
@@ -428,7 +443,7 @@ export class SyncPlanService {
           leagueTournaments: {
             some: {
               tournament: {
-                matches: { some: { matchDate: { gte: todayStart, lt: todayEnd } } },
+                matches: { some: trackedMatchesWhere },
               },
             },
           },
@@ -440,7 +455,7 @@ export class SyncPlanService {
               tournament: {
                 select: {
                   matches: {
-                    where: { matchDate: { gte: todayStart, lt: todayEnd } },
+                    where: trackedMatchesWhere,
                     select: { id: true },
                   },
                 },
@@ -467,8 +482,31 @@ export class SyncPlanService {
     const now = new Date();
 
     // Build sync slots starting from now until end of day
-    const buildSyncSlots = (matchDate: Date): string[] => {
+    const buildSyncSlots = (
+      matchDate: Date,
+      status: MatchStatus,
+      trackingScope: MatchSyncSlot['trackingScope'],
+    ): string[] => {
       const slots: string[] = [];
+
+      if (
+        trackingScope === 'CARRY_OVER' &&
+        status !== MatchStatus.FINISHED &&
+        status !== MatchStatus.CANCELLED
+      ) {
+        let cursor = new Date(now);
+        const carryOverEnd = new Date(
+          now.getTime() + Math.max(intervalMs * 4, 60 * 60 * 1000),
+        );
+
+        while (cursor <= carryOverEnd) {
+          slots.push(cursor.toISOString());
+          cursor = new Date(cursor.getTime() + intervalMs);
+        }
+
+        return slots.slice(0, 12);
+      }
+
       const matchStart = matchDate;
       const matchEnd = new Date(matchDate.getTime() + 130 * 60 * 1000); // match + 10min buffer
 
@@ -482,34 +520,32 @@ export class SyncPlanService {
       return slots.slice(0, 30); // cap to prevent huge payloads
     };
 
-    const buildNotifications = (matchDate: Date, status: string, closePredictionMinutes = 15) => {
+    const buildNotifications = (
+      matchDate: Date,
+      status: MatchStatus,
+      closePredictionMinutes = 15,
+    ) => {
       const notifications: MatchSyncSlot['notificationSchedule'] = [];
       const md = matchDate.getTime();
 
-      if (status === 'SCHEDULED' || status === 'LIVE') {
-        // Reminder 1 hour before
-        if (md - 60 * 60 * 1000 > now.getTime()) {
-          notifications.push({
-            type: 'MATCH_REMINDER',
-            label: 'Aviso 1h antes del partido',
-            scheduledAt: new Date(md - 60 * 60 * 1000).toISOString(),
-          });
-        }
-        // Prediction close warning
-        if (md - closePredictionMinutes * 60 * 1000 > now.getTime()) {
-          notifications.push({
-            type: 'PREDICTION_CLOSED',
-            label: `Cierre de predicciones (${closePredictionMinutes} min antes)`,
-            scheduledAt: new Date(md - closePredictionMinutes * 60 * 1000).toISOString(),
-          });
-        }
-      }
-
-      if (status === 'FINISHED') {
+      if (status !== MatchStatus.CANCELLED) {
+        notifications.push({
+          type: 'MATCH_REMINDER',
+          label: 'Recordatorio 1h antes',
+          scheduledAt: new Date(md - 60 * 60 * 1000).toISOString(),
+        });
+        notifications.push({
+          type: 'PREDICTION_CLOSED',
+          label: `Cierre de predicciones (${closePredictionMinutes} min antes)`,
+          scheduledAt: new Date(md - closePredictionMinutes * 60 * 1000).toISOString(),
+        });
         notifications.push({
           type: 'RESULT_PUBLISHED',
-          label: 'Resultado publicado',
-          scheduledAt: new Date(md + 10 * 60 * 1000).toISOString(),
+          label:
+            status === MatchStatus.FINISHED
+              ? 'Resultado publicado'
+              : 'Resultado estimado tras finalizar',
+          scheduledAt: new Date(md + 130 * 60 * 1000).toISOString(),
         });
       }
 
@@ -522,9 +558,12 @@ export class SyncPlanService {
       : 0;
 
     const matchSlots: MatchSyncSlot[] = matches.map((m) => {
-      const slots = buildSyncSlots(m.matchDate);
+      const trackingScope =
+        m.matchDate < todayStart ? 'CARRY_OVER' : 'TODAY';
+      const slots = buildSyncSlots(m.matchDate, m.status, trackingScope);
       return {
         matchId: m.id,
+        trackingScope,
         homeTeam: m.homeTeam.name,
         awayTeam: m.awayTeam.name,
         homeFlag: m.homeTeam.flagUrl,
@@ -533,7 +572,11 @@ export class SyncPlanService {
         status: m.status,
         externalId: m.externalId,
         syncSlots: slots,
-        notificationSchedule: buildNotifications(m.matchDate, m.status, closePredictionMap.get(m.id) ?? 15),
+        notificationSchedule: buildNotifications(
+          m.matchDate,
+          m.status,
+          closePredictionMap.get(m.id) ?? 15,
+        ),
         lastSyncAt: m.syncLogs[0]?.createdAt?.toISOString() ?? null,
         lastSyncStatus: m.syncLogs[0]?.status ?? null,
         requestsAssigned: Math.min(slots.length, requestsPerMatch),
@@ -597,5 +640,42 @@ export class SyncPlanService {
     const d = bogotaNow.getUTCDate();
     // Midnight COT = 05:00 UTC
     return new Date(Date.UTC(y, m, d, 5, 0, 0));
+  }
+
+  private getTodayEnd(todayStart: Date): Date {
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+    return todayEnd;
+  }
+
+  private getYesterdayStart(todayStart: Date): Date {
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    return yesterdayStart;
+  }
+
+  private buildTrackedMatchesWhere(todayStart: Date, todayEnd: Date) {
+    const yesterdayStart = this.getYesterdayStart(todayStart);
+
+    return {
+      OR: [
+        {
+          matchDate: {
+            gte: todayStart,
+            lt: todayEnd,
+          },
+        },
+        {
+          matchDate: {
+            gte: yesterdayStart,
+            lt: todayStart,
+          },
+          OR: [
+            { status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] } },
+            { status: MatchStatus.FINISHED, resultNotificationSentAt: null },
+          ],
+        },
+      ],
+    };
   }
 }

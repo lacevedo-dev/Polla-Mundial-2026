@@ -102,7 +102,7 @@ export class MatchSyncService {
       if (!matched) {
         skipped++;
         warnings.push(
-          `Equipo fuera del catálogo curado no modificado: ${team.name} (${team.code})`,
+          `Equipo fuera del catÃ¡logo curado no modificado: ${team.name} (${team.code})`,
         );
       }
     }
@@ -148,8 +148,19 @@ export class MatchSyncService {
     const startedAt = Date.now();
 
     try {
+      const todayDate = new Date(Date.now() - 5 * 60 * 60 * 1000);
+      const today = todayDate.toISOString().split('T')[0];
+      const yesterdayDate = new Date(todayDate);
+      yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+      const yesterday = yesterdayDate.toISOString().split('T')[0];
+
+      const carryOverMatches = await this.syncPlan.getCarryOverMatches();
+      const shouldQueryYesterday = carryOverMatches.some((match) => !!match.externalId);
+      const datesToQuery = shouldQueryYesterday ? [today, yesterday] : [today];
+      const requestCount = datesToQuery.length;
+
       // Check rate limit
-      if (!(await this.rateLimiter.canMakeRequest())) {
+      if (!(await this.rateLimiter.canMakeRequests(requestCount))) {
         this.logger.warn('Rate limit reached, skipping sync');
         await this.monitoring.createLog({
           type: options.logType,
@@ -172,23 +183,33 @@ export class MatchSyncService {
         };
       }
 
-      // Get today's date in Colombia timezone (UTC-5, no DST)
-      const today = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().split('T')[0];
-
       // Fetch fixtures from API-Football (client already logs to ApiFootballRequest internally)
-      this.logger.log(`Fetching fixtures for date: ${today}`);
-      const response = await this.apiClient.getFixturesByDate(today);
+      this.logger.log(`Fetching fixtures for dates: ${datesToQuery.join(", ")}`);
+      const responses = await Promise.all(
+        datesToQuery.map((date) => this.apiClient.getFixturesByDate(date)),
+      );
+      const fixtureMap = new Map<number, ApiFootballFixture>();
+      for (const response of responses) {
+        for (const fixture of response.response) {
+          fixtureMap.set(fixture.fixture.id, fixture);
+        }
+      }
+      const fixtures = [...fixtureMap.values()];
+      const totalResults = responses.reduce(
+        (sum, response) => sum + response.results,
+        0,
+      );
 
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
-      await this.syncPlan.incrementRequestsUsed();
+      await this.syncPlan.incrementRequestsUsed(requestCount);
 
       // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
       let skippedCount = 0;
       const CONCURRENT = 4;
-      for (let i = 0; i < response.response.length; i += CONCURRENT) {
-        const batch = response.response.slice(i, i + CONCURRENT);
+      for (let i = 0; i < fixtures.length; i += CONCURRENT) {
+        const batch = fixtures.slice(i, i + CONCURRENT);
         const results = await Promise.allSettled(
           batch.map(f => this.updateMatchFromFixture(f)),
         );
@@ -201,31 +222,32 @@ export class MatchSyncService {
       }
 
       this.logger.log(
-        `Sync completed: ${updatedCount} updated, ${skippedCount} skipped (no match in DB) from ${response.results} fixtures`,
+        `Sync completed: ${updatedCount} updated, ${skippedCount} skipped (no match in DB) from ${fixtures.length} fixtures`,
       );
 
       await this.monitoring.createLog({
         type: options.logType,
         status: SyncLogStatus.SUCCESS,
         message: `${options.summaryLabel} completed successfully`,
-        requestsUsed: 1,
+        requestsUsed: requestCount,
         matchesUpdated: updatedCount,
         duration: Date.now() - startedAt,
         details: JSON.stringify({
-          fixturesFetched: response.results,
-          date: today,
+          fixturesFetched: totalResults,
+          datesQueried: datesToQuery,
+          carryOverMatches: carryOverMatches.length,
         }),
         triggeredBy: options.triggeredBy,
       });
 
-      if (response.results > 0 && updatedCount === 0) {
+      if (totalResults > 0 && updatedCount === 0) {
         await this.monitoring.createAlert({
           type: SyncAlertType.NO_MATCHES_UPDATED,
           severity: SyncAlertLevel.INFO,
-          message: 'Football Sync consultó fixtures, pero no encontró partidos locales para actualizar.',
+          message: 'Football Sync consulto fixtures, pero no encontro partidos locales para actualizar.',
           details: JSON.stringify({
-            fixturesFetched: response.results,
-            date: today,
+            fixturesFetched: totalResults,
+            datesQueried: datesToQuery,
           }),
         });
       }
@@ -249,7 +271,7 @@ export class MatchSyncService {
       await this.monitoring.createAlert({
         type: SyncAlertType.SYNC_FAILURE,
         severity: SyncAlertLevel.ERROR,
-        message: `Football Sync falló: ${error.message}`,
+        message: `Football Sync fallÃ³: ${error.message}`,
       });
       return {
         success: false,
@@ -495,14 +517,14 @@ export class MatchSyncService {
 
         if (pts >= 5) {
           await this.push.sendToUser(prediction.userId, {
-            title: '🎯 ¡Marcador exacto!',
-            body: `${home} ${score} ${away} — +${pts} pts`,
+            title: 'ðŸŽ¯ Â¡Marcador exacto!',
+            body: `${home} ${score} ${away} â€” +${pts} pts`,
             data: { matchId, points: pts },
           });
         } else {
           await this.push.sendToUser(prediction.userId, {
-            title: '✅ Resultado publicado',
-            body: `${home} ${score} ${away} — ganaste ${pts} pts`,
+            title: 'âœ… Resultado publicado',
+            body: `${home} ${score} ${away} â€” ganaste ${pts} pts`,
             data: { matchId, points: pts },
           });
         }
@@ -665,7 +687,7 @@ export class MatchSyncService {
         return {
           wasLinked: false,
           synced: false,
-          message: 'No se encontraron candidatos con suficiente confianza para vincular automáticamente.',
+          message: 'No se encontraron candidatos con suficiente confianza para vincular automÃ¡ticamente.',
         };
       }
 
@@ -703,8 +725,8 @@ export class MatchSyncService {
       candidate,
       synced,
       message: wasLinked
-        ? `Auto-vinculado a ${candidate!.homeTeam} vs ${candidate!.awayTeam} (confianza: ${candidate!.confidence}) y ${synced ? 'sincronizado correctamente' : 'sincronización falló'}.`
-        : synced ? 'Sincronizado correctamente.' : 'Sincronización falló.',
+        ? `Auto-vinculado a ${candidate!.homeTeam} vs ${candidate!.awayTeam} (confianza: ${candidate!.confidence}) y ${synced ? 'sincronizado correctamente' : 'sincronizaciÃ³n fallÃ³'}.`
+        : synced ? 'Sincronizado correctamente.' : 'SincronizaciÃ³n fallÃ³.',
     };
   }
 
@@ -761,7 +783,7 @@ export class MatchSyncService {
       const label = `${match.homeTeam.name} vs ${match.awayTeam.name}`;
       try {
         if (!(await this.rateLimiter.canMakeRequest())) {
-          results.push({ matchId: match.id, label, status: 'skipped', message: 'Límite de requests alcanzado' });
+          results.push({ matchId: match.id, label, status: 'skipped', message: 'LÃ­mite de requests alcanzado' });
           skipped++;
           continue;
         }
@@ -953,7 +975,7 @@ export class MatchSyncService {
       await this.monitoring.createAlert({
         type: SyncAlertType.SYNC_FAILURE,
         severity: SyncAlertLevel.ERROR,
-        message: `La sincronización del partido ${matchId} falló: ${error.message}`,
+        message: `La sincronizaciÃ³n del partido ${matchId} fallÃ³: ${error.message}`,
       });
       return false;
     }
@@ -1005,7 +1027,7 @@ export class MatchSyncService {
       reasons.push('Hora de inicio razonablemente cercana');
     } else if (diffMinutes <= 360) {
       score += 5;
-      reasons.push('Mismo día con ventana horaria compatible');
+      reasons.push('Mismo dÃ­a con ventana horaria compatible');
     }
 
     const confidence: 'high' | 'medium' | 'low' =
