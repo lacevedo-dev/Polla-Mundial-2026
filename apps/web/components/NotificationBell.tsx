@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bell, CheckCheck, X, EyeOff, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api';
+import { useLeagueStore } from '../stores/league.store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,20 +62,9 @@ function fmtRelative(iso: string): string {
   return `Hace ${Math.floor(hrs / 24)}d`;
 }
 
-/** Devuelve la ruta destino según el tipo de notificación. */
-function resolveRoute(type: string, leagueId: string | null): string | null {
-  switch (type) {
-    case 'MATCH_REMINDER':
-    case 'PREDICTION_CLOSED':
-    case 'RESULT_PUBLISHED':
-      return leagueId ? `/my-leagues/${leagueId}` : '/my-leagues';
-    case 'LEAGUE_INVITE':
-      return '/my-leagues';
-    case 'PAYMENT_CONFIRMED':
-      return '/dashboard';
-    default:
-      return null;
-  }
+/** true si la notificación tiene destino navegable */
+function isNavigable(type: string): boolean {
+  return ['MATCH_REMINDER', 'PREDICTION_CLOSED', 'RESULT_PUBLISHED', 'LEAGUE_INVITE', 'PAYMENT_CONFIRMED'].includes(type);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -88,6 +78,7 @@ export default function NotificationBell() {
   const [isDesktop, setIsDesktop]   = useState(() => window.innerWidth >= 768);
   const containerRef                = useRef<HTMLDivElement>(null);
   const navigate                    = useNavigate();
+  const setActiveLeague             = useLeagueStore(s => s.setActiveLeague);
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
@@ -155,10 +146,23 @@ export default function NotificationBell() {
 
   const handleNotifClick = async (n: Notif) => {
     void markRead(n.id);
-    const route = resolveRoute(n.type, n.leagueId);
-    if (route) {
-      setOpen(false);
-      navigate(route);
+    if (!isNavigable(n.type)) return;
+    setOpen(false);
+
+    switch (n.type) {
+      case 'MATCH_REMINDER':
+      case 'PREDICTION_CLOSED':
+      case 'RESULT_PUBLISHED':
+        // Seleccionar la liga en el store y navegar a predicciones
+        if (n.leagueId) setActiveLeague(n.leagueId);
+        navigate('/predictions');
+        break;
+      case 'LEAGUE_INVITE':
+        navigate('/my-leagues');
+        break;
+      case 'PAYMENT_CONFIRMED':
+        navigate('/dashboard');
+        break;
     }
   };
 
@@ -325,8 +329,7 @@ export default function NotificationBell() {
             )}
 
             {visible.map(n => {
-              const route       = resolveRoute(n.type, n.leagueId);
-              const isClickable = !!route;
+              const isClickable = isNavigable(n.type);
 
               return (
                 <button
