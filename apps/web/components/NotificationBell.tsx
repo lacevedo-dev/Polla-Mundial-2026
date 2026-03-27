@@ -190,7 +190,7 @@ export default function NotificationBell() {
   const unread = data?.unreadCount ?? 0;
 
   return (
-    <div ref={containerRef} className="fixed top-3 right-3 md:right-4 z-[100]">
+    <div ref={containerRef} className="fixed top-3 right-14 md:right-4 z-[100]">
       {/* Botón campana */}
       <button
         onClick={handleOpen}
