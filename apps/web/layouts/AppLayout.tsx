@@ -107,10 +107,6 @@ const AppLayout: React.FC = () => {
                         </NavLink>
                     )}
                     <NotificationToggle className="mb-4" />
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                        <NotificationBell />
-                        <span className="text-[10px] text-slate-500 font-semibold">Notificaciones</span>
-                    </div>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
@@ -145,12 +141,9 @@ const AppLayout: React.FC = () => {
                     <div className="w-8 h-8 bg-white rounded flex items-center justify-center font-brand text-black text-xl font-black">26</div>
                     <span className="font-brand text-sm">POLLA<span className="text-lime-400">2026</span></span>
                 </NavLink>
-                <div className="flex items-center gap-2">
-                    <NotificationBell />
-                    <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-                        {isMobileMenuOpen ? <X /> : <Menu />}
-                    </button>
-                </div>
+                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                    {isMobileMenuOpen ? <X /> : <Menu />}
+                </button>
             </header>
 
             {/* Mobile Menu Overlay */}
@@ -267,6 +260,9 @@ const AppLayout: React.FC = () => {
 
             {/* PWA install banner */}
             <PWAInstallBanner />
+
+            {/* Campana de notificaciones — flotante fija en esquina superior derecha */}
+            <NotificationBell />
 
             {/* Mobile Bottom Nav */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">
