@@ -46,20 +46,25 @@ export class PushNotificationsService {
     subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
     userAgent?: string,
   ): Promise<void> {
-    // Remove existing subscription with same endpoint to avoid duplicates
-    await this.prisma.pushSubscription.deleteMany({
-      where: { endpoint: subscription.endpoint },
-    });
+    try {
+      // Remove all previous subscriptions for this user (clean re-subscribe)
+      await this.prisma.pushSubscription.deleteMany({ where: { userId } });
 
-    await this.prisma.pushSubscription.create({
-      data: {
-        userId,
-        endpoint: subscription.endpoint,
-        p256dh: subscription.keys.p256dh,
-        auth: subscription.keys.auth,
-        userAgent,
-      },
-    });
+      await this.prisma.pushSubscription.create({
+        data: {
+          userId,
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+          // userAgent is VARCHAR(191) — truncate to avoid MySQL data-too-long error
+          userAgent: userAgent ? userAgent.substring(0, 190) : undefined,
+        },
+      });
+      this.logger.log(`Push subscription saved for user ${userId}`);
+    } catch (err: any) {
+      this.logger.error(`saveSubscription failed for user ${userId}: ${err.message}`);
+      throw err;
+    }
   }
 
   async removeSubscription(endpoint: string): Promise<void> {

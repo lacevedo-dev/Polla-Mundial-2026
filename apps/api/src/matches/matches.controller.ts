@@ -68,7 +68,7 @@ export class MatchesController {
         return this.matchesService.updateScore(id, updateScoreDto);
     }
 
-    @Sse('live/events')
+    @Sse('live/stream')
     @UseGuards(JwtAuthGuard)
     liveMatchEvents(@Res() res: Response): Observable<MessageEvent> {
         const heartbeat = setInterval(() => {

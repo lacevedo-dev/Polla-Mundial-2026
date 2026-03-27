@@ -8,6 +8,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { IsString, IsObject, IsOptional, ValidateNested } from 'class-validator';
@@ -35,6 +37,7 @@ class RemoveSubscriptionDto {
 @UseGuards(JwtAuthGuard)
 @Controller('push')
 export class PushNotificationsController {
+  private readonly logger = new Logger(PushNotificationsController.name);
   constructor(private readonly push: PushNotificationsService) {}
 
   @Get('vapid-key')
@@ -47,9 +50,14 @@ export class PushNotificationsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a push subscription for the current user' })
   async subscribe(@Body() dto: SaveSubscriptionDto, @Req() req: any) {
-    const userAgent = req.headers?.['user-agent'];
-    await this.push.saveSubscription(req.user.id, dto, userAgent);
-    return { ok: true };
+    try {
+      const userAgent = req.headers?.['user-agent'];
+      await this.push.saveSubscription(req.user.id, dto, userAgent);
+      return { ok: true };
+    } catch (err: any) {
+      this.logger.error(`subscribe failed for user ${req.user?.id}: ${err.message}`, err.stack);
+      throw new InternalServerErrorException('Error al guardar la suscripción push');
+    }
   }
 
   @Delete('unsubscribe')

@@ -42,7 +42,7 @@ export function useLiveSyncEvents(): LiveSyncState {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const url = `${BASE_URL}/matches/live/events?token=${encodeURIComponent(token)}`;
+        const url = `${BASE_URL}/matches/live/stream?token=${encodeURIComponent(token)}`;
         const es = new EventSource(url);
 
         // Pending updates buffer — keyed by matchId so rapid duplicates collapse into one
