@@ -70,14 +70,34 @@ export class PushNotificationsService {
     await this.prisma.pushSubscription.deleteMany({ where: { userId } });
   }
 
-  async sendToUser(userId: string, payload: PushPayload): Promise<void> {
+  async sendToUser(userId: string, payload: PushPayload): Promise<{ sent: number; failed: number; devices: number }> {
     const subscriptions = await this.prisma.pushSubscription.findMany({
       where: { userId },
     });
 
-    await Promise.allSettled(
+    const devices = subscriptions.length;
+    if (devices === 0) return { sent: 0, failed: 0, devices: 0 };
+
+    const results = await Promise.allSettled(
       subscriptions.map((sub) => this.sendOne(sub, payload)),
     );
+
+    let sent = 0;
+    let failed = 0;
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) sent++;
+      else failed++;
+    }
+    return { sent, failed, devices };
+  }
+
+  async sendTestToUser(userId: string): Promise<{ sent: number; failed: number; devices: number }> {
+    return this.sendToUser(userId, {
+      title: '🔔 Notificaciones activas',
+      body: 'Las notificaciones push están funcionando correctamente en este dispositivo.',
+      tag: 'test-push',
+      requireInteraction: false,
+    });
   }
 
   async sendToUsers(userIds: string[], payload: PushPayload): Promise<void> {

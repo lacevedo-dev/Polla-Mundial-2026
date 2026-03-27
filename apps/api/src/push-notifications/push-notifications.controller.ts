@@ -58,4 +58,22 @@ export class PushNotificationsController {
   async unsubscribe(@Body() dto: RemoveSubscriptionDto) {
     await this.push.removeSubscription(dto.endpoint);
   }
+
+  @Post('test')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send a test push notification to the current user' })
+  async testPush(@Req() req: any) {
+    const result = await this.push.sendTestToUser(req.user.id);
+    return {
+      ok: result.sent > 0,
+      sent: result.sent,
+      failed: result.failed,
+      devices: result.devices,
+      message: result.devices === 0
+        ? 'No hay dispositivos suscritos. Activa las notificaciones primero.'
+        : result.sent > 0
+        ? `Notificación enviada a ${result.sent} de ${result.devices} dispositivo(s).`
+        : `Falló el envío a ${result.failed} dispositivo(s). Revisa las claves VAPID.`,
+    };
+  }
 }

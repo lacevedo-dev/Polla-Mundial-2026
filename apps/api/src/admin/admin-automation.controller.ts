@@ -1,10 +1,11 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NotificationType, Prisma } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 const AUTO_TYPES = [
   NotificationType.MATCH_REMINDER,
@@ -19,6 +20,7 @@ export class AdminAutomationController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly push: PushNotificationsService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -295,7 +297,7 @@ export class AdminAutomationController {
       ...(matchId ? { data: { contains: matchId } } : {}),
     };
 
-    const [byType, recent, total] = await Promise.all([
+    const [byType, rawRecords, total] = await Promise.all([
       this.prisma.notification.groupBy({
         by: ['type'],
         where: { sentAt: { gte: since }, type: { in: [...AUTO_TYPES] } },
@@ -323,6 +325,39 @@ export class AdminAutomationController {
     const countByType: Record<string, number> = {};
     for (const row of byType) countByType[row.type] = row._count.id;
 
+    // Enriquecer cada registro con campos de entrega extraídos del JSON data
+    const recent = rawRecords.map((n) => {
+      let parsed: Record<string, unknown> = {};
+      try { if (n.data) parsed = JSON.parse(n.data); } catch { /* ignore */ }
+      return {
+        ...n,
+        matchId:     (parsed.matchId as string)   ?? null,
+        leagueId:    (parsed.leagueId as string)  ?? null,
+        trigger:     (parsed._trigger as string)  ?? null,
+        pushSent:    typeof parsed._pushSent    === 'number' ? parsed._pushSent    as number : null,
+        pushFailed:  typeof parsed._pushFailed  === 'number' ? parsed._pushFailed  as number : null,
+        pushDevices: typeof parsed._pushDevices === 'number' ? parsed._pushDevices as number : null,
+        whatsapp:    typeof parsed._whatsapp    === 'boolean' ? parsed._whatsapp   as boolean : null,
+      };
+    });
+
     return { countByType, recent, total, page, limit };
+  }
+
+  /** Envía push de prueba al superadmin para validar configuración VAPID */
+  @Post('test-push')
+  async testPush(@Req() req: any) {
+    const result = await this.push.sendTestToUser(req.user.id);
+    return {
+      ok: result.sent > 0,
+      sent: result.sent,
+      failed: result.failed,
+      devices: result.devices,
+      message: result.devices === 0
+        ? 'Sin dispositivos suscritos. Activa las notificaciones en el menú lateral primero.'
+        : result.sent > 0
+        ? `✓ Push enviado a ${result.sent}/${result.devices} dispositivo(s).`
+        : `✗ Falló en ${result.failed} dispositivo(s). Verifica VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY.`,
+    };
   }
 }

@@ -17,17 +17,22 @@ export class NotificationScheduler {
     private readonly twilio: TwilioService,
   ) {}
 
-  /** Envía notificación a todos los canales disponibles para un usuario */
+  /**
+   * Envía notificación a todos los canales y registra el resultado en el campo
+   * `data` del registro in-app: _trigger, _pushSent, _pushDevices, _whatsapp.
+   */
   private async notifyUser(
     userId: string,
     type: NotificationType,
     title: string,
     body: string,
     data: Record<string, unknown>,
+    trigger?: string,
   ): Promise<void> {
-    await this.notificationsService.createInAppNotification({ userId, type, title, body, data });
-    await this.push.sendToUser(userId, { title, body, data });
+    // Push primero para capturar resultado antes de guardar en DB
+    const pushResult = await this.push.sendToUser(userId, { title, body, data });
 
+    let whatsappSent = false;
     if (this.twilio.isEnabled()) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -35,9 +40,29 @@ export class NotificationScheduler {
       });
       if (user?.phone) {
         const fullPhone = `${user.countryCode ?? '+57'}${user.phone}`;
-        await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);
+        try {
+          await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);
+          whatsappSent = true;
+        } catch { /* continúa aunque WhatsApp falle */ }
       }
     }
+
+    // Guardar en DB con metadatos de entrega embebidos en data
+    const enrichedData: Record<string, unknown> = {
+      ...data,
+      _trigger: trigger ?? null,
+      _pushSent: pushResult.sent,
+      _pushFailed: pushResult.failed,
+      _pushDevices: pushResult.devices,
+      _whatsapp: whatsappSent,
+    };
+    await this.notificationsService.createInAppNotification({ userId, type, title, body, data: enrichedData });
+
+    this.logger.log(
+      `[${type}] ${title} → user:${userId} | ` +
+      `push:${pushResult.sent}/${pushResult.devices} wa:${whatsappSent} | ` +
+      (trigger ? `trigger:"${trigger}"` : ''),
+    );
   }
 
   /**
@@ -152,6 +177,7 @@ export class NotificationScheduler {
               '⏰ Recordatorio de partido',
               body,
               { matchId: match.id, leagueId: league.id },
+              `Partido en ~60min: ${home} vs ${away}`,
             );
             notified.add(key);
           }
@@ -268,6 +294,7 @@ export class NotificationScheduler {
                 hasPrediction ? '🔒 Predicciones cerrando' : '⚠️ ¡Predicciones cerrando pronto!',
                 body,
                 { matchId: match.id, leagueId: league.id },
+                `Cierre en ${closeMinutes}min: ${home} vs ${away} | ${hasPrediction ? 'ya predijo' : 'sin pronóstico'}`,
               );
             }
           }
@@ -337,8 +364,8 @@ export class NotificationScheduler {
             NotificationType.RESULT_PUBLISHED,
             title,
             body,
-            // leagueId ahora incluido para navegación directa desde la notificación
             { matchId: match.id, leagueId, points: pts },
+            `Partido finalizado: ${home} ${score} ${away} | ${pts}pts`,
           );
         }
 
