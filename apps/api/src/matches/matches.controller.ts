@@ -8,6 +8,7 @@ import { filter, map } from 'rxjs/operators';
 import type { Response } from 'express';
 import { SyncEventsService } from '../football-sync/services/sync-events.service';
 import { SyncPlanService } from '../football-sync/services/sync-plan.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('matches')
 export class MatchesController {
@@ -15,6 +16,7 @@ export class MatchesController {
         private readonly matchesService: MatchesService,
         private readonly syncEvents: SyncEventsService,
         private readonly syncPlan: SyncPlanService,
+        private readonly prisma: PrismaService,
     ) { }
 
     @UseGuards(JwtAuthGuard)
@@ -40,6 +42,21 @@ export class MatchesController {
     @Get(':id')
     async findOne(@Param('id') id: string) {
         return this.matchesService.findOne(id);
+    }
+
+    /** Eventos (goles, tarjetas) de un partido */
+    @Get(':id/events')
+    async getEvents(@Param('id') id: string) {
+        const events = await (this.prisma as any).matchEvent.findMany({
+            where: { matchId: id },
+            orderBy: [{ minute: 'asc' }, { extraMin: 'asc' }],
+            select: {
+                id: true, type: true, detail: true,
+                playerName: true, assistName: true,
+                minute: true, extraMin: true,
+            },
+        });
+        return events;
     }
 
     @UseGuards(JwtAuthGuard)

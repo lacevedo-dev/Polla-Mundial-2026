@@ -204,6 +204,8 @@ model Match {
   venue       String?
   matchDate   DateTime
   status      MatchStatus       @default(SCHEDULED)
+  elapsed     Int?
+  statusShort String?           @db.VarChar(8)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   externalId              String?           @unique
@@ -221,6 +223,7 @@ model Match {
   awayTeam    Team              @relation("AwayTeam", fields: [awayTeamId], references: [id])
   homeTeam    Team              @relation("HomeTeam", fields: [homeTeamId], references: [id])
   predictions Prediction[]
+  events      MatchEvent[]
 
   @@index([matchDate])
   @@index([status])
@@ -229,6 +232,25 @@ model Match {
   @@index([awayTeamId], map: "Match_awayTeamId_fkey")
   @@index([homeTeamId], map: "Match_homeTeamId_fkey")
   @@index([advancingTeamId])
+}
+
+model MatchEvent {
+  id         String   @id @default(cuid())
+  matchId    String
+  teamId     String?
+  playerName String?
+  assistName String?
+  type       String   // GOAL, CARD, SUBST, VAR
+  detail     String?  // Normal Goal, Own Goal, Penalty, Yellow Card, Red Card, etc.
+  minute     Int
+  extraMin   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, type, playerName, minute])
+  @@index([matchId])
 }
 
 model Prediction {

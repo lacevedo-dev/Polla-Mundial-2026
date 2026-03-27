@@ -62,6 +62,13 @@ export class ApiFootballClient {
   }
 
   /**
+   * Get events for a fixture (goals, cards, substitutions)
+   */
+  async getFixtureEvents(fixtureId: number): Promise<ApiFootballResponse> {
+    return this.makeRequest('/fixtures/events', { fixture: fixtureId }, `events-${fixtureId}`);
+  }
+
+  /**
    * Make HTTP request to API-Football and log usage to DB
    */
   private async makeRequest(

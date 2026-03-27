@@ -36,4 +36,13 @@ export class PredictionsController {
     ) {
         return this.predictionsService.getLeaderboardUserBreakdown(leagueId, userId, category);
     }
+
+    /** Clasificación provisional considerando el marcador actual de partidos en vivo */
+    @Get('live-standings/:leagueId')
+    async getLiveStandings(
+        @Param('leagueId') leagueId: string,
+        @Request() req,
+    ) {
+        return this.predictionsService.getLiveStandings(leagueId, req.user.userId);
+    }
 }

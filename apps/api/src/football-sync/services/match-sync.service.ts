@@ -418,7 +418,7 @@ export class MatchSyncService {
         match.homeScore !== fixture.goals.home ||
         match.awayScore !== fixture.goals.away;
 
-      // Update match
+      // Update match (including elapsed + statusShort for live timer persistence)
       const updatedMatch = await this.prisma.match.update({
         where: { id: match.id },
         data: {
@@ -427,10 +427,19 @@ export class MatchSyncService {
           homeScore: fixture.goals.home,
           awayScore: fixture.goals.away,
           status,
+          elapsed:     fixture.fixture.status.elapsed ?? null,
+          statusShort: fixture.fixture.status.short ?? null,
           lastSyncAt: new Date(),
           syncCount: { increment: 1 },
         },
       });
+
+      // Sync goal/card events for live matches (fire-and-forget, non-blocking)
+      if (status === MatchStatus.LIVE && fixture.fixture.id) {
+        this.syncMatchEvents(fixture.fixture.id, match.id).catch(err =>
+          this.logger.warn(`Event sync failed for match ${match.id}: ${err.message}`),
+        );
+      }
 
       this.logger.log(
         `Updated match ${match.id}: ${fixture.teams.home.name} ${fixture.goals.home ?? '-'} - ${fixture.goals.away ?? '-'} ${fixture.teams.away.name} (${status})`,
@@ -490,6 +499,45 @@ export class MatchSyncService {
         `Failed to update match from fixture ${fixture.fixture.id}: ${error.message}`,
       );
       return false;
+    }
+  }
+
+  /**
+   * Sync goals, cards and substitutions for a live match.
+   * Uses upsert keyed on (matchId, type, playerName, minute) to avoid duplicates.
+   */
+  private async syncMatchEvents(fixtureId: number, matchId: string): Promise<void> {
+    const response = await this.apiClient.getFixtureEvents(fixtureId);
+    const events: any[] = response?.response ?? [];
+    if (!events.length) return;
+
+    for (const ev of events) {
+      const type: string   = ev.type   ?? 'UNKNOWN';
+      const detail: string = ev.detail ?? '';
+      const minute: number = ev.time?.elapsed ?? 0;
+      const extraMin: number | null = ev.time?.extra ?? null;
+      const playerName: string | null = ev.player?.name ?? null;
+      const assistName: string | null = ev.assist?.name ?? null;
+
+      // Only store goals and cards (skip substitutions to keep list clean)
+      if (!['Goal', 'Card'].includes(type)) continue;
+
+      try {
+        await (this.prisma as any).matchEvent.upsert({
+          where: {
+            matchId_type_playerName_minute: {
+              matchId,
+              type:       type.toUpperCase(),
+              playerName: playerName ?? '',
+              minute,
+            },
+          },
+          update: { detail, assistName, extraMin, updatedAt: new Date() },
+          create: { matchId, type: type.toUpperCase(), detail, minute, extraMin, playerName, assistName },
+        });
+      } catch {
+        // Ignore constraint errors (duplicate event at same minute)
+      }
     }
   }
 

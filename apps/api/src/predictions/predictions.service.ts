@@ -764,4 +764,85 @@ export class PredictionsService {
 
         return participationKeys.has(`${phaseBonus.userId}:${phaseBonus.phase}`);
     }
+
+    /**
+     * Clasificación provisional: standings actuales + puntos hipotéticos si los partidos
+     * en vivo terminaran con el marcador actual.
+     */
+    async getLiveStandings(leagueId: string, requestingUserId: string) {
+        // 1. Partidos en vivo de esta liga
+        const liveMatches = await this.prisma.match.findMany({
+            where: {
+                status: 'LIVE',
+                predictions: { some: { leagueId } },
+            },
+            select: { id: true, homeScore: true, awayScore: true, phase: true },
+        });
+
+        if (liveMatches.length === 0) {
+            return { hasLive: false, standings: [] };
+        }
+
+        // 2. Reglas de puntuación de la liga
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            include: { scoringRules: { where: { active: true } } },
+        });
+        const rules = league?.scoringRules ?? [];
+
+        // 3. Leaderboard actual (puntos reales ya calculados)
+        const leaderboard = await this.getLeaderboard(leagueId);
+
+        // 4. Predicciones de los miembros activos para los partidos en vivo
+        const liveMatchIds = liveMatches.map(m => m.id);
+        const livePredictions = await this.prisma.prediction.findMany({
+            where: { leagueId, matchId: { in: liveMatchIds } },
+            select: { userId: true, matchId: true, homeScore: true, awayScore: true },
+        });
+
+        // 5. Calcular puntos hipotéticos por usuario
+        const liveGain = new Map<string, number>();
+        for (const pred of livePredictions) {
+            const match = liveMatches.find(m => m.id === pred.matchId);
+            if (!match || match.homeScore === null || match.awayScore === null) continue;
+            const { total } = this.calculatePointsForOne(
+                { homeScore: match.homeScore, awayScore: match.awayScore, phase: match.phase },
+                { homeScore: pred.homeScore, awayScore: pred.awayScore },
+                rules,
+            );
+            liveGain.set(pred.userId, (liveGain.get(pred.userId) ?? 0) + total);
+        }
+
+        // 6. Merge, re-ordenar y calcular cambio de posición
+        const withLive = leaderboard.map((entry, idx) => ({
+            ...entry,
+            currentPosition:    idx + 1,
+            livePoints:         liveGain.get(entry.id) ?? 0,
+            provisionalPoints:  entry.points + (liveGain.get(entry.id) ?? 0),
+        }));
+
+        withLive.sort((a, b) =>
+            b.provisionalPoints !== a.provisionalPoints
+                ? b.provisionalPoints - a.provisionalPoints
+                : b.exactCount - a.exactCount,
+        );
+
+        const standings = withLive.map((entry, idx) => ({
+            ...entry,
+            provisionalPosition: idx + 1,
+            positionChange: entry.currentPosition - (idx + 1), // >0 subió, <0 bajó
+            isMe: entry.id === requestingUserId,
+        }));
+
+        const myEntry = standings.find(s => s.id === requestingUserId);
+
+        return {
+            hasLive: true,
+            liveMatchCount: liveMatches.length,
+            myProvisionalPosition: myEntry?.provisionalPosition ?? null,
+            myPositionChange:      myEntry?.positionChange ?? 0,
+            myLivePoints:          myEntry?.livePoints ?? 0,
+            standings: standings.slice(0, 10), // top 10 provisional
+        };
+    }
 }

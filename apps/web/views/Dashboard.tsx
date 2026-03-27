@@ -1365,6 +1365,12 @@ const Dashboard: React.FC = () => {
     const [scoringTab, setScoringTab] = useState<'resultado' | 'bonos' | 'desempate'>('resultado');
     const [currentTime, setCurrentTime] = useState(() => Date.now());
 
+    interface MatchEventItem { type: string; detail: string | null; playerName: string | null; assistName: string | null; minute: number; extraMin: number | null; }
+    interface LiveStandingsData { hasLive: boolean; myProvisionalPosition: number | null; myPositionChange: number; myLivePoints: number; liveMatchCount: number; }
+
+    const [matchEvents, setMatchEvents] = useState<Map<string, MatchEventItem[]>>(new Map());
+    const [liveStandings, setLiveStandings] = useState<LiveStandingsData | null>(null);
+
     const isLoading = leagueLoading || dashboardLoading;
     const isRealAdmin = activeLeague?.role === 'ADMIN' || isSuperAdmin();
 
@@ -1480,6 +1486,26 @@ const Dashboard: React.FC = () => {
             setError(e instanceof Error ? e.message : 'No fue posible cargar la liga activa.');
         });
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
+
+    useEffect(() => {
+        if (liveMatches.length === 0) return;
+        void Promise.all(
+            liveMatches.map((m) =>
+                request<MatchEventItem[]>(`/matches/${m.id}/events`)
+                    .then((events) => ({ id: m.id, events }))
+                    .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
+            ),
+        ).then((results) => {
+            setMatchEvents(new Map(results.map((r) => [r.id, r.events])));
+        });
+    }, [liveMatches]);
+
+    useEffect(() => {
+        if (liveMatches.length === 0 || !activeLeague?.id) { setLiveStandings(null); return; }
+        void request<LiveStandingsData>(`/predictions/live-standings/${activeLeague.id}`)
+            .then((data) => setLiveStandings(data))
+            .catch(() => setLiveStandings(null));
+    }, [liveMatches.length, activeLeague?.id]);
 
     const handleQuickSave = async (match: MatchViewModel) => {
         if (!activeLeague?.id) return;
@@ -2269,6 +2295,13 @@ const Dashboard: React.FC = () => {
                             <div className="mb-3 flex items-center gap-2">
                                 <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-rose-400" />
                                 <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">En vivo ahora</p>
+                                {liveStandings?.myProvisionalPosition != null && (
+                                    <span className={`ml-1 text-[10px] font-black ${liveStandings.myPositionChange > 0 ? 'text-lime-400' : liveStandings.myPositionChange < 0 ? 'text-rose-400' : 'text-white/50'}`}>
+                                        📍 #{liveStandings.myProvisionalPosition}
+                                        {liveStandings.myPositionChange > 0 && ` ↑${liveStandings.myPositionChange}`}
+                                        {liveStandings.myPositionChange < 0 && ` ↓${Math.abs(liveStandings.myPositionChange)}`}
+                                    </span>
+                                )}
                                 <span className="ml-auto text-[10px] text-rose-600">
                                     {liveSync.lastSyncAt
                                         ? `↻ hace ${Math.round((Date.now() - liveSync.lastSyncAt) / 60000)}m`
@@ -2385,6 +2418,31 @@ const Dashboard: React.FC = () => {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {/* Goalscorers / events */}
+                                            {(() => {
+                                                const events = matchEvents.get(match.id) ?? [];
+                                                const notable = events.filter((e) => ['GOAL', 'YELLOW_CARD', 'RED_CARD'].includes(e.type));
+                                                if (notable.length === 0) return null;
+                                                return (
+                                                    <div className="px-3 pb-2 space-y-0.5">
+                                                        {notable.map((e, i) => {
+                                                            const icon = e.type === 'GOAL'
+                                                                ? (e.detail?.toLowerCase().includes('own goal') ? '⚽ OG' : '⚽')
+                                                                : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
+                                                            const name = e.type === 'GOAL' && e.detail?.toLowerCase().includes('own goal')
+                                                                ? null
+                                                                : e.playerName;
+                                                            const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                            return (
+                                                                <p key={i} className="text-[10px] text-white/30">
+                                                                    {icon}{name ? ` ${name}` : ''} {min}
+                                                                </p>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Footer: torneo */}
                                             {match.phase && (
