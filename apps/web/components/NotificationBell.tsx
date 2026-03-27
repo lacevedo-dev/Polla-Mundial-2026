@@ -120,7 +120,7 @@ export default function NotificationBell() {
 
   return (
     /* Contenedor fijo en esquina superior derecha — siempre visible */
-    <div ref={containerRef} className="fixed top-4 right-4 z-[100]">
+    <div ref={containerRef} className="fixed top-3 right-14 md:right-4 z-[100]">
       {/* Botón campana */}
       <button
         onClick={handleOpen}
