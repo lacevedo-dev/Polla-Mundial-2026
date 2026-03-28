@@ -212,6 +212,7 @@ model Match {
   updatedAt   DateTime          @updatedAt
   externalId              String?           @unique
   lastSyncAt              DateTime?
+  eventsNoDataAt          DateTime?
   syncCount               Int               @default(0)
   predictionReportSentAt       DateTime?
   resultNotificationSentAt     DateTime?

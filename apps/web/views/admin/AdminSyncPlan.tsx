@@ -33,6 +33,7 @@ interface PlannedRequest {
   scheduledAt: string;
   requestCost: number;
   matchIds: string[];
+  optional?: boolean;
   notes?: string;
 }
 
@@ -366,6 +367,9 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
             </span>
           ))}
         </div>
+        <p className="mt-3 text-[11px] text-slate-500">
+          Los eventos son opcionales: se planean solo si sobra presupuesto y, si no aportan eventos útiles para un fixture, no se reintentan para no gastar requests del resto.
+        </p>
       </div>
 
       {timeline && (
@@ -463,6 +467,11 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                           >
                             <Clock size={9} />
                             {planned.label} · {fmtDateTime(planned.scheduledAt)}
+                            {planned.optional && (
+                              <span className="ml-1 rounded-full border border-dashed border-current px-1.5 py-0.5 text-[9px] font-black uppercase">
+                                opcional
+                              </span>
+                            )}
                           </span>
                         ))}
                       </div>

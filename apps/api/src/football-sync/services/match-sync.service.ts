@@ -503,10 +503,21 @@ export class MatchSyncService {
         currentStatusShort === 'HT' && previousStatusShort !== 'HT';
       const isFinalStatus = ['FT', 'AET', 'PEN'].includes(currentStatusShort ?? '');
       const wasFinalStatus = ['FT', 'AET', 'PEN'].includes(previousStatusShort ?? '');
+      const shouldSyncEvents =
+        !match.eventsNoDataAt &&
+        (shouldSyncHalftimeEvents || (isFinalStatus && !wasFinalStatus));
 
-      if ((shouldSyncHalftimeEvents || (isFinalStatus && !wasFinalStatus)) && fixture.fixture.id) {
+      if (shouldSyncEvents && fixture.fixture.id) {
         try {
-          await this.syncMatchEvents(fixture.fixture.id, match.id);
+          const eventSyncResult = await this.syncMatchEvents(fixture.fixture.id, match.id);
+          if (eventSyncResult.relevantEvents === 0) {
+            await this.prisma.match.update({
+              where: { id: match.id },
+              data: {
+                eventsNoDataAt: new Date(),
+              },
+            });
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           this.logger.warn(`Event sync failed for match ${match.id}: ${message}`);
@@ -584,11 +595,20 @@ export class MatchSyncService {
    * Sync goals, cards and substitutions for a live match.
    * Uses upsert keyed on (matchId, type, playerName, minute) to avoid duplicates.
    */
-  private async syncMatchEvents(fixtureId: number, matchId: string): Promise<void> {
+  private async syncMatchEvents(
+    fixtureId: number,
+    matchId: string,
+  ): Promise<{
+    relevantEvents: number;
+    rawEvents: number;
+  }> {
     const response = await this.apiClient.getFixtureEvents(fixtureId);
     const events: any[] = response?.response ?? [];
-    if (!events.length) return;
+    if (!events.length) {
+      return { relevantEvents: 0, rawEvents: 0 };
+    }
 
+    let relevantEvents = 0;
     for (const ev of events) {
       const type: string   = ev.type   ?? 'UNKNOWN';
       const detail: string = ev.detail ?? '';
@@ -599,6 +619,7 @@ export class MatchSyncService {
 
       // Only store goals and cards (skip substitutions to keep list clean)
       if (!['Goal', 'Card'].includes(type)) continue;
+      relevantEvents++;
 
       try {
         await (this.prisma as any).matchEvent.upsert({
@@ -617,6 +638,11 @@ export class MatchSyncService {
         // Ignore constraint errors (duplicate event at same minute)
       }
     }
+
+    return {
+      relevantEvents,
+      rawEvents: events.length,
+    };
   }
 
   /**

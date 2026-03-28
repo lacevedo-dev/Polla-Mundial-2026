@@ -177,6 +177,7 @@ Plan diario con estrategia, intervalo calculado y budget de requests.
 ### Match (actualizado)
 - `externalId`: ID del fixture en API-Football
 - `lastSyncAt`: Última sincronización
+- `eventsNoDataAt`: Marca de que `/fixtures/events` ya no devolvió información útil para ese fixture
 - `syncCount`: Contador de syncs
 
 ---
@@ -193,5 +194,6 @@ Ver documentación completa en: [`apps/api/src/football-sync/README.md`](../apps
 ## Ajustes recientes del plan
 
 - La planeacion ahora distingue consultas agrupadas de estado, consultas con arrastres y consultas de vinculo + estado para partidos sin `externalId`.
-- Los requests de eventos quedan reservados para dos hitos: entretiempo y final del partido.
+- Los requests de eventos quedan reservados para dos hitos: entretiempo y final del partido, y solo se planean si sobra presupuesto.
+- Si un fixture no devuelve eventos útiles, se marca para no reintentar `/fixtures/events` en ese mismo partido y no consumir requests del resto.
 - El tablero del plan debe mostrar esas consultas con colores distintos y manteniendo el presupuesto diario de 100 requests.

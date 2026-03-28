@@ -40,6 +40,7 @@ export interface PlannedSyncRequest {
   scheduledAt: string;
   requestCost: number;
   matchIds: string[];
+  optional?: boolean;
   notes?: string;
 }
 
@@ -671,23 +672,25 @@ export class SyncPlanService {
         eventCandidates.push({
           id: `events-halftime-${match.matchId}`,
           type: 'EVENTS_HALFTIME',
-          label: 'Eventos alternados: entretiempo',
+          label: 'Eventos alternados (opcionales): entretiempo',
           scheduledAt: halftimeAt,
           requestCost: 1,
           matchIds: [match.matchId],
+          optional: true,
           notes:
-            'Consulta de eventos reservada para el entretiempo, evitando pedir eventos en cada sync.',
+            'Consulta de eventos reservada para el entretiempo. Solo se agenda si sobra presupuesto y no se reintenta para el fixture si devuelve sin eventos útiles.',
           priority: 2,
         });
         eventCandidates.push({
           id: `events-final-${match.matchId}`,
           type: 'EVENTS_FINAL',
-          label: 'Eventos alternados: final',
+          label: 'Eventos alternados (opcionales): final',
           scheduledAt: finalAt,
           requestCost: 1,
           matchIds: [match.matchId],
+          optional: true,
           notes:
-            'Consulta final de eventos para cerrar el partido con el menor costo posible.',
+            'Consulta final de eventos para cerrar el partido. Solo se agenda si sobra presupuesto y no se reintenta para el fixture si devuelve sin eventos útiles.',
           priority: 1,
         });
       }

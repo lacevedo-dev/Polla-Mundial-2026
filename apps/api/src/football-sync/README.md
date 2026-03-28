@@ -316,4 +316,4 @@ Para problemas o preguntas, revisar:
 
 - The planning view groups status checks for multiple matches into a single planned request when they share the same sync window.
 - Carry-over matches are highlighted as combined status requests, and unlinked matches are marked as link-plus-status batches.
-- Event queries are planned only for halftime and final milestones to protect the daily 100-request budget.
+- Event queries are planned only for halftime and final milestones, and only if budget remains; if a fixture returns no useful events, it is marked as non-retryable so the budget is preserved for the rest of the day.

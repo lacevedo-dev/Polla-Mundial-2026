@@ -122,7 +122,7 @@ describe('MatchSyncService', () => {
             away: 0,
           },
         },
-      ],
+        ],
     });
     mockPrismaService.match.findUnique.mockResolvedValue({
       id: 'match-1',
@@ -187,6 +187,101 @@ describe('MatchSyncService', () => {
         status: 'SUCCESS',
         matchesUpdated: 1,
         requestsUsed: 1,
+      }),
+    );
+  });
+
+  it('marks a fixture as no-data when events return only non-useful payloads', async () => {
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: {
+            id: 999,
+            status: { short: 'HT' },
+          },
+          teams: {
+            home: {
+              id: 999,
+              name: 'England',
+              logo: 'https://media.api-sports.io/football/teams/999.png',
+              winner: null,
+            },
+            away: {
+              id: 888,
+              name: 'France',
+              logo: 'https://media.api-sports.io/football/teams/888.png',
+              winner: null,
+            },
+          },
+          goals: {
+            home: 1,
+            away: 0,
+          },
+        },
+      ],
+    });
+    mockApiFootballClient.getFixtureEvents.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          type: 'Substitution',
+          detail: 'Substitution',
+          time: { elapsed: 48, extra: null },
+          player: { name: 'John Doe' },
+          assist: { name: null },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-1',
+      externalId: '999',
+      homeTeamId: 'team-eng',
+      awayTeamId: 'team-fra',
+      homeScore: null,
+      awayScore: null,
+      statusShort: 'LIVE',
+      eventsNoDataAt: null,
+      homeTeam: {
+        id: 'team-eng',
+        name: 'England',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 999,
+        flagUrl: null,
+        group: 'C',
+      },
+      awayTeam: {
+        id: 'team-fra',
+        name: 'France',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 888,
+        flagUrl: null,
+        group: 'B',
+      },
+    });
+    mockPrismaService.team.findUnique.mockResolvedValue(null);
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-1',
+      status: MatchStatus.LIVE,
+    });
+
+    await service.syncTodayMatchesForTrigger({
+      logType: 'MANUAL_SYNC' as any,
+      summaryLabel: 'Manual sync',
+      triggeredBy: 'manual',
+    });
+
+    expect(mockPrismaService.match.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'match-1' },
+        data: expect.objectContaining({
+          eventsNoDataAt: expect.any(Date),
+        }),
       }),
     );
   });
