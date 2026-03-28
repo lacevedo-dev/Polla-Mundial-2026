@@ -11,6 +11,7 @@ import { TwilioService } from './twilio.service';
 export class NotificationScheduler {
   private readonly logger = new Logger(NotificationScheduler.name);
   private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
+  private static readonly RESULT_NOTIFICATION_KEY_PREFIX = 'result-published';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -20,7 +21,7 @@ export class NotificationScheduler {
   ) {}
 
   /**
-   * Env√≠a notificaci√≥n a todos los canales y registra el resultado en el campo
+   * EnvÌa notificaciÛn a todos los canales y registra el resultado en el campo
    * `data` del registro in-app: _trigger, _pushSent, _pushDevices, _whatsapp.
    */
   private async notifyUser(
@@ -45,7 +46,9 @@ export class NotificationScheduler {
         try {
           await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);
           whatsappSent = true;
-        } catch { /* contin√∫a aunque WhatsApp falle */ }
+        } catch {
+          /* contin˙a aunque WhatsApp falle */
+        }
       }
     }
 
@@ -61,18 +64,18 @@ export class NotificationScheduler {
     await this.notificationsService.createInAppNotification({ userId, type, title, body, data: enrichedData });
 
     this.logger.log(
-      `[${type}] ${title} ‚Üí user:${userId} | ` +
-      `push:${pushResult.sent}/${pushResult.devices} wa:${whatsappSent} | ` +
-      (trigger ? `trigger:"${trigger}"` : ''),
+      `[${type}] ${title} ? user:${userId} | ` +
+        `push:${pushResult.sent}/${pushResult.devices} wa:${whatsappSent} | ` +
+        (trigger ? `trigger:"${trigger}"` : ''),
     );
   }
 
   /**
-   * Resuelve qu√© ligas "ven" un partido dado su tournamentId.
+   * Resuelve quÈ ligas "ven" un partido dado su tournamentId.
    *
-   * Regla id√©ntica al fallback de MatchesService.findByLeague:
-   *   - Ligas con torneos asignados ‚Üí solo ven partidos de esos torneos.
-   *   - Ligas SIN torneos asignados ‚Üí ven TODOS los partidos.
+   * Regla idÈntica al fallback de MatchesService.findByLeague:
+   *   - Ligas con torneos asignados ? solo ven partidos de esos torneos.
+   *   - Ligas SIN torneos asignados ? ven TODOS los partidos.
    */
   private async getLeaguesForMatch(tournamentId: string | null): Promise<
     Array<{ id: string; members: Array<{ userId: string }> }>
@@ -91,7 +94,7 @@ export class NotificationScheduler {
             },
           })
         : [],
-      // Ligas sin ning√∫n torneo asignado (ven todos los partidos por fallback)
+      // Ligas sin ning˙n torneo asignado (ven todos los partidos por fallback)
       this.prisma.league.findMany({
         where: {
           status: 'ACTIVE',
@@ -104,7 +107,7 @@ export class NotificationScheduler {
       }),
     ]);
 
-    // Deduplicar por leagueId (una liga no deber√≠a estar en ambas listas, pero por seguridad)
+    // Deduplicar por leagueId (una liga no deberÌa estar en ambas listas, pero por seguridad)
     const seen = new Set<string>();
     const result: Array<{ id: string; members: Array<{ userId: string }> }> = [];
     for (const l of [...leaguesWithTournament, ...leaguesWithoutTournament]) {
@@ -117,7 +120,7 @@ export class NotificationScheduler {
   }
 
   /**
-   * Cada minuto: partidos que empiezan en ~60 minutos ‚Üí recordatorio.
+   * Cada minuto: partidos que empiezan en ~60 minutos ? recordatorio.
    */
   @Cron('* * * * *')
   async sendMatchReminders(): Promise<void> {
@@ -136,7 +139,7 @@ export class NotificationScheduler {
     try {
       const now = new Date();
       const from = new Date(now.getTime() + 55 * 60 * 1000);
-      const to   = new Date(now.getTime() + 65 * 60 * 1000);
+      const to = new Date(now.getTime() + 65 * 60 * 1000);
 
       const matches = await this.prisma.match.findMany({
         where: {
@@ -163,7 +166,7 @@ export class NotificationScheduler {
 
         const home = match.homeTeam.name;
         const away = match.awayTeam.name;
-        const predictedUserIds = new Set(match.predictions.map(p => p.userId));
+        const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
 
         for (const league of leagues) {
           for (const member of league.members) {
@@ -178,17 +181,20 @@ export class NotificationScheduler {
                 data: { contains: match.id },
               },
             });
-            if (alreadySent) { notified.add(key); continue; }
+            if (alreadySent) {
+              notified.add(key);
+              continue;
+            }
 
             const hasPrediction = predictedUserIds.has(userId);
             const body = hasPrediction
-              ? `‚öΩ En 1 hora: ${home} vs ${away} ‚Äî ya tienes tu pron√≥stico guardado`
-              : `‚öΩ 1 hora para ${home} vs ${away} ‚Äî ¬°a√∫n puedes pronosticar!`;
+              ? `? En 1 hora: ${home} vs ${away} ó ya tienes tu pronÛstico guardado`
+              : `? 1 hora para ${home} vs ${away} ó °a˙n puedes pronosticar!`;
 
             await this.notifyUser(
               userId,
               NotificationType.MATCH_REMINDER,
-              '‚è∞ Recordatorio de partido',
+              '? Recordatorio de partido',
               body,
               { matchId: match.id, leagueId: league.id },
               `Partido en ~60min: ${home} vs ${away}`,
@@ -203,9 +209,9 @@ export class NotificationScheduler {
   }
 
   /**
-   * Cada minuto: partidos cuyo cierre de predicci√≥n ocurre en los pr√≥ximos 5 min.
-   * Notifica a TODOS los miembros: si ya predicaron, les recuerda el cierre;
-   * si a√∫n no, los urge a hacerlo.
+   * Cada minuto: partidos cuyo cierre de predicciÛn ocurre en los prÛximos 5 min.
+   * Notifica a TODOS los miembros: si ya predijeron, les recuerda el cierre;
+   * si a˙n no, los urge a hacerlo.
    */
   @Cron('* * * * *')
   async sendPredictionClosingAlerts(): Promise<void> {
@@ -246,14 +252,10 @@ export class NotificationScheduler {
       for (const [closeMinutes, leagues] of closeGroups) {
         // Ventana de cierre: [matchDate - closeMin - 5min, matchDate - closeMin]
         const windowStart = new Date(now.getTime() + closeMinutes * 60 * 1000);
-        const windowEnd   = new Date(now.getTime() + (closeMinutes + 5) * 60 * 1000);
+        const windowEnd = new Date(now.getTime() + (closeMinutes + 5) * 60 * 1000);
 
-        const tournamentIds = [
-          ...new Set(
-            leagues.flatMap(l => l.leagueTournaments.map(lt => lt.tournamentId)),
-          ),
-        ];
-        const leaguesWithoutTournament = leagues.filter(l => l.leagueTournaments.length === 0);
+        const tournamentIds = [...new Set(leagues.flatMap((l) => l.leagueTournaments.map((lt) => lt.tournamentId)))];
+        const leaguesWithoutTournament = leagues.filter((l) => l.leagueTournaments.length === 0);
 
         // Partidos dentro de la ventana
         const whereMatch =
@@ -263,7 +265,7 @@ export class NotificationScheduler {
                 matchDate: { gte: windowStart, lte: windowEnd },
                 OR: [
                   { tournamentId: { in: tournamentIds } },
-                  // Tambi√©n incluye matches sin torneo si hay ligas sin torneo
+                  // TambiÈn incluye matches sin torneo si hay ligas sin torneo
                   ...(leaguesWithoutTournament.length > 0 ? [{ tournamentId: null as null }] : []),
                 ],
               }
@@ -285,14 +287,13 @@ export class NotificationScheduler {
         });
 
         for (const match of matches) {
-          const predictedUserIds = new Set(match.predictions.map(p => p.userId));
+          const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
           const home = match.homeTeam.name;
           const away = match.awayTeam.name;
 
-          // Determinar qu√© ligas de este grupo "ven" este partido
-          const relevantLeagues = leagues.filter(l =>
-            l.leagueTournaments.length === 0 ||
-            l.leagueTournaments.some(lt => lt.tournamentId === match.tournamentId),
+          // Determinar quÈ ligas de este grupo "ven" este partido
+          const relevantLeagues = leagues.filter(
+            (l) => l.leagueTournaments.length === 0 || l.leagueTournaments.some((lt) => lt.tournamentId === match.tournamentId),
           );
 
           for (const league of relevantLeagues) {
@@ -309,18 +310,18 @@ export class NotificationScheduler {
               if (alreadySent) continue;
 
               const hasPrediction = predictedUserIds.has(userId);
-              // Notificar a TODOS: los que no han predicho con urgencia, los que s√≠ con aviso
+              // Notificar a TODOS: los que no han predicho con urgencia, los que sÌ con aviso
               const body = hasPrediction
-                ? `üîí Cierre en ${closeMinutes} min: ${home} vs ${away} ‚Äî pron√≥stico guardado ‚úì`
-                : `‚ö†Ô∏è ¬°Quedan ${closeMinutes} min! ${home} vs ${away} ‚Äî haz tu pron√≥stico ahora`;
+                ? `?? Cierre en ${closeMinutes} min: ${home} vs ${away} ó pronÛstico guardado ?`
+                : `?? °Quedan ${closeMinutes} min! ${home} vs ${away} ó haz tu pronÛstico ahora`;
 
               await this.notifyUser(
                 userId,
                 NotificationType.PREDICTION_CLOSED,
-                hasPrediction ? 'üîí Predicciones cerrando' : '‚ö†Ô∏è ¬°Predicciones cerrando pronto!',
+                hasPrediction ? '?? Predicciones cerrando' : '?? °Predicciones cerrando pronto!',
                 body,
                 { matchId: match.id, leagueId: league.id },
-                `Cierre en ${closeMinutes}min: ${home} vs ${away} | ${hasPrediction ? 'ya predijo' : 'sin pron√≥stico'}`,
+                `Cierre en ${closeMinutes}min: ${home} vs ${away} | ${hasPrediction ? 'ya predijo' : 'sin pronÛstico'}`,
               );
             }
           }
@@ -332,7 +333,7 @@ export class NotificationScheduler {
   }
 
   /**
-   * Cada minuto: partidos terminados ‚Üí notificar resultado + puntos
+   * Cada minuto: partidos terminados ? notificar resultado + puntos
    */
   @Cron('* * * * *')
   async sendMatchResultNotifications(): Promise<void> {
@@ -364,13 +365,31 @@ export class NotificationScheduler {
         take: 20,
       });
 
+      const processedNotificationKeys = new Set<string>();
+
       for (const match of matches) {
+        const notificationKey = this.buildMatchResultNotificationKey(match);
+        const claimTimestamp = new Date();
+
+        if (processedNotificationKeys.has(notificationKey)) {
+          await this.markResultNotificationsAsSent(match.id, match.externalId ?? null, claimTimestamp);
+          this.logger.warn(
+            `Skipping duplicate finished match ${match.id} for RESULT_PUBLISHED (notificationKey=${notificationKey})`,
+          );
+          continue;
+        }
+
+        const claimed = await this.claimResultNotifications(match.id, match.externalId ?? null, claimTimestamp);
+        if (!claimed) {
+          continue;
+        }
+
         const home = match.homeTeam.name;
         const away = match.awayTeam.name;
         const score = `${match.homeScore ?? '-'}-${match.awayScore ?? '-'}`;
 
         // Agrupar predicciones por usuario para evitar notificaciones duplicadas
-        // cuando el usuario est√° en varias ligas con el mismo partido
+        // cuando el usuario est· en varias ligas con el mismo partido
         const byUser = new Map<string, { points: number; leagueId: string | null }>();
         for (const pred of match.predictions) {
           if (!byUser.has(pred.userId)) {
@@ -381,39 +400,107 @@ export class NotificationScheduler {
           }
         }
 
-        for (const [userId, { points: pts, leagueId }] of byUser) {
-          const alreadySent = await this.prisma.notification.findFirst({
-            where: {
+        processedNotificationKeys.add(notificationKey);
+
+        try {
+          for (const [userId, { points: pts, leagueId }] of byUser) {
+            const alreadySent = await this.prisma.notification.findFirst({
+              where: {
+                userId,
+                type: NotificationType.RESULT_PUBLISHED,
+                OR: [{ data: { contains: match.id } }, { data: { contains: notificationKey } }],
+              },
+            });
+            if (alreadySent) continue;
+
+            const isExact = pts >= 5;
+            const title = isExact ? '?? °Acertaste el marcador exacto!' : '? Resultado publicado';
+            const body = isExact
+              ? `${home} ${score} ${away} ó °Acertaste! +${pts} pts`
+              : `${home} ${score} ${away} ó ganaste ${pts} pts`;
+
+            await this.notifyUser(
               userId,
-              type: NotificationType.RESULT_PUBLISHED,
-              data: { contains: match.id },
-            },
-          });
-          if (alreadySent) continue;
-
-          const isExact = pts >= 5;
-          const title = isExact ? 'üéØ ¬°Acertaste el marcador exacto!' : '‚úÖ Resultado publicado';
-          const body = isExact
-            ? `${home} ${score} ${away} ‚Äî ¬°Acertaste! +${pts} pts`
-            : `${home} ${score} ${away} ‚Äî ganaste ${pts} pts`;
-
-          await this.notifyUser(
-            userId,
-            NotificationType.RESULT_PUBLISHED,
-            title,
-            body,
-            { matchId: match.id, leagueId, points: pts },
-            `Partido finalizado: ${home} ${score} ${away} | ${pts}pts`,
-          );
+              NotificationType.RESULT_PUBLISHED,
+              title,
+              body,
+              { matchId: match.id, leagueId, points: pts, matchNotificationKey: notificationKey },
+              `Partido finalizado: ${home} ${score} ${away} | ${pts}pts`,
+            );
+          }
+        } catch (error) {
+          await this.releaseResultNotificationClaim(match.id);
+          throw error;
         }
-
-        await this.prisma.match.update({
-          where: { id: match.id },
-          data: { resultNotificationSentAt: new Date() },
-        });
       }
     } catch (error) {
       this.logger.error(`sendMatchResultNotifications failed: ${error.message}`);
     }
+  }
+
+  private buildMatchResultNotificationKey(match: {
+    externalId: string | null;
+    homeTeamId: string | null;
+    awayTeamId: string | null;
+    matchDate: Date;
+  }): string {
+    if (match.externalId?.trim()) {
+      return `${NotificationScheduler.RESULT_NOTIFICATION_KEY_PREFIX}:fixture:${match.externalId}`;
+    }
+
+    return [
+      NotificationScheduler.RESULT_NOTIFICATION_KEY_PREFIX,
+      'fallback',
+      match.homeTeamId ?? 'no-home',
+      match.awayTeamId ?? 'no-away',
+      match.matchDate.toISOString(),
+    ].join(':');
+  }
+
+  private async claimResultNotifications(
+    matchId: string,
+    externalId: string | null,
+    claimedAt: Date,
+  ): Promise<boolean> {
+    const claim = await this.prisma.match.updateMany({
+      where: externalId?.trim()
+        ? {
+            resultNotificationSentAt: null,
+            OR: [{ id: matchId }, { externalId }],
+          }
+        : {
+            id: matchId,
+            resultNotificationSentAt: null,
+          },
+      data: { resultNotificationSentAt: claimedAt },
+    });
+
+    return claim.count > 0;
+  }
+
+  private async markResultNotificationsAsSent(
+    matchId: string,
+    externalId: string | null,
+    sentAt: Date,
+  ): Promise<void> {
+    await this.prisma.match.updateMany({
+      where: externalId?.trim()
+        ? {
+            resultNotificationSentAt: null,
+            OR: [{ id: matchId }, { externalId }],
+          }
+        : {
+            id: matchId,
+            resultNotificationSentAt: null,
+          },
+      data: { resultNotificationSentAt: sentAt },
+    });
+  }
+
+  private async releaseResultNotificationClaim(matchId: string): Promise<void> {
+    await this.prisma.match.update({
+      where: { id: matchId },
+      data: { resultNotificationSentAt: null },
+    });
   }
 }

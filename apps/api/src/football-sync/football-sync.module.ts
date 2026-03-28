@@ -19,7 +19,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    ScheduleModule,
     HttpModule.register({
       timeout: 15000,
       maxRedirects: 3,

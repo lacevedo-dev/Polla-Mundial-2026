@@ -8,7 +8,7 @@ import { TwilioService } from './twilio.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), PrismaModule, PushNotificationsModule],
+  imports: [ScheduleModule, PrismaModule, PushNotificationsModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationScheduler, TwilioService],
   exports: [NotificationsService, TwilioService],

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { join } from 'path';
@@ -35,6 +36,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     AdminModule,
     ConfigModule,
