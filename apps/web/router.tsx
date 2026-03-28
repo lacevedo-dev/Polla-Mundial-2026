@@ -27,6 +27,7 @@ const FootballSyncStats = React.lazy(() => import('./views/admin/FootballSyncSta
 const FootballSyncApiLogs = React.lazy(() => import('./views/admin/FootballSyncApiLogs'));
 const AdminSyncPlan = React.lazy(() => import('./views/admin/AdminSyncPlan'));
 const AdminAutomation = React.lazy(() => import('./views/admin/AdminAutomation'));
+const AdminEmailProviders = React.lazy(() => import('./views/admin/AdminEmailProviders'));
 
 // Vistas públicas - static imports (critical path)
 import Landing from './views/Landing';
@@ -103,6 +104,7 @@ const adminRoutes: RouteObject[] = [
     { path: '/admin/football-sync/api-logs', element: <Suspense fallback={<LoadingFallback />}><FootballSyncApiLogs /></Suspense> },
     { path: '/admin/football-sync/plan', element: <Suspense fallback={<LoadingFallback />}><AdminSyncPlan /></Suspense> },
     { path: '/admin/automation', element: <Suspense fallback={<LoadingFallback />}><AdminAutomation /></Suspense> },
+    { path: '/admin/email-providers', element: <Suspense fallback={<LoadingFallback />}><AdminEmailProviders /></Suspense> },
 ];
 
 export { resolveDevelopmentSurfaceFlags } from './runtime-flags';
