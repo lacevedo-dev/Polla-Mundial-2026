@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { MatchStatus, NotificationType } from '@prisma/client';
+import { tryRunExclusiveBackgroundJob } from '../prisma/background-job-lock.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { NotificationsService } from './notifications.service';
@@ -9,6 +10,7 @@ import { TwilioService } from './twilio.service';
 @Injectable()
 export class NotificationScheduler {
   private readonly logger = new Logger(NotificationScheduler.name);
+  private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -119,6 +121,18 @@ export class NotificationScheduler {
    */
   @Cron('* * * * *')
   async sendMatchReminders(): Promise<void> {
+    const execution = await tryRunExclusiveBackgroundJob(
+      NotificationScheduler.BACKGROUND_DB_JOB_KEY,
+      () => this.runSendMatchReminders(),
+    );
+
+    if (!execution.ran) {
+      this.logger.warn('sendMatchReminders skipped because another DB-heavy background job is running');
+      return;
+    }
+  }
+
+  private async runSendMatchReminders(): Promise<void> {
     try {
       const now = new Date();
       const from = new Date(now.getTime() + 55 * 60 * 1000);
@@ -195,6 +209,18 @@ export class NotificationScheduler {
    */
   @Cron('* * * * *')
   async sendPredictionClosingAlerts(): Promise<void> {
+    const execution = await tryRunExclusiveBackgroundJob(
+      NotificationScheduler.BACKGROUND_DB_JOB_KEY,
+      () => this.runSendPredictionClosingAlerts(),
+    );
+
+    if (!execution.ran) {
+      this.logger.warn('sendPredictionClosingAlerts skipped because another DB-heavy background job is running');
+      return;
+    }
+  }
+
+  private async runSendPredictionClosingAlerts(): Promise<void> {
     try {
       const now = new Date();
 
@@ -310,6 +336,18 @@ export class NotificationScheduler {
    */
   @Cron('* * * * *')
   async sendMatchResultNotifications(): Promise<void> {
+    const execution = await tryRunExclusiveBackgroundJob(
+      NotificationScheduler.BACKGROUND_DB_JOB_KEY,
+      () => this.runSendMatchResultNotifications(),
+    );
+
+    if (!execution.ran) {
+      this.logger.warn('sendMatchResultNotifications skipped because another DB-heavy background job is running');
+      return;
+    }
+  }
+
+  private async runSendMatchResultNotifications(): Promise<void> {
     try {
       const matches = await this.prisma.match.findMany({
         where: {

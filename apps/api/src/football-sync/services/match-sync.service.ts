@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { tryRunExclusiveBackgroundJob } from '../../prisma/background-job-lock.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PredictionsService } from '../../predictions/predictions.service';
 import { PredictionReportService } from '../../prediction-report/prediction-report.service';
@@ -31,7 +32,9 @@ import {
 
 @Injectable()
 export class MatchSyncService {
+  private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
   private readonly logger = new Logger(MatchSyncService.name);
+  private readonly syncConcurrency = 1;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -145,6 +148,32 @@ export class MatchSyncService {
     matchesUpdated: number;
     error?: string;
   }> {
+    const execution = await tryRunExclusiveBackgroundJob(
+      MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      () => this.runTodaySyncInternal(options),
+    );
+
+    if (!execution.ran) {
+      this.logger.warn(`${options.summaryLabel} skipped because another DB-heavy background job is running`);
+      return {
+        success: false,
+        matchesUpdated: 0,
+        error: 'Another DB-heavy background job is running',
+      };
+    }
+
+    return execution.result;
+  }
+
+  private async runTodaySyncInternal(options: {
+    logType: SyncLogType;
+    triggeredBy?: string;
+    summaryLabel: string;
+  }): Promise<{
+    success: boolean;
+    matchesUpdated: number;
+    error?: string;
+  }> {
     const startedAt = Date.now();
 
     try {
@@ -204,12 +233,12 @@ export class MatchSyncService {
       await this.syncPlan.updateLastSyncTime();
       await this.syncPlan.incrementRequestsUsed(requestCount);
 
-      // Process fixtures in parallel batches (4 concurrent)
+      // Process fixtures sequentially to avoid saturating MariaDB pool when
+      // the environment is intentionally limited to a single connection.
       let updatedCount = 0;
       let skippedCount = 0;
-      const CONCURRENT = 4;
-      for (let i = 0; i < fixtures.length; i += CONCURRENT) {
-        const batch = fixtures.slice(i, i + CONCURRENT);
+      for (let i = 0; i < fixtures.length; i += this.syncConcurrency) {
+        const batch = fixtures.slice(i, i + this.syncConcurrency);
         const results = await Promise.allSettled(
           batch.map(f => this.updateMatchFromFixture(f)),
         );
@@ -289,6 +318,28 @@ export class MatchSyncService {
     matchesUpdated: number;
     error?: string;
   }> {
+    const execution = await tryRunExclusiveBackgroundJob(
+      MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      () => this.syncLiveMatchesInternal(),
+    );
+
+    if (!execution.ran) {
+      this.logger.warn('Live sync skipped because another DB-heavy background job is running');
+      return {
+        success: false,
+        matchesUpdated: 0,
+        error: 'Another DB-heavy background job is running',
+      };
+    }
+
+    return execution.result;
+  }
+
+  private async syncLiveMatchesInternal(): Promise<{
+    success: boolean;
+    matchesUpdated: number;
+    error?: string;
+  }> {
     const startedAt = Date.now();
     try {
       // Check rate limit
@@ -327,9 +378,8 @@ export class MatchSyncService {
 
       // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
-      const CONCURRENT = 4;
-      for (let i = 0; i < response.response.length; i += CONCURRENT) {
-        const batch = response.response.slice(i, i + CONCURRENT);
+      for (let i = 0; i < response.response.length; i += this.syncConcurrency) {
+        const batch = response.response.slice(i, i + this.syncConcurrency);
         const results = await Promise.allSettled(
           batch.map(f => this.updateMatchFromFixture(f)),
         );
@@ -434,11 +484,15 @@ export class MatchSyncService {
         },
       });
 
-      // Sync goal/card events for live matches (fire-and-forget, non-blocking)
+      // Sync goal/card events inline to avoid overlapping DB work when the
+      // runtime is constrained to a single MariaDB connection.
       if (status === MatchStatus.LIVE && fixture.fixture.id) {
-        this.syncMatchEvents(fixture.fixture.id, match.id).catch(err =>
-          this.logger.warn(`Event sync failed for match ${match.id}: ${err.message}`),
-        );
+        try {
+          await this.syncMatchEvents(fixture.fixture.id, match.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Event sync failed for match ${match.id}: ${message}`);
+        }
       }
 
       this.logger.log(
@@ -464,14 +518,6 @@ export class MatchSyncService {
       if (scoreChanged && status === MatchStatus.FINISHED) {
         this.logger.log(`Match ${match.id} finished, calculating points`);
         await this.predictionsService.calculateMatchPoints(match.id);
-        this.predictionReport.sendMatchResultsReport(match.id).catch(err =>
-          this.logger.error(`Error sending results email for match ${match.id}: ${err.message}`),
-        );
-
-        // Send push notifications for match result + points (CAMBIO 3)
-        this.sendResultPushNotifications(match.id, fixture.goals.home, fixture.goals.away).catch(err =>
-          this.logger.error(`Error sending result push for match ${match.id}: ${err.message}`),
-        );
 
         // Set advancingTeamId for knockout matches
         if (match.phase !== Phase.GROUP) {
@@ -488,8 +534,19 @@ export class MatchSyncService {
           }
         }
         // Calculate phase bonuses after advancement is set
-        this.predictionsService.calculatePhaseBonuses(match.id).catch(err =>
-          this.logger.error(`Error calculating phase bonuses for match ${match.id}: ${err.message}`),
+        await this.runFinishedMatchSideEffect(
+          `calculate phase bonuses for match ${match.id}`,
+          () => this.predictionsService.calculatePhaseBonuses(match.id),
+        );
+        await this.runFinishedMatchSideEffect(
+          `send results email for match ${match.id}`,
+          () => this.predictionReport.sendMatchResultsReport(match.id),
+        );
+
+        // Send push notifications for match result + points (CAMBIO 3)
+        await this.runFinishedMatchSideEffect(
+          `send result push for match ${match.id}`,
+          () => this.sendResultPushNotifications(match.id, fixture.goals.home, fixture.goals.away),
         );
       }
 
@@ -579,6 +636,17 @@ export class MatchSyncService {
       }
     } catch (error) {
       this.logger.error(`sendResultPushNotifications failed: ${error.message}`);
+    }
+  }
+
+  private async runFinishedMatchSideEffect(
+    label: string,
+    effect: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await effect();
+    } catch (error) {
+      this.logger.error(`Error ${label}: ${error.message}`);
     }
   }
 
