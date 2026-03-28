@@ -3,6 +3,7 @@ import { EmailJobPriority, EmailJobStatus, Prisma } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailProviderConfig, EmailProviderConfigService } from './email-provider-config.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 export interface QueueEmailInput {
   type: Prisma.EmailJobCreateInput['type'];
@@ -57,8 +58,8 @@ export class EmailQueueService {
   }
 
   async enqueueForUser(userId: string, input: Omit<QueueEmailInput, 'recipientEmail'>): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, status: USER_STATUS.ACTIVE },
       select: { email: true, emailVerified: true },
     });
 

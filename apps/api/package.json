@@ -12,6 +12,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
+    "smtp:bootstrap": "tsx -r dotenv/config prisma/bootstrap_email_providers.ts",
+    "smtp:bootstrap:apply": "tsx -r dotenv/config prisma/bootstrap_email_providers.ts --apply",
     "seed:live-validation": "tsx -r dotenv/config prisma/seed_live_validation.ts",
     "fix:duplicate-matches": "tsx -r dotenv/config prisma/fix_duplicate_matches.ts",
     "fix:duplicate-matches:apply": "tsx -r dotenv/config prisma/fix_duplicate_matches.ts --fix",
