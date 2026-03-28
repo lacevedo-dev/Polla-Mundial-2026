@@ -12,7 +12,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminService } from './admin.service';
-import { USER_STATUS, UserStatusValue } from '../users/user-status.constants';
+import { USER_STATUS } from '../users/user-status.constants';
+import type { UserStatusValue } from '../users/user-status.constants';
 
 export class UpdateUserAdminDto {
     @IsOptional()

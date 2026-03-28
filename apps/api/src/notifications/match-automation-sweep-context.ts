@@ -9,6 +9,12 @@ const REPORTABLE_MEMBER_STATUSES = [
   MemberStatus.ACTIVE,
   MemberStatus.PENDING_PAYMENT,
 ] as const;
+type ReportableMemberStatus = (typeof REPORTABLE_MEMBER_STATUSES)[number];
+
+const isReportableMemberStatus = (
+  status: MemberStatus,
+): status is ReportableMemberStatus =>
+  status === MemberStatus.ACTIVE || status === MemberStatus.PENDING_PAYMENT;
 
 export type MatchAutomationSweepLeagueMember = {
   userId: string;
@@ -232,8 +238,8 @@ export function getReportAudienceFromLeague(
   members: MatchAutomationSweepLeagueMember[];
   recipients: string[];
 } {
-  const members = league.members.filter((member) =>
-    REPORTABLE_MEMBER_STATUSES.includes(member.status),
+  const members = league.members.filter((member): member is MatchAutomationSweepLeagueMember =>
+    isReportableMemberStatus(member.status),
   );
   const recipients = [
     ...new Set(

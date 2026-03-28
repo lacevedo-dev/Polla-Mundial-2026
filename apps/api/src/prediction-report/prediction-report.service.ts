@@ -9,6 +9,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
 
+type PendingReportLeague = {
+  id: string;
+  name: string;
+  code: string;
+  closePredictionMinutes: number;
+  prefetchedLeague?: MatchAutomationSweepLeague;
+};
+
 @Injectable()
 export class PredictionReportService {
   private readonly logger = new Logger(PredictionReportService.name);
@@ -31,7 +39,7 @@ export class PredictionReportService {
   ): Promise<void> {
     const now = context?.now ?? new Date();
 
-    const leagues = context
+    const leagues: PendingReportLeague[] = context
       ? context.activeLeagues.map((league) => ({
           id: league.id,
           name: league.name,
@@ -94,7 +102,7 @@ export class PredictionReportService {
 
         const { members, recipients } = await this.getLeagueReportAudience(
           league.id,
-          'prefetchedLeague' in league ? league.prefetchedLeague : undefined,
+          league.prefetchedLeague,
         );
         if (recipients.length === 0) continue;
 
@@ -104,7 +112,7 @@ export class PredictionReportService {
           );
           return {
             userId: prediction.userId,
-            name: prediction.user.name,
+            name: this.resolvePredictorName(prediction.user, prediction.userId),
             isAdmin: member?.role === 'ADMIN',
             homeScore: prediction.homeScore,
             awayScore: prediction.awayScore,
@@ -175,7 +183,7 @@ export class PredictionReportService {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:    p.userId,
-        name:      p.user.name,
+        name:      this.resolvePredictorName(p.user, p.userId),
         isAdmin:   member?.role === 'ADMIN',
         homeScore: p.homeScore,
         awayScore: p.awayScore,
@@ -231,7 +239,7 @@ export class PredictionReportService {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:    p.userId,
-        name:      p.user.name,
+        name:      this.resolvePredictorName(p.user, p.userId),
         isAdmin:   member?.role === 'ADMIN',
         homeScore: p.homeScore,
         awayScore: p.awayScore,
@@ -317,7 +325,7 @@ export class PredictionReportService {
         const outcome = this.parseOutcomeFromDetail(p.pointDetail, p.points);
         return {
           userId:       p.userId,
-          name:         p.user.name,
+          name:         this.resolvePredictorName(p.user, p.userId),
           isAdmin:      member?.role === 'ADMIN',
           homeScore:    p.homeScore,
           awayScore:    p.awayScore,
@@ -430,7 +438,7 @@ export class PredictionReportService {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:       p.userId,
-        name:         p.user.name,
+        name:         this.resolvePredictorName(p.user, p.userId),
         isAdmin:      member?.role === 'ADMIN',
         homeScore:    p.homeScore,
         awayScore:    p.awayScore,
@@ -503,7 +511,7 @@ export class PredictionReportService {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:       p.userId,
-        name:         p.user.name,
+        name:         this.resolvePredictorName(p.user, p.userId),
         isAdmin:      member?.role === 'ADMIN',
         homeScore:    p.homeScore,
         awayScore:    p.awayScore,
@@ -587,6 +595,13 @@ export class PredictionReportService {
     }
     // Fallback for predictions without pointDetail
     return (points ?? 0) > 0 ? 'WINNER' : 'WRONG';
+  }
+
+  private resolvePredictorName(
+    user: { name: string | null; email?: string | null },
+    userId: string,
+  ): string {
+    return user.name ?? user.email ?? userId;
   }
 
   private async getStandings(leagueId: string): Promise<Map<string, { points: number; position: number }>> {

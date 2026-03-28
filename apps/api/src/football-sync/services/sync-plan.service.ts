@@ -577,7 +577,7 @@ export class SyncPlanService {
       : 0;
 
     const matchDrafts = matches.map((m) => {
-      const trackingScope =
+      const trackingScope: MatchSyncSlot['trackingScope'] =
         m.matchDate < todayStart ? 'CARRY_OVER' : 'TODAY';
       const slots = buildSyncSlots(m.matchDate, m.status, trackingScope);
       return {
