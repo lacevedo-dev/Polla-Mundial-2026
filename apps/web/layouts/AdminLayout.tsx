@@ -435,7 +435,7 @@ const AdminLayout: React.FC = () => {
                                 className="w-full flex items-center gap-4 px-3 py-3.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors"
                             >
                                 <LogOut size={20} className="shrink-0" />
-                                <span className="text-base font-semibold">Cerrar Sesión</span>
+                                <span className="text-base font-semibold">Cerrar sesión</span>
                             </button>
                         </div>
                     </div>

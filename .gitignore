@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local noise / deployment-only files
+apps/api/.env
+bash.exe.stackdump
+.claude/worktrees/
