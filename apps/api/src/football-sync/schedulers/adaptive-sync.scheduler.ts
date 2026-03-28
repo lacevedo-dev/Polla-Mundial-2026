@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SyncLogType } from '@prisma/client';
+import { observeSchedulerJob } from '../../common/scheduler-observability.util';
 import { SyncPlanService } from '../services/sync-plan.service';
 import { MatchSyncService } from '../services/match-sync.service';
 import { ConfigService as FootballConfigService } from '../services/config.service';
@@ -24,23 +25,53 @@ export class AdaptiveSyncScheduler {
    */
   @Cron('*/1 * * * *') // Every minute
   async adaptiveSyncTick() {
-    if (this.isSyncing) return;
-    this.isSyncing = true; // Claim lock before any await to prevent race condition
-    try {
-      if (!(await this.footballConfigService.isAutoSyncEnabled())) {
-        return;
+    await observeSchedulerJob(this.logger, 'adaptiveSyncTick', async () => {
+      if (this.isSyncing) {
+        return {
+          status: 'skipped',
+          summary: { reason: 'sync_in_progress' },
+        };
       }
 
-      const shouldSync = await this.syncPlan.shouldSyncNow();
-      if (shouldSync) {
-        this.logger.log('Adaptive sync triggered');
-        await this.executeSyncWithLock();
+      this.isSyncing = true; // Claim lock before any await to prevent race condition
+      try {
+        if (!(await this.footballConfigService.isAutoSyncEnabled())) {
+          return {
+            status: 'skipped',
+            summary: { reason: 'auto_sync_disabled' },
+          };
+        }
+
+        const decision = await this.resolveFrequentSyncDecision();
+        if (!decision.shouldSync) {
+          return {
+            status: 'skipped',
+            summary: decision.summary,
+          };
+        }
+
+        this.logger.log(decision.logMessage);
+        const execution = await this.executeSyncWithLock(decision.trigger);
+
+        return {
+          status: 'completed',
+          level: execution.success ? 'log' : 'warn',
+          summary: {
+            ...decision.summary,
+            trigger: decision.trigger,
+            success: execution.success,
+            matchesUpdated: execution.matchesUpdated ?? 0,
+            requestsUsed: execution.requestsUsed ?? 0,
+            ...(execution.error ? { error: execution.error } : {}),
+          },
+        };
+      } catch (error) {
+        this.logger.error(`Adaptive sync tick error: ${error.message}`);
+        throw error;
+      } finally {
+        this.isSyncing = false;
       }
-    } catch (error) {
-      this.logger.error(`Adaptive sync tick error: ${error.message}`);
-    } finally {
-      this.isSyncing = false;
-    }
+    });
   }
 
   /**
@@ -48,16 +79,29 @@ export class AdaptiveSyncScheduler {
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async generateDailyPlan() {
-    try {
-      this.logger.log('Generating daily sync plan');
-      const plan = await this.syncPlan.calculateDailyPlan();
+    await observeSchedulerJob(this.logger, 'generateDailyPlan', async () => {
+      try {
+        this.logger.log('Generating daily sync plan');
+        const plan = await this.syncPlan.calculateDailyPlan();
 
-      this.logger.log(
-        `Daily plan created: ${plan.totalMatches} matches, ${plan.intervalMinutes}min interval, ${plan.strategy} strategy`,
-      );
-    } catch (error) {
-      this.logger.error(`Failed to generate daily plan: ${error.message}`);
-    }
+        this.logger.log(
+          `Daily plan created: ${plan.totalMatches} matches, ${plan.intervalMinutes}min interval, ${plan.strategy} strategy`,
+        );
+
+        return {
+          status: 'completed',
+          level: 'log',
+          summary: {
+            totalMatches: plan.totalMatches,
+            intervalMinutes: plan.intervalMinutes,
+            strategy: plan.strategy,
+          },
+        };
+      } catch (error) {
+        this.logger.error(`Failed to generate daily plan: ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   /**
@@ -65,59 +109,44 @@ export class AdaptiveSyncScheduler {
    */
   @Cron('0 2 * * *') // 2 AM daily
   async syncYesterdayResults() {
-    if (!(await this.footballConfigService.isAutoSyncEnabled())) {
-      this.logger.debug('Auto sync disabled, skipping yesterday sync');
-      return;
-    }
-
-    try {
-      this.logger.log('Running yesterday results sync');
-
-      // This is a safety net to ensure all matches from yesterday are finalized
-      // It uses today's sync which will catch any stragglers
-      await this.executeSyncWithLock();
-    } catch (error) {
-      this.logger.error(`Yesterday sync failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * High-frequency sync during peak hours (9 AM - 11 PM)
-   * Only runs if there are live matches
-   */
-  @Cron('*/5 9-23 * * *') // Every 5 minutes from 9 AM to 11 PM
-  async peakHoursSync() {
-    if (this.isSyncing) return;
-    this.isSyncing = true; // Claim lock before any await to prevent race condition
-    try {
-      if (!(await this.footballConfigService.isPeakHoursSyncEnabled())) {
-        return;
+    await observeSchedulerJob(this.logger, 'syncYesterdayResults', async () => {
+      if (!(await this.footballConfigService.isAutoSyncEnabled())) {
+        this.logger.debug('Auto sync disabled, skipping yesterday sync');
+        return {
+          status: 'skipped',
+          summary: { reason: 'auto_sync_disabled' },
+        };
       }
 
-      const plan = await this.syncPlan.calculateDailyPlan();
-      const potentiallyLive = plan.hasLiveMatches
-        ? 0
-        : await this.syncPlan.countPotentiallyLiveMatches();
+      try {
+        this.logger.log('Running yesterday results sync');
 
-      if ((plan.hasLiveMatches || potentiallyLive > 0) && plan.requestBudget > 0) {
-        this.logger.log(
-          plan.hasLiveMatches
-            ? 'Peak hours sync triggered (live matches detected)'
-            : `Peak hours sync triggered (${potentiallyLive} potentially live matches)`,
-        );
-        await this.executeSyncWithLock();
+        // This is a safety net to ensure all matches from yesterday are finalized
+        // It uses today's sync which will catch any stragglers
+        const execution = await this.executeSyncWithLock('yesterday_results');
+
+        return {
+          status: 'completed',
+          level: execution.success ? 'log' : 'warn',
+          summary: {
+            trigger: 'yesterday_results',
+            success: execution.success,
+            matchesUpdated: execution.matchesUpdated ?? 0,
+            requestsUsed: execution.requestsUsed ?? 0,
+            ...(execution.error ? { error: execution.error } : {}),
+          },
+        };
+      } catch (error) {
+        this.logger.error(`Yesterday sync failed: ${error.message}`);
+        throw error;
       }
-    } catch (error) {
-      this.logger.error(`Peak hours sync error: ${error.message}`);
-    } finally {
-      this.isSyncing = false;
-    }
+    });
   }
 
   /**
    * Execute sync with locking mechanism
    */
-  private async executeSyncWithLock() {
+  private async executeSyncWithLock(trigger: 'adaptive' | 'yesterday_results' | 'peak_hours') {
     this.isSyncing = true;
     const startedAt = Date.now();
 
@@ -178,6 +207,13 @@ export class AdaptiveSyncScheduler {
             });
           }
         }
+        return {
+          success: true,
+          matchesUpdated: result.matchesUpdated,
+          requestsUsed: plan?.estimatedRequestsUsed ?? 0,
+          durationMs: Date.now() - startedAt,
+          trigger,
+        };
       } else {
         this.logger.warn(`Sync completed with issues: ${result.error}`);
         this.syncEvents.emit({
@@ -185,6 +221,13 @@ export class AdaptiveSyncScheduler {
           data: { error: result.error ?? 'Unknown error' },
           timestamp: new Date().toISOString(),
         });
+        return {
+          success: false,
+          matchesUpdated: result.matchesUpdated,
+          error: result.error ?? 'Unknown error',
+          durationMs: Date.now() - startedAt,
+          trigger,
+        };
       }
     } catch (error) {
       this.logger.error(`Sync execution failed: ${error.message}`);
@@ -193,6 +236,12 @@ export class AdaptiveSyncScheduler {
         data: { error: error.message },
         timestamp: new Date().toISOString(),
       });
+      return {
+        success: false,
+        error: error.message,
+        durationMs: Date.now() - startedAt,
+        trigger,
+      };
     } finally {
       this.isSyncing = false;
     }
@@ -266,5 +315,100 @@ export class AdaptiveSyncScheduler {
       isSyncing: this.isSyncing,
       lastError: null, // Can be enhanced to track last error
     };
+  }
+
+  private async resolveFrequentSyncDecision(): Promise<
+    | {
+        shouldSync: true;
+        trigger: 'adaptive' | 'peak_hours';
+        logMessage: string;
+        summary: Record<string, string | number | boolean>;
+      }
+    | {
+        shouldSync: false;
+        summary: Record<string, string | number | boolean>;
+      }
+  > {
+    const shouldRunAdaptiveSync = await this.syncPlan.shouldSyncNow();
+    if (shouldRunAdaptiveSync) {
+      return {
+        shouldSync: true,
+        trigger: 'adaptive',
+        logMessage: 'Adaptive sync triggered',
+        summary: { reason: 'plan_due' },
+      };
+    }
+
+    return this.evaluatePeakHoursOverride();
+  }
+
+  private async evaluatePeakHoursOverride(): Promise<
+    | {
+        shouldSync: true;
+        trigger: 'peak_hours';
+        logMessage: string;
+        summary: Record<string, string | number | boolean>;
+      }
+    | {
+        shouldSync: false;
+        summary: Record<string, string | number | boolean>;
+      }
+  > {
+    const now = new Date();
+
+    if (!this.isPeakHoursWindow(now) || !this.isPeakHoursBoundary(now)) {
+      return {
+        shouldSync: false,
+        summary: { reason: 'plan_not_due' },
+      };
+    }
+
+    if (!(await this.footballConfigService.isPeakHoursSyncEnabled())) {
+      return {
+        shouldSync: false,
+        summary: { reason: 'peak_hours_sync_disabled' },
+      };
+    }
+
+    const plan = await this.syncPlan.calculateDailyPlan();
+    const potentiallyLive = plan.hasLiveMatches
+      ? 0
+      : await this.syncPlan.countPotentiallyLiveMatches();
+
+    if (plan.requestBudget <= 0) {
+      return {
+        shouldSync: false,
+        summary: { reason: 'request_budget_exhausted', trigger: 'peak_hours' },
+      };
+    }
+
+    if (!plan.hasLiveMatches && potentiallyLive <= 0) {
+      return {
+        shouldSync: false,
+        summary: { reason: 'no_live_matches_detected', trigger: 'peak_hours' },
+      };
+    }
+
+    return {
+      shouldSync: true,
+      trigger: 'peak_hours',
+      logMessage: plan.hasLiveMatches
+        ? 'Peak hours sync triggered (live matches detected)'
+        : `Peak hours sync triggered (${potentiallyLive} potentially live matches)`,
+      summary: {
+        reason: 'peak_hours_override',
+        hasLiveMatches: plan.hasLiveMatches,
+        potentiallyLive,
+      },
+    };
+  }
+
+  private isPeakHoursWindow(now: Date): boolean {
+    const hour = now.getHours();
+    return hour >= 9 && hour <= 23;
+  }
+
+  private isPeakHoursBoundary(now: Date): boolean {
+    return now.getMinutes() % 5 === 0;
   }
 }

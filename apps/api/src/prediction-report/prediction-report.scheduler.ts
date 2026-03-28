@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { observeSchedulerJob } from '../common/scheduler-observability.util';
 import {
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
@@ -16,20 +17,38 @@ export class PredictionReportScheduler {
   /** Cada minuto revisa si alguna ventana de predicciones acaba de cerrarse */
   @Cron('* * * * *')
   async checkAndSendReports(): Promise<void> {
-    const execution = await tryRunExclusiveBackgroundJob(
-      PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
-      'checkAndSendReports',
-      () => this.runCheckAndSendReports(),
-    );
-
-    if (!execution.ran) {
-      logExclusiveBackgroundJobSkip(
-        this.logger,
+    await observeSchedulerJob(this.logger, 'checkAndSendReports', async () => {
+      const execution = await tryRunExclusiveBackgroundJob(
+        PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
         'checkAndSendReports',
-        execution,
+        () => this.runCheckAndSendReports(),
       );
-      return;
-    }
+
+      if (!execution.ran) {
+        logExclusiveBackgroundJobSkip(
+          this.logger,
+          'checkAndSendReports',
+          execution,
+        );
+        return {
+          status: 'skipped',
+          summary: {
+            reason: 'background_lock',
+            lockHolder: execution.skip.holder,
+            heldMs: execution.skip.heldMs,
+            skipCount: execution.skip.skipCount,
+          },
+        };
+      }
+
+      return {
+        status: 'completed',
+        level: 'log',
+        summary: {
+          result: 'send_pending_reports_completed',
+        },
+      };
+    });
   }
 
   private async runCheckAndSendReports(): Promise<void> {
