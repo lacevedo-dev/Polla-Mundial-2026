@@ -1,5 +1,5 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
-import { EmailJobPriority, EmailJobStatus, Prisma } from '@prisma/client';
+import { EmailJob, EmailJobPriority, EmailJobStatus, Prisma } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailProviderConfig, EmailProviderConfigService } from './email-provider-config.service';
@@ -21,7 +21,10 @@ export interface QueueEmailInput {
 
 @Injectable()
 export class EmailQueueService {
-  private static readonly DEFAULT_DISPATCH_BATCH = 20;
+  private static readonly DEFAULT_DISPATCH_BATCH = 5;
+  private static readonly MAX_REQUIRED_ATTEMPTS = 6;
+  private static readonly MAX_OPTIONAL_ATTEMPTS = 3;
+  private static readonly CONNECTION_BACKOFF_MS = 15 * 60_000;
   private readonly logger = new Logger(EmailQueueService.name);
   private readonly transporterCache = new Map<string, nodemailer.Transporter>();
 
@@ -98,41 +101,35 @@ export class EmailQueueService {
       }
 
       processed += 1;
-
-      const provider = await this.selectProvider(job.priority, now);
-      if (!provider) {
-        await this.deferJobForCapacity(job.id, job.required, now);
-        continue;
-      }
-
-      try {
-        const transporter = this.getTransporter(provider);
-        await transporter.sendMail({
-          from: formatFrom(provider),
-          to: job.recipientEmail,
-          subject: job.subject,
-          html: job.html,
-          text: job.text,
-        });
-
-        await this.recordProviderSuccess(provider.key, now);
-        await this.prisma.emailJob.update({
-          where: { id: job.id },
-          data: {
-            status: EmailJobStatus.SENT,
-            providerKey: provider.key,
-            sentAt: now,
-            availableAt: now,
-            lastError: null,
-          },
-        });
-        sent += 1;
-      } catch (error) {
-        await this.handleSendFailure(job.id, job.required, provider, now, error);
-      }
+      sent += (await this.processClaimedJob(job, now)) ? 1 : 0;
     }
 
     return { processed, sent };
+  }
+
+  async dispatchJobById(
+    jobId: string,
+    options?: { providerKey?: string },
+  ): Promise<{ processed: boolean; sent: boolean; job: EmailJob }> {
+    const now = new Date();
+    const job = await this.prisma.emailJob.findUniqueOrThrow({
+      where: { id: jobId },
+    });
+
+    const claimed = await this.claimJob(job.id, now);
+    if (!claimed) {
+      const currentJob = await this.prisma.emailJob.findUniqueOrThrow({
+        where: { id: jobId },
+      });
+      return { processed: false, sent: currentJob.status === EmailJobStatus.SENT, job: currentJob };
+    }
+
+    const sent = await this.processClaimedJob(job, now, options?.providerKey);
+    const currentJob = await this.prisma.emailJob.findUniqueOrThrow({
+      where: { id: jobId },
+    });
+
+    return { processed: true, sent, job: currentJob };
   }
 
   private async claimJob(jobId: string, now: Date): Promise<boolean> {
@@ -150,6 +147,54 @@ export class EmailQueueService {
     });
 
     return claimed.count > 0;
+  }
+
+  private async processClaimedJob(job: EmailJob, now: Date, forcedProviderKey?: string): Promise<boolean> {
+    const provider = await this.resolveProvider(job.priority, now, forcedProviderKey);
+    if (!provider) {
+      await this.deferJobForCapacity(job.id, job.required, now);
+      return false;
+    }
+
+    try {
+      const transporter = this.getTransporter(provider);
+      await transporter.sendMail({
+        from: formatFrom(provider),
+        to: job.recipientEmail,
+        subject: job.subject,
+        html: job.html,
+        text: job.text,
+      });
+
+      await this.recordProviderSuccess(provider.key, now);
+      await this.prisma.emailJob.update({
+        where: { id: job.id },
+        data: {
+          status: EmailJobStatus.SENT,
+          providerKey: provider.key,
+          sentAt: now,
+          availableAt: now,
+          lastError: null,
+        },
+      });
+      return true;
+    } catch (error) {
+      await this.handleSendFailure(job.id, job.required, provider, now, error);
+      return false;
+    }
+  }
+
+  private async resolveProvider(
+    priority: Prisma.EmailJobCreateInput['priority'],
+    now: Date,
+    forcedProviderKey?: string,
+  ): Promise<EmailProviderConfig | null> {
+    if (!forcedProviderKey) {
+      return this.selectProvider(priority, now);
+    }
+
+    const providers = await this.providerConfigService.getProviders();
+    return providers.find((provider) => provider.key === forcedProviderKey) ?? null;
   }
 
   private async selectProvider(priority: Prisma.EmailJobCreateInput['priority'], now: Date): Promise<EmailProviderConfig | null> {
@@ -218,9 +263,12 @@ export class EmailQueueService {
   ): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     const isRateLimited = this.isRateLimitError(message);
+    const isTransientConnectionFailure = this.isTransientConnectionError(message);
 
     if (isRateLimited) {
-      await this.blockProvider(provider.key, now, message);
+      await this.blockProvider(provider.key, now, message, 60 * 60_000);
+    } else if (isTransientConnectionFailure) {
+      await this.blockProvider(provider.key, now, message, EmailQueueService.CONNECTION_BACKOFF_MS);
     }
 
     const currentJob = await this.prisma.emailJob.findUnique({
@@ -228,13 +276,19 @@ export class EmailQueueService {
       select: { attemptCount: true },
     });
     const attempts = currentJob?.attemptCount ?? 1;
-    const shouldRetry = required || isRateLimited || attempts < 3;
+    const maxAttempts = required
+      ? EmailQueueService.MAX_REQUIRED_ATTEMPTS
+      : EmailQueueService.MAX_OPTIONAL_ATTEMPTS;
+    const shouldRetry = attempts < maxAttempts;
+    const exhaustedStatus = required ? EmailJobStatus.FAILED : EmailJobStatus.DROPPED;
 
     await this.prisma.emailJob.update({
       where: { id: jobId },
       data: {
-        status: shouldRetry ? EmailJobStatus.DEFERRED : EmailJobStatus.FAILED,
-        availableAt: shouldRetry ? new Date(now.getTime() + this.computeBackoffMs(attempts, isRateLimited)) : now,
+        status: shouldRetry ? EmailJobStatus.DEFERRED : exhaustedStatus,
+        availableAt: shouldRetry
+          ? new Date(now.getTime() + this.computeBackoffMs(attempts, isRateLimited, isTransientConnectionFailure))
+          : now,
         providerKey: provider.key,
         lastError: message,
       },
@@ -277,9 +331,9 @@ export class EmailQueueService {
     });
   }
 
-  private async blockProvider(providerKey: string, now: Date, message: string): Promise<void> {
+  private async blockProvider(providerKey: string, now: Date, message: string, durationMs: number): Promise<void> {
     const quotaWindowStart = getQuotaWindowStart(now);
-    const blockedUntil = new Date(now.getTime() + 60 * 60_000);
+    const blockedUntil = new Date(now.getTime() + durationMs);
 
     await this.prisma.emailProviderUsage.upsert({
       where: {
@@ -322,6 +376,9 @@ export class EmailQueueService {
       port: provider.port,
       secure: provider.secure,
       auth: provider.user && provider.pass ? { user: provider.user, pass: provider.pass } : undefined,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     } as nodemailer.TransportOptions);
 
     this.transporterCache.set(cacheKey, transporter);
@@ -333,9 +390,24 @@ export class EmailQueueService {
     return normalized.includes('451') || normalized.includes('rate limit') || normalized.includes('ratelimit');
   }
 
-  private computeBackoffMs(attemptCount: number, rateLimited: boolean): number {
+  private isTransientConnectionError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('greeting never received')
+      || normalized.includes('connection timeout')
+      || normalized.includes('etimedout')
+      || normalized.includes('econnreset')
+      || normalized.includes('socket closed unexpectedly')
+      || normalized.includes('unable to establish tls')
+      || normalized.includes('read econnreset');
+  }
+
+  private computeBackoffMs(attemptCount: number, rateLimited: boolean, transientConnectionFailure: boolean): number {
     if (rateLimited) {
       return 60 * 60_000;
+    }
+
+    if (transientConnectionFailure) {
+      return EmailQueueService.CONNECTION_BACKOFF_MS;
     }
 
     return Math.min(15 * 60_000, Math.max(1, attemptCount) * 2 * 60_000);
