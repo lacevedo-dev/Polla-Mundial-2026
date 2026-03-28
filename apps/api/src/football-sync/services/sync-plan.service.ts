@@ -22,9 +22,25 @@ export interface MatchSyncSlot {
     label: string;
     scheduledAt: string;
   }[];
+  plannedRequests: PlannedSyncRequest[];
   lastSyncAt: string | null;
   lastSyncStatus: string | null;
   requestsAssigned: number;
+}
+
+export interface PlannedSyncRequest {
+  id: string;
+  type:
+    | 'STATUS_BATCH'
+    | 'STATUS_BATCH_WITH_CARRY_OVER'
+    | 'LINK_AND_STATUS'
+    | 'EVENTS_HALFTIME'
+    | 'EVENTS_FINAL';
+  label: string;
+  scheduledAt: string;
+  requestCost: number;
+  matchIds: string[];
+  notes?: string;
 }
 
 export interface DetailedSyncTimeline {
@@ -36,12 +52,14 @@ export interface DetailedSyncTimeline {
   requestsLimit: number;
   nextSyncAt: string | null;
   matches: MatchSyncSlot[];
+  plannedRequests: PlannedSyncRequest[];
   requestLog: {
     hour: number;        // 0-23
     requests: number;    // calls in that hour
     slots: string[];     // ISO timestamps of calls planned that hour
   }[];
   totalSlotsPlanned: number;
+  totalPlannedRequests: number;
 }
 
 @Injectable()
@@ -557,7 +575,7 @@ export class SyncPlanService {
       ? Math.max(1, Math.floor(available / matches.length))
       : 0;
 
-    const matchSlots: MatchSyncSlot[] = matches.map((m) => {
+    const matchDrafts = matches.map((m) => {
       const trackingScope =
         m.matchDate < todayStart ? 'CARRY_OVER' : 'TODAY';
       const slots = buildSyncSlots(m.matchDate, m.status, trackingScope);
@@ -577,9 +595,143 @@ export class SyncPlanService {
           m.status,
           closePredictionMap.get(m.id) ?? 15,
         ),
+        plannedRequests: [] as PlannedSyncRequest[],
         lastSyncAt: m.syncLogs[0]?.createdAt?.toISOString() ?? null,
         lastSyncStatus: m.syncLogs[0]?.status ?? null,
         requestsAssigned: Math.min(slots.length, requestsPerMatch),
+      };
+    });
+
+    const statusRequestMap = new Map<string, PlannedSyncRequest>();
+    const matchRequestMap = new Map<string, PlannedSyncRequest[]>();
+    const eventCandidates: Array<PlannedSyncRequest & { priority: number }> = [];
+
+    const appendMatchRequest = (matchId: string, request: PlannedSyncRequest) => {
+      const existing = matchRequestMap.get(matchId) ?? [];
+      existing.push(request);
+      matchRequestMap.set(matchId, existing);
+    };
+
+    for (const match of matchDrafts) {
+      for (const slot of match.syncSlots) {
+        const existing = statusRequestMap.get(slot);
+        if (existing) {
+          if (!existing.matchIds.includes(match.matchId)) {
+            existing.matchIds.push(match.matchId);
+          }
+          if (match.trackingScope === 'CARRY_OVER') {
+            existing.type = existing.type === 'LINK_AND_STATUS'
+              ? existing.type
+              : 'STATUS_BATCH_WITH_CARRY_OVER';
+            existing.label =
+              'Consulta agrupada de estados (hoy + arrastres)';
+            existing.notes =
+              'Agrupa partidos del dia y arrastres en una misma consulta planeada.';
+          }
+          if (!match.externalId) {
+            existing.type = 'LINK_AND_STATUS';
+            existing.label = 'Vinculo + estado en consulta agrupada';
+            existing.notes =
+              'Primero resuelve el fixtureId faltante y luego reutiliza la misma respuesta para estado.';
+          }
+          continue;
+        }
+
+        statusRequestMap.set(slot, {
+          id: `status-${slot}`,
+          type: !match.externalId
+            ? 'LINK_AND_STATUS'
+            : match.trackingScope === 'CARRY_OVER'
+              ? 'STATUS_BATCH_WITH_CARRY_OVER'
+              : 'STATUS_BATCH',
+          label: !match.externalId
+            ? 'Vinculo + estado en consulta agrupada'
+            : match.trackingScope === 'CARRY_OVER'
+              ? 'Consulta agrupada de estados (hoy + arrastres)'
+              : 'Consulta agrupada de estados del dia',
+          scheduledAt: slot,
+          requestCost: 1,
+          matchIds: [match.matchId],
+          notes: !match.externalId
+            ? 'Primero resuelve el fixtureId faltante y luego reutiliza la misma respuesta para estado.'
+            : match.trackingScope === 'CARRY_OVER'
+              ? 'Agrupa partidos del dia y arrastres en una misma consulta planeada.'
+              : 'Combina varios partidos del mismo bloque horario en una sola consulta.',
+        });
+      }
+
+      if (match.status !== MatchStatus.CANCELLED && match.status !== MatchStatus.POSTPONED) {
+        const halftimeAt = new Date(
+          new Date(match.matchDate).getTime() + 50 * 60 * 1000,
+        ).toISOString();
+        const finalAt = new Date(
+          new Date(match.matchDate).getTime() + 130 * 60 * 1000,
+        ).toISOString();
+
+        eventCandidates.push({
+          id: `events-halftime-${match.matchId}`,
+          type: 'EVENTS_HALFTIME',
+          label: 'Eventos alternados: entretiempo',
+          scheduledAt: halftimeAt,
+          requestCost: 1,
+          matchIds: [match.matchId],
+          notes:
+            'Consulta de eventos reservada para el entretiempo, evitando pedir eventos en cada sync.',
+          priority: 2,
+        });
+        eventCandidates.push({
+          id: `events-final-${match.matchId}`,
+          type: 'EVENTS_FINAL',
+          label: 'Eventos alternados: final',
+          scheduledAt: finalAt,
+          requestCost: 1,
+          matchIds: [match.matchId],
+          notes:
+            'Consulta final de eventos para cerrar el partido con el menor costo posible.',
+          priority: 1,
+        });
+      }
+    }
+
+    const statusRequests = [...statusRequestMap.values()].sort((left, right) =>
+      left.scheduledAt.localeCompare(right.scheduledAt),
+    );
+    const remainingBudget = Math.max(0, available - statusRequests.length);
+    const selectedEvents = eventCandidates
+      .sort((left, right) => {
+        if (left.priority !== right.priority) {
+          return left.priority - right.priority;
+        }
+        return left.scheduledAt.localeCompare(right.scheduledAt);
+      })
+      .slice(0, remainingBudget)
+      .map(({ priority: _priority, ...request }) => request);
+
+    const plannedRequests = [...statusRequests, ...selectedEvents].sort((left, right) =>
+      left.scheduledAt.localeCompare(right.scheduledAt),
+    );
+
+    for (const request of plannedRequests) {
+      for (const matchId of request.matchIds) {
+        appendMatchRequest(matchId, request);
+      }
+    }
+
+    const matchSlots: MatchSyncSlot[] = matchDrafts.map((match) => {
+      const planned = (matchRequestMap.get(match.matchId) ?? []).sort((left, right) =>
+        left.scheduledAt.localeCompare(right.scheduledAt),
+      );
+      return {
+        ...match,
+        plannedRequests: planned,
+        syncSlots: planned
+          .filter((request) =>
+            request.type === 'STATUS_BATCH' ||
+            request.type === 'STATUS_BATCH_WITH_CARRY_OVER' ||
+            request.type === 'LINK_AND_STATUS',
+          )
+          .map((request) => request.scheduledAt),
+        requestsAssigned: planned.length,
       };
     });
 
@@ -587,12 +739,10 @@ export class SyncPlanService {
     const hourBuckets: Record<number, string[]> = {};
     for (let h = 0; h < 24; h++) hourBuckets[h] = [];
 
-    matchSlots.forEach((m) =>
-      m.syncSlots.forEach((slot) => {
-        const h = new Date(slot).getHours();
-        hourBuckets[h].push(slot);
-      }),
-    );
+    plannedRequests.forEach((request) => {
+      const h = new Date(request.scheduledAt).getHours();
+      hourBuckets[h].push(request.scheduledAt);
+    });
 
     const requestLog = Object.entries(hourBuckets).map(([hour, slots]) => ({
       hour: Number(hour),
@@ -600,9 +750,9 @@ export class SyncPlanService {
       slots,
     }));
 
-    const totalSlotsPlanned = matchSlots.reduce((s, m) => s + m.syncSlots.length, 0);
-    const nextSyncAt = matchSlots
-      .flatMap((m) => m.syncSlots)
+    const totalSlotsPlanned = plannedRequests.length;
+    const nextSyncAt = plannedRequests
+      .map((request) => request.scheduledAt)
       .sort()
       .find((s) => s > now.toISOString()) ?? null;
 
@@ -615,8 +765,10 @@ export class SyncPlanService {
       requestsLimit: limit,
       nextSyncAt,
       matches: matchSlots,
+      plannedRequests,
       requestLog,
       totalSlotsPlanned,
+      totalPlannedRequests: plannedRequests.length,
     };
   }
 

@@ -7,6 +7,9 @@ import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
 import { MatchSyncService } from './match-sync.service';
 import { MonitoringService } from './monitoring.service';
+import { PredictionReportService } from '../../prediction-report/prediction-report.service';
+import { SyncEventsService } from './sync-events.service';
+import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 
 describe('MatchSyncService', () => {
   let service: MatchSyncService;
@@ -14,6 +17,7 @@ describe('MatchSyncService', () => {
   const mockPrismaService = {
     match: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
     },
     team: {
@@ -28,14 +32,17 @@ describe('MatchSyncService', () => {
     getFixturesByDate: jest.fn(),
     getLiveFixtures: jest.fn(),
     getFixtureById: jest.fn(),
+    getFixtureEvents: jest.fn(),
   };
 
   const mockRateLimiterService = {
     canMakeRequest: jest.fn(),
+    canMakeRequests: jest.fn(),
     logRequest: jest.fn(),
   };
 
   const mockSyncPlanService = {
+    getCarryOverMatches: jest.fn(),
     updateLastSyncTime: jest.fn(),
     incrementRequestsUsed: jest.fn(),
   };
@@ -49,6 +56,18 @@ describe('MatchSyncService', () => {
     createAlert: jest.fn(),
   };
 
+  const mockPredictionReportService = {
+    sendMatchResultsReport: jest.fn(),
+  };
+
+  const mockSyncEventsService = {
+    emit: jest.fn(),
+  };
+
+  const mockPushNotificationsService = {
+    sendMulticast: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -59,6 +78,9 @@ describe('MatchSyncService', () => {
         { provide: SyncPlanService, useValue: mockSyncPlanService },
         { provide: PredictionsService, useValue: mockPredictionsService },
         { provide: MonitoringService, useValue: mockMonitoringService },
+        { provide: PredictionReportService, useValue: mockPredictionReportService },
+        { provide: SyncEventsService, useValue: mockSyncEventsService },
+        { provide: PushNotificationsService, useValue: mockPushNotificationsService },
       ],
     }).compile();
 
@@ -70,7 +92,9 @@ describe('MatchSyncService', () => {
   });
 
   it('creates a success monitoring log after syncing today matches', async () => {
-    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
     mockApiFootballClient.getFixturesByDate.mockResolvedValue({
       results: 1,
       response: [
@@ -168,7 +192,8 @@ describe('MatchSyncService', () => {
   });
 
   it('creates skip log and rate-limit alert when today sync cannot run', async () => {
-    mockRateLimiterService.canMakeRequest.mockResolvedValue(false);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(false);
 
     const result = await service.syncTodayMatchesForTrigger({
       logType: 'CRON_SYNC' as any,
@@ -221,7 +246,9 @@ describe('MatchSyncService', () => {
   });
 
   it('remaps a fixture team using apiFootballTeamId during sync', async () => {
-    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
     mockApiFootballClient.getFixturesByDate.mockResolvedValue({
       results: 1,
       response: [

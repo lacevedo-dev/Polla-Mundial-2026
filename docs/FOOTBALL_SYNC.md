@@ -189,3 +189,9 @@ Ver documentación completa en: [`apps/api/src/football-sync/README.md`](../apps
 
 **Versión**: 1.0.0
 **Compatibilidad**: NestJS 11.x, Prisma 7.x, Node 22+
+
+## Ajustes recientes del plan
+
+- La planeacion ahora distingue consultas agrupadas de estado, consultas con arrastres y consultas de vinculo + estado para partidos sin `externalId`.
+- Los requests de eventos quedan reservados para dos hitos: entretiempo y final del partido.
+- El tablero del plan debe mostrar esas consultas con colores distintos y manteniendo el presupuesto diario de 100 requests.

@@ -12,12 +12,16 @@ describe('SyncPlanService', () => {
   const mockPrismaService = {
     dailySyncPlan: {
       findUnique: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
+      upsert: jest.fn(),
       updateMany: jest.fn(),
     },
     match: {
       groupBy: jest.fn(),
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    league: {
+      findMany: jest.fn(),
     },
   };
 
@@ -84,7 +88,7 @@ describe('SyncPlanService', () => {
       ]);
       mockRateLimiter.getUsedRequestsToday.mockResolvedValue(20);
       mockRateLimiter.getAvailableRequests.mockResolvedValue(80);
-      mockPrismaService.dailySyncPlan.create.mockResolvedValue({
+      mockPrismaService.dailySyncPlan.upsert.mockResolvedValue({
         id: 'test-plan',
         date: today,
         totalMatches: 5,
@@ -102,7 +106,7 @@ describe('SyncPlanService', () => {
       expect(result).toBeDefined();
       expect(result.totalMatches).toBe(5);
       expect(result.hasLiveMatches).toBe(true);
-      expect(mockPrismaService.dailySyncPlan.create).toHaveBeenCalled();
+      expect(mockPrismaService.dailySyncPlan.upsert).toHaveBeenCalled();
     });
 
     it('should update existing plan', async () => {
@@ -128,7 +132,7 @@ describe('SyncPlanService', () => {
       ]);
       mockRateLimiter.getUsedRequestsToday.mockResolvedValue(25);
       mockRateLimiter.getAvailableRequests.mockResolvedValue(75);
-      mockPrismaService.dailySyncPlan.update.mockResolvedValue({
+      mockPrismaService.dailySyncPlan.upsert.mockResolvedValue({
         ...existingPlan,
         totalMatches: 5,
         requestsUsed: 25,
@@ -138,7 +142,7 @@ describe('SyncPlanService', () => {
       const result = await service.calculateDailyPlan();
 
       expect(result).toBeDefined();
-      expect(mockPrismaService.dailySyncPlan.update).toHaveBeenCalled();
+      expect(mockPrismaService.dailySyncPlan.upsert).toHaveBeenCalled();
     });
 
     it('should use emergency strategy when few requests left', async () => {
@@ -150,7 +154,7 @@ describe('SyncPlanService', () => {
       ]);
       mockRateLimiter.getUsedRequestsToday.mockResolvedValue(98);
       mockRateLimiter.getAvailableRequests.mockResolvedValue(2);
-      mockPrismaService.dailySyncPlan.create.mockResolvedValue({
+      mockPrismaService.dailySyncPlan.upsert.mockResolvedValue({
         id: 'emergency-plan',
         date: today,
         totalMatches: 3,
@@ -183,9 +187,10 @@ describe('SyncPlanService', () => {
       mockPrismaService.match.groupBy.mockResolvedValue([
         { status: MatchStatus.SCHEDULED, _count: 3 },
       ]);
+      mockPrismaService.match.count.mockResolvedValue(0);
       mockRateLimiter.getUsedRequestsToday.mockResolvedValue(20);
       mockRateLimiter.getAvailableRequests.mockResolvedValue(80);
-      mockPrismaService.dailySyncPlan.create.mockResolvedValue({
+      mockPrismaService.dailySyncPlan.upsert.mockResolvedValue({
         id: 'test',
         date: new Date().toISOString().split('T')[0],
         totalMatches: 3,
@@ -210,7 +215,7 @@ describe('SyncPlanService', () => {
       ]);
       mockRateLimiter.getUsedRequestsToday.mockResolvedValue(100);
       mockRateLimiter.getAvailableRequests.mockResolvedValue(0);
-      mockPrismaService.dailySyncPlan.create.mockResolvedValue({
+      mockPrismaService.dailySyncPlan.upsert.mockResolvedValue({
         id: 'test',
         date: new Date().toISOString().split('T')[0],
         totalMatches: 2,

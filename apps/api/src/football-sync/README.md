@@ -311,3 +311,9 @@ Para problemas o preguntas, revisar:
 1. Logs del API (`npm run api:dev`)
 2. Dashboard de uso (`GET /admin/football/usage`)
 3. Documentación de API-Football: https://www.api-football.com/documentation-v3
+
+## Update Notes
+
+- The planning view groups status checks for multiple matches into a single planned request when they share the same sync window.
+- Carry-over matches are highlighted as combined status requests, and unlinked matches are marked as link-plus-status batches.
+- Event queries are planned only for halftime and final milestones to protect the daily 100-request budget.

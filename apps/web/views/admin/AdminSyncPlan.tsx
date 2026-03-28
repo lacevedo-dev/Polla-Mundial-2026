@@ -21,6 +21,21 @@ interface NotifSchedule {
   scheduledAt: string;
 }
 
+interface PlannedRequest {
+  id: string;
+  type:
+    | 'STATUS_BATCH'
+    | 'STATUS_BATCH_WITH_CARRY_OVER'
+    | 'LINK_AND_STATUS'
+    | 'EVENTS_HALFTIME'
+    | 'EVENTS_FINAL';
+  label: string;
+  scheduledAt: string;
+  requestCost: number;
+  matchIds: string[];
+  notes?: string;
+}
+
 interface MatchSlot {
   matchId: string;
   trackingScope: 'TODAY' | 'CARRY_OVER';
@@ -33,6 +48,7 @@ interface MatchSlot {
   externalId: string | null;
   syncSlots: string[];
   notificationSchedule: NotifSchedule[];
+  plannedRequests: PlannedRequest[];
   lastSyncAt: string | null;
   lastSyncStatus: string | null;
   requestsAssigned: number;
@@ -53,8 +69,10 @@ interface SyncTimeline {
   requestsLimit: number;
   nextSyncAt: string | null;
   matches: MatchSlot[];
+  plannedRequests: PlannedRequest[];
   requestLog: HourBucket[];
   totalSlotsPlanned: number;
+  totalPlannedRequests: number;
 }
 
 interface LiveEvent {
@@ -82,6 +100,14 @@ const NOTIF_ICON: Record<NotifSchedule['type'], React.ReactNode> = {
   MATCH_REMINDER: <Bell size={12} className="text-sky-500" />,
   PREDICTION_CLOSED: <AlertTriangle size={12} className="text-amber-500" />,
   RESULT_PUBLISHED: <CheckCircle2 size={12} className="text-emerald-500" />,
+};
+
+const REQUEST_STYLES: Record<PlannedRequest['type'], string> = {
+  STATUS_BATCH: 'border-sky-200 bg-sky-50 text-sky-700',
+  STATUS_BATCH_WITH_CARRY_OVER: 'border-violet-200 bg-violet-50 text-violet-700',
+  LINK_AND_STATUS: 'border-amber-200 bg-amber-50 text-amber-700',
+  EVENTS_HALFTIME: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
+  EVENTS_FINAL: 'border-emerald-200 bg-emerald-50 text-emerald-700',
 };
 
 const fmtTime = (iso: string) =>
@@ -316,6 +342,32 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
         ))}
       </div>
 
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <Activity size={14} className="text-slate-500" />
+          <p className="text-sm font-black text-slate-900">Leyenda de consultas planeadas</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ['STATUS_BATCH', 'Estados del dia'],
+            ['STATUS_BATCH_WITH_CARRY_OVER', 'Estados + arrastres'],
+            ['LINK_AND_STATUS', 'Sin vinculo + estado'],
+            ['EVENTS_HALFTIME', 'Eventos entretiempo'],
+            ['EVENTS_FINAL', 'Eventos final'],
+          ].map(([type, label]) => (
+            <span
+              key={type}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
+                REQUEST_STYLES[type as PlannedRequest['type']]
+              }`}
+            >
+              <Clock size={10} />
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+
       {timeline && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -326,7 +378,7 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Disponibles</p>
             <p className="mt-2 text-2xl font-black text-slate-900">{timeline.requestsBudget}</p>
-            <p className="mt-1 text-xs text-slate-500">{timeline.totalSlotsPlanned} slots planeados</p>
+            <p className="mt-1 text-xs text-slate-500">{timeline.totalPlannedRequests} requests planeados</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estrategia</p>
@@ -392,7 +444,7 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                       </span>
                     )}
                     <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600 sm:inline-flex">
-                      {match.requestsAssigned} req
+                      {match.requestsAssigned} req plan
                     </span>
                     {expanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
                   </div>
@@ -401,12 +453,16 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                 {expanded && (
                   <div className="space-y-4 border-t border-slate-100 p-4">
                     <div>
-                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Slots de sincronizacion</p>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Consultas planeadas</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {match.syncSlots.map((slot) => (
-                          <span key={slot} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700">
+                        {match.plannedRequests.map((planned) => (
+                          <span
+                            key={planned.id}
+                            title={planned.notes}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold ${REQUEST_STYLES[planned.type]}`}
+                          >
                             <Clock size={9} />
-                            {fmtDateTime(slot)}
+                            {planned.label} · {fmtDateTime(planned.scheduledAt)}
                           </span>
                         ))}
                       </div>

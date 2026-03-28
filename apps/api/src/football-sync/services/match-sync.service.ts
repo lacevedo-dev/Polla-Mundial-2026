@@ -232,6 +232,11 @@ export class MatchSyncService {
         (sum, response) => sum + response.results,
         0,
       );
+      const autoLinkedMatches = await this.autoLinkTrackedMatchesFromFixtures(
+        fixtures,
+        today,
+        shouldQueryYesterday ? yesterday : null,
+      );
 
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
@@ -269,6 +274,7 @@ export class MatchSyncService {
           fixturesFetched: totalResults,
           datesQueried: datesToQuery,
           carryOverMatches: carryOverMatches.length,
+          autoLinkedMatches,
         }),
         triggeredBy: options.triggeredBy,
       });
@@ -491,7 +497,14 @@ export class MatchSyncService {
 
       // Sync goal/card events inline to avoid overlapping DB work when the
       // runtime is constrained to a single MariaDB connection.
-      if (status === MatchStatus.LIVE && fixture.fixture.id) {
+      const currentStatusShort = fixture.fixture.status.short ?? null;
+      const previousStatusShort = match.statusShort ?? null;
+      const shouldSyncHalftimeEvents =
+        currentStatusShort === 'HT' && previousStatusShort !== 'HT';
+      const isFinalStatus = ['FT', 'AET', 'PEN'].includes(currentStatusShort ?? '');
+      const wasFinalStatus = ['FT', 'AET', 'PEN'].includes(previousStatusShort ?? '');
+
+      if ((shouldSyncHalftimeEvents || (isFinalStatus && !wasFinalStatus)) && fixture.fixture.id) {
         try {
           await this.syncMatchEvents(fixture.fixture.id, match.id);
         } catch (err) {
@@ -1170,5 +1183,81 @@ export class MatchSyncService {
       score,
       reasons,
     };
+  }
+
+  private async autoLinkTrackedMatchesFromFixtures(
+    fixtures: ApiFootballFixture[],
+    today: string,
+    yesterday: string | null,
+  ): Promise<number> {
+    const dateFilters = yesterday
+      ? [today, yesterday]
+      : [today];
+
+    const trackedUnlinkedMatches = await this.prisma.match.findMany({
+      where: {
+        externalId: null,
+        status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE, MatchStatus.FINISHED] },
+      },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+      },
+      orderBy: { matchDate: 'asc' },
+    });
+
+    const candidateMatches = trackedUnlinkedMatches.filter((match) => {
+      const localDate = this.getBogotaDateKey(match.matchDate);
+      return dateFilters.includes(localDate);
+    });
+
+    if (candidateMatches.length === 0 || fixtures.length === 0) {
+      return 0;
+    }
+
+    const linkedExternalIds = new Set(
+      (
+        await this.prisma.match.findMany({
+          where: {
+            externalId: { not: null },
+          },
+          select: { externalId: true },
+        })
+      )
+        .map((match) => match.externalId)
+        .filter((externalId): externalId is string => !!externalId),
+    );
+
+    let linked = 0;
+
+    for (const match of candidateMatches) {
+      const best = fixtures
+        .filter((fixture) => !linkedExternalIds.has(fixture.fixture.id.toString()))
+        .map((fixture) => this.scoreFixtureCandidate(match, fixture))
+        .filter((candidate) => candidate.confidence !== 'low')
+        .sort((left, right) => right.score - left.score)[0];
+
+      if (!best) {
+        continue;
+      }
+
+      await this.prisma.match.update({
+        where: { id: match.id },
+        data: { externalId: best.fixtureId },
+      });
+
+      linkedExternalIds.add(best.fixtureId);
+      linked++;
+      this.logger.log(
+        `Auto-linked tracked match ${match.id} to fixture ${best.fixtureId} during grouped daily sync`,
+      );
+    }
+
+    return linked;
+  }
+
+  private getBogotaDateKey(date: Date): string {
+    const bogotaDate = new Date(date.getTime() - 5 * 60 * 60 * 1000);
+    return bogotaDate.toISOString().split('T')[0];
   }
 }
