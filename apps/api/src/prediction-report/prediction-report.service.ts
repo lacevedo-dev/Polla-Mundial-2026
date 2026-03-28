@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MemberStatus } from '@prisma/client';
+import {
+  getPendingReportMatches,
+  getReportAudienceFromLeague,
+  MatchAutomationSweepContext,
+  MatchAutomationSweepLeague,
+} from '../notifications/match-automation-sweep-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
 
@@ -18,69 +24,99 @@ export class PredictionReportService {
 
   /**
    * Busca matches cuya ventana de predicciones acaba de cerrarse (por liga)
-   * y envía el reporte a todos los miembros activos de cada liga.
+   * y envÃ­a el reporte a todos los miembros activos de cada liga.
    */
-  async sendPendingReports(): Promise<void> {
-    const now = new Date();
+  async sendPendingReports(
+    context?: MatchAutomationSweepContext,
+  ): Promise<void> {
+    const now = context?.now ?? new Date();
 
-    // Obtener todos los leagues con sus closePredictionMinutes
-    const leagues = await this.prisma.league.findMany({
-      select: { id: true, name: true, code: true, closePredictionMinutes: true },
-    });
+    const leagues = context
+      ? context.activeLeagues.map((league) => ({
+          id: league.id,
+          name: league.name,
+          code: league.code,
+          closePredictionMinutes: league.closePredictionMinutes,
+          prefetchedLeague: league,
+        }))
+      : await this.prisma.league.findMany({
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            closePredictionMinutes: true,
+          },
+        });
 
     for (const league of leagues) {
-      const closingThreshold = new Date(now.getTime() - league.closePredictionMinutes * 60_000);
-
-      // Matches de esta liga cuya ventana cerró y el reporte aún no se envió
-      const matches = await this.prisma.match.findMany({
-        where: {
-          predictionReportSentAt: null,
-          matchDate: {
-            gt:  closingThreshold,         // el partido no ocurrió hace demasiado tiempo
-            lte: new Date(now.getTime() + league.closePredictionMinutes * 60_000), // ya cerró la ventana
-          },
-          predictions: {
-            some: { leagueId: league.id },
-          },
-        },
-        include: {
-          homeTeam: true,
-          awayTeam: true,
-          predictions: {
-            where: { leagueId: league.id },
-            include: { user: { select: { id: true, name: true, email: true } } },
-            orderBy: { submittedAt: 'asc' },
-          },
-        },
-      });
+      const matches = context
+        ? getPendingReportMatches(
+            context,
+            league.id,
+            league.closePredictionMinutes,
+          )
+        : await this.prisma.match.findMany({
+            where: {
+              predictionReportSentAt: null,
+              matchDate: {
+                gt: new Date(
+                  now.getTime() - league.closePredictionMinutes * 60_000,
+                ),
+                lte: new Date(
+                  now.getTime() + league.closePredictionMinutes * 60_000,
+                ),
+              },
+              predictions: {
+                some: { leagueId: league.id },
+              },
+            },
+            include: {
+              homeTeam: true,
+              awayTeam: true,
+              predictions: {
+                where: { leagueId: league.id },
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
+                orderBy: { submittedAt: 'asc' },
+              },
+            },
+          });
 
       for (const match of matches) {
-        if (match.predictions.length === 0) continue;
+        const leaguePredictions = match.predictions
+          .filter((prediction) => prediction.leagueId === league.id)
+          .sort(
+            (left, right) =>
+              left.submittedAt.getTime() - right.submittedAt.getTime(),
+          );
+        if (leaguePredictions.length === 0) continue;
 
-        // Miembros activos de la liga con email
-        const { members, recipients } = await this.getLeagueReportAudience(league.id);
-
+        const { members, recipients } = await this.getLeagueReportAudience(
+          league.id,
+          'prefetchedLeague' in league ? league.prefetchedLeague : undefined,
+        );
         if (recipients.length === 0) continue;
 
-        // Preparar datos del reporte
-        const predictors = match.predictions.map(p => {
-          const member = members.find(m => m.userId === p.userId);
+        const predictors = leaguePredictions.map((prediction) => {
+          const member = members.find(
+            (leagueMember) => leagueMember.userId === prediction.userId,
+          );
           return {
-            userId:    p.userId,
-            name:      p.user.name,
-            isAdmin:   member?.role === 'ADMIN',
-            homeScore: p.homeScore,
-            awayScore: p.awayScore,
-            submittedAt: p.submittedAt,
+            userId: prediction.userId,
+            name: prediction.user.name,
+            isAdmin: member?.role === 'ADMIN',
+            homeScore: prediction.homeScore,
+            awayScore: prediction.awayScore,
+            submittedAt: prediction.submittedAt,
           };
         });
 
-        // Ranking actual en la liga
         const standings = await this.getStandings(league.id);
 
         this.logger.log(
           `Enviando reporte de predicciones: ${match.homeTeam.name} vs ${match.awayTeam.name} ` +
-          `| Liga: ${league.code} | ${recipients.length} destinatarios`,
+            `| Liga: ${league.code} | ${recipients.length} destinatarios`,
         );
 
         await this.emailService.sendPredictionsReport({
@@ -90,18 +126,17 @@ export class PredictionReportService {
           leagueId: league.id,
           matchId: match.id,
           match: {
-            homeTeam:  match.homeTeam.name,
-            awayTeam:  match.awayTeam.name,
+            homeTeam: match.homeTeam.name,
+            awayTeam: match.awayTeam.name,
             matchDate: match.matchDate,
-            venue:     match.venue ?? undefined,
-            round:     match.round ?? undefined,
+            venue: match.venue ?? undefined,
+            round: match.round ?? undefined,
           },
           predictors,
           standings,
           sentAt: now,
         });
 
-        // Marcar como enviado
         await this.prisma.match.update({
           where: { id: match.id },
           data: { predictionReportSentAt: now },
@@ -113,7 +148,7 @@ export class PredictionReportService {
   }
 
   /**
-   * Genera el reporte para un match/liga específico (para preview o envío manual).
+   * Genera el reporte para un match/liga especÃƒÂ­fico (para preview o envÃƒÂ­o manual).
    */
   async sendReportForMatch(matchId: string, leagueId: string, testEmail?: string): Promise<void> {
     const match = await this.prisma.match.findUniqueOrThrow({
@@ -223,8 +258,8 @@ export class PredictionReportService {
   }
 
   /**
-   * Envía el correo de resultados automáticamente cuando un partido termina.
-   * Llamado desde MatchSyncService después de calcular los puntos.
+   * EnvÃƒÂ­a el correo de resultados automÃƒÂ¡ticamente cuando un partido termina.
+   * Llamado desde MatchSyncService despuÃƒÂ©s de calcular los puntos.
    */
   async sendMatchResultsReport(matchId: string): Promise<void> {
     const match = await this.prisma.match.findUnique({
@@ -265,7 +300,7 @@ export class PredictionReportService {
       const prevTotals = new Map<string, number>();
       for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
 
-      // Standings DESPUÉS (incluyendo este partido)
+      // Standings DESPUÃƒâ€°S (incluyendo este partido)
       const afterTotals = new Map<string, number>(prevTotals);
       for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
 
@@ -577,7 +612,14 @@ export class PredictionReportService {
     return this.getLeagueReportAudience(leagueId);
   }
 
-  private async getLeagueReportAudience(leagueId: string) {
+  private async getLeagueReportAudience(
+    leagueId: string,
+    prefetchedLeague?: MatchAutomationSweepLeague,
+  ) {
+    if (prefetchedLeague) {
+      return getReportAudienceFromLeague(prefetchedLeague);
+    }
+
     const members = await this.prisma.leagueMember.findMany({
       where: {
         leagueId,

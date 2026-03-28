@@ -10,6 +10,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { USER_STATUS } from '../users/user-status.constants';
+import {
+  getClosingAlertMatches,
+  getNotificationLeagueMembers,
+  getRelevantLeaguesForScheduledMatch,
+  getReminderMatches,
+  MatchAutomationSweepContext,
+} from './match-automation-sweep-context';
 import { NotificationsService } from './notifications.service';
 import { TwilioService } from './twilio.service';
 
@@ -99,7 +106,19 @@ export class NotificationScheduler {
     });
   }
 
-  private async getLeaguesForMatch(tournamentId: string | null): Promise<Array<{ id: string; members: Array<{ userId: string }> }>> {
+  private async getLeaguesForMatch(
+    tournamentId: string | null,
+    context?: MatchAutomationSweepContext,
+  ): Promise<Array<{ id: string; members: Array<{ userId: string }> }>> {
+    if (context) {
+      return getRelevantLeaguesForScheduledMatch(context, tournamentId).map(
+        (league) => ({
+          id: league.id,
+          members: getNotificationLeagueMembers(league),
+        }),
+      );
+    }
+
     const [leaguesWithTournament, leaguesWithoutTournament] = await Promise.all([
       tournamentId
         ? this.prisma.league.findMany({
@@ -136,11 +155,13 @@ export class NotificationScheduler {
     return result;
   }
 
-  async sendMatchReminders(): Promise<SchedulerObservationOutcome> {
+  async sendMatchReminders(
+    context?: MatchAutomationSweepContext,
+  ): Promise<SchedulerObservationOutcome> {
     const execution = await tryRunExclusiveBackgroundJob(
       NotificationScheduler.BACKGROUND_DB_JOB_KEY,
       'sendMatchReminders',
-      () => this.runSendMatchReminders(),
+      () => this.runSendMatchReminders(context),
     );
     if (!execution.ran) {
       logExclusiveBackgroundJobSkip(
@@ -167,32 +188,38 @@ export class NotificationScheduler {
     };
   }
 
-  private async runSendMatchReminders(): Promise<void> {
+  private async runSendMatchReminders(
+    context?: MatchAutomationSweepContext,
+  ): Promise<void> {
     try {
-      const now = new Date();
-      const from = new Date(now.getTime() + 55 * 60 * 1000);
-      const to = new Date(now.getTime() + 65 * 60 * 1000);
-
-      const matches = await this.prisma.match.findMany({
-        where: {
-          status: MatchStatus.SCHEDULED,
-          matchDate: { gte: from, lte: to },
-        },
-        select: {
-          id: true,
-          matchDate: true,
-          tournamentId: true,
-          venue: true,
-          homeTeam: { select: { name: true } },
-          awayTeam: { select: { name: true } },
-          predictions: { select: { userId: true } },
-        },
-      });
+      const matches = context
+        ? getReminderMatches(context)
+        : await this.prisma.match.findMany({
+            where: {
+              status: MatchStatus.SCHEDULED,
+              matchDate: {
+                gte: new Date(Date.now() + 55 * 60 * 1000),
+                lte: new Date(Date.now() + 65 * 60 * 1000),
+              },
+            },
+            select: {
+              id: true,
+              matchDate: true,
+              tournamentId: true,
+              venue: true,
+              homeTeam: { select: { name: true } },
+              awayTeam: { select: { name: true } },
+              predictions: { select: { userId: true } },
+            },
+          });
 
       const notified = new Set<string>();
 
       for (const match of matches) {
-        const leagues = await this.getLeaguesForMatch(match.tournamentId ?? null);
+        const leagues = await this.getLeaguesForMatch(
+          match.tournamentId ?? null,
+          context,
+        );
         const home = match.homeTeam.name;
         const away = match.awayTeam.name;
         const predictedUserIds = new Set(match.predictions.map((prediction) => prediction.userId));
@@ -259,11 +286,13 @@ export class NotificationScheduler {
     }
   }
 
-  async sendPredictionClosingAlerts(): Promise<SchedulerObservationOutcome> {
+  async sendPredictionClosingAlerts(
+    context?: MatchAutomationSweepContext,
+  ): Promise<SchedulerObservationOutcome> {
     const execution = await tryRunExclusiveBackgroundJob(
       NotificationScheduler.BACKGROUND_DB_JOB_KEY,
       'sendPredictionClosingAlerts',
-      () => this.runSendPredictionClosingAlerts(),
+      () => this.runSendPredictionClosingAlerts(context),
     );
     if (!execution.ran) {
       logExclusiveBackgroundJobSkip(
@@ -290,18 +319,27 @@ export class NotificationScheduler {
     };
   }
 
-  private async runSendPredictionClosingAlerts(): Promise<void> {
+  private async runSendPredictionClosingAlerts(
+    context?: MatchAutomationSweepContext,
+  ): Promise<void> {
     try {
-      const now = new Date();
-      const allLeagues = await this.prisma.league.findMany({
-        where: { status: 'ACTIVE' },
-        select: {
-          id: true,
-          closePredictionMinutes: true,
-          members: { where: { status: 'ACTIVE' }, select: { userId: true } },
-          leagueTournaments: { select: { tournamentId: true } },
-        },
-      });
+      const now = context?.now ?? new Date();
+      const allLeagues = context
+        ? context.activeLeagues.map((league) => ({
+            id: league.id,
+            closePredictionMinutes: league.closePredictionMinutes,
+            members: getNotificationLeagueMembers(league),
+            leagueTournaments: league.leagueTournaments,
+          }))
+        : await this.prisma.league.findMany({
+            where: { status: 'ACTIVE' },
+            select: {
+              id: true,
+              closePredictionMinutes: true,
+              members: { where: { status: 'ACTIVE' }, select: { userId: true } },
+              leagueTournaments: { select: { tournamentId: true } },
+            },
+          });
 
       const closeGroups = new Map<number, typeof allLeagues>();
       for (const league of allLeagues) {
@@ -311,37 +349,57 @@ export class NotificationScheduler {
       }
 
       for (const [closeMinutes, leagues] of closeGroups) {
-        const windowStart = new Date(now.getTime() + closeMinutes * 60 * 1000);
-        const windowEnd = new Date(now.getTime() + (closeMinutes + 5) * 60 * 1000);
         const tournamentIds = [...new Set(leagues.flatMap((league) => league.leagueTournaments.map((entry) => entry.tournamentId)))];
         const leaguesWithoutTournament = leagues.filter((league) => league.leagueTournaments.length === 0);
 
-        const whereMatch = tournamentIds.length > 0
-          ? {
-              status: MatchStatus.SCHEDULED,
-              matchDate: { gte: windowStart, lte: windowEnd },
-              OR: [
-                { tournamentId: { in: tournamentIds } },
-                ...(leaguesWithoutTournament.length > 0 ? [{ tournamentId: null as null }] : []),
-              ],
-            }
-          : {
-              status: MatchStatus.SCHEDULED,
-              matchDate: { gte: windowStart, lte: windowEnd },
-            };
+        const matches = context
+          ? getClosingAlertMatches(context, closeMinutes).filter((match) => {
+              if (tournamentIds.length === 0) {
+                return true;
+              }
 
-        const matches = await this.prisma.match.findMany({
-          where: whereMatch,
-          select: {
-            id: true,
-            matchDate: true,
-            tournamentId: true,
-            venue: true,
-            homeTeam: { select: { name: true } },
-            awayTeam: { select: { name: true } },
-            predictions: { select: { userId: true } },
-          },
-        });
+              if (leaguesWithoutTournament.length > 0 && match.tournamentId === null) {
+                return true;
+              }
+
+              return tournamentIds.includes(match.tournamentId ?? '');
+            })
+          : await this.prisma.match.findMany({
+              where: tournamentIds.length > 0
+                ? {
+                    status: MatchStatus.SCHEDULED,
+                    matchDate: {
+                      gte: new Date(now.getTime() + closeMinutes * 60 * 1000),
+                      lte: new Date(
+                        now.getTime() + (closeMinutes + 5) * 60 * 1000,
+                      ),
+                    },
+                    OR: [
+                      { tournamentId: { in: tournamentIds } },
+                      ...(leaguesWithoutTournament.length > 0
+                        ? [{ tournamentId: null as null }]
+                        : []),
+                    ],
+                  }
+                : {
+                    status: MatchStatus.SCHEDULED,
+                    matchDate: {
+                      gte: new Date(now.getTime() + closeMinutes * 60 * 1000),
+                      lte: new Date(
+                        now.getTime() + (closeMinutes + 5) * 60 * 1000,
+                      ),
+                    },
+                  },
+              select: {
+                id: true,
+                matchDate: true,
+                tournamentId: true,
+                venue: true,
+                homeTeam: { select: { name: true } },
+                awayTeam: { select: { name: true } },
+                predictions: { select: { userId: true } },
+              },
+            });
 
         for (const match of matches) {
           const predictedUserIds = new Set(match.predictions.map((prediction) => prediction.userId));

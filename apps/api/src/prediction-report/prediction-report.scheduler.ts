@@ -7,6 +7,7 @@ import {
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
 } from '../prisma/background-job-lock.util';
+import { MatchAutomationSweepContext } from '../notifications/match-automation-sweep-context';
 import { PredictionReportService } from './prediction-report.service';
 
 @Injectable()
@@ -17,12 +18,14 @@ export class PredictionReportScheduler {
   constructor(private readonly reportService: PredictionReportService) {}
 
   /** Cada minuto revisa si alguna ventana de predicciones acaba de cerrarse */
-  async checkAndSendReports(): Promise<SchedulerObservationOutcome> {
+  async checkAndSendReports(
+    context?: MatchAutomationSweepContext,
+  ): Promise<SchedulerObservationOutcome> {
     return await observeSchedulerJob(this.logger, 'checkAndSendReports', async () => {
       const execution = await tryRunExclusiveBackgroundJob(
         PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
         'checkAndSendReports',
-        () => this.runCheckAndSendReports(),
+        () => this.runCheckAndSendReports(context),
       );
 
       if (!execution.ran) {
@@ -52,9 +55,11 @@ export class PredictionReportScheduler {
     });
   }
 
-  private async runCheckAndSendReports(): Promise<void> {
+  private async runCheckAndSendReports(
+    context?: MatchAutomationSweepContext,
+  ): Promise<void> {
     try {
-      await this.reportService.sendPendingReports();
+      await this.reportService.sendPendingReports(context);
     } catch (err: any) {
       this.logger.error(`Error en scheduler de reportes: ${err.message}`, err.stack);
     }

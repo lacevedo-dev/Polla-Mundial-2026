@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { resetExclusiveBackgroundJobStateForTests } from '../prisma/background-job-lock.util';
+import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
 import { MatchAutomationSweepScheduler } from './match-automation-sweep.scheduler';
 import { NotificationScheduler } from './notification.scheduler';
@@ -19,11 +20,16 @@ describe('MatchAutomationSweepScheduler', () => {
   const predictionReportScheduler = {
     checkAndSendReports: jest.fn(),
   };
+  const prisma = {
+    league: { findMany: jest.fn() },
+    match: { findMany: jest.fn() },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MatchAutomationSweepScheduler,
+        { provide: PrismaService, useValue: prisma },
         { provide: NotificationScheduler, useValue: notificationScheduler },
         { provide: PredictionReportScheduler, useValue: predictionReportScheduler },
       ],
@@ -45,6 +51,11 @@ describe('MatchAutomationSweepScheduler', () => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
     resetExclusiveBackgroundJobStateForTests();
+  });
+
+  beforeEach(() => {
+    prisma.league.findMany.mockResolvedValue([]);
+    prisma.match.findMany.mockResolvedValue([]);
   });
 
   it('runs notification and report tasks sequentially from a single cron entrypoint', async () => {

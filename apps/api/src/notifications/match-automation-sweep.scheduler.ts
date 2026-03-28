@@ -5,11 +5,13 @@ import {
   SchedulerObservationSummary,
   observeSchedulerJob,
 } from '../common/scheduler-observability.util';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
 } from '../prisma/background-job-lock.util';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
+import { buildMatchAutomationSweepContext } from './match-automation-sweep-context';
 import { NotificationScheduler } from './notification.scheduler';
 
 @Injectable()
@@ -18,6 +20,7 @@ export class MatchAutomationSweepScheduler {
   private readonly logger = new Logger(MatchAutomationSweepScheduler.name);
 
   constructor(
+    private readonly prisma: PrismaService,
     private readonly notificationScheduler: NotificationScheduler,
     private readonly predictionReportScheduler: PredictionReportScheduler,
   ) {}
@@ -58,6 +61,7 @@ export class MatchAutomationSweepScheduler {
   }
 
   private async runSweepTasks(): Promise<SchedulerObservationSummary> {
+    const context = await buildMatchAutomationSweepContext(this.prisma);
     const taskNames = [
       'sendMatchReminders',
       'sendPredictionClosingAlerts',
@@ -65,16 +69,22 @@ export class MatchAutomationSweepScheduler {
       'checkAndSendReports',
     ];
     const tasks: Array<[string, () => Promise<SchedulerObservationOutcome | void>]> = [
-      ['sendMatchReminders', () => this.notificationScheduler.sendMatchReminders()],
+      [
+        'sendMatchReminders',
+        () => this.notificationScheduler.sendMatchReminders(context),
+      ],
       [
         'sendPredictionClosingAlerts',
-        () => this.notificationScheduler.sendPredictionClosingAlerts(),
+        () => this.notificationScheduler.sendPredictionClosingAlerts(context),
       ],
       [
         'sendMatchResultNotifications',
         () => this.notificationScheduler.sendMatchResultNotifications(),
       ],
-      ['checkAndSendReports', () => this.predictionReportScheduler.checkAndSendReports()],
+      [
+        'checkAndSendReports',
+        () => this.predictionReportScheduler.checkAndSendReports(context),
+      ],
     ];
 
     const taskResults: SweepTaskResult[] = [];
