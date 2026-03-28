@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { tryRunExclusiveBackgroundJob } from '../prisma/background-job-lock.util';
+import {
+  logExclusiveBackgroundJobSkip,
+  tryRunExclusiveBackgroundJob,
+} from '../prisma/background-job-lock.util';
 import { PredictionReportService } from './prediction-report.service';
 
 @Injectable()
@@ -15,11 +18,16 @@ export class PredictionReportScheduler {
   async checkAndSendReports(): Promise<void> {
     const execution = await tryRunExclusiveBackgroundJob(
       PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
+      'checkAndSendReports',
       () => this.runCheckAndSendReports(),
     );
 
     if (!execution.ran) {
-      this.logger.warn('checkAndSendReports skipped because another DB-heavy background job is running');
+      logExclusiveBackgroundJobSkip(
+        this.logger,
+        'checkAndSendReports',
+        execution,
+      );
       return;
     }
   }
