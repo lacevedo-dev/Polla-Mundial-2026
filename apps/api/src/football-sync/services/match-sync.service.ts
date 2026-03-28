@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { tryRunExclusiveBackgroundJob } from '../../prisma/background-job-lock.util';
+import {
+  logExclusiveBackgroundJobSkip,
+  tryRunExclusiveBackgroundJob,
+} from '../../prisma/background-job-lock.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PredictionsService } from '../../predictions/predictions.service';
 import { PredictionReportService } from '../../prediction-report/prediction-report.service';
@@ -150,11 +153,12 @@ export class MatchSyncService {
   }> {
     const execution = await tryRunExclusiveBackgroundJob(
       MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      'syncTodayMatches',
       () => this.runTodaySyncInternal(options),
     );
 
     if (!execution.ran) {
-      this.logger.warn(`${options.summaryLabel} skipped because another DB-heavy background job is running`);
+      logExclusiveBackgroundJobSkip(this.logger, options.summaryLabel, execution);
       return {
         success: false,
         matchesUpdated: 0,
@@ -320,11 +324,12 @@ export class MatchSyncService {
   }> {
     const execution = await tryRunExclusiveBackgroundJob(
       MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      'syncLiveMatches',
       () => this.syncLiveMatchesInternal(),
     );
 
     if (!execution.ran) {
-      this.logger.warn('Live sync skipped because another DB-heavy background job is running');
+      logExclusiveBackgroundJobSkip(this.logger, 'Live sync', execution);
       return {
         success: false,
         matchesUpdated: 0,
@@ -514,8 +519,11 @@ export class MatchSyncService {
         timestamp: new Date().toISOString(),
       });
 
-      // If score changed and match is finished, calculate points and send results email
-      if (scoreChanged && status === MatchStatus.FINISHED) {
+      const transitionedToFinished = match.status !== MatchStatus.FINISHED && status === MatchStatus.FINISHED;
+
+      // When the match reaches FINISHED we must calculate points and enqueue the
+      // result email even if the score was already present before the final status.
+      if (status === MatchStatus.FINISHED && (scoreChanged || transitionedToFinished)) {
         this.logger.log(`Match ${match.id} finished, calculating points`);
         await this.predictionsService.calculateMatchPoints(match.id);
 

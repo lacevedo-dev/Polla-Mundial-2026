@@ -87,6 +87,8 @@ export class PredictionReportService {
           recipients,
           leagueName: league.name,
           leagueCode: league.code,
+          leagueId: league.id,
+          matchId: match.id,
           match: {
             homeTeam:  match.homeTeam.name,
             awayTeam:  match.awayTeam.name,
@@ -154,6 +156,8 @@ export class PredictionReportService {
       recipients,
       leagueName: league.name,
       leagueCode: league.code,
+      leagueId,
+      matchId,
       match: {
         homeTeam:  match.homeTeam.name,
         awayTeam:  match.awayTeam.name,
@@ -298,6 +302,8 @@ export class PredictionReportService {
         recipients,
         leagueName: league.name,
         leagueCode: league.code,
+        leagueId,
+        matchId,
         match: {
           homeTeam:  match.homeTeam.name,
           awayTeam:  match.awayTeam.name,

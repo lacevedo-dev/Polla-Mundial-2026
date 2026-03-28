@@ -777,3 +777,69 @@ model UserAiCredits {
 
   @@index([plan])
 }
+
+model EmailJob {
+  id             String           @id @default(cuid())
+  type           EmailJobType
+  priority       EmailJobPriority
+  status         EmailJobStatus   @default(PENDING)
+  required       Boolean          @default(false)
+  recipientEmail String           @db.VarChar(320)
+  subject        String           @db.VarChar(255)
+  html           String           @db.LongText
+  text           String           @db.LongText
+  dedupeKey      String           @unique(map: "EmailJob_dedupeKey_key") @db.VarChar(191)
+  matchId        String?
+  leagueId       String?
+  providerKey    String?          @db.VarChar(191)
+  scheduledAt    DateTime         @default(now())
+  availableAt    DateTime         @default(now())
+  lastAttemptAt  DateTime?
+  attemptCount   Int              @default(0)
+  sentAt         DateTime?
+  lastError      String?          @db.Text
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([status, availableAt])
+  @@index([priority, scheduledAt])
+  @@index([matchId])
+  @@index([leagueId])
+  @@index([providerKey])
+}
+
+model EmailProviderUsage {
+  id               String   @id @default(cuid())
+  providerKey      String   @db.VarChar(191)
+  quotaWindowStart DateTime
+  sentCount        Int      @default(0)
+  blockedUntil     DateTime?
+  lastError        String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([providerKey, quotaWindowStart])
+  @@index([providerKey, blockedUntil])
+}
+
+enum EmailJobType {
+  MATCH_REMINDER
+  PREDICTION_CLOSING
+  PREDICTIONS_REPORT
+  MATCH_RESULTS_REPORT
+}
+
+enum EmailJobPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum EmailJobStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  DEFERRED
+  DROPPED
+}

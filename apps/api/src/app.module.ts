@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
+import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { AdminModule } from './admin/admin.module';
 import { ConfigModule } from './config/config.module';
@@ -37,6 +38,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
       serveRoot: '/uploads',
     }),
     ScheduleModule.forRoot(),
+    EmailModule,
     AuthModule,
     AdminModule,
     ConfigModule,
