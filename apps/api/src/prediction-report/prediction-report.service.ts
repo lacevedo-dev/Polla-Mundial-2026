@@ -30,6 +30,13 @@ export class PredictionReportService {
     private readonly emailService: PredictionReportEmailService,
   ) {}
 
+  private readonly hasCompletePredictionScores = <
+    T extends { homeScore: number | null; awayScore: number | null },
+  >(
+    prediction: T,
+  ): prediction is T & { homeScore: number; awayScore: number } =>
+    prediction.homeScore !== null && prediction.awayScore !== null;
+
   /**
    * Busca matches cuya ventana de predicciones acaba de cerrarse (por liga)
    * y envÃ­a el reporte a todos los miembros activos de cada liga.
@@ -106,7 +113,7 @@ export class PredictionReportService {
         );
         if (recipients.length === 0) continue;
 
-        const predictors = leaguePredictions.map((prediction) => {
+        const predictors = leaguePredictions.filter(this.hasCompletePredictionScores).map((prediction) => {
           const member = members.find(
             (leagueMember) => leagueMember.userId === prediction.userId,
           );
@@ -179,7 +186,7 @@ export class PredictionReportService {
 
     const { members, recipients: allRecipients } = await this.getLeagueReportAudience(leagueId);
 
-    const predictors = match.predictions.map(p => {
+    const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:    p.userId,
@@ -235,7 +242,7 @@ export class PredictionReportService {
 
     const { members } = await this.getLeagueReportAudience(leagueId);
 
-    const predictors = match.predictions.map(p => {
+    const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:    p.userId,
@@ -320,7 +327,7 @@ export class PredictionReportService {
       const realHome = match.homeScore!;
       const realAway = match.awayScore!;
 
-      const results = predictions.map(p => {
+      const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
         const member  = members.find(m => m.userId === p.userId);
         const outcome = this.parseOutcomeFromDetail(p.pointDetail, p.points);
         return {
@@ -434,7 +441,7 @@ export class PredictionReportService {
     const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
     const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
 
-    const results = predictions.map(p => {
+    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:       p.userId,
@@ -507,7 +514,7 @@ export class PredictionReportService {
     const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
     const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
 
-    const results = predictions.map(p => {
+    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
       return {
         userId:       p.userId,
