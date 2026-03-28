@@ -858,6 +858,35 @@ model EmailProviderAccount {
   @@index([key, blockedUntil])
 }
 
+model EmailBacklogAuditRun {
+  id                        String                  @id @default(cuid())
+  trigger                   EmailBacklogAuditTrigger
+  mode                      EmailBacklogAuditMode
+  status                    EmailBacklogAuditStatus @default(RUNNING)
+  startedAt                 DateTime                @default(now())
+  completedAt               DateTime?
+  durationMs                Int?
+  inspectedCount            Int                     @default(0)
+  actionableCount           Int                     @default(0)
+  staleSendingCount         Int                     @default(0)
+  exhaustedRetryCount       Int                     @default(0)
+  transientWithinBudgetCount Int                    @default(0)
+  sanitizedCount            Int                     @default(0)
+  deferredCount             Int                     @default(0)
+  failedCount               Int                     @default(0)
+  droppedCount              Int                     @default(0)
+  notActionedCount          Int                     @default(0)
+  errorCount                Int                     @default(0)
+  summary                   Json?
+  errorMessage              String?                 @db.Text
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+  @@index([trigger, startedAt])
+}
+
 enum EmailJobType {
   MATCH_REMINDER
   PREDICTION_CLOSING
@@ -878,4 +907,22 @@ enum EmailJobStatus {
   FAILED
   DEFERRED
   DROPPED
+}
+
+enum EmailBacklogAuditTrigger {
+  SCHEDULER
+  MANUAL
+  CLI
+}
+
+enum EmailBacklogAuditMode {
+  AUDIT
+  SANITIZE
+}
+
+enum EmailBacklogAuditStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
 }

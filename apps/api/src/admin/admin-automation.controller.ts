@@ -4,6 +4,7 @@ import { NotificationType, Prisma } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { EmailBacklogAuditService } from '../email/email-backlog-audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { USER_STATUS } from '../users/user-status.constants';
@@ -22,17 +23,19 @@ export class AdminAutomationController {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly push: PushNotificationsService,
+    private readonly emailBacklogAudit: EmailBacklogAuditService,
   ) {}
 
   /** Estado de canales y schedulers */
   @Get('status')
   async getStatus() {
-    const [pushCount, notifLast24h, userWithPhone] = await Promise.all([
+    const [pushCount, notifLast24h, userWithPhone, emailBacklog] = await Promise.all([
       this.prisma.pushSubscription.count(),
       this.prisma.notification.count({
         where: { sentAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
       }),
       this.prisma.user.count({ where: { phone: { not: null }, status: USER_STATUS.ACTIVE } }),
+      this.emailBacklogAudit.getAutomationStatus(),
     ]);
 
     const twilioSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
@@ -103,12 +106,30 @@ export class AdminAutomationController {
         audience: 'Usuarios con predicciÃƒÂ³n en el partido',
         channels: ['inApp', 'push', 'whatsapp'],
       },
+      {
+        id: 'smtp_backlog_audit',
+        name: 'Auditor�a backlog SMTP',
+        cron: '*/15 * * * *',
+        description: 'Cada 15 minutos - audita y sanea backlog SMTP con trazabilidad persistente',
+        notifType: null,
+        icon: 'SMTP',
+        audience: 'Operaci�n / monitoreo de cola SMTP',
+        channels: ['email'],
+      },
     ];
 
     return {
       channels,
       schedulers,
       stats: { notifLast24h, pushSubscribers: pushCount, usersWithPhone: userWithPhone },
+      automation: {
+        emailBacklogAudit: {
+          cron: '*/15 * * * *',
+          queue: emailBacklog.queue,
+          latestRun: emailBacklog.latestRun,
+          recentFailures: emailBacklog.recentFailures,
+        },
+      },
     };
   }
 
@@ -345,6 +366,27 @@ export class AdminAutomationController {
     return { countByType, recent, total, page, limit };
   }
 
+  @Get('email-backlog/status')
+  async getEmailBacklogStatus() {
+    return this.emailBacklogAudit.getAutomationStatus();
+  }
+
+  @Get('email-backlog/history')
+  async getEmailBacklogHistory(
+    @Query('page') pageParam?: string,
+    @Query('limit') limitParam?: string,
+  ) {
+    const page = Math.max(1, parseInt(pageParam ?? '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(limitParam ?? '20', 10)));
+    return this.emailBacklogAudit.listRuns(page, limit);
+  }
+
+  @Post('email-backlog/run')
+  async runEmailBacklogAudit(@Query('apply') applyParam?: string) {
+    const apply = applyParam === undefined ? false : applyParam === 'true';
+    return this.emailBacklogAudit.runAudit({ apply, trigger: 'MANUAL' });
+  }
+
   /** Envía push de prueba al superadmin para validar configuración VAPID */
   @Post('test-push')
   async testPush(@Req() req: any) {
@@ -362,3 +404,9 @@ export class AdminAutomationController {
     };
   }
 }
+
+
+
+
+
+

@@ -1,6 +1,8 @@
 ﻿import { Global, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '../prisma/prisma.module';
+import { EmailBacklogAuditScheduler } from './email-backlog-audit.scheduler';
+import { EmailBacklogAuditService } from './email-backlog-audit.service';
 import { EmailDispatcherScheduler } from './email-dispatcher.scheduler';
 import { EmailProviderAccountsService } from './email-provider-accounts.service';
 import { EmailProviderCryptoService } from './email-provider-crypto.service';
@@ -14,15 +16,18 @@ import { MatchEmailTemplateService } from './match-email-template.service';
   imports: [ScheduleModule, PrismaModule],
   providers: [
     EmailService,
+    EmailBacklogAuditService,
     EmailProviderCryptoService,
     EmailProviderAccountsService,
     EmailProviderConfigService,
     EmailQueueService,
     MatchEmailTemplateService,
     EmailDispatcherScheduler,
+    EmailBacklogAuditScheduler,
   ],
   exports: [
     EmailService,
+    EmailBacklogAuditService,
     EmailProviderCryptoService,
     EmailProviderAccountsService,
     EmailProviderConfigService,
