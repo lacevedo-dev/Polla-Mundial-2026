@@ -152,7 +152,7 @@ export class EmailQueueService {
   }
 
   private async selectProvider(priority: Prisma.EmailJobCreateInput['priority'], now: Date): Promise<EmailProviderConfig | null> {
-    const providers = this.providerConfigService.getProviders();
+    const providers = await this.providerConfigService.getProviders();
     if (providers.length === 0) {
       return null;
     }
@@ -183,7 +183,7 @@ export class EmailQueueService {
     usage: { sentCount: number; blockedUntil: Date | null } | undefined,
     now: Date,
   ): boolean {
-    if (usage?.blockedUntil && usage.blockedUntil > now) {
+    if ((provider.blockedUntil && provider.blockedUntil > now) || (usage?.blockedUntil && usage.blockedUntil > now)) {
       return false;
     }
 
@@ -265,6 +265,15 @@ export class EmailQueueService {
         lastError: null,
       },
     });
+
+    await this.prisma.emailProviderAccount.updateMany({
+      where: { key: providerKey, deletedAt: null },
+      data: {
+        blockedUntil: null,
+        lastError: null,
+        lastUsedAt: now,
+      },
+    });
   }
 
   private async blockProvider(providerKey: string, now: Date, message: string): Promise<void> {
@@ -290,10 +299,19 @@ export class EmailQueueService {
         lastError: message,
       },
     });
+
+    await this.prisma.emailProviderAccount.updateMany({
+      where: { key: providerKey, deletedAt: null },
+      data: {
+        blockedUntil,
+        lastError: message,
+      },
+    });
   }
 
   private getTransporter(provider: EmailProviderConfig): nodemailer.Transporter {
-    const cached = this.transporterCache.get(provider.key);
+    const cacheKey = `${provider.key}:${provider.cacheKey}`;
+    const cached = this.transporterCache.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -305,7 +323,7 @@ export class EmailQueueService {
       auth: provider.user && provider.pass ? { user: provider.user, pass: provider.pass } : undefined,
     } as nodemailer.TransportOptions);
 
-    this.transporterCache.set(provider.key, transporter);
+    this.transporterCache.set(cacheKey, transporter);
     return transporter;
   }
 

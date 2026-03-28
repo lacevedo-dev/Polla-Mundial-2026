@@ -13,6 +13,7 @@ import { AdminPredictionsController } from './admin-predictions.controller';
 import { AdminSettingsController } from './admin-settings.controller';
 import { AdminPaymentsController } from './admin-payments.controller';
 import { AdminAutomationController } from './admin-automation.controller';
+import { AdminEmailProvidersController } from './admin-email-providers.controller';
 import { UsersModule } from '../users/users.module';
 import { MatchesModule } from '../matches/matches.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -20,9 +21,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { PredictionsModule } from '../predictions/predictions.module';
 import { LeaguesModule } from '../leagues/leagues.module';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule, PredictionsModule, LeaguesModule, PushNotificationsModule],
+    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule, PredictionsModule, LeaguesModule, PushNotificationsModule, EmailModule],
     controllers: [
         AdminStatsController,
         AdminUsersController,
@@ -35,6 +37,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
         AdminSettingsController,
         AdminPaymentsController,
         AdminAutomationController,
+        AdminEmailProvidersController,
     ],
     providers: [AdminService, AdminPaymentsService, Reflector],
 })

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EmailProviderAccountsService } from './email-provider-accounts.service';
 
 export interface EmailProviderConfig {
   key: string;
@@ -12,6 +13,11 @@ export interface EmailProviderConfig {
   dailyLimit: number;
   reservedHighPriority: number;
   active: boolean;
+  maxRecipientsPerMessage: number;
+  maxEmailSizeMb: number;
+  maxAttachmentSizeMb: number;
+  blockedUntil?: Date;
+  cacheKey: string;
 }
 
 interface EmailProviderConfigInput {
@@ -26,31 +32,47 @@ interface EmailProviderConfigInput {
   dailyLimit?: number;
   reservedHighPriority?: number;
   active?: boolean;
+  maxRecipientsPerMessage?: number;
+  maxEmailSizeMb?: number;
+  maxAttachmentSizeMb?: number;
 }
 
 @Injectable()
 export class EmailProviderConfigService {
+  private static readonly CACHE_TTL_MS = 30_000;
   private readonly logger = new Logger(EmailProviderConfigService.name);
   private cachedProviders: EmailProviderConfig[] | null = null;
+  private cachedAt = 0;
 
-  getProviders(): EmailProviderConfig[] {
-    if (this.cachedProviders) {
+  constructor(private readonly emailProviderAccountsService: EmailProviderAccountsService) {}
+
+  async getProviders(): Promise<EmailProviderConfig[]> {
+    const now = Date.now();
+    if (this.cachedProviders && now - this.cachedAt < EmailProviderConfigService.CACHE_TTL_MS) {
       return this.cachedProviders;
     }
 
-    const providers: EmailProviderConfig[] = [];
-    const keyedProviders = this.parseProvidersFromNamedEnv();
-    providers.push(...keyedProviders);
-    const envProviders = this.parseProvidersFromJson();
-    providers.push(...envProviders);
+    const databaseProviders = await this.emailProviderAccountsService.getProviderConfigs();
+    const providers: EmailProviderConfig[] = [...databaseProviders];
 
-    const defaultProvider = this.buildDefaultProvider();
-    if (defaultProvider && !providers.some((provider) => provider.key === defaultProvider.key)) {
-      providers.push(defaultProvider);
+    if (providers.length === 0) {
+      providers.push(...this.parseProvidersFromNamedEnv());
+      providers.push(...this.parseProvidersFromJson());
+
+      const defaultProvider = this.buildDefaultProvider();
+      if (defaultProvider && !providers.some((provider) => provider.key === defaultProvider.key)) {
+        providers.push(defaultProvider);
+      }
     }
 
     this.cachedProviders = providers.filter((provider) => provider.active);
+    this.cachedAt = now;
     return this.cachedProviders;
+  }
+
+  invalidateCache(): void {
+    this.cachedProviders = null;
+    this.cachedAt = 0;
   }
 
   private parseProvidersFromNamedEnv(): EmailProviderConfig[] {
@@ -69,13 +91,17 @@ export class EmailProviderConfigService {
             fromName: process.env[`EMAIL_PROVIDER_${upperKey}_FROM_NAME`] ?? process.env.EMAIL_FROM_NAME,
             host: process.env[`EMAIL_PROVIDER_${upperKey}_HOST`] ?? process.env.EMAIL_HOST ?? process.env.SMTP_HOST,
             port: process.env[`EMAIL_PROVIDER_${upperKey}_PORT`] ?? process.env.EMAIL_PORT ?? process.env.SMTP_PORT ?? 587,
-            secure: readBoolean(process.env[`EMAIL_PROVIDER_${upperKey}_SECURE`], undefined)
+            secure:
+              readBoolean(process.env[`EMAIL_PROVIDER_${upperKey}_SECURE`], undefined)
               ?? readBoolean(process.env.EMAIL_SECURE, undefined),
             user: process.env[`EMAIL_PROVIDER_${upperKey}_USER`],
             pass: process.env[`EMAIL_PROVIDER_${upperKey}_PASS`],
             dailyLimit: parseInteger(process.env[`EMAIL_PROVIDER_${upperKey}_DAILY_LIMIT`], 100),
             reservedHighPriority: parseInteger(process.env[`EMAIL_PROVIDER_${upperKey}_RESERVED_HIGH_PRIORITY`], 60),
             active: readBoolean(process.env[`EMAIL_PROVIDER_${upperKey}_ACTIVE`], true),
+            maxRecipientsPerMessage: parseInteger(process.env[`EMAIL_PROVIDER_${upperKey}_MAX_RECIPIENTS`], 100),
+            maxEmailSizeMb: parseInteger(process.env[`EMAIL_PROVIDER_${upperKey}_MAX_EMAIL_SIZE_MB`], 35),
+            maxAttachmentSizeMb: parseInteger(process.env[`EMAIL_PROVIDER_${upperKey}_MAX_ATTACHMENT_SIZE_MB`], 25),
           },
           key,
         );
@@ -124,6 +150,9 @@ export class EmailProviderConfigService {
         dailyLimit: parseInteger(process.env.EMAIL_DAILY_LIMIT, 100),
         reservedHighPriority: parseInteger(process.env.EMAIL_RESERVED_HIGH_PRIORITY, 60),
         active: true,
+        maxRecipientsPerMessage: parseInteger(process.env.EMAIL_MAX_RECIPIENTS, 100),
+        maxEmailSizeMb: parseInteger(process.env.EMAIL_MAX_EMAIL_SIZE_MB, 35),
+        maxAttachmentSizeMb: parseInteger(process.env.EMAIL_MAX_ATTACHMENT_SIZE_MB, 25),
       },
       'default',
     );
@@ -140,9 +169,10 @@ export class EmailProviderConfigService {
     const secure = typeof input.secure === 'boolean' ? input.secure : port === 465;
     const dailyLimit = Math.max(1, parseInteger(input.dailyLimit, 100));
     const reservedHighPriority = Math.min(dailyLimit, Math.max(0, parseInteger(input.reservedHighPriority, 60)));
+    const key = input.key?.trim() || fallbackKey;
 
     return {
-      key: input.key?.trim() || fallbackKey,
+      key,
       fromEmail,
       fromName: input.fromName?.trim() || undefined,
       host,
@@ -153,6 +183,10 @@ export class EmailProviderConfigService {
       dailyLimit,
       reservedHighPriority,
       active: input.active ?? true,
+      maxRecipientsPerMessage: Math.max(1, parseInteger(input.maxRecipientsPerMessage, 100)),
+      maxEmailSizeMb: Math.max(1, parseInteger(input.maxEmailSizeMb, 35)),
+      maxAttachmentSizeMb: Math.max(1, parseInteger(input.maxAttachmentSizeMb, 25)),
+      cacheKey: key,
     };
   }
 }

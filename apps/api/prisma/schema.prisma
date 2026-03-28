@@ -822,6 +822,34 @@ model EmailProviderUsage {
   @@index([providerKey, blockedUntil])
 }
 
+model EmailProviderAccount {
+  id                    String    @id @default(cuid())
+  key                   String    @unique @db.VarChar(191)
+  name                  String    @db.VarChar(120)
+  fromEmail             String    @db.VarChar(320)
+  fromName              String?   @db.VarChar(191)
+  smtpHost              String    @db.VarChar(255)
+  smtpPort              Int       @default(587)
+  secure                Boolean   @default(false)
+  smtpUser              String?   @db.VarChar(320)
+  smtpPassEncrypted     String?   @db.LongText
+  dailyLimit            Int       @default(100)
+  reservedHighPriority  Int       @default(60)
+  maxRecipientsPerMessage Int     @default(100)
+  maxEmailSizeMb        Int       @default(35)
+  maxAttachmentSizeMb   Int       @default(25)
+  active                Boolean   @default(true)
+  blockedUntil          DateTime?
+  lastUsedAt            DateTime?
+  lastError             String?   @db.Text
+  deletedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([active, deletedAt])
+  @@index([key, blockedUntil])
+}
+
 enum EmailJobType {
   MATCH_REMINDER
   PREDICTION_CLOSING
