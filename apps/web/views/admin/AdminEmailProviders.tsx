@@ -1040,34 +1040,38 @@ const AdminEmailProviders: React.FC = () => {
         account={editingAccount}
       />
 
-      <ConfirmDialog
-        open={Boolean(confirmAction)}
-        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
-        title={
-          confirmAction?.type === 'delete'
-            ? 'Eliminar cuenta SMTP'
-            : confirmAction?.type === 'activate'
-              ? 'Activar cuenta SMTP'
-              : 'Desactivar cuenta SMTP'
-        }
-        description={
-          confirmAction?.type === 'delete'
-            ? `Vas a eliminar ${confirmAction.account.name}. La cuenta quedará deshabilitada y archivada.`
-            : confirmAction?.type === 'activate'
-              ? `Vas a activar ${confirmAction.account.name} para que vuelva a rotar en el sistema.`
-              : `Vas a desactivar ${confirmAction.account.name} para sacarla de la rotación.`
-        }
-        confirmLabel={
-          confirmAction?.type === 'delete'
-            ? 'Eliminar'
-            : confirmAction?.type === 'activate'
-              ? 'Activar'
-              : 'Desactivar'
-        }
-        variant={confirmAction?.type === 'delete' ? 'danger' : 'warning'}
-        isLoading={isSaving}
-        onConfirm={() => void handleConfirm()}
-      />
+      {confirmAction && (
+        <ConfirmDialog
+          open={Boolean(confirmAction)}
+          onOpenChange={(open) => {
+            if (!open) setConfirmAction(null);
+          }}
+          title={
+            confirmAction.type === 'delete'
+              ? 'Eliminar cuenta SMTP'
+              : confirmAction.type === 'activate'
+                ? 'Activar cuenta SMTP'
+                : 'Desactivar cuenta SMTP'
+          }
+          description={
+            confirmAction.type === 'delete'
+              ? `Vas a eliminar ${confirmAction.account.name}. La cuenta quedará deshabilitada y archivada.`
+              : confirmAction.type === 'activate'
+                ? `Vas a activar ${confirmAction.account.name} para que vuelva a rotar en el sistema.`
+                : `Vas a desactivar ${confirmAction.account.name} para sacarla de la rotación.`
+          }
+          confirmLabel={
+            confirmAction.type === 'delete'
+              ? 'Eliminar'
+              : confirmAction.type === 'activate'
+                ? 'Activar'
+                : 'Desactivar'
+          }
+          variant={confirmAction.type === 'delete' ? 'danger' : 'warning'}
+          isLoading={isSaving}
+          onConfirm={() => void handleConfirm()}
+        />
+      )}
     </div>
   );
 };
