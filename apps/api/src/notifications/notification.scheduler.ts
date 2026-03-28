@@ -1,6 +1,6 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { EmailJobPriority, EmailJobType, MatchStatus, NotificationType } from '@prisma/client';
+import { SchedulerObservationOutcome } from '../common/scheduler-observability.util';
 import { EmailQueueService } from '../email/email-queue.service';
 import { MatchEmailTemplateService } from '../email/match-email-template.service';
 import {
@@ -136,8 +136,7 @@ export class NotificationScheduler {
     return result;
   }
 
-  @Cron('* * * * *')
-  async sendMatchReminders(): Promise<void> {
+  async sendMatchReminders(): Promise<SchedulerObservationOutcome> {
     const execution = await tryRunExclusiveBackgroundJob(
       NotificationScheduler.BACKGROUND_DB_JOB_KEY,
       'sendMatchReminders',
@@ -149,7 +148,23 @@ export class NotificationScheduler {
         'sendMatchReminders',
         execution,
       );
+      return {
+        status: 'skipped',
+        summary: {
+          reason: 'background_lock',
+          lockHolder: execution.skip.holder,
+          heldMs: execution.skip.heldMs,
+          skipCount: execution.skip.skipCount,
+        },
+      };
     }
+
+    return {
+      status: 'completed',
+      summary: {
+        result: 'match_reminders_completed',
+      },
+    };
   }
 
   private async runSendMatchReminders(): Promise<void> {
@@ -244,8 +259,7 @@ export class NotificationScheduler {
     }
   }
 
-  @Cron('* * * * *')
-  async sendPredictionClosingAlerts(): Promise<void> {
+  async sendPredictionClosingAlerts(): Promise<SchedulerObservationOutcome> {
     const execution = await tryRunExclusiveBackgroundJob(
       NotificationScheduler.BACKGROUND_DB_JOB_KEY,
       'sendPredictionClosingAlerts',
@@ -257,7 +271,23 @@ export class NotificationScheduler {
         'sendPredictionClosingAlerts',
         execution,
       );
+      return {
+        status: 'skipped',
+        summary: {
+          reason: 'background_lock',
+          lockHolder: execution.skip.holder,
+          heldMs: execution.skip.heldMs,
+          skipCount: execution.skip.skipCount,
+        },
+      };
     }
+
+    return {
+      status: 'completed',
+      summary: {
+        result: 'prediction_closing_alerts_completed',
+      },
+    };
   }
 
   private async runSendPredictionClosingAlerts(): Promise<void> {
@@ -378,8 +408,7 @@ export class NotificationScheduler {
     }
   }
 
-  @Cron('* * * * *')
-  async sendMatchResultNotifications(): Promise<void> {
+  async sendMatchResultNotifications(): Promise<SchedulerObservationOutcome> {
     const execution = await tryRunExclusiveBackgroundJob(
       NotificationScheduler.BACKGROUND_DB_JOB_KEY,
       'sendMatchResultNotifications',
@@ -391,7 +420,23 @@ export class NotificationScheduler {
         'sendMatchResultNotifications',
         execution,
       );
+      return {
+        status: 'skipped',
+        summary: {
+          reason: 'background_lock',
+          lockHolder: execution.skip.holder,
+          heldMs: execution.skip.heldMs,
+          skipCount: execution.skip.skipCount,
+        },
+      };
     }
+
+    return {
+      status: 'completed',
+      summary: {
+        result: 'match_result_notifications_completed',
+      },
+    };
   }
 
   private async runSendMatchResultNotifications(): Promise<void> {

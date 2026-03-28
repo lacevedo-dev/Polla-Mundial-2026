@@ -14,6 +14,6 @@ import { PredictionReportController } from './prediction-report.controller';
     PredictionReportEmailService,
     PredictionReportScheduler,
   ],
-  exports: [PredictionReportService],
+  exports: [PredictionReportService, PredictionReportScheduler],
 })
 export class PredictionReportModule {}

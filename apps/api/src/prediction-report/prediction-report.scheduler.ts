@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
-import { observeSchedulerJob } from '../common/scheduler-observability.util';
+import {
+  SchedulerObservationOutcome,
+  observeSchedulerJob,
+} from '../common/scheduler-observability.util';
 import {
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
@@ -15,9 +17,8 @@ export class PredictionReportScheduler {
   constructor(private readonly reportService: PredictionReportService) {}
 
   /** Cada minuto revisa si alguna ventana de predicciones acaba de cerrarse */
-  @Cron('* * * * *')
-  async checkAndSendReports(): Promise<void> {
-    await observeSchedulerJob(this.logger, 'checkAndSendReports', async () => {
+  async checkAndSendReports(): Promise<SchedulerObservationOutcome> {
+    return await observeSchedulerJob(this.logger, 'checkAndSendReports', async () => {
       const execution = await tryRunExclusiveBackgroundJob(
         PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
         'checkAndSendReports',
