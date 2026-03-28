@@ -37,7 +37,7 @@ export class AdminAffiliationsController {
     @Patch(':userId')
     @ApiOperation({ summary: "Change a user's plan" })
     async updateAffiliation(@Param('userId') userId: string, @Body() dto: UpdateAffiliationDto) {
-        const user = await this.usersService.findById(userId);
+        const user = await this.usersService.findById(userId, { includeInactive: true });
         if (!user) throw new NotFoundException('Usuario no encontrado');
         return this.usersService.updateByAdmin(userId, { plan: dto.plan });
     }

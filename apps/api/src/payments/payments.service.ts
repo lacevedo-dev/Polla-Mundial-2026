@@ -6,6 +6,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { OrdersService } from '../orders/orders.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 @Injectable()
 export class PaymentsService {
@@ -201,8 +202,8 @@ export class PaymentsService {
             select: { userId: true },
         });
 
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, status: USER_STATUS.ACTIVE },
             select: { name: true },
         });
 

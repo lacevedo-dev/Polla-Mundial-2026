@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 export interface DashboardStats {
   aciertos: number;
@@ -74,8 +75,8 @@ export class DashboardService {
     const tasa = total > 0 ? (aciertos / total) * 100 : 0;
 
     // Get user streak (assuming 0 if not set)
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, status: USER_STATUS.ACTIVE },
       select: { id: true }, // User model might not have streak field in current schema
     });
 

@@ -9,6 +9,7 @@ import {
 } from '../prisma/background-job-lock.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { USER_STATUS } from '../users/user-status.constants';
 import { NotificationsService } from './notifications.service';
 import { TwilioService } from './twilio.service';
 
@@ -35,15 +36,20 @@ export class NotificationScheduler {
     data: Record<string, unknown>,
     trigger?: string,
   ): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, status: USER_STATUS.ACTIVE },
+      select: { phone: true, countryCode: true },
+    });
+
+    if (!user) {
+      return;
+    }
+
     const pushResult = await this.push.sendToUser(userId, { title, body, data });
 
     let whatsappSent = false;
     if (this.twilio.isEnabled()) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { phone: true, countryCode: true },
-      });
-      if (user?.phone) {
+      if (user.phone) {
         const fullPhone = `${user.countryCode ?? '+57'}${user.phone}`;
         try {
           await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);

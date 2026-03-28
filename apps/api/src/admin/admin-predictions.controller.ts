@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -45,6 +46,7 @@ export class AdminPredictionsController {
             }),
             this.prisma.user.findMany({
                 where: {
+                    status: USER_STATUS.ACTIVE,
                     predictions: {
                         some: predictionWhere,
                     },
@@ -98,6 +100,7 @@ export class AdminPredictionsController {
         if (matchId) and.push({ matchId });
         if (leagueId) and.push({ leagueId });
         if (userId) and.push({ userId });
+        and.push({ user: { is: { status: USER_STATUS.ACTIVE } } });
         if (phase) and.push({ match: { phase } });
         if (group) and.push({ match: { group } });
         if (round) and.push({ match: { round } });

@@ -1,26 +1,45 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, SystemRole, Plan } from '@prisma/client';
+import { Plan, Prisma, SystemRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseSystemConfigValue, serializeSystemConfigValue } from '../system-config/system-config.util';
+import { USER_STATUS, UserStatusValue } from './user-status.constants';
+
+type FindUserOptions = {
+    includeInactive?: boolean;
+};
 
 @Injectable()
 export class UsersService {
     constructor(private readonly prisma: PrismaService) { }
 
-    async findByEmail(email: string) {
-        return this.prisma.user.findUnique({
-            where: { email },
+    private buildStatusWhere(includeInactive = false): Prisma.UserWhereInput {
+        return includeInactive ? {} : { status: USER_STATUS.ACTIVE };
+    }
+
+    async findByEmail(email: string, options: FindUserOptions = {}) {
+        return this.prisma.user.findFirst({
+            where: {
+                email,
+                ...this.buildStatusWhere(options.includeInactive),
+            },
         });
     }
 
-    async findByUsername(username: string) {
-        return this.prisma.user.findUnique({
-            where: { username },
+    async findByUsername(username: string, options: FindUserOptions = {}) {
+        return this.prisma.user.findFirst({
+            where: {
+                username,
+                ...this.buildStatusWhere(options.includeInactive),
+            },
         });
     }
 
-    async findById(id: string) {
-        return this.prisma.user.findUnique({
-            where: { id },
+    async findById(id: string, options: FindUserOptions = {}) {
+        return this.prisma.user.findFirst({
+            where: {
+                id,
+                ...this.buildStatusWhere(options.includeInactive),
+            },
         });
     }
 
@@ -36,11 +55,14 @@ export class UsersService {
         search?: string;
         plan?: Plan;
         systemRole?: SystemRole;
+        status?: UserStatusValue;
+        includeInactive?: boolean;
     }) {
-        const { page, limit, search, plan, systemRole } = params;
+        const { page, limit, search, plan, systemRole, status, includeInactive = true } = params;
         const skip = (page - 1) * limit;
 
         const where: Prisma.UserWhereInput = {
+            ...this.buildStatusWhere(includeInactive),
             ...(search && {
                 OR: [
                     { name: { contains: search } },
@@ -50,6 +72,7 @@ export class UsersService {
             }),
             ...(plan && { plan }),
             ...(systemRole && { systemRole }),
+            ...(status && { status }),
         };
 
         const [data, total] = await Promise.all([
@@ -67,6 +90,7 @@ export class UsersService {
                     plan: true,
                     systemRole: true,
                     emailVerified: true,
+                    status: true,
                     createdAt: true,
                     _count: { select: { leagues: true, predictions: true } },
                 },
@@ -77,10 +101,70 @@ export class UsersService {
         return { data, total, page, limit };
     }
 
-    async updateByAdmin(id: string, data: Partial<{ plan: Plan; systemRole: SystemRole; emailVerified: boolean }>) {
+    async updateByAdmin(id: string, data: Partial<{ plan: Plan; systemRole: SystemRole; emailVerified: boolean; status: UserStatusValue }>) {
         return this.prisma.user.update({
             where: { id },
             data,
+        });
+    }
+
+    async setStatus(id: string, status: UserStatusValue) {
+        return this.prisma.$transaction(async (tx) => {
+            const user = await tx.user.update({
+                where: { id },
+                data: { status },
+            });
+
+            if (status === USER_STATUS.INACTIVE) {
+                await tx.verificationToken.deleteMany({
+                    where: { userId: id },
+                });
+            }
+
+            return user;
+        });
+    }
+
+    async hardDeleteByAdmin(id: string) {
+        return this.prisma.$transaction(async (tx) => {
+            const payments = await tx.payment.findMany({
+                where: { userId: id },
+                select: { id: true },
+            });
+            const paymentIds = payments.map((payment) => payment.id);
+
+            if (paymentIds.length > 0) {
+                await tx.transaction.deleteMany({
+                    where: { paymentId: { in: paymentIds } },
+                });
+            }
+
+            await tx.prediction.deleteMany({ where: { userId: id } });
+            await tx.phaseBonus.deleteMany({ where: { userId: id } });
+            await tx.auditLog.deleteMany({ where: { userId: id } });
+            await tx.invitation.deleteMany({ where: { invitedBy: id } });
+            await tx.userAiCredits.deleteMany({ where: { userId: id } });
+            await tx.payment.deleteMany({ where: { userId: id } });
+
+            const creditResetsRecord = await tx.systemConfig.findUnique({
+                where: { key: 'user_credit_resets' },
+            });
+            if (creditResetsRecord) {
+                const currentMap = parseSystemConfigValue<Record<string, string> | null>(creditResetsRecord.value) ?? {};
+                if (currentMap[id]) {
+                    delete currentMap[id];
+                    await tx.systemConfig.update({
+                        where: { key: 'user_credit_resets' },
+                        data: { value: serializeSystemConfigValue(currentMap) },
+                    });
+                }
+            }
+
+            await tx.user.delete({ where: { id } });
+
+            return {
+                deletedPaymentCount: paymentIds.length,
+            };
         });
     }
 }

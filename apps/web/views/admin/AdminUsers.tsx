@@ -39,6 +39,43 @@ const roleBadge: Record<string, string> = {
     SUPERADMIN: 'bg-rose-100 text-rose-700',
 };
 
+type UserStatusAction = {
+    type: 'status';
+    userId: string;
+    name: string;
+    nextStatus: 'ACTIVE' | 'INACTIVE';
+};
+
+type HardDeleteAction = {
+    type: 'hard-delete';
+    userId: string;
+    name: string;
+};
+
+type UserConfirmAction = UserStatusAction | HardDeleteAction;
+
+function isInactiveUser(status?: string) {
+    return status === 'INACTIVE' || status === 'BANNED';
+}
+
+function isStatusConfirmAction(action: UserConfirmAction | null): action is UserStatusAction {
+    return action?.type === 'status';
+}
+
+function getStatusActionMeta(status?: string) {
+    const inactive = isInactiveUser(status);
+    return {
+        label: inactive ? 'Reactivar' : 'Inactivar',
+        icon: inactive ? CheckCircle : Ban,
+        color: inactive ? 'text-lime-600 hover:bg-lime-50' : 'text-amber-600 hover:bg-amber-50',
+        confirmLabel: inactive ? 'Reactivar' : 'Inactivar',
+        nextStatus: inactive ? 'ACTIVE' : 'INACTIVE',
+        description: inactive
+            ? 'El usuario volverá a mostrarse como activo y podrá usar la plataforma normalmente.'
+            : 'El usuario quedará inactivo, pero su información se conservará para auditoría y recuperación.',
+    } as const;
+}
+
 /* ─── Edit User Dialog ─── */
 const EditUserDialog: React.FC<{
     user: any;
@@ -160,13 +197,13 @@ const EditUserDialog: React.FC<{
 const UserActionMenu: React.FC<{
     user: any;
     onEdit: () => void;
-    onBan: () => void;
-    onActivate: () => void;
-    onDelete: () => void;
+    onToggleStatus: () => void;
+    onHardDelete: () => void;
     onResetCredits: () => void;
-}> = ({ onEdit, onBan, onActivate, onDelete, onResetCredits }) => {
+}> = ({ user, onEdit, onToggleStatus, onHardDelete, onResetCredits }) => {
     const [open, setOpen] = React.useState(false);
     const ref = React.useRef<HTMLDivElement>(null);
+    const statusMeta = getStatusActionMeta(user?.status);
 
     React.useEffect(() => {
         if (!open) return;
@@ -180,9 +217,8 @@ const UserActionMenu: React.FC<{
     const actions = [
         { label: 'Editar', icon: Edit3, onClick: onEdit, color: 'text-amber-600 hover:bg-amber-50' },
         { label: 'Resetear créditos IA', icon: Sparkles, onClick: onResetCredits, color: 'text-sky-600 hover:bg-sky-50' },
-        { label: 'Activar', icon: CheckCircle, onClick: onActivate, color: 'text-lime-600 hover:bg-lime-50' },
-        { label: 'Banear', icon: Ban, onClick: onBan, color: 'text-rose-600 hover:bg-rose-50' },
-        { label: 'Eliminar', icon: Trash2, onClick: onDelete, color: 'text-rose-700 hover:bg-rose-50' },
+        { label: statusMeta.label, icon: statusMeta.icon, onClick: onToggleStatus, color: statusMeta.color },
+        { label: 'Eliminar definitivamente', icon: Trash2, onClick: onHardDelete, color: 'text-rose-700 hover:bg-rose-50' },
     ];
 
     return (
@@ -222,11 +258,11 @@ const UserActionMenu: React.FC<{
 const AdminUsers: React.FC = () => {
     const {
         users, total, filters, isLoading, isSaving,
-        fetchUsers, banUser, activateUser, deleteUser, resetUserCredits, setFilters,
+        fetchUsers, setUserStatus, permanentlyDeleteUser, resetUserCredits, setFilters,
     } = useAdminUsersStore();
 
     const [editUser, setEditUser] = React.useState<any>(null);
-    const [confirmAction, setConfirmAction] = React.useState<{ type: string; userId: string; name: string } | null>(null);
+    const [confirmAction, setConfirmAction] = React.useState<UserConfirmAction | null>(null);
     const [resetCreditsUserId, setResetCreditsUserId] = React.useState<string | null>(null);
     const [searchInput, setSearchInput] = React.useState('');
 
@@ -242,9 +278,11 @@ const AdminUsers: React.FC = () => {
 
     const handleConfirm = async () => {
         if (!confirmAction) return;
-        if (confirmAction.type === 'ban') await banUser(confirmAction.userId);
-        else if (confirmAction.type === 'activate') await activateUser(confirmAction.userId);
-        else if (confirmAction.type === 'delete') await deleteUser(confirmAction.userId);
+        if (confirmAction.type === 'status') {
+            await setUserStatus(confirmAction.userId, confirmAction.nextStatus);
+        } else if (confirmAction.type === 'hard-delete') {
+            await permanentlyDeleteUser(confirmAction.userId);
+        }
         setConfirmAction(null);
     };
 
@@ -253,6 +291,11 @@ const AdminUsers: React.FC = () => {
         await resetUserCredits(resetCreditsUserId);
         setResetCreditsUserId(null);
     };
+
+    const isHardDeleteAction = confirmAction?.type === 'hard-delete';
+    const isInactivateAction = isStatusConfirmAction(confirmAction)
+        ? confirmAction.nextStatus === 'INACTIVE'
+        : false;
 
     return (
         <div className="space-y-5">
@@ -370,9 +413,13 @@ const AdminUsers: React.FC = () => {
                                             <UserActionMenu
                                                 user={user}
                                                 onEdit={() => setEditUser(user)}
-                                                onBan={() => setConfirmAction({ type: 'ban', userId: user.id, name: user.name })}
-                                                onActivate={() => setConfirmAction({ type: 'activate', userId: user.id, name: user.name })}
-                                                onDelete={() => setConfirmAction({ type: 'delete', userId: user.id, name: user.name })}
+                                                onToggleStatus={() => setConfirmAction({
+                                                    type: 'status',
+                                                    userId: user.id,
+                                                    name: user.name,
+                                                    nextStatus: isInactiveUser(user.status) ? 'ACTIVE' : 'INACTIVE',
+                                                })}
+                                                onHardDelete={() => setConfirmAction({ type: 'hard-delete', userId: user.id, name: user.name })}
                                                 onResetCredits={() => setResetCreditsUserId(user.id)}
                                             />
                                         </div>
@@ -451,23 +498,25 @@ const AdminUsers: React.FC = () => {
                                             <Sparkles size={14} />
                                         </button>
                                         <button
-                                            onClick={() => setConfirmAction({ type: 'activate', userId: user.id, name: user.name })}
-                                            className="p-1.5 rounded-lg hover:bg-lime-50 text-slate-400 hover:text-lime-600 transition-colors"
-                                            title="Activar usuario"
+                                            onClick={() => setConfirmAction({
+                                                type: 'status',
+                                                userId: user.id,
+                                                name: user.name,
+                                                nextStatus: isInactiveUser(user.status) ? 'ACTIVE' : 'INACTIVE',
+                                            })}
+                                            className={`p-1.5 rounded-lg transition-colors ${
+                                                isInactiveUser(user.status)
+                                                    ? 'hover:bg-lime-50 text-slate-400 hover:text-lime-600'
+                                                    : 'hover:bg-amber-50 text-slate-400 hover:text-amber-600'
+                                            }`}
+                                            title={isInactiveUser(user.status) ? 'Reactivar usuario' : 'Inactivar usuario'}
                                         >
-                                            <CheckCircle size={14} />
+                                            {isInactiveUser(user.status) ? <CheckCircle size={14} /> : <Ban size={14} />}
                                         </button>
                                         <button
-                                            onClick={() => setConfirmAction({ type: 'ban', userId: user.id, name: user.name })}
-                                            className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                                            title="Banear usuario"
-                                        >
-                                            <Ban size={14} />
-                                        </button>
-                                        <button
-                                            onClick={() => setConfirmAction({ type: 'delete', userId: user.id, name: user.name })}
+                                            onClick={() => setConfirmAction({ type: 'hard-delete', userId: user.id, name: user.name })}
                                             className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-700 transition-colors"
-                                            title="Eliminar usuario"
+                                            title="Eliminar definitivamente"
                                         >
                                             <Trash2 size={14} />
                                         </button>
@@ -500,21 +549,27 @@ const AdminUsers: React.FC = () => {
                 open={!!confirmAction}
                 onOpenChange={(v) => { if (!v) setConfirmAction(null); }}
                 title={
-                    confirmAction?.type === 'delete' ? 'Eliminar usuario' :
-                    confirmAction?.type === 'ban' ? 'Banear usuario' : 'Activar usuario'
+                    isHardDeleteAction
+                        ? 'Eliminar definitivamente'
+                        : isInactivateAction
+                            ? 'Inactivar usuario'
+                            : 'Reactivar usuario'
                 }
                 description={
-                    confirmAction?.type === 'delete'
-                        ? `¿Eliminar a "${confirmAction?.name}"? Esta acción no se puede deshacer.`
-                        : confirmAction?.type === 'ban'
-                        ? `¿Banear a "${confirmAction?.name}" de todas las pollas?`
-                        : `¿Reactivar la cuenta de "${confirmAction?.name}"?`
+                    isHardDeleteAction
+                        ? `¿Eliminar definitivamente a "${confirmAction?.name}"? Esta acción borrará también toda la información hija asociada y no se puede deshacer.`
+                        : isInactivateAction
+                            ? `¿Inactivar a "${confirmAction?.name}"? Su información se conservará, pero dejará de figurar como activo.`
+                            : `¿Reactivar la cuenta de "${confirmAction?.name}"? Volverá a figurar como activa.`
                 }
                 confirmLabel={
-                    confirmAction?.type === 'delete' ? 'Eliminar' :
-                    confirmAction?.type === 'ban' ? 'Banear' : 'Activar'
+                    isHardDeleteAction
+                        ? 'Eliminar definitivamente'
+                        : isInactivateAction
+                            ? 'Inactivar'
+                            : 'Reactivar'
                 }
-                variant={confirmAction?.type === 'activate' ? 'warning' : 'danger'}
+                variant={isHardDeleteAction ? 'danger' : 'warning'}
                 isLoading={isSaving}
                 onConfirm={handleConfirm}
             />

@@ -18,6 +18,7 @@ model User {
   passwordHash       String
   plan               Plan                @default(FREE)
   emailVerified      Boolean             @default(false)
+  status             UserStatus          @default(ACTIVE)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   systemRole         SystemRole          @default(USER)
@@ -35,6 +36,7 @@ model User {
   pushSubscriptions  PushSubscription[]
 
   @@index([email])
+  @@index([status])
   @@index([username])
 }
 
@@ -511,6 +513,11 @@ enum SystemRole {
   USER
   ADMIN
   SUPERADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
 }
 
 enum Plan {

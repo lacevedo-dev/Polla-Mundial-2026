@@ -12,6 +12,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminService } from './admin.service';
+import { USER_STATUS, UserStatusValue } from '../users/user-status.constants';
 
 export class UpdateUserAdminDto {
     @IsOptional()
@@ -26,6 +27,11 @@ export class UpdateUserAdminDto {
     @IsBoolean()
     @Transform(({ value }) => value === 'true' || value === true)
     emailVerified?: boolean;
+}
+
+export class UpdateUserStatusDto {
+    @IsEnum(USER_STATUS)
+    status: UserStatusValue;
 }
 
 @ApiTags('admin')
@@ -47,14 +53,16 @@ export class AdminUsersController {
     @ApiQuery({ name: 'search', required: false })
     @ApiQuery({ name: 'plan', required: false, enum: Plan })
     @ApiQuery({ name: 'systemRole', required: false, enum: SystemRole })
+    @ApiQuery({ name: 'status', required: false, enum: Object.values(USER_STATUS) })
     async findAll(
         @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
         @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
         @Query('search') search?: string,
         @Query('plan') plan?: Plan,
         @Query('systemRole') systemRole?: SystemRole,
+        @Query('status') status?: UserStatusValue,
     ) {
-        return this.usersService.findAllPaginated({ page, limit, search, plan, systemRole });
+        return this.usersService.findAllPaginated({ page, limit, search, plan, systemRole, status, includeInactive: true });
     }
 
     @Get(':id')
@@ -77,48 +85,49 @@ export class AdminUsersController {
     @Patch(':id')
     @ApiOperation({ summary: 'Update user plan, role, or verification status' })
     async update(@Param('id') id: string, @Body() dto: UpdateUserAdminDto) {
-        const user = await this.usersService.findById(id);
+        const user = await this.usersService.findById(id, { includeInactive: true });
         if (!user) throw new NotFoundException('Usuario no encontrado');
         return this.usersService.updateByAdmin(id, dto);
     }
 
-    @Post(':id/ban')
-    @ApiOperation({ summary: 'Ban a user by deleting all their league memberships' })
-    async ban(@Param('id') id: string) {
-        const user = await this.usersService.findById(id);
+    @Patch(':id/status')
+    @ApiOperation({ summary: 'Update user active/inactive status' })
+    async updateStatus(@Param('id') id: string, @Body() dto: UpdateUserStatusDto) {
+        const user = await this.usersService.findById(id, { includeInactive: true });
         if (!user) throw new NotFoundException('Usuario no encontrado');
-        await this.prisma.leagueMember.updateMany({
-            where: { userId: id },
-            data: { status: 'BANNED' },
-        });
-        return { message: 'Usuario baneado exitosamente' };
+        await this.usersService.setStatus(id, dto.status);
+        return {
+            message: dto.status === USER_STATUS.INACTIVE
+                ? 'Usuario inactivado exitosamente'
+                : 'Usuario reactivado exitosamente',
+        };
+    }
+
+    @Post(':id/ban')
+    @ApiOperation({ summary: 'Legacy alias for inactivating a user' })
+    async ban(@Param('id') id: string) {
+        return this.updateStatus(id, { status: USER_STATUS.INACTIVE });
     }
 
     @Post(':id/activate')
-    @ApiOperation({ summary: 'Reactivate a banned user' })
+    @ApiOperation({ summary: 'Legacy alias for reactivating a user' })
     async activate(@Param('id') id: string) {
-        const user = await this.usersService.findById(id);
-        if (!user) throw new NotFoundException('Usuario no encontrado');
-        await this.prisma.leagueMember.updateMany({
-            where: { userId: id, status: 'BANNED' },
-            data: { status: 'ACTIVE' },
-        });
-        return { message: 'Usuario reactivado exitosamente' };
+        return this.updateStatus(id, { status: USER_STATUS.ACTIVE });
     }
 
     @Delete(':id')
-    @ApiOperation({ summary: 'Delete a user permanently' })
+    @ApiOperation({ summary: 'Hard delete a user permanently' })
     async remove(@Param('id') id: string) {
-        const user = await this.usersService.findById(id);
+        const user = await this.usersService.findById(id, { includeInactive: true });
         if (!user) throw new NotFoundException('Usuario no encontrado');
-        await this.prisma.user.delete({ where: { id } });
-        return { message: 'Usuario eliminado exitosamente' };
+        const summary = await this.usersService.hardDeleteByAdmin(id);
+        return { message: 'Usuario eliminado definitivamente', ...summary };
     }
 
     @Post(':id/credits/reset')
     @ApiOperation({ summary: 'Reset Smart Insights credits for a specific user' })
     async resetUserCredits(@Param('id') id: string) {
-        const user = await this.usersService.findById(id);
+        const user = await this.usersService.findById(id, { includeInactive: true });
         if (!user) throw new NotFoundException('Usuario no encontrado');
         const resetAt = new Date().toISOString();
         const existing = await this.adminService.getSystemConfig('user_credit_resets');

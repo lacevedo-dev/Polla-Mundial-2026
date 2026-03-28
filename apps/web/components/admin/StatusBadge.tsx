@@ -18,6 +18,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
     CONFIRMED: { label: 'Confirmado', className: 'bg-lime-100 text-lime-700' },
     REJECTED: { label: 'Rechazado', className: 'bg-rose-100 text-rose-700' },
     BANNED: { label: 'Baneado', className: 'bg-rose-100 text-rose-700' },
+    INACTIVE: { label: 'Inactivo', className: 'bg-slate-100 text-slate-600' },
     FREE: { label: 'FREE', className: 'bg-slate-100 text-slate-600' },
     GOLD: { label: 'GOLD', className: 'bg-amber-100 text-amber-700' },
     DIAMOND: { label: 'DIAMOND', className: 'bg-purple-100 text-purple-700' },

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { request } from '../api';
 
+export type AdminUserStatus = 'ACTIVE' | 'INACTIVE' | 'BANNED' | string;
+
 export interface AdminUser {
     id: string;
     name: string;
@@ -10,7 +12,7 @@ export interface AdminUser {
     plan: string;
     systemRole: string;
     emailVerified: boolean;
-    status?: string;
+    status?: AdminUserStatus;
     createdAt: string;
     _count?: { leagues: number; predictions: number };
 }
@@ -42,9 +44,8 @@ interface AdminUsersState {
     fetchUsers: () => Promise<void>;
     fetchUser: (id: string) => Promise<void>;
     updateUser: (id: string, data: Partial<{ plan: string; systemRole: string; emailVerified: boolean }>) => Promise<void>;
-    banUser: (id: string) => Promise<void>;
-    activateUser: (id: string) => Promise<void>;
-    deleteUser: (id: string) => Promise<void>;
+    setUserStatus: (id: string, status: 'ACTIVE' | 'INACTIVE') => Promise<void>;
+    permanentlyDeleteUser: (id: string) => Promise<void>;
     resetUserCredits: (id: string) => Promise<void>;
     setFilters: (filters: Partial<AdminUsersFilters>) => void;
     setSelectedUser: (user: AdminUser | null) => void;
@@ -109,10 +110,13 @@ export const useAdminUsersStore = create<AdminUsersState>((set, get) => ({
         }
     },
 
-    banUser: async (id) => {
+    setUserStatus: async (id, status) => {
         set({ isSaving: true });
         try {
-            await request(`/admin/users/${id}/ban`, { method: 'POST' });
+            await request(`/admin/users/${id}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status }),
+            });
             set({ isSaving: false });
             get().fetchUsers();
         } catch (error) {
@@ -121,19 +125,7 @@ export const useAdminUsersStore = create<AdminUsersState>((set, get) => ({
         }
     },
 
-    activateUser: async (id) => {
-        set({ isSaving: true });
-        try {
-            await request(`/admin/users/${id}/activate`, { method: 'POST' });
-            set({ isSaving: false });
-            get().fetchUsers();
-        } catch (error) {
-            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
-            throw error;
-        }
-    },
-
-    deleteUser: async (id) => {
+    permanentlyDeleteUser: async (id) => {
         set({ isSaving: true });
         try {
             await request(`/admin/users/${id}`, { method: 'DELETE' });

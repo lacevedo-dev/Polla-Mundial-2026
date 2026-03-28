@@ -6,6 +6,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 const AUTO_TYPES = [
   NotificationType.MATCH_REMINDER,
@@ -31,7 +32,7 @@ export class AdminAutomationController {
       this.prisma.notification.count({
         where: { sentAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
       }),
-      this.prisma.user.count({ where: { phone: { not: null } } }),
+      this.prisma.user.count({ where: { phone: { not: null }, status: USER_STATUS.ACTIVE } }),
     ]);
 
     const twilioSid = this.config.get<string>('TWILIO_ACCOUNT_SID');

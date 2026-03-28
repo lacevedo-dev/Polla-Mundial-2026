@@ -9,6 +9,7 @@ import { EmailService } from '../email/email.service';
 import { generateVerificationToken, calculateTokenExpiration } from './verification-token.utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { AvatarStorageService, type AvatarUploadFile } from './avatar-storage.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 @Injectable()
 export class AuthService {
@@ -59,14 +60,14 @@ export class AuthService {
 
     async register(registerDto: RegisterDto, avatarFile?: AvatarUploadFile) {
         const existingEmail = await this.wrapRegisterDatabaseOperation(() =>
-            this.usersService.findByEmail(registerDto.email),
+            this.usersService.findByEmail(registerDto.email, { includeInactive: true }),
         );
         if (existingEmail) {
             throw new ConflictException('El correo electrónico ya está registrado');
         }
 
         const existingUsername = await this.wrapRegisterDatabaseOperation(() =>
-            this.usersService.findByUsername(registerDto.username),
+            this.usersService.findByUsername(registerDto.username, { includeInactive: true }),
         );
         if (existingUsername) {
             throw new ConflictException('El nombre de usuario ya está en uso');
@@ -149,6 +150,10 @@ export class AuthService {
 
         if (!verificationToken) {
             throw new UnauthorizedException('Token de verificación inválido o expirado');
+        }
+
+        if (verificationToken.user.status !== USER_STATUS.ACTIVE) {
+            throw new UnauthorizedException('La cuenta está inactiva');
         }
 
         // Check if token has expired

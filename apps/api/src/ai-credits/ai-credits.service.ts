@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Plan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { USER_STATUS } from '../users/user-status.constants';
 
 const PLAN_CREDITS: Record<Plan, number> = {
     FREE: 3,
@@ -37,8 +38,8 @@ export class AiCreditsService {
      */
     async getUserCreditSummary(userId: string): Promise<CreditSummary> {
         // Obtener el plan del usuario
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, status: USER_STATUS.ACTIVE },
             select: { plan: true },
         });
 
@@ -150,8 +151,8 @@ export class AiCreditsService {
      * Resetea los créditos de un usuario (útil para cambio de plan o reset manual)
      */
     async resetUserCredits(userId: string): Promise<CreditSummary> {
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, status: USER_STATUS.ACTIVE },
             select: { plan: true },
         });
 

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePredictionDto } from './dto/prediction.dto';
 import { MemberStatus, ParticipationCategory, ParticipationStatus, Phase, ScoringType } from '@prisma/client';
 import { matchTeamSelect } from '../matches/match-response.util';
+import { USER_STATUS } from '../users/user-status.constants';
 
 type ScoringRuleLike = {
     ruleType: ScoringType | string;
@@ -387,7 +388,11 @@ export class PredictionsService {
     async getLeaderboard(leagueId: string, category?: string) {
         const leaderboardCategory = this.normalizeLeaderboardCategory(category);
         const members = await this.prisma.leagueMember.findMany({
-            where: { leagueId, status: MemberStatus.ACTIVE },
+            where: {
+                leagueId,
+                status: MemberStatus.ACTIVE,
+                user: { is: { status: USER_STATUS.ACTIVE } },
+            },
             include: {
                 user: {
                     select: {
@@ -525,8 +530,13 @@ export class PredictionsService {
         const leaderboardCategory = this.normalizeLeaderboardCategory(category);
         const participationKeys = await this.getParticipationScopeKeys(leagueId, leaderboardCategory);
 
-        const member = await this.prisma.leagueMember.findUnique({
-            where: { userId_leagueId: { userId, leagueId } },
+        const member = await this.prisma.leagueMember.findFirst({
+            where: {
+                userId,
+                leagueId,
+                status: MemberStatus.ACTIVE,
+                user: { is: { status: USER_STATUS.ACTIVE } },
+            },
             include: {
                 user: {
                     select: {
@@ -539,7 +549,7 @@ export class PredictionsService {
             },
         });
 
-        if (!member || member.status !== MemberStatus.ACTIVE) {
+        if (!member) {
             throw new NotFoundException('Participante no encontrado en esta liga');
         }
 

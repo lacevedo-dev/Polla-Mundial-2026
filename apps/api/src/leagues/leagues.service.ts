@@ -206,7 +206,7 @@ export class LeaguesService {
     }
 
     private async isSuperAdmin(userId: string): Promise<boolean> {
-        const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { systemRole: true } });
+    const user = await this.prisma.user.findFirst({ where: { id: userId, status: 'ACTIVE' }, select: { systemRole: true } });
         return user?.systemRole === 'SUPERADMIN';
     }
 
@@ -259,7 +259,7 @@ export class LeaguesService {
 
         let leaguePlan = createLeagueDto.plan;
         if (!leaguePlan) {
-            const creator = await this.prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+            const creator = await this.prisma.user.findFirst({ where: { id: userId, status: 'ACTIVE' }, select: { plan: true } });
             leaguePlan = creator?.plan ?? Plan.FREE;
         }
 
@@ -432,8 +432,8 @@ export class LeaguesService {
     }
 
     async findMyInvitations(userId: string) {
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, status: 'ACTIVE' },
             select: { email: true },
         });
         if (!user) return [];
