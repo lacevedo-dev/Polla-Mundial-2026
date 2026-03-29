@@ -304,6 +304,18 @@ function StatusDot({ state, size = 10 }: { state: StepState; size?: number }) {
   );
 }
 
+const STEP_STATE_COLOR: Record<StepState, string> = {
+  SUCCESS:        'text-emerald-500',
+  MANUAL:         'text-emerald-500',
+  WARNING:        'text-amber-400',
+  RUNNING:        'text-blue-400',
+  SCHEDULED:      'text-slate-300',
+  SKIPPED:        'text-slate-300',
+  NOT_APPLICABLE: 'text-slate-200',
+  FAILED:         'text-red-500',
+  OVERDUE:        'text-red-500',
+};
+
 function StepCell({
   step,
   onIncident,
@@ -315,20 +327,33 @@ function StepCell({
 }) {
   const canRetry = step.status === 'FAILED' || step.status === 'OVERDUE';
   const channels = STEP_CHANNELS[step.key] ?? [];
+  const iconColor = STEP_STATE_COLOR[step.status] ?? 'text-slate-300';
+
+  // Totales agregados sobre todas las ligas
+  const totalDelivered = step.leagues.reduce((sum, l) => sum + (l.deliveredCount ?? 0), 0);
+  const totalFailed    = step.leagues.reduce((sum, l) => sum + (l.failedCount ?? 0), 0);
+  const hasCounters    = step.leagues.length > 0 && (totalDelivered > 0 || totalFailed > 0);
+
   return (
     <div
-      className={`flex flex-col items-center gap-1 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
+      className={`flex flex-col items-center gap-0.5 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
       onClick={canRetry && onIncident ? (e) => { e.stopPropagation(); onIncident({ match, step, label: step.label }); } : undefined}
       title={canRetry && onIncident ? 'Click para ver detalle y reintentar' : undefined}
     >
       <StatusDot state={step.status} />
       {channels.length > 0 && (
-        <div className="flex gap-0.5 text-slate-300">
+        <div className={`flex gap-0.5 ${iconColor}`}>
           {channels.map((ch) => (
             <span key={ch} title={CHANNEL_META[ch]?.label} className="leading-none">
               {CHANNEL_META[ch]?.icon}
             </span>
           ))}
+        </div>
+      )}
+      {hasCounters && (
+        <div className="flex items-center gap-0.5 text-[9px] font-semibold leading-none">
+          <span className="text-emerald-600">✓{totalDelivered}</span>
+          {totalFailed > 0 && <span className="text-red-500">✗{totalFailed}</span>}
         </div>
       )}
       {step.lastStartedAt && (
