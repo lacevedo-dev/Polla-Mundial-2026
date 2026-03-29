@@ -1,5 +1,6 @@
-﻿import { Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsService } from './notifications.service';
@@ -15,6 +16,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PrismaModule,
     PushNotificationsModule,
     PredictionReportModule,
+    AutomationObservabilityModule,
   ],
   controllers: [NotificationsController],
   providers: [
@@ -23,6 +25,6 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     MatchAutomationSweepScheduler,
     TwilioService,
   ],
-  exports: [NotificationsService, TwilioService],
+  exports: [NotificationsService, TwilioService, NotificationScheduler],
 })
 export class NotificationsModule {}

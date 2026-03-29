@@ -114,4 +114,21 @@ export class PredictionReportScheduler {
       );
     }
   }
+
+  // ─── Métodos de reintento manual ─────────────────────────────────────────────
+
+  /** Fuerza el reenvío del reporte de predicciones para un partido/liga */
+  async retryPredictionReportForMatch(matchId: string, leagueId?: string): Promise<void> {
+    if (leagueId) {
+      await this.reportService.sendReportForMatch(matchId, leagueId);
+    } else {
+      await this.reportService.resendPredictionsReport(matchId);
+    }
+  }
+
+  /** Fuerza el reenvío del reporte de resultados para un partido */
+  async retryResultReportForMatch(matchId: string, _leagueId?: string): Promise<void> {
+    await this.reportService.sendMatchResultsReport(matchId);
+  }
 }
+

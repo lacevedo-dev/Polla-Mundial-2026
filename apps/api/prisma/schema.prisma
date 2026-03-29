@@ -84,6 +84,7 @@ model League {
   scoringRules           ScoringRule[]
   stageFees              StageFee[]
   phaseBonuses           PhaseBonus[]
+  automationRuns         AutomationRun[]
 
   @@index([code])
   @@index([status])
@@ -227,6 +228,7 @@ model Match {
   homeTeam    Team              @relation("HomeTeam", fields: [homeTeamId], references: [id])
   predictions Prediction[]
   events      MatchEvent[]
+  automationRuns AutomationRun[]
 
   @@index([matchDate])
   @@index([status])
@@ -511,6 +513,37 @@ model FootballSyncAlert {
   @@index([createdAt])
 }
 
+model AutomationRun {
+  id             String               @id @default(cuid())
+  correlationId  String?              @db.VarChar(191)
+  step           AutomationStep
+  status         AutomationRunStatus
+  trigger        AutomationRunTrigger @default(SCHEDULER)
+  matchId        String
+  leagueId       String?
+  scheduledAt    DateTime?
+  startedAt      DateTime
+  finishedAt     DateTime?
+  summary        String?              @db.Text
+  errorMessage   String?              @db.Text
+  details        Json?
+  audienceCount  Int?
+  deliveredCount Int?
+  failedCount    Int?
+  warningCount   Int?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  match          Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  league         League?              @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, step, startedAt])
+  @@index([leagueId, step, startedAt])
+  @@index([status, startedAt])
+  @@index([trigger, startedAt])
+  @@index([scheduledAt])
+  @@index([correlationId])
+}
+
 enum SystemRole {
   USER
   ADMIN
@@ -724,6 +757,27 @@ enum SyncAlertLevel {
   WARNING
   ERROR
   CRITICAL
+}
+
+enum AutomationStep {
+  MATCH_REMINDER
+  PREDICTION_CLOSING
+  RESULT_NOTIFICATION
+  PREDICTION_REPORT
+  RESULT_REPORT
+}
+
+enum AutomationRunStatus {
+  RUNNING
+  SUCCESS
+  WARNING
+  FAILED
+  SKIPPED
+}
+
+enum AutomationRunTrigger {
+  SCHEDULER
+  MANUAL
 }
 
 model PhaseBonus {

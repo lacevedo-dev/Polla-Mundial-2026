@@ -1,5 +1,6 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
-import { EmailJobPriority, EmailJobType, MatchStatus, NotificationType } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { AutomationStep, EmailJobPriority, EmailJobType, MatchStatus, NotificationType } from '@prisma/client';
+import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import { SchedulerObservationOutcome } from '../common/scheduler-observability.util';
 import { EmailQueueService } from '../email/email-queue.service';
 import { MatchEmailTemplateService } from '../email/match-email-template.service';
@@ -28,6 +29,7 @@ export class NotificationScheduler {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly observability: AutomationObservabilityService,
     private readonly emailQueue: EmailQueueService,
     private readonly matchEmailTemplates: MatchEmailTemplateService,
     private readonly push: PushNotificationsService,
@@ -42,14 +44,20 @@ export class NotificationScheduler {
     body: string,
     data: Record<string, unknown>,
     trigger?: string,
-  ): Promise<void> {
+  ): Promise<NotificationDeliveryResult> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, status: USER_STATUS.ACTIVE },
       select: { phone: true, countryCode: true },
     });
 
     if (!user) {
-      return;
+      return {
+        pushSent: 0,
+        pushFailed: 0,
+        pushDevices: 0,
+        whatsappSent: false,
+        skipped: true,
+      };
     }
 
     const pushResult = await this.push.sendToUser(userId, { title, body, data });
@@ -81,6 +89,14 @@ export class NotificationScheduler {
     this.logger.log(
       `[${type}] ${title} -> user:${userId} | push:${pushResult.sent}/${pushResult.devices} wa:${whatsappSent}${trigger ? ` | trigger:"${trigger}"` : ''}`,
     );
+
+    return {
+      pushSent: pushResult.sent,
+      pushFailed: pushResult.failed,
+      pushDevices: pushResult.devices,
+      whatsappSent,
+      skipped: false,
+    };
   }
 
   private async queueUserEmail(
@@ -225,58 +241,133 @@ export class NotificationScheduler {
         const predictedUserIds = new Set(match.predictions.map((prediction) => prediction.userId));
 
         for (const league of leagues) {
-          for (const member of league.members) {
-            const userId = member.userId;
-            const key = `${match.id}:${userId}`;
-            if (notified.has(key)) continue;
+          const scheduledAt = this.observability.getScheduledAt(
+            AutomationStep.MATCH_REMINDER,
+            {
+              matchDate: match.matchDate,
+              closeMinutes: null,
+              matchStatus: MatchStatus.SCHEDULED,
+            },
+          );
+          const runId = await this.observability.startRun({
+            step: AutomationStep.MATCH_REMINDER,
+            matchId: match.id,
+            leagueId: league.id,
+            scheduledAt,
+            audienceCount: league.members.length,
+            summary: `Evaluando recordatorio para ${home} vs ${away}`,
+          });
+          let deliveredCount = 0;
+          let pushSent = 0;
+          let pushFailed = 0;
+          let pushDevices = 0;
+          let whatsappSentCount = 0;
+          let emailQueued = 0;
+          let alreadySentCount = 0;
 
-            const alreadySent = await this.prisma.notification.findFirst({
-              where: {
+          try {
+            for (const member of league.members) {
+              const userId = member.userId;
+              const key = `${match.id}:${userId}`;
+              if (notified.has(key)) continue;
+
+              const alreadySent = await this.prisma.notification.findFirst({
+                where: {
+                  userId,
+                  type: NotificationType.MATCH_REMINDER,
+                  data: { contains: match.id },
+                },
+              });
+              if (alreadySent) {
+                notified.add(key);
+                alreadySentCount++;
+                continue;
+              }
+
+              const hasPrediction = predictedUserIds.has(userId);
+              const title = 'Recordatorio de partido';
+              const body = hasPrediction
+                ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
+                : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
+
+              const delivery = await this.notifyUser(
                 userId,
-                type: NotificationType.MATCH_REMINDER,
-                data: { contains: match.id },
-              },
-            });
-            if (alreadySent) {
+                NotificationType.MATCH_REMINDER,
+                title,
+                body,
+                { matchId: match.id, leagueId: league.id },
+                `Partido en ~60 min: ${home} vs ${away}`,
+              );
+              deliveredCount++;
+              pushSent += delivery.pushSent;
+              pushFailed += delivery.pushFailed;
+              pushDevices += delivery.pushDevices;
+              whatsappSentCount += delivery.whatsappSent ? 1 : 0;
+
+              const emailContent = this.matchEmailTemplates.buildReminderEmail({
+                homeTeam: home,
+                awayTeam: away,
+                matchDate: match.matchDate,
+                venue: match.venue ?? undefined,
+                hasPrediction,
+              });
+
+              await this.queueUserEmail(
+                userId,
+                EmailJobType.MATCH_REMINDER,
+                EmailJobPriority.HIGH,
+                true,
+                `match-reminder:${match.id}:${userId}`,
+                emailContent,
+                match.id,
+                league.id,
+              );
+              emailQueued++;
+
               notified.add(key);
-              continue;
             }
 
-            const hasPrediction = predictedUserIds.has(userId);
-            const title = 'Recordatorio de partido';
-            const body = hasPrediction
-              ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
-              : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
-
-            await this.notifyUser(
-              userId,
-              NotificationType.MATCH_REMINDER,
-              title,
-              body,
-              { matchId: match.id, leagueId: league.id },
-              `Partido en ~60 min: ${home} vs ${away}`,
-            );
-
-            const emailContent = this.matchEmailTemplates.buildReminderEmail({
-              homeTeam: home,
-              awayTeam: away,
-              matchDate: match.matchDate,
-              venue: match.venue ?? undefined,
-              hasPrediction,
+            await this.observability.finishRun(runId, {
+              status:
+                deliveredCount === 0 && alreadySentCount > 0
+                  ? 'SKIPPED'
+                  : pushFailed > 0
+                    ? 'WARNING'
+                    : deliveredCount > 0
+                      ? 'SUCCESS'
+                      : 'SKIPPED',
+              summary: deliveredCount > 0
+                ? `Recordatorio procesado para ${league.members.length} miembros`
+                : 'No hubo envíos nuevos para este recordatorio.',
+              deliveredCount,
+              failedCount: pushFailed,
+              warningCount: pushFailed > 0 ? pushFailed : 0,
+              details: {
+                matchId: match.id,
+                leagueId: league.id,
+                channelBreakdown: {
+                  pushSent,
+                  pushFailed,
+                  pushDevices,
+                  whatsappSentCount,
+                  emailQueued,
+                },
+                alreadySentCount,
+                predictedUsers: predictedUserIds.size,
+              },
             });
-
-            await this.queueUserEmail(
-              userId,
-              EmailJobType.MATCH_REMINDER,
-              EmailJobPriority.HIGH,
-              true,
-              `match-reminder:${match.id}:${userId}`,
-              emailContent,
-              match.id,
-              league.id,
+          } catch (error) {
+            await this.observability.failRun(
+              runId,
+              error,
+              {
+                matchId: match.id,
+                leagueId: league.id,
+                alreadySentCount,
+              },
+              'Falló el procesamiento del recordatorio automático.',
             );
-
-            notified.add(key);
+            throw error;
           }
         }
       }
@@ -410,52 +501,131 @@ export class NotificationScheduler {
           );
 
           for (const league of relevantLeagues) {
-            for (const member of league.members) {
-              const userId = member.userId;
+            const scheduledAt = this.observability.getScheduledAt(
+              AutomationStep.PREDICTION_CLOSING,
+              {
+                matchDate: match.matchDate,
+                closeMinutes,
+                matchStatus: MatchStatus.SCHEDULED,
+              },
+            );
+            const runId = await this.observability.startRun({
+              step: AutomationStep.PREDICTION_CLOSING,
+              matchId: match.id,
+              leagueId: league.id,
+              scheduledAt,
+              audienceCount: league.members.length,
+              summary: `Evaluando cierre de predicciones para ${home} vs ${away}`,
+            });
+            let deliveredCount = 0;
+            let pushSent = 0;
+            let pushFailed = 0;
+            let pushDevices = 0;
+            let whatsappSentCount = 0;
+            let emailQueued = 0;
+            let alreadySentCount = 0;
 
-              const alreadySent = await this.prisma.notification.findFirst({
-                where: {
+            try {
+              for (const member of league.members) {
+                const userId = member.userId;
+
+                const alreadySent = await this.prisma.notification.findFirst({
+                  where: {
+                    userId,
+                    type: NotificationType.PREDICTION_CLOSED,
+                    data: { contains: match.id },
+                  },
+                });
+                if (alreadySent) {
+                  alreadySentCount++;
+                  continue;
+                }
+
+                const hasPrediction = predictedUserIds.has(userId);
+                const title = hasPrediction ? 'Predicciones cerrando' : 'Predicciones cierran pronto';
+                const body = hasPrediction
+                  ? `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tu pronóstico ya está guardado.`
+                  : `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Envía tu pronóstico ahora.`;
+
+                const delivery = await this.notifyUser(
                   userId,
-                  type: NotificationType.PREDICTION_CLOSED,
-                  data: { contains: match.id },
+                  NotificationType.PREDICTION_CLOSED,
+                  title,
+                  body,
+                  { matchId: match.id, leagueId: league.id },
+                  `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+                );
+                deliveredCount++;
+                pushSent += delivery.pushSent;
+                pushFailed += delivery.pushFailed;
+                pushDevices += delivery.pushDevices;
+                whatsappSentCount += delivery.whatsappSent ? 1 : 0;
+
+                const emailContent = this.matchEmailTemplates.buildPredictionClosingEmail({
+                  homeTeam: home,
+                  awayTeam: away,
+                  matchDate: match.matchDate,
+                  venue: match.venue ?? undefined,
+                  closeMinutes,
+                  hasPrediction,
+                });
+
+                await this.queueUserEmail(
+                  userId,
+                  EmailJobType.PREDICTION_CLOSING,
+                  EmailJobPriority.HIGH,
+                  true,
+                  `prediction-closing:${match.id}:${userId}`,
+                  emailContent,
+                  match.id,
+                  league.id,
+                );
+                emailQueued++;
+              }
+
+              await this.observability.finishRun(runId, {
+                status:
+                  deliveredCount === 0 && alreadySentCount > 0
+                    ? 'SKIPPED'
+                    : pushFailed > 0
+                      ? 'WARNING'
+                      : deliveredCount > 0
+                        ? 'SUCCESS'
+                        : 'SKIPPED',
+                summary: deliveredCount > 0
+                  ? `Cierre procesado para ${league.members.length} miembros`
+                  : 'No hubo alertas nuevas de cierre para esta polla.',
+                deliveredCount,
+                failedCount: pushFailed,
+                warningCount: pushFailed > 0 ? pushFailed : 0,
+                details: {
+                  matchId: match.id,
+                  leagueId: league.id,
+                  closeMinutes,
+                  channelBreakdown: {
+                    pushSent,
+                    pushFailed,
+                    pushDevices,
+                    whatsappSentCount,
+                    emailQueued,
+                  },
+                  alreadySentCount,
+                  predictedUsers: predictedUserIds.size,
                 },
               });
-              if (alreadySent) continue;
-
-              const hasPrediction = predictedUserIds.has(userId);
-              const title = hasPrediction ? 'Predicciones cerrando' : 'Predicciones cierran pronto';
-              const body = hasPrediction
-                ? `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tu pronóstico ya está guardado.`
-                : `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Envía tu pronóstico ahora.`;
-
-              await this.notifyUser(
-                userId,
-                NotificationType.PREDICTION_CLOSED,
-                title,
-                body,
-                { matchId: match.id, leagueId: league.id },
-                `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+            } catch (error) {
+              await this.observability.failRun(
+                runId,
+                error,
+                {
+                  matchId: match.id,
+                  leagueId: league.id,
+                  closeMinutes,
+                  alreadySentCount,
+                },
+                'Falló el procesamiento del cierre automático.',
               );
-
-              const emailContent = this.matchEmailTemplates.buildPredictionClosingEmail({
-                homeTeam: home,
-                awayTeam: away,
-                matchDate: match.matchDate,
-                venue: match.venue ?? undefined,
-                closeMinutes,
-                hasPrediction,
-              });
-
-              await this.queueUserEmail(
-                userId,
-                EmailJobType.PREDICTION_CLOSING,
-                EmailJobPriority.HIGH,
-                true,
-                `prediction-closing:${match.id}:${userId}`,
-                emailContent,
-                match.id,
-                league.id,
-              );
+              throw error;
             }
           }
         }
@@ -517,6 +687,21 @@ export class NotificationScheduler {
       const processedNotificationKeys = new Set<string>();
 
       for (const match of matches) {
+        const scheduledAt = this.observability.getScheduledAt(
+          AutomationStep.RESULT_NOTIFICATION,
+          {
+            matchDate: match.matchDate,
+            closeMinutes: null,
+            matchStatus: MatchStatus.FINISHED,
+          },
+        );
+        const runId = await this.observability.startRun({
+          step: AutomationStep.RESULT_NOTIFICATION,
+          matchId: match.id,
+          scheduledAt,
+          audienceCount: match.predictions.length,
+          summary: `Procesando resultado para ${match.homeTeam.name} vs ${match.awayTeam.name}`,
+        });
         const notificationKey = this.buildMatchResultNotificationKey(match);
         const claimTimestamp = new Date();
 
@@ -548,6 +733,13 @@ export class NotificationScheduler {
         processedNotificationKeys.add(notificationKey);
 
         try {
+          let deliveredCount = 0;
+          let pushSent = 0;
+          let pushFailed = 0;
+          let pushDevices = 0;
+          let whatsappSentCount = 0;
+          let alreadySentCount = 0;
+
           for (const [userId, { points, leagueId }] of byUser) {
             const alreadySent = await this.prisma.notification.findFirst({
               where: {
@@ -556,14 +748,17 @@ export class NotificationScheduler {
                 OR: [{ data: { contains: match.id } }, { data: { contains: notificationKey } }],
               },
             });
-            if (alreadySent) continue;
+            if (alreadySent) {
+              alreadySentCount++;
+              continue;
+            }
 
             const title = points >= 5 ? 'Acertaste el marcador exacto' : 'Resultado publicado';
             const body = points >= 5
               ? `${home} ${score} ${away}. Acertaste el marcador y ganaste ${points} puntos.`
               : `${home} ${score} ${away}. Ganaste ${points} puntos.`;
 
-            await this.notifyUser(
+            const delivery = await this.notifyUser(
               userId,
               NotificationType.RESULT_PUBLISHED,
               title,
@@ -571,8 +766,46 @@ export class NotificationScheduler {
               { matchId: match.id, leagueId, points, matchNotificationKey: notificationKey },
               `Partido finalizado: ${home} ${score} ${away} | ${points} pts`,
             );
+            deliveredCount++;
+            pushSent += delivery.pushSent;
+            pushFailed += delivery.pushFailed;
+            pushDevices += delivery.pushDevices;
+            whatsappSentCount += delivery.whatsappSent ? 1 : 0;
           }
+
+          await this.observability.finishRun(runId, {
+            status: pushFailed > 0 ? 'WARNING' : deliveredCount > 0 ? 'SUCCESS' : 'SKIPPED',
+            summary: deliveredCount > 0
+              ? `Resultado notificado a ${deliveredCount} usuario(s)`
+              : 'No hubo usuarios nuevos para notificar el resultado.',
+            deliveredCount,
+            failedCount: pushFailed,
+            warningCount: pushFailed > 0 ? pushFailed : 0,
+            details: {
+              matchId: match.id,
+              notificationKey,
+              alreadySentCount,
+              impactedLeagueCount: new Set(
+                match.predictions.map((prediction) => prediction.leagueId),
+              ).size,
+              channelBreakdown: {
+                pushSent,
+                pushFailed,
+                pushDevices,
+                whatsappSentCount,
+              },
+            },
+          });
         } catch (error) {
+          await this.observability.failRun(
+            runId,
+            error,
+            {
+              matchId: match.id,
+              notificationKey,
+            },
+            'Falló la notificación automática de resultado.',
+          );
           await this.releaseResultNotificationClaim(match.id);
           throw error;
         }
@@ -640,4 +873,128 @@ export class NotificationScheduler {
       data: { resultNotificationSentAt: null },
     });
   }
+
+  // ─── Métodos de reintento manual ─────────────────────────────────────────────
+
+  /** Fuerza el envío del recordatorio de partido para un matchId y leagueId opcionales */
+  async retryReminderForMatch(matchId: string, leagueId?: string): Promise<void> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        matchDate: true,
+        tournamentId: true,
+        venue: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+        predictions: { select: { userId: true } },
+      },
+    });
+    if (!match) return;
+
+    const leagues = leagueId
+      ? await this.prisma.league.findMany({
+          where: { id: leagueId, status: 'ACTIVE' },
+          select: { id: true, members: { where: { status: 'ACTIVE' }, select: { userId: true } } },
+        })
+      : await this.getLeaguesForMatch(match.tournamentId ?? null);
+
+    const home = match.homeTeam.name;
+    const away = match.awayTeam.name;
+    const predictedUserIds = new Set(match.predictions.map(p => p.userId));
+
+    for (const league of leagues) {
+      for (const member of league.members) {
+        const hasPrediction = predictedUserIds.has(member.userId);
+        const title = 'Recordatorio de partido';
+        const body = hasPrediction
+          ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
+          : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
+        await this.notifyUser(member.userId, NotificationType.MATCH_REMINDER, title, body, { matchId: match.id, leagueId: league.id }, `[MANUAL] Partido en ~60 min: ${home} vs ${away}`);
+      }
+    }
+  }
+
+  /** Fuerza el envío del cierre de predicciones para un matchId y leagueId opcionales */
+  async retryClosingForMatch(matchId: string, leagueId?: string): Promise<void> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        matchDate: true,
+        tournamentId: true,
+        venue: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+        predictions: { select: { userId: true } },
+      },
+    });
+    if (!match) return;
+
+    const leagues = leagueId
+      ? await this.prisma.league.findMany({
+          where: { id: leagueId, status: 'ACTIVE' },
+          select: { id: true, closePredictionMinutes: true, members: { where: { status: 'ACTIVE' }, select: { userId: true } } },
+        })
+      : await this.prisma.league.findMany({
+          where: { status: 'ACTIVE' },
+          select: { id: true, closePredictionMinutes: true, members: { where: { status: 'ACTIVE' }, select: { userId: true } } },
+        });
+
+    const home = match.homeTeam.name;
+    const away = match.awayTeam.name;
+    const predictedUserIds = new Set(match.predictions.map(p => p.userId));
+
+    for (const league of leagues) {
+      const closeMinutes = league.closePredictionMinutes ?? 15;
+      for (const member of league.members) {
+        const hasPrediction = predictedUserIds.has(member.userId);
+        const title = hasPrediction ? 'Predicciones cerrando' : 'Predicciones cierran pronto';
+        const body = hasPrediction
+          ? `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tu pronóstico ya está guardado.`
+          : `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Envía tu pronóstico ahora.`;
+        await this.notifyUser(member.userId, NotificationType.PREDICTION_CLOSED, title, body, { matchId: match.id, leagueId: league.id }, `[MANUAL] Cierre en ${closeMinutes} min: ${home} vs ${away}`);
+      }
+    }
+  }
+
+  /** Fuerza el reenvío de la notificación de resultado para un matchId específico */
+  async retryResultNotificationForMatch(matchId: string): Promise<void> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        predictions: { select: { userId: true, points: true, leagueId: true } },
+      },
+    });
+    if (!match || match.status !== 'FINISHED') return;
+
+    const home = match.homeTeam.name;
+    const away = match.awayTeam.name;
+    const score = `${match.homeScore ?? '-'}-${match.awayScore ?? '-'}`;
+    const byUser = new Map<string, { points: number; leagueId: string | null }>();
+    for (const prediction of match.predictions) {
+      if (!byUser.has(prediction.userId)) {
+        byUser.set(prediction.userId, { points: Math.round(prediction.points ?? 0), leagueId: prediction.leagueId ?? null });
+      }
+    }
+
+    for (const [userId, { points, leagueId }] of byUser) {
+      const title = points >= 5 ? 'Acertaste el marcador exacto' : 'Resultado publicado';
+      const body = points >= 5
+        ? `${home} ${score} ${away}. Acertaste el marcador y ganaste ${points} puntos.`
+        : `${home} ${score} ${away}. Ganaste ${points} puntos.`;
+      await this.notifyUser(userId, NotificationType.RESULT_PUBLISHED, title, body, { matchId: match.id, leagueId, points }, `[MANUAL] Resultado: ${home} ${score} ${away} | ${points} pts`);
+    }
+  }
 }
+
+
+type NotificationDeliveryResult = {
+  pushSent: number;
+  pushFailed: number;
+  pushDevices: number;
+  whatsappSent: boolean;
+  skipped: boolean;
+};

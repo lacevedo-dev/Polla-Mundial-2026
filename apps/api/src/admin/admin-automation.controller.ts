@@ -1,10 +1,15 @@
-import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NotificationType, Prisma } from '@prisma/client';
+import { AutomationRunTrigger, AutomationStep, NotificationType, Prisma } from '@prisma/client';
+import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { AdminAutomationOperationsQueryDto } from './dto/admin-automation-operations-query.dto';
+import { AdminAutomationRetryDto } from './dto/admin-automation-retry.dto';
 import { EmailBacklogAuditService } from '../email/email-backlog-audit.service';
+import { NotificationScheduler } from '../notifications/notification.scheduler';
+import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { USER_STATUS } from '../users/user-status.constants';
@@ -24,6 +29,9 @@ export class AdminAutomationController {
     private readonly config: ConfigService,
     private readonly push: PushNotificationsService,
     private readonly emailBacklogAudit: EmailBacklogAuditService,
+    private readonly observability: AutomationObservabilityService,
+    private readonly notificationScheduler: NotificationScheduler,
+    private readonly predictionReportScheduler: PredictionReportScheduler,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -133,6 +141,13 @@ export class AdminAutomationController {
     };
   }
 
+  @Get('operations')
+  async getOperations(
+    @Query() query: AdminAutomationOperationsQueryDto,
+  ) {
+    return this.observability.getDailyOperations(query.date);
+  }
+
   /** Matriz del día: partidos de hoy con estado de cada automatización.
    * Cuenta notificaciones por tipo usando el campo JSON `data` que contiene { matchId }.
    */
@@ -174,7 +189,6 @@ export class AdminAutomationController {
 
     if (matches.length === 0) return { date: todayCOT, matches: [] };
 
-    // Obtener closePredictionMinutes de cada liga activa que tenga estos partidos
     const matchIds = matches.map(m => m.id);
     const leagueData = await this.prisma.league.findMany({
       where: { status: 'ACTIVE' },
@@ -206,7 +220,6 @@ export class AdminAutomationController {
       }
     }
 
-    // Notificaciones en ventana amplia (2h antes del primero al +4h del último)
     const earliest = matches[0].matchDate;
     const latest = matches[matches.length - 1].matchDate;
     const wideStart = new Date(earliest.getTime() - 2 * 60 * 60 * 1000);
@@ -221,7 +234,6 @@ export class AdminAutomationController {
       orderBy: { sentAt: 'desc' },
     });
 
-    // Agrupar en memoria por matchId (extraído del JSON en data)
     const byMatch = new Map<string, Array<{ type: NotificationType; sentAt: Date }>>();
     for (const n of allNotifs) {
       if (!n.data) continue;
@@ -345,7 +357,6 @@ export class AdminAutomationController {
     const countByType: Record<string, number> = {};
     for (const row of byType) countByType[row.type] = row._count.id;
 
-    // Enriquecer cada registro con campos de entrega extraídos del JSON data
     const recent = rawRecords.map((n) => {
       let parsed: Record<string, unknown> = {};
       try { if (n.data) parsed = JSON.parse(n.data); } catch { /* ignore */ }
@@ -385,6 +396,79 @@ export class AdminAutomationController {
     return this.emailBacklogAudit.runAudit({ apply, trigger: 'MANUAL' });
   }
 
+  /**
+   * Reintenta manualmente un step de automatización para un partido (y opcionalmente una liga).
+   * Útil cuando el scheduler falló y el admin quiere forzar el envío sin esperar el próximo ciclo.
+   */
+  @Post('retry')
+  async retryStep(@Body() dto: AdminAutomationRetryDto) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: dto.matchId },
+      select: {
+        id: true,
+        status: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+      },
+    });
+
+    if (!match) {
+      throw new NotFoundException(`Partido ${dto.matchId} no encontrado`);
+    }
+
+    if (
+      (dto.step === AutomationStep.RESULT_NOTIFICATION || dto.step === AutomationStep.RESULT_REPORT) &&
+      match.status !== 'FINISHED'
+    ) {
+      throw new BadRequestException(
+        `El step ${dto.step} solo aplica a partidos finalizados. Estado actual: ${match.status}.`,
+      );
+    }
+
+    const label = `${match.homeTeam.name} vs ${match.awayTeam.name}`;
+
+    const runId = await this.observability.startRun({
+      step: dto.step,
+      matchId: dto.matchId,
+      leagueId: dto.leagueId ?? null,
+      trigger: AutomationRunTrigger.MANUAL,
+      summary: `Reintento manual de ${dto.step} para ${label}`,
+    });
+
+    try {
+      switch (dto.step) {
+        case AutomationStep.MATCH_REMINDER:
+          await this.notificationScheduler.retryReminderForMatch(dto.matchId, dto.leagueId);
+          break;
+        case AutomationStep.PREDICTION_CLOSING:
+          await this.notificationScheduler.retryClosingForMatch(dto.matchId, dto.leagueId);
+          break;
+        case AutomationStep.RESULT_NOTIFICATION:
+          await this.notificationScheduler.retryResultNotificationForMatch(dto.matchId);
+          break;
+        case AutomationStep.PREDICTION_REPORT:
+          await this.predictionReportScheduler.retryPredictionReportForMatch(dto.matchId, dto.leagueId);
+          break;
+        case AutomationStep.RESULT_REPORT:
+          await this.predictionReportScheduler.retryResultReportForMatch(dto.matchId, dto.leagueId);
+          break;
+        default:
+          throw new BadRequestException(`Step no soportado: ${dto.step as string}`);
+      }
+
+      await this.observability.finishRun(runId, {
+        status: 'SUCCESS',
+        summary: `Reintento manual completado para ${label} — step: ${dto.step}`,
+      });
+
+      return { ok: true, runId, summary: `Reintento de ${dto.step} completado OK para ${label}.` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.observability.failRun(runId, error, null, `Reintento manual falló: ${message}`);
+      return { ok: false, runId, summary: message };
+    }
+  }
+
   /** Envía push de prueba al superadmin para validar configuración VAPID */
   @Post('test-push')
   async testPush(@Req() req: any) {
@@ -402,9 +486,3 @@ export class AdminAutomationController {
     };
   }
 }
-
-
-
-
-
-

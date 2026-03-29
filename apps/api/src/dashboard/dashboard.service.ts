@@ -96,102 +96,59 @@ export class DashboardService {
    * Get user's leagues with position and points
    */
   async getLeagues(userId: string): Promise<{ ligas: LeagueItem[] }> {
-    // Get all leagues user is a member of
+    // 1 query: todas las membresias del usuario con nombre/participantes
     const memberships = await this.prisma.leagueMember.findMany({
       where: { userId },
-      include: {
+      select: {
         league: {
           select: {
             id: true,
             name: true,
-            members: {
-              select: { userId: true },
-            },
+            _count: { select: { members: true } },
           },
         },
       },
     });
 
-    // For each league, get user's points and rankings
-    const ligas: LeagueItem[] = [];
+    if (memberships.length === 0) return { ligas: [] };
 
-    for (const membership of memberships) {
-      // Get user's correct predictions in this league
-      const userPredictions = await this.prisma.prediction.findMany({
-        where: {
-          userId,
-          leagueId: membership.league.id,
-        },
-        include: {
-          match: {
-            select: {
-              homeScore: true,
-              awayScore: true,
-            },
-          },
-        },
-      });
+    const leagueIds = memberships.map((m) => m.league.id);
 
-      let tusPuntos = 0;
-      userPredictions.forEach((pred) => {
-        if (pred.match.homeScore !== null && pred.match.awayScore !== null) {
-          const isCorrect =
-            pred.homeScore === pred.match.homeScore &&
-            pred.awayScore === pred.match.awayScore;
-          if (isCorrect) {
-            tusPuntos++;
-          }
-        }
-      });
+    // 1 query: puntos reales por usuario+liga (groupBy)
+    const pointsRows = await this.prisma.prediction.groupBy({
+      by: ['userId', 'leagueId'],
+      where: { leagueId: { in: leagueIds }, points: { not: null } },
+      _sum: { points: true },
+    });
 
-      // Get max points in league (any user's correct predictions)
-      const allLeaguePredictions = await this.prisma.prediction.findMany({
-        where: { leagueId: membership.league.id },
-        include: {
-          match: {
-            select: {
-              homeScore: true,
-              awayScore: true,
-            },
-          },
-          user: {
-            select: { id: true },
-          },
-        },
-      });
+    // Indexado: leagueId -> userId -> totalPoints
+    const leaguePointsMap = new Map<string, Map<string, number>>();
+    for (const row of pointsRows) {
+      if (!leaguePointsMap.has(row.leagueId)) {
+        leaguePointsMap.set(row.leagueId, new Map());
+      }
+      leaguePointsMap.get(row.leagueId)!.set(row.userId, row._sum.points ?? 0);
+    }
 
-      const userPointsMap = new Map<string, number>();
-      allLeaguePredictions.forEach((pred) => {
-        if (pred.match.homeScore !== null && pred.match.awayScore !== null) {
-          const isCorrect =
-            pred.homeScore === pred.match.homeScore &&
-            pred.awayScore === pred.match.awayScore;
-          if (isCorrect) {
-            const currentPoints = userPointsMap.get(pred.userId) || 0;
-            userPointsMap.set(pred.userId, currentPoints + 1);
-          }
-        }
-      });
+    const ligas: LeagueItem[] = memberships.map(({ league }) => {
+      const usersInLeague = leaguePointsMap.get(league.id) ?? new Map<string, number>();
+      const tusPuntos = usersInLeague.get(userId) ?? 0;
+      const maxPuntos = Math.max(0, ...usersInLeague.values());
 
-      // Get position
       let posicion = 1;
-      for (const points of userPointsMap.values()) {
-        if (points > tusPuntos) {
-          posicion++;
-        }
+      for (const pts of usersInLeague.values()) {
+        if (pts > tusPuntos) posicion++;
       }
 
-      const maxPuntos = Math.max(...userPointsMap.values(), tusPuntos);
-
-      ligas.push({
-        id: membership.league.id,
-        nombre: membership.league.name,
+      return {
+        id: league.id,
+        nombre: league.name,
         posicion,
         tusPuntos,
         maxPuntos,
-        participantes: membership.league.members.length,
-      });
-    }
+        participantes: league._count.members,
+      };
+    });
 
     return { ligas };
   }

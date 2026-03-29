@@ -18,6 +18,7 @@
     "smtp:backlog:apply": "tsx -r dotenv/config prisma/sanitize_email_backlog.ts --apply",
     "smtp:smoke-test": "tsx -r dotenv/config prisma/smoke_test_email_queue.ts",
     "seed:live-validation": "tsx -r dotenv/config prisma/seed_live_validation.ts",
+    "seed:push-validation-march": "tsx -r dotenv/config prisma/seed_push_validation_march_2026.ts",
     "fix:duplicate-matches": "tsx -r dotenv/config prisma/fix_duplicate_matches.ts",
     "fix:duplicate-matches:apply": "tsx -r dotenv/config prisma/fix_duplicate_matches.ts --fix",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

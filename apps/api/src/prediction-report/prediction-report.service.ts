@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EmailJobType, MatchStatus, MemberStatus } from '@prisma/client';
+import { AutomationStep, EmailJobType, MatchStatus, MemberStatus } from '@prisma/client';
+import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import {
   getPendingReportMatches,
   getReportAudienceFromLeague,
@@ -27,6 +28,7 @@ export class PredictionReportService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly observability: AutomationObservabilityService,
     private readonly emailService: PredictionReportEmailService,
   ) {}
 
@@ -133,31 +135,73 @@ export class PredictionReportService {
           `Enviando reporte de predicciones: ${match.homeTeam.name} vs ${match.awayTeam.name} ` +
             `| Liga: ${league.code} | ${recipients.length} destinatarios`,
         );
-
-        await this.emailService.sendPredictionsReport({
-          recipients,
-          leagueName: league.name,
-          leagueCode: league.code,
-          leagueId: league.id,
-          matchId: match.id,
-          match: {
-            homeTeam: match.homeTeam.name,
-            awayTeam: match.awayTeam.name,
+        const scheduledAt = this.observability.getScheduledAt(
+          AutomationStep.PREDICTION_REPORT,
+          {
             matchDate: match.matchDate,
-            venue: match.venue ?? undefined,
-            round: match.round ?? undefined,
+            closeMinutes: league.closePredictionMinutes,
+            matchStatus: match.status,
           },
-          predictors,
-          standings,
-          sentAt: now,
+        );
+        const runId = await this.observability.startRun({
+          step: AutomationStep.PREDICTION_REPORT,
+          matchId: match.id,
+          leagueId: league.id,
+          scheduledAt,
+          audienceCount: recipients.length,
+          summary: `Preparando reporte de predicciones para ${league.code}`,
         });
 
-        await this.prisma.match.update({
-          where: { id: match.id },
-          data: { predictionReportSentAt: now },
-        });
+        try {
+          await this.emailService.sendPredictionsReport({
+            recipients,
+            leagueName: league.name,
+            leagueCode: league.code,
+            leagueId: league.id,
+            matchId: match.id,
+            match: {
+              homeTeam: match.homeTeam.name,
+              awayTeam: match.awayTeam.name,
+              matchDate: match.matchDate,
+              venue: match.venue ?? undefined,
+              round: match.round ?? undefined,
+            },
+            predictors,
+            standings,
+            sentAt: now,
+          });
 
-        this.logger.log(`Reporte enviado para match ${match.id}`);
+          await this.prisma.match.update({
+            where: { id: match.id },
+            data: { predictionReportSentAt: now },
+          });
+
+          await this.observability.finishRun(runId, {
+            status: 'SUCCESS',
+            summary: `Reporte de predicciones enviado a ${recipients.length} destinatario(s)`,
+            deliveredCount: recipients.length,
+            details: {
+              matchId: match.id,
+              leagueId: league.id,
+              predictorCount: predictors.length,
+              recipients,
+            },
+          });
+
+          this.logger.log(`Reporte enviado para match ${match.id}`);
+        } catch (error) {
+          await this.observability.failRun(
+            runId,
+            error,
+            {
+              matchId: match.id,
+              leagueId: league.id,
+              predictorCount: predictors.length,
+            },
+            'Falló el envío del reporte de predicciones.',
+          );
+          throw error;
+        }
       }
     }
   }
@@ -378,25 +422,67 @@ export class PredictionReportService {
       this.logger.log(
         `Enviando correo de resultados: ${match.homeTeam.name} ${realHome}-${realAway} ${match.awayTeam.name} | ${league.code} | ${recipients.length} destinatarios`,
       );
-
-      await this.emailService.sendResultsReport({
-        recipients,
-        leagueName: league.name,
-        leagueCode: league.code,
-        leagueId,
-        matchId,
-        match: {
-          homeTeam:  match.homeTeam.name,
-          awayTeam:  match.awayTeam.name,
+      const scheduledAt = this.observability.getScheduledAt(
+        AutomationStep.RESULT_REPORT,
+        {
           matchDate: match.matchDate,
-          homeScore: realHome,
-          awayScore: realAway,
-          venue:     match.venue ?? undefined,
-          round:     match.round ?? undefined,
+          closeMinutes: null,
+          matchStatus: MatchStatus.FINISHED,
         },
-        results,
-        sentAt: new Date(),
+      );
+      const runId = await this.observability.startRun({
+        step: AutomationStep.RESULT_REPORT,
+        matchId,
+        leagueId,
+        scheduledAt,
+        audienceCount: recipients.length,
+        summary: `Preparando reporte de resultados para ${league.code}`,
       });
+
+      try {
+        await this.emailService.sendResultsReport({
+          recipients,
+          leagueName: league.name,
+          leagueCode: league.code,
+          leagueId,
+          matchId,
+          match: {
+            homeTeam:  match.homeTeam.name,
+            awayTeam:  match.awayTeam.name,
+            matchDate: match.matchDate,
+            homeScore: realHome,
+            awayScore: realAway,
+            venue:     match.venue ?? undefined,
+            round:     match.round ?? undefined,
+          },
+          results,
+          sentAt: new Date(),
+        });
+
+        await this.observability.finishRun(runId, {
+          status: 'SUCCESS',
+          summary: `Reporte de resultados enviado a ${recipients.length} destinatario(s)`,
+          deliveredCount: recipients.length,
+          details: {
+            matchId,
+            leagueId,
+            resultCount: results.length,
+            recipients,
+          },
+        });
+      } catch (error) {
+        await this.observability.failRun(
+          runId,
+          error,
+          {
+            matchId,
+            leagueId,
+            resultCount: results.length,
+          },
+          'Falló el envío del reporte de resultados.',
+        );
+        throw error;
+      }
     }
   }
 

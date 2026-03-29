@@ -1,5 +1,14 @@
 import { Module } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
+import { UsersModule } from '../users/users.module';
+import { MatchesModule } from '../matches/matches.module';
+import { PrismaModule } from '../prisma/prisma.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { PredictionsModule } from '../predictions/predictions.module';
+import { LeaguesModule } from '../leagues/leagues.module';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
+import { EmailModule } from '../email/email.module';
 import { AdminService } from './admin.service';
 import { AdminPaymentsService } from './admin-payments.service';
 import { AdminStatsController } from './admin-stats.controller';
@@ -14,31 +23,33 @@ import { AdminSettingsController } from './admin-settings.controller';
 import { AdminPaymentsController } from './admin-payments.controller';
 import { AdminAutomationController } from './admin-automation.controller';
 import { AdminEmailProvidersController } from './admin-email-providers.controller';
-import { UsersModule } from '../users/users.module';
-import { MatchesModule } from '../matches/matches.module';
-import { PrismaModule } from '../prisma/prisma.module';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { PredictionsModule } from '../predictions/predictions.module';
-import { LeaguesModule } from '../leagues/leagues.module';
-import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
-import { EmailModule } from '../email/email.module';
 
 @Module({
-    imports: [PrismaModule, UsersModule, MatchesModule, NotificationsModule, PredictionsModule, LeaguesModule, PushNotificationsModule, EmailModule],
-    controllers: [
-        AdminStatsController,
-        AdminUsersController,
-        AdminLeaguesController,
-        AdminMatchesController,
-        AdminTeamsController,
-        AdminPlansController,
-        AdminAffiliationsController,
-        AdminPredictionsController,
-        AdminSettingsController,
-        AdminPaymentsController,
-        AdminAutomationController,
-        AdminEmailProvidersController,
-    ],
-    providers: [AdminService, AdminPaymentsService, Reflector],
+  imports: [
+    PrismaModule,
+    UsersModule,
+    MatchesModule,
+    NotificationsModule,
+    PredictionsModule,
+    LeaguesModule,
+    PushNotificationsModule,
+    EmailModule,
+    AutomationObservabilityModule,
+  ],
+  controllers: [
+    AdminStatsController,
+    AdminUsersController,
+    AdminLeaguesController,
+    AdminMatchesController,
+    AdminTeamsController,
+    AdminPlansController,
+    AdminAffiliationsController,
+    AdminPredictionsController,
+    AdminSettingsController,
+    AdminPaymentsController,
+    AdminAutomationController,
+    AdminEmailProvidersController,
+  ],
+  providers: [AdminService, AdminPaymentsService, Reflector],
 })
 export class AdminModule {}

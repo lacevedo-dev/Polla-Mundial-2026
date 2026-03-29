@@ -57,6 +57,17 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Admin automation observability
+
+- `GET /admin/automation/operations?date=<ISO date>` devuelve la matriz operativa diaria con:
+  - sync más reciente por partido
+  - pasos automáticos por partido
+  - estado tipo semáforo
+  - horas/minutos exactos de ejecución
+  - desglose por polla cuando existe traza por liga
+
+El endpoint es aditivo y no reemplaza la ejecución actual de automatización; solo expone observabilidad operativa.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

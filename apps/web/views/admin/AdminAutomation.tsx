@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   Bell,
   CheckCircle2,
   ChevronDown,
@@ -9,6 +10,7 @@ import {
   MessageSquare,
   Phone,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   Smartphone,
@@ -98,6 +100,19 @@ interface HistoryResponse {
 }
 
 type TabId = 'matrix' | 'history' | 'schedulers' | 'channels';
+
+interface IncidentInfo {
+  match: MatrixMatch;
+  eventKey: 'reminder' | 'closing' | 'result';
+  label: string;
+  step: string;
+}
+
+interface RetryResult {
+  ok: boolean;
+  runId: string | null;
+  summary: string;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   MATCH_REMINDER: 'Recordatorio 1h',
@@ -222,7 +237,13 @@ function fmtFull(iso: string) {
   });
 }
 
-function EventCell({ ev }: { ev: EventState & { scheduledAt: string | null } }) {
+function EventCell({
+  ev,
+  onOverdueClick,
+}: {
+  ev: EventState & { scheduledAt: string | null };
+  onOverdueClick?: () => void;
+}) {
   const time = ev.scheduledAt;
 
   if (ev.done) {
@@ -238,8 +259,12 @@ function EventCell({ ev }: { ev: EventState & { scheduledAt: string | null } }) 
 
   if (ev.overdue) {
     return (
-      <div className="flex flex-col items-center gap-1">
-        <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600">
+      <div
+        className="flex flex-col items-center gap-1 cursor-pointer"
+        onClick={onOverdueClick}
+        title={onOverdueClick ? 'Click para ver detalle y reintentar' : undefined}
+      >
+        <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600 transition hover:ring-2 hover:ring-red-300/40">
           Pendiente
         </span>
         {time && <span className="text-[10px] text-slate-500">{fmtTime(time)}</span>}
@@ -258,7 +283,20 @@ function EventCell({ ev }: { ev: EventState & { scheduledAt: string | null } }) 
   );
 }
 
-function MatrixRow({ match, expanded, onExpand }: { match: MatrixMatch; expanded: boolean; onExpand: (id: string) => void }) {
+function MatrixRow({
+  match,
+  expanded,
+  onExpand,
+  onIncident,
+}: {
+  match: MatrixMatch;
+  expanded: boolean;
+  onExpand: (id: string) => void;
+  onIncident?: (info: IncidentInfo) => void;
+}) {
+  const makeIncidentHandler = (eventKey: 'reminder' | 'closing' | 'result', label: string, step: string) =>
+    onIncident ? () => onIncident({ match, eventKey, label, step }) : undefined;
+
   return (
     <>
       <div
@@ -287,9 +325,9 @@ function MatrixRow({ match, expanded, onExpand }: { match: MatrixMatch; expanded
           </span>
         </div>
 
-        <div className="flex justify-center"><EventCell ev={match.events.reminder} /></div>
-        <div className="flex justify-center"><EventCell ev={match.events.closing} /></div>
-        <div className="flex justify-center"><EventCell ev={match.events.result} /></div>
+        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}><EventCell ev={match.events.reminder} onOverdueClick={makeIncidentHandler('reminder', 'Recordatorio', 'MATCH_REMINDER')} /></div>
+        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}><EventCell ev={match.events.closing} onOverdueClick={makeIncidentHandler('closing', 'Cierre predicciones', 'PREDICTION_CLOSING')} /></div>
+        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}><EventCell ev={match.events.result} onOverdueClick={makeIncidentHandler('result', 'Resultado', 'RESULT_NOTIFICATION')} /></div>
         <div className="flex justify-end text-slate-400">{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</div>
       </div>
 
@@ -497,6 +535,98 @@ function SchedulerCard({ scheduler, channelStatus }: { scheduler: SchedulerDef; 
   );
 }
 
+function guessErrorSuggestion(isOverdue: boolean, hasDone: boolean): string | null {
+  if (isOverdue && !hasDone) return 'Este paso no se ejecutó cuando correspondía. Podría ser un fallo del scheduler o un lock de concurrencia. Usá el botón de reintento manual.';
+  return null;
+}
+
+function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInfo; onClose: () => void; onRefresh: () => void }) {
+  const [retrying, setRetrying] = useState(false);
+  const [retryResult, setRetryResult] = useState<RetryResult | null>(null);
+
+  const eventState = incident.match.events[incident.eventKey] as EventState & { scheduledAt: string | null };
+  const suggestion = guessErrorSuggestion(eventState.overdue, eventState.done);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    setRetryResult(null);
+    try {
+      const result = await request<RetryResult>('/admin/automation/retry', {
+        method: 'POST',
+        body: JSON.stringify({ matchId: incident.match.id, step: incident.step }),
+      });
+      setRetryResult(result);
+      if (result.ok) setTimeout(() => { onRefresh(); }, 1500);
+    } catch (err: unknown) {
+      setRetryResult({ ok: false, runId: null, summary: err instanceof Error ? err.message : 'Error desconocido' });
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 backdrop-blur-sm sm:items-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+              <p className="text-sm font-black text-slate-900">Paso sin ejecutar</p>
+              <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-700">{incident.label}</span>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-500">{incident.match.homeTeam} vs {incident.match.awayTeam}</p>
+          </div>
+          <button onClick={onClose} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X size={16} /></button>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Detalle del evento</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+              <p><span className="text-slate-400">Programado: </span>{eventState.scheduledAt ? fmtFull(eventState.scheduledAt) : '—'}</p>
+              <p><span className="text-slate-400">Enviados: </span>{eventState.sentCount}</p>
+              <p><span className="text-slate-400">Partido: </span>{incident.match.status}</p>
+              <p><span className="text-slate-400">Ejecutado: </span>{eventState.done ? 'Sí' : 'No'}</p>
+            </div>
+          </div>
+
+          {suggestion && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-1">Diagnóstico</p>
+              <p className="text-xs text-amber-800">{suggestion}</p>
+            </div>
+          )}
+
+          {retryResult && (
+            <div className={`rounded-xl border px-3 py-2 text-xs font-medium ${retryResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+              {retryResult.ok ? '✓' : '✗'} {retryResult.summary}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
+          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">Cerrar</button>
+          {!retryResult?.ok && (
+            <button
+              onClick={handleRetry}
+              disabled={retrying}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
+            >
+              <RotateCcw size={12} className={retrying ? 'animate-spin' : ''} />
+              {retrying ? 'Reintentando...' : 'Reintentar manualmente'}
+            </button>
+          )}
+          {retryResult?.ok && (
+            <button onClick={() => { onClose(); onRefresh(); }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700">
+              <CheckCircle2 size={12} /> Actualizar panel
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminAutomation() {
   const [status, setStatus] = useState<AutomationStatus | null>(null);
   const [matrix, setMatrix] = useState<TodayMatrix | null>(null);
@@ -509,6 +639,7 @@ export default function AdminAutomation() {
   const [historyPage, setHistoryPage] = useState(1);
   const [historySearch, setHistorySearch] = useState('');
   const [matrixSearch, setMatrixSearch] = useState('');
+  const [incident, setIncident] = useState<IncidentInfo | null>(null);
 
   const loadBase = async () => {
     setLoading(true);
@@ -597,6 +728,7 @@ export default function AdminAutomation() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8">
+      {incident && <IncidentModal incident={incident} onClose={() => setIncident(null)} onRefresh={loadBase} />}
       <div className="mx-auto max-w-7xl">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -706,7 +838,7 @@ export default function AdminAutomation() {
               </div>
               <div className="divide-y divide-slate-200">
                 {filteredMatches.map((match) => (
-                  <MatrixRow key={match.id} match={match} expanded={expandedMatch === match.id} onExpand={(id) => setExpandedMatch((current) => current === id ? null : id)} />
+                  <MatrixRow key={match.id} match={match} expanded={expandedMatch === match.id} onExpand={(id) => setExpandedMatch((current) => current === id ? null : id)} onIncident={setIncident} />
                 ))}
               </div>
             </div>

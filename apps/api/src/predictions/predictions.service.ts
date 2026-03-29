@@ -257,33 +257,33 @@ export class PredictionsService {
             const bonusPoints = this.getPhaseBonusPoints(match.phase, league.scoringRules);
             if (bonusPoints === 0) continue;
 
-            // Users who made predictions in this league
-            const userIds = await this.prisma.prediction.findMany({
-                where: { leagueId, match: { phase: match.phase } },
-                select: { userId: true },
-                distinct: ['userId'],
+            // 1 query: ALL advance predictions for this league+phase (replaces N+1 per user)
+            const allAdvancePreds = await this.prisma.prediction.findMany({
+                where: {
+                    leagueId,
+                    match: { phase: match.phase },
+                    advanceTeamId: { not: null },
+                },
+                select: { userId: true, matchId: true, advanceTeamId: true },
             });
 
-            for (const { userId } of userIds) {
-                // Check if user predicted ALL phase matches advancement
-                const userAdvancePreds = await this.prisma.prediction.findMany({
-                    where: {
-                        userId,
-                        leagueId,
-                        match: { phase: match.phase },
-                        advanceTeamId: { not: null },
-                    },
-                    select: { matchId: true, advanceTeamId: true },
-                });
+            // Index by userId -> matchId -> advanceTeamId
+            const predsByUser = new Map<string, Map<string, string | null>>();
+            for (const pred of allAdvancePreds) {
+                if (!predsByUser.has(pred.userId)) {
+                    predsByUser.set(pred.userId, new Map());
+                }
+                predsByUser.get(pred.userId)!.set(pred.matchId, pred.advanceTeamId);
+            }
 
-                // Must have predicted ALL matches
-                if (userAdvancePreds.length !== phaseMatches.length) continue;
+            for (const [userId, userPreds] of predsByUser) {
+                // Must have predicted ALL phase matches
+                if (userPreds.size !== phaseMatches.length) continue;
 
                 // Check all were correct
-                const allCorrect = userAdvancePreds.every(pred => {
-                    const pm = phaseMatches.find(m => m.id === pred.matchId);
-                    return pm && pred.advanceTeamId === pm.advancingTeamId;
-                });
+                const allCorrect = phaseMatches.every(pm =>
+                    userPreds.get(pm.id) === pm.advancingTeamId,
+                );
 
                 if (allCorrect) {
                     await this.prisma.phaseBonus.upsert({
