@@ -51,6 +51,7 @@ export type MatchAutomationSweepPrediction = {
 
 export type MatchAutomationSweepMatch = {
   id: string;
+  status: MatchStatus;
   matchDate: Date;
   tournamentId: string | null;
   venue: string | null;
@@ -137,10 +138,12 @@ export async function buildMatchAutomationSweepContext(
     },
     select: {
       id: true,
+      status: true,
       matchDate: true,
       tournamentId: true,
       venue: true,
       round: true,
+
       predictionReportSentAt: true,
       homeTeam: { select: { name: true } },
       awayTeam: { select: { name: true } },

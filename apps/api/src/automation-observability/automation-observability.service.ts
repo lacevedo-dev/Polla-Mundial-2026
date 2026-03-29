@@ -124,7 +124,7 @@ export class AutomationObservabilityService {
       status: AutomationRunStatus.FAILED,
       summary,
       errorMessage: error instanceof Error ? error.message : String(error),
-      details: details ?? Prisma.JsonNull,
+      details: details ?? null,
     });
   }
 
