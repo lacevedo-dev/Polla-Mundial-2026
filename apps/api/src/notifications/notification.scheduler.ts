@@ -266,19 +266,27 @@ export class NotificationScheduler {
           let alreadySentCount = 0;
 
           try {
+            // Pre-load all users who already received a reminder for this match
+            // in a SINGLE query before iterating — eliminates per-user N+1 DB hits
+            // and prevents the loop caused by unreliable substring JSON search.
+            const memberUserIds = league.members.map((m) => m.userId);
+            const alreadySentReminders = await this.prisma.notification.findMany({
+              where: {
+                userId: { in: memberUserIds },
+                type: NotificationType.MATCH_REMINDER,
+                // Use string_contains on the serialized JSON for matchId key
+                data: { contains: `"matchId":"${match.id}"` },
+              },
+              select: { userId: true },
+            });
+            const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
+
             for (const member of league.members) {
               const userId = member.userId;
               const key = `${match.id}:${userId}`;
               if (notified.has(key)) continue;
 
-              const alreadySent = await this.prisma.notification.findFirst({
-                where: {
-                  userId,
-                  type: NotificationType.MATCH_REMINDER,
-                  data: { contains: match.id },
-                },
-              });
-              if (alreadySent) {
+              if (alreadySentUserIds.has(userId)) {
                 notified.add(key);
                 alreadySentCount++;
                 continue;
@@ -526,17 +534,22 @@ export class NotificationScheduler {
             let alreadySentCount = 0;
 
             try {
+              // Pre-load sent users in one query — same pattern as MATCH_REMINDER fix
+              const memberUserIds = league.members.map((m) => m.userId);
+              const alreadySentReminders = await this.prisma.notification.findMany({
+                where: {
+                  userId: { in: memberUserIds },
+                  type: NotificationType.PREDICTION_CLOSED,
+                  data: { contains: `"matchId":"${match.id}"` },
+                },
+                select: { userId: true },
+              });
+              const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
+
               for (const member of league.members) {
                 const userId = member.userId;
 
-                const alreadySent = await this.prisma.notification.findFirst({
-                  where: {
-                    userId,
-                    type: NotificationType.PREDICTION_CLOSED,
-                    data: { contains: match.id },
-                  },
-                });
-                if (alreadySent) {
+                if (alreadySentUserIds.has(userId)) {
                   alreadySentCount++;
                   continue;
                 }
