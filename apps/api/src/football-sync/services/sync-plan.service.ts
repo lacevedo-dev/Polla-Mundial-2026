@@ -41,6 +41,8 @@ export interface PlannedSyncRequest {
   requestCost: number;
   matchIds: string[];
   optional?: boolean;
+  executionState?: 'enabled' | 'disabled_by_config';
+  disabledReason?: 'event_sync_disabled';
   notes?: string;
 }
 
@@ -432,6 +434,7 @@ export class SyncPlanService {
    */
   async getDetailedTimeline(): Promise<DetailedSyncTimeline> {
     const plan = await this.calculateDailyPlan();
+    const eventSyncEnabled = await this.footballConfigService.isEventSyncEnabled();
     const [used, limit] = await Promise.all([
       this.rateLimiter.getUsedRequestsToday(),
       this.rateLimiter.getDailyLimit(),
@@ -506,26 +509,15 @@ export class SyncPlanService {
       status: MatchStatus,
       trackingScope: MatchSyncSlot['trackingScope'],
     ): string[] => {
-      const slots: string[] = [];
-
-      if (
-        trackingScope === 'CARRY_OVER' &&
-        status !== MatchStatus.FINISHED &&
-        status !== MatchStatus.CANCELLED
-      ) {
-        let cursor = new Date(now);
-        const carryOverEnd = new Date(
-          now.getTime() + Math.max(intervalMs * 4, 60 * 60 * 1000),
-        );
-
-        while (cursor <= carryOverEnd) {
-          slots.push(cursor.toISOString());
-          cursor = new Date(cursor.getTime() + intervalMs);
-        }
-
-        return slots.slice(0, 12);
+      if (this.isClosedStatus(status)) {
+        return [];
       }
 
+      if (trackingScope === 'CARRY_OVER') {
+        return [now.toISOString()];
+      }
+
+      const slots: string[] = [];
       const matchStart = matchDate;
       const matchEnd = new Date(matchDate.getTime() + 130 * 60 * 1000); // match + 10min buffer
 
@@ -653,6 +645,7 @@ export class SyncPlanService {
           scheduledAt: slot,
           requestCost: 1,
           matchIds: [match.matchId],
+          executionState: 'enabled',
           notes: !match.externalId
             ? 'Primero resuelve el fixtureId faltante y luego reutiliza la misma respuesta para estado.'
             : match.trackingScope === 'CARRY_OVER'
@@ -661,7 +654,7 @@ export class SyncPlanService {
         });
       }
 
-      if (match.status !== MatchStatus.CANCELLED && match.status !== MatchStatus.POSTPONED) {
+      if (this.shouldPlanEventRequests(match)) {
         const halftimeAt = new Date(
           new Date(match.matchDate).getTime() + 50 * 60 * 1000,
         ).toISOString();
@@ -677,6 +670,8 @@ export class SyncPlanService {
           requestCost: 1,
           matchIds: [match.matchId],
           optional: true,
+          executionState: eventSyncEnabled ? 'enabled' : 'disabled_by_config',
+          disabledReason: eventSyncEnabled ? undefined : 'event_sync_disabled',
           notes:
             'Consulta de eventos reservada para el entretiempo. Solo se agenda si sobra presupuesto y no se reintenta para el fixture si devuelve sin eventos útiles.',
           priority: 2,
@@ -689,6 +684,8 @@ export class SyncPlanService {
           requestCost: 1,
           matchIds: [match.matchId],
           optional: true,
+          executionState: eventSyncEnabled ? 'enabled' : 'disabled_by_config',
+          disabledReason: eventSyncEnabled ? undefined : 'event_sync_disabled',
           notes:
             'Consulta final de eventos para cerrar el partido. Solo se agenda si sobra presupuesto y no se reintenta para el fixture si devuelve sin eventos útiles.',
           priority: 1,
@@ -724,6 +721,7 @@ export class SyncPlanService {
       const planned = (matchRequestMap.get(match.matchId) ?? []).sort((left, right) =>
         left.scheduledAt.localeCompare(right.scheduledAt),
       );
+      const activePlanned = planned.filter(isExecutableRequest);
       return {
         ...match,
         plannedRequests: planned,
@@ -734,7 +732,7 @@ export class SyncPlanService {
             request.type === 'LINK_AND_STATUS',
           )
           .map((request) => request.scheduledAt),
-        requestsAssigned: planned.length,
+        requestsAssigned: activePlanned.length,
       };
     });
 
@@ -742,7 +740,9 @@ export class SyncPlanService {
     const hourBuckets: Record<number, string[]> = {};
     for (let h = 0; h < 24; h++) hourBuckets[h] = [];
 
-    plannedRequests.forEach((request) => {
+    const activeRequests = plannedRequests.filter(isExecutableRequest);
+
+    activeRequests.forEach((request) => {
       const h = new Date(request.scheduledAt).getHours();
       hourBuckets[h].push(request.scheduledAt);
     });
@@ -753,8 +753,8 @@ export class SyncPlanService {
       slots,
     }));
 
-    const totalSlotsPlanned = plannedRequests.length;
-    const nextSyncAt = plannedRequests
+    const totalSlotsPlanned = activeRequests.length;
+    const nextSyncAt = activeRequests
       .map((request) => request.scheduledAt)
       .sort()
       .find((s) => s > now.toISOString()) ?? null;
@@ -771,7 +771,7 @@ export class SyncPlanService {
       plannedRequests,
       requestLog,
       totalSlotsPlanned,
-      totalPlannedRequests: plannedRequests.length,
+      totalPlannedRequests: activeRequests.length,
     };
   }
 
@@ -833,4 +833,23 @@ export class SyncPlanService {
       ],
     };
   }
+
+  private isClosedStatus(status: MatchStatus): boolean {
+    return [
+      MatchStatus.FINISHED,
+      MatchStatus.CANCELLED,
+      MatchStatus.POSTPONED,
+    ].includes(status);
+  }
+
+  private shouldPlanEventRequests(match: {
+    trackingScope: MatchSyncSlot['trackingScope'];
+    status: MatchStatus;
+  }): boolean {
+    return match.trackingScope === 'TODAY' && !this.isClosedStatus(match.status);
+  }
+}
+
+function isExecutableRequest(request: PlannedSyncRequest): boolean {
+  return request.executionState !== 'disabled_by_config';
 }

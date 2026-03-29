@@ -318,4 +318,6 @@ Para problemas o preguntas, revisar:
 
 - The planning view groups status checks for multiple matches into a single planned request when they share the same sync window.
 - Carry-over matches are highlighted as combined status requests, and unlinked matches are marked as link-plus-status batches.
+- Event requests remain visible in the plan even when `eventSyncEnabled` is disabled; the backend now exposes `executionState`/`disabledReason` so the UI can render that state explicitly without inferring business rules.
 - Event queries now run only when `eventSyncEnabled` is enabled in admin config and request budget remains; if a fixture returns no useful events, it is marked as non-retryable so the budget is preserved for the rest of the day.
+- Finished matches no longer keep active planned requests, and carry-over matches are reduced to a single reconciliation request instead of repeated future slots.

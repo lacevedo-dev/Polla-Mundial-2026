@@ -34,6 +34,8 @@ interface PlannedRequest {
   requestCost: number;
   matchIds: string[];
   optional?: boolean;
+  executionState?: 'enabled' | 'disabled_by_config';
+  disabledReason?: 'event_sync_disabled';
   notes?: string;
 }
 
@@ -111,6 +113,11 @@ const REQUEST_STYLES: Record<PlannedRequest['type'], string> = {
   EVENTS_FINAL: 'border-emerald-200 bg-emerald-50 text-emerald-700',
 };
 
+const EXECUTION_STATE_STYLES: Record<NonNullable<PlannedRequest['executionState']>, string> = {
+  enabled: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  disabled_by_config: 'border-rose-200 bg-rose-50 text-rose-700',
+};
+
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-CO', {
     hour: '2-digit',
@@ -134,6 +141,12 @@ const fmtDay = (iso: string) =>
     month: 'short',
     timeZone: 'America/Bogota',
   });
+
+const isExecutableRequest = (planned: PlannedRequest) =>
+  planned.executionState !== 'disabled_by_config';
+
+const getActiveRequestCount = (plannedRequests: PlannedRequest[]) =>
+  plannedRequests.filter(isExecutableRequest).length;
 
 function eventSummary(type: string, data: Record<string, unknown>): string {
   switch (type) {
@@ -370,6 +383,9 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
         <p className="mt-3 text-[11px] text-slate-500">
           Los eventos son opcionales: se planean solo si sobra presupuesto y, si no aportan eventos útiles para un fixture, no se reintentan para no gastar requests del resto.
         </p>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Cuando un evento aparece desactivado por configuración, igual se muestra en el plan para dejar claro el costo potencial aunque no se ejecute.
+        </p>
       </div>
 
       {timeline && (
@@ -419,6 +435,8 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
 
           {timeline?.matches.map((match) => {
             const expanded = expandedMatch === match.matchId;
+            const activeRequests = getActiveRequestCount(match.plannedRequests);
+            const totalRequests = match.plannedRequests.length;
             return (
               <div key={match.matchId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <button
@@ -447,9 +465,16 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                         <AlertTriangle size={9} /> Sin vinculo
                       </span>
                     )}
-                    <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600 sm:inline-flex">
-                      {match.requestsAssigned} req plan
-                    </span>
+                    <div className="hidden flex-col items-end sm:flex">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600">
+                        {activeRequests} req activo{activeRequests === 1 ? '' : 's'}
+                      </span>
+                      {totalRequests !== activeRequests && (
+                        <span className="mt-1 text-[10px] font-bold text-slate-400">
+                          {totalRequests} planeados
+                        </span>
+                      )}
+                    </div>
                     {expanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
                   </div>
                 </button>
@@ -469,7 +494,12 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                             {planned.label} · {fmtDateTime(planned.scheduledAt)}
                             {planned.optional && (
                               <span className="ml-1 rounded-full border border-dashed border-current px-1.5 py-0.5 text-[9px] font-black uppercase">
-                                opcional
+                                Opcional
+                              </span>
+                            )}
+                            {planned.executionState === 'disabled_by_config' && (
+                              <span className={`ml-1 rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase ${EXECUTION_STATE_STYLES[planned.executionState]}`}>
+                                Desactivado por configuración
                               </span>
                             )}
                           </span>

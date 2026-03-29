@@ -38,6 +38,7 @@ describe('SyncPlanService', () => {
   const mockFootballConfigService = {
     getSyncIntervals: jest.fn().mockResolvedValue({ min: 5, max: 30 }),
     isAutoSyncEnabled: jest.fn().mockResolvedValue(true),
+    isEventSyncEnabled: jest.fn().mockResolvedValue(false),
   };
 
   beforeEach(async () => {
@@ -71,6 +72,7 @@ describe('SyncPlanService', () => {
     jest.clearAllMocks();
     mockFootballConfigService.getSyncIntervals.mockResolvedValue({ min: 5, max: 30 });
     mockFootballConfigService.isAutoSyncEnabled.mockResolvedValue(true);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
   });
 
   it('should be defined', () => {
@@ -262,6 +264,173 @@ describe('SyncPlanService', () => {
           },
         },
       });
+    });
+  });
+
+  describe('getDetailedTimeline', () => {
+    const mockPlan = {
+      date: '2026-03-28',
+      totalMatches: 1,
+      requestBudget: 10,
+      intervalMinutes: 5,
+      estimatedRequestsUsed: 1,
+      strategy: SyncStrategy.BALANCED,
+      hasLiveMatches: true,
+      nextSyncIn: 0,
+      lastSync: null,
+    };
+
+    const mockMatch = {
+      id: 'match-1',
+      matchDate: new Date('2026-03-28T13:00:00.000Z'),
+      status: MatchStatus.LIVE,
+      externalId: '123',
+      homeTeam: {
+        id: 'home-1',
+        name: 'Colombia',
+        flagUrl: null,
+        code: 'COL',
+      },
+      awayTeam: {
+        id: 'away-1',
+        name: 'Brasil',
+        flagUrl: null,
+        code: 'BRA',
+      },
+      syncLogs: [],
+    };
+
+    const mockLeague = {
+      closePredictionMinutes: 15,
+      leagueTournaments: [
+        {
+          tournament: {
+            matches: [{ id: 'match-1' }],
+          },
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-03-28T12:00:00.000Z'));
+      jest.spyOn(service, 'calculateDailyPlan').mockResolvedValue(mockPlan as any);
+      mockRateLimiter.getUsedRequestsToday.mockResolvedValue(0);
+      mockRateLimiter.getDailyLimit.mockResolvedValue(100);
+      mockPrismaService.match.findMany.mockResolvedValue([mockMatch]);
+      mockPrismaService.league.findMany.mockResolvedValue([mockLeague]);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('marks optional event requests as disabled by configuration when event sync is off', async () => {
+      mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+
+      const timeline = await service.getDetailedTimeline();
+
+      const eventRequest = timeline.plannedRequests.find((request) => request.type === 'EVENTS_FINAL');
+
+      expect(eventRequest).toMatchObject({
+        optional: true,
+        executionState: 'disabled_by_config',
+        disabledReason: 'event_sync_disabled',
+      });
+      expect(
+        timeline.plannedRequests.every((request) =>
+          request.type.startsWith('EVENTS_')
+            ? request.executionState === 'disabled_by_config'
+            : request.executionState === 'enabled',
+        ),
+      ).toBe(true);
+      expect(
+        timeline.matches[0].plannedRequests.some((request) =>
+          request.type === 'EVENTS_HALFTIME' || request.type === 'EVENTS_FINAL',
+        ),
+      ).toBe(true);
+    });
+
+    it('marks event requests as enabled when event sync is on', async () => {
+      mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(true);
+
+      const timeline = await service.getDetailedTimeline();
+
+      const eventRequest = timeline.plannedRequests.find((request) => request.type === 'EVENTS_FINAL');
+
+      expect(eventRequest).toMatchObject({
+        optional: true,
+        executionState: 'enabled',
+      });
+      expect(eventRequest?.disabledReason).toBeUndefined();
+    });
+
+    it('does not keep finished matches with active requests', async () => {
+      mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(true);
+      mockPrismaService.match.findMany.mockResolvedValue([
+        {
+          ...mockMatch,
+          id: 'match-finished',
+          status: MatchStatus.FINISHED,
+          matchDate: new Date('2026-03-28T13:00:00.000Z'),
+          syncLogs: [],
+        },
+      ]);
+      mockPrismaService.league.findMany.mockResolvedValue([
+        {
+          closePredictionMinutes: 15,
+          leagueTournaments: [
+            {
+              tournament: {
+                matches: [{ id: 'match-finished' }],
+              },
+            },
+          ],
+        },
+      ]);
+
+      const timeline = await service.getDetailedTimeline();
+      const finishedMatch = timeline.matches[0];
+
+      expect(finishedMatch.status).toBe(MatchStatus.FINISHED);
+      expect(finishedMatch.plannedRequests).toHaveLength(0);
+      expect(finishedMatch.requestsAssigned).toBe(0);
+      expect(timeline.totalPlannedRequests).toBe(0);
+      expect(timeline.requestLog.every((bucket) => bucket.requests === 0)).toBe(true);
+    });
+
+    it('limits carry-over matches to a single reconciliation request', async () => {
+      mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(true);
+      mockPrismaService.match.findMany.mockResolvedValue([
+        {
+          ...mockMatch,
+          id: 'match-carry-over',
+          status: MatchStatus.SCHEDULED,
+          matchDate: new Date('2026-03-27T13:00:00.000Z'),
+          syncLogs: [],
+        },
+      ]);
+      mockPrismaService.league.findMany.mockResolvedValue([
+        {
+          closePredictionMinutes: 15,
+          leagueTournaments: [
+            {
+              tournament: {
+                matches: [{ id: 'match-carry-over' }],
+              },
+            },
+          ],
+        },
+      ]);
+
+      const timeline = await service.getDetailedTimeline();
+      const carryOverMatch = timeline.matches[0];
+
+      expect(carryOverMatch.trackingScope).toBe('CARRY_OVER');
+      expect(carryOverMatch.requestsAssigned).toBe(1);
+      expect(carryOverMatch.plannedRequests).toHaveLength(1);
+      expect(carryOverMatch.plannedRequests[0].type).toMatch(/^STATUS_/);
+      expect(carryOverMatch.plannedRequests[0].executionState).toBe('enabled');
+      expect(carryOverMatch.plannedRequests[0].optional).toBeUndefined();
     });
   });
 });
