@@ -10,35 +10,102 @@ type MatchSeed = {
   venue: string;
   round: string;
   label: string;
+  externalId: string;
 };
 
 const MATCHES: MatchSeed[] = [
+  // ------------------ MARZO 29 ------------------
   {
     key: 'push-val-2026-03-29-col-arg',
     homeCode: 'COL',
     awayCode: 'ARG',
     matchDate: '2026-03-29T15:00:00-05:00',
     venue: 'El Campín, Bogotá',
-    round: 'Push Validation',
+    round: 'Push Validation Day 1',
     label: 'Colombia vs Argentina',
+    externalId: '1446996', // Real API-Football ID for Sync
   },
   {
-    key: 'push-val-2026-03-30-bra-esp',
+    key: 'push-val-2026-03-29-bra-esp',
     homeCode: 'BRA',
     awayCode: 'ESP',
-    matchDate: '2026-03-30T17:00:00-05:00',
+    matchDate: '2026-03-29T17:00:00-05:00',
     venue: 'Maracanã, Río de Janeiro',
-    round: 'Push Validation',
+    round: 'Push Validation Day 1',
     label: 'Brasil vs España',
+    externalId: '1457198',
   },
   {
-    key: 'push-val-2026-03-31-fra-ger',
+    key: 'push-val-2026-03-29-uru-chi',
+    homeCode: 'URU',
+    awayCode: 'CHI',
+    matchDate: '2026-03-29T19:00:00-05:00',
+    venue: 'Centenario, Montevideo',
+    round: 'Push Validation Day 1',
+    label: 'Uruguay vs Chile',
+    externalId: '1483605',
+  },
+  // ------------------ MARZO 30 ------------------
+  {
+    key: 'push-val-2026-03-30-fra-ger',
     homeCode: 'FRA',
     awayCode: 'GER',
-    matchDate: '2026-03-31T18:30:00-05:00',
+    matchDate: '2026-03-30T15:00:00-05:00',
     venue: 'Stade de France, París',
-    round: 'Push Validation',
+    round: 'Push Validation Day 2',
     label: 'Francia vs Alemania',
+    externalId: '1476926',
+  },
+  {
+    key: 'push-val-2026-03-30-eng-ita',
+    homeCode: 'ENG',
+    awayCode: 'ITA',
+    matchDate: '2026-03-30T17:00:00-05:00',
+    venue: 'Wembley, Londres',
+    round: 'Push Validation Day 2',
+    label: 'Inglaterra vs Italia',
+    externalId: '1525682',
+  },
+  {
+    key: 'push-val-2026-03-30-usa-mex',
+    homeCode: 'USA',
+    awayCode: 'MEX',
+    matchDate: '2026-03-30T19:00:00-05:00',
+    venue: 'Azteca, CDMX',
+    round: 'Push Validation Day 2',
+    label: 'USA vs México',
+    externalId: '1533563',
+  },
+  // ------------------ MARZO 31 ------------------
+  {
+    key: 'push-val-2026-03-31-ned-bel',
+    homeCode: 'NED',
+    awayCode: 'BEL',
+    matchDate: '2026-03-31T15:00:00-05:00',
+    venue: 'Johan Cruyff Arena, Ámsterdam',
+    round: 'Push Validation Day 3',
+    label: 'Países Bajos vs Bélgica',
+    externalId: '1374526', // Random valid fixtures for Mar 31 logic
+  },
+  {
+    key: 'push-val-2026-03-31-por-cro',
+    homeCode: 'POR',
+    awayCode: 'CRO',
+    matchDate: '2026-03-31T17:00:00-05:00',
+    venue: 'José Alvalade, Lisboa',
+    round: 'Push Validation Day 3',
+    label: 'Portugal vs Croacia',
+    externalId: '1374530',
+  },
+  {
+    key: 'push-val-2026-03-31-jpn-kor',
+    homeCode: 'JPN',
+    awayCode: 'KOR',
+    matchDate: '2026-03-31T19:00:00-05:00',
+    venue: 'Saitama Stadium',
+    round: 'Push Validation Day 3',
+    label: 'Japón vs Corea del Sur',
+    externalId: '1483569',
   },
 ];
 
@@ -167,6 +234,7 @@ async function main() {
               status: 'SCHEDULED',
               tournamentId: tournament.id,
               round: matchSeed.round,
+              externalId: matchSeed.externalId,
             },
             select: { id: true },
           })
@@ -181,6 +249,7 @@ async function main() {
               status: 'SCHEDULED',
               tournamentId: tournament.id,
               round: matchSeed.round,
+              externalId: matchSeed.externalId,
             },
             select: { id: true },
           });
