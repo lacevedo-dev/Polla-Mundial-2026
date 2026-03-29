@@ -1496,16 +1496,11 @@ const Dashboard: React.FC = () => {
         });
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
 
+    // Load events for all live matches on mount and whenever liveMatches changes
     useEffect(() => {
-        // Solo carga eventos (goleadores) en partidos que están en entretiempo o
-        // que ya pasaron el minuto 44 — evita consumir requests de API-Football
-        // en cada actualización durante el juego normal.
-        const htMatches = liveMatches.filter(
-            (m) => m.statusShort === 'HT' || (m.elapsed != null && m.elapsed >= 44),
-        );
-        if (htMatches.length === 0) return;
+        if (liveMatches.length === 0) return;
         void Promise.all(
-            htMatches.map((m) =>
+            liveMatches.map((m) =>
                 request<MatchEventItem[]>(`/matches/${m.id}/events`)
                     .then((events) => ({ id: m.id, events }))
                     .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
@@ -1518,6 +1513,24 @@ const Dashboard: React.FC = () => {
             });
         });
     }, [liveMatches]);
+
+    // Refresh events for all live matches whenever SSE fires match_updated events
+    useEffect(() => {
+        if (liveSync.matchesUpdatedCount === 0 || liveMatches.length === 0) return;
+        void Promise.all(
+            liveMatches.map((m) =>
+                request<MatchEventItem[]>(`/matches/${m.id}/events`)
+                    .then((events) => ({ id: m.id, events }))
+                    .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
+            ),
+        ).then((results) => {
+            setMatchEvents((prev) => {
+                const next = new Map(prev);
+                results.forEach((r) => next.set(r.id, r.events));
+                return next;
+            });
+        });
+    }, [liveSync.matchesUpdatedCount, liveMatches]);
 
     useEffect(() => {
         if (liveMatches.length === 0 || !activeLeague?.id) { setLiveStandings(null); return; }
