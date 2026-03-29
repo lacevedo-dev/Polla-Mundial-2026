@@ -835,11 +835,11 @@ export class SyncPlanService {
   }
 
   private isClosedStatus(status: MatchStatus): boolean {
-    return [
-      MatchStatus.FINISHED,
-      MatchStatus.CANCELLED,
-      MatchStatus.POSTPONED,
-    ].includes(status);
+    return (
+      status === MatchStatus.FINISHED ||
+      status === MatchStatus.CANCELLED ||
+      status === MatchStatus.POSTPONED
+    );
   }
 
   private shouldPlanEventRequests(match: {
