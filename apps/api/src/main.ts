@@ -28,10 +28,15 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
   // CORS — reflect the request origin so all configured domains work
   // Security is enforced by JWT on protected endpoints
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Permitir siempre
+      callback(null, true);
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With, Origin',
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   // Swagger / OpenAPI documentation — available at /api-docs
