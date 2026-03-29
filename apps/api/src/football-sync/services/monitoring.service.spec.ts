@@ -8,11 +8,27 @@ describe('MonitoringService', () => {
   let service: MonitoringService;
 
   const mockPrismaService = {
+    footballSyncConfig: {
+      findFirst: jest.fn(),
+    },
+    dailySyncPlan: {
+      findUnique: jest.fn(),
+    },
+    apiFootballRequest: {
+      count: jest.fn(),
+    },
     footballSyncAlert: {
       findFirst: jest.fn(),
       create: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+    },
+    footballSyncLog: {
+      findMany: jest.fn(),
+    },
+    match: {
+      count: jest.fn(),
+      findMany: jest.fn(),
     },
   };
 
@@ -39,6 +55,7 @@ describe('MonitoringService', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
@@ -102,5 +119,50 @@ describe('MonitoringService', () => {
         resolved: false,
       }),
     });
+  });
+
+  it('uses UTC for quota data and Bogota for the operational plan window', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-03-28T01:30:00Z'));
+
+    mockPrismaService.footballSyncConfig.findFirst.mockResolvedValue({
+      enabled: true,
+      autoSyncEnabled: true,
+      dailyRequestLimit: 100,
+      emergencyModeThreshold: 10,
+      minSyncInterval: 5,
+      maxSyncInterval: 30,
+    });
+    mockPrismaService.dailySyncPlan.findUnique.mockResolvedValue({
+      requestsBudget: 42,
+      lastSyncAt: null,
+      intervalMinutes: 5,
+    });
+    mockPrismaService.footballSyncLog.findMany.mockResolvedValue([]);
+    mockPrismaService.apiFootballRequest.count.mockResolvedValue(0);
+    mockPrismaService.match.count.mockResolvedValue(0);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+
+    await service.getDashboard();
+
+    expect(mockPrismaService.dailySyncPlan.findUnique).toHaveBeenCalledWith({
+      where: { date: '2026-03-27' },
+    });
+    expect(mockPrismaService.apiFootballRequest.count).toHaveBeenCalledWith({
+      where: {
+        createdAt: {
+          gte: new Date('2026-03-28T00:00:00.000Z'),
+        },
+      },
+    });
+    expect(mockPrismaService.match.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          matchDate: expect.objectContaining({
+            gte: new Date('2026-03-27T05:00:00.000Z'),
+            lt: new Date('2026-03-28T05:00:00.000Z'),
+          }),
+        }),
+      }),
+    );
   });
 });

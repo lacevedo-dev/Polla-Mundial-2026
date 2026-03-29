@@ -295,10 +295,10 @@ export class FootballSyncController {
   }
 
   /**
-   * Get API-Football request logs for today (Colombia timezone, UTC-5)
+   * Get API-Football request logs for today (UTC, aligned to provider reset)
    */
   @Get('requests/today')
-  @ApiOperation({ summary: 'Get today API-Football request logs (COT timezone)' })
+  @ApiOperation({ summary: 'Get today API-Football request logs (UTC)' })
   async getTodayRequests() {
     const requests = await this.rateLimiter.getTodayRequests();
 

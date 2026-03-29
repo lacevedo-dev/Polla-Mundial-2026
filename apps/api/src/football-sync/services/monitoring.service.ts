@@ -29,27 +29,31 @@ export class MonitoringService {
   ) {}
 
   /**
-   * Obtener dashboard de monitoreo con métricas en tiempo real
+   * Obtener dashboard de monitoreo con mÃ©tricas en tiempo real
    */
   async getDashboard(): Promise<MonitoringDashboardDto> {
-    const today = this.getTodayStart();
+    const quotaWindowStart = this.getTodayStart();
+    const operationalTodayKey = this.getBogotaDateKey();
+    const operationalTodayStart = this.getBogotaTodayStart();
+    const operationalTomorrowStart = new Date(operationalTodayStart);
+    operationalTomorrowStart.setDate(operationalTomorrowStart.getDate() + 1);
     const config = await this.getConfig();
 
-    // Obtener plan del día
+    // Obtener plan del dÃ­a
     const plan = await this.prisma.dailySyncPlan.findUnique({
-      where: { date: new Date().toISOString().split('T')[0] },
+      where: { date: operationalTodayKey },
     });
 
-    // Estadísticas del día
+    // EstadÃ­sticas del dÃ­a
     const todayLogs = await this.prisma.footballSyncLog.findMany({
       where: {
-        createdAt: { gte: today },
+        createdAt: { gte: quotaWindowStart },
       },
     });
 
     const requestsUsed = await this.prisma.apiFootballRequest.count({
       where: {
-        createdAt: { gte: today },
+        createdAt: { gte: quotaWindowStart },
       },
     });
     const requestsLimit = config?.dailyRequestLimit ?? 100;
@@ -75,23 +79,20 @@ export class MonitoringService {
         ? durations.reduce((a, b) => a + b, 0) / durations.length
         : 0;
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
     const [todayMatchesTotal, linkedMatchesToday, unlinkedMatchesToday, unlinkedMatchesPreview] = await Promise.all([
       this.prisma.match.count({
         where: {
           matchDate: {
-            gte: today,
-            lt: tomorrow,
+            gte: operationalTodayStart,
+            lt: operationalTomorrowStart,
           },
         },
       }),
       this.prisma.match.count({
         where: {
           matchDate: {
-            gte: today,
-            lt: tomorrow,
+            gte: operationalTodayStart,
+            lt: operationalTomorrowStart,
           },
           NOT: {
             externalId: null,
@@ -101,8 +102,8 @@ export class MonitoringService {
       this.prisma.match.count({
         where: {
           matchDate: {
-            gte: today,
-            lt: tomorrow,
+            gte: operationalTodayStart,
+            lt: operationalTomorrowStart,
           },
           externalId: null,
         },
@@ -110,8 +111,8 @@ export class MonitoringService {
       this.prisma.match.findMany({
         where: {
           matchDate: {
-            gte: today,
-            lt: tomorrow,
+            gte: operationalTodayStart,
+            lt: operationalTomorrowStart,
           },
           externalId: null,
         },
@@ -134,13 +135,13 @@ export class MonitoringService {
       blockers.push('Falta configurar API_FOOTBALL_KEY en el backend.');
     }
     if (!(config?.enabled ?? true)) {
-      blockers.push('El sistema Football Sync está deshabilitado globalmente.');
+      blockers.push('El sistema Football Sync estÃ¡ deshabilitado globalmente.');
     }
     if (!(config?.autoSyncEnabled ?? true)) {
-      blockers.push('La sincronización automática está pausada desde configuración.');
+      blockers.push('La sincronizaciÃ³n automÃ¡tica estÃ¡ pausada desde configuraciÃ³n.');
     }
     if (requestsRemaining <= 0) {
-      blockers.push('La cuota diaria de requests ya se agotó.');
+      blockers.push('La cuota diaria de requests ya se agotÃ³.');
     }
     if (todayMatchesTotal > 0 && linkedMatchesToday === 0) {
       blockers.push('Los partidos de hoy no tienen externalId vinculado a API-Football.');
@@ -148,7 +149,7 @@ export class MonitoringService {
       blockers.push(`${unlinkedMatchesToday} partido(s) de hoy siguen sin vincular a fixture externo.`);
     }
 
-    // Logs recientes (últimos 10)
+    // Logs recientes (Ãºltimos 10)
     const recentLogs = await this.prisma.footballSyncLog.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
@@ -169,7 +170,7 @@ export class MonitoringService {
       take: 20,
     });
 
-    // Gráfica de sincronizaciones (últimas 24 horas)
+    // GrÃ¡fica de sincronizaciones (Ãºltimas 24 horas)
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const hourlyLogs = await this.prisma.footballSyncLog.findMany({
       where: {
@@ -224,7 +225,7 @@ export class MonitoringService {
   }
 
   /**
-   * Obtener historial de sincronizaciones con filtros y paginación
+   * Obtener historial de sincronizaciones con filtros y paginaciÃ³n
    */
   async getSyncHistory(
     filter: SyncHistoryFilterDto,
@@ -305,7 +306,7 @@ export class MonitoringService {
   }
 
   /**
-   * Obtener alertas con filtros y paginación
+   * Obtener alertas con filtros y paginaciÃ³n
    */
   async getAlerts(filter: AlertsFilterDto): Promise<AlertsResponseDto> {
     const page = Number(filter.page) || 1;
@@ -373,7 +374,7 @@ export class MonitoringService {
   }
 
   /**
-   * Obtener estadísticas de sincronización
+   * Obtener estadÃ­sticas de sincronizaciÃ³n
    */
   async getSyncStats(period: 'today' | 'week' | 'month'): Promise<SyncStatsDto> {
     const startDate = this.getStartDate(period);
@@ -396,12 +397,12 @@ export class MonitoringService {
         ? durations.reduce((a, b) => a + b, 0) / durations.length
         : 0;
 
-    // Calcular requests por día
+    // Calcular requests por dÃ­a
     const days = Math.ceil((Date.now() - startDate.getTime()) / (24 * 60 * 60 * 1000));
     const totalRequests = logs.reduce((sum, log) => sum + log.requestsUsed, 0);
     const averageRequestsPerDay = days > 0 ? totalRequests / days : 0;
 
-    // Horas más activas
+    // Horas mÃ¡s activas
     const hourCounts = new Map<number, number>();
     logs.forEach((log) => {
       const hour = new Date(log.createdAt).getHours();
@@ -443,7 +444,7 @@ export class MonitoringService {
   }
 
   /**
-   * Crear un log de sincronización
+   * Crear un log de sincronizaciÃ³n
    */
   async createLog(data: {
     type: SyncLogType;
@@ -542,7 +543,7 @@ export class MonitoringService {
     this.logger.log(`Alert ${alertId} resolved by ${resolvedBy}`);
   }
 
-  // === MÉTODOS PRIVADOS ===
+  // === MÃ‰TODOS PRIVADOS ===
 
   private async getConfig() {
     return this.prisma.footballSyncConfig.findFirst({
@@ -605,8 +606,37 @@ export class MonitoringService {
   }
 
   private getTodayStart(): Date {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const now = new Date(Date.now());
+    return new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+      ),
+    );
+  }
+
+  /**
+   * Get today's date string (YYYY-MM-DD) in Colombia timezone (UTC-5).
+   */
+  private getBogotaDateKey(now = new Date(Date.now())): string {
+    const bogotaNow = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+    return bogotaNow.toISOString().split('T')[0];
+  }
+
+  /**
+   * Get start of today in Colombia timezone (UTC-5).
+   * Returns the UTC equivalent of 00:00:00 COT today, i.e. 05:00:00 UTC.
+   */
+  private getBogotaTodayStart(): Date {
+    const bogotaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    const y = bogotaNow.getUTCFullYear();
+    const m = bogotaNow.getUTCMonth();
+    const d = bogotaNow.getUTCDate();
+    return new Date(Date.UTC(y, m, d, 5, 0, 0));
   }
 
   private getDailyBreakdown(logs: any[], startDate: Date) {
@@ -686,3 +716,4 @@ export class MonitoringService {
     };
   }
 }
+

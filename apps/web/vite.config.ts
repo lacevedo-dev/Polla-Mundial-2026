@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
           categories: ['sports', 'games'],
         },
         workbox: {
+          importScripts: ['/sw-push.js'],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api/, /^\/uploads/],

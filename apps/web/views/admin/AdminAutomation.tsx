@@ -135,6 +135,74 @@ const STATUS_BADGES: Record<string, string> = {
   CANCELLED: 'border-slate-200 bg-slate-100 text-slate-600',
 };
 
+function repairMojibake(value: string) {
+  if (!/[\u00C3\u00C2\u00E2]/.test(value)) return value;
+
+  try {
+    const bytes = Uint8Array.from(value, (char) => char.charCodeAt(0));
+    const decoded = new TextDecoder('utf-8').decode(bytes);
+    return decoded.includes('\uFFFD') ? value : decoded;
+  } catch {
+    return value;
+  }
+}
+
+function text(value?: string | null) {
+  if (!value) return '';
+  return repairMojibake(value);
+}
+
+function TimeFrameCard({
+  icon,
+  title,
+  timezone,
+  description,
+  detail,
+  tone,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  timezone: string;
+  description: string;
+  detail: string;
+  tone: 'sky' | 'amber';
+}) {
+  const tones = {
+    sky: {
+      wrapper: 'border-sky-200 bg-gradient-to-br from-sky-50 to-white',
+      chip: 'border-sky-200 bg-white text-sky-700',
+      title: 'text-sky-900',
+      icon: 'bg-sky-100 text-sky-700',
+      detail: 'text-sky-700/80',
+    },
+    amber: {
+      wrapper: 'border-amber-200 bg-gradient-to-br from-amber-50 to-white',
+      chip: 'border-amber-200 bg-white text-amber-700',
+      title: 'text-amber-900',
+      icon: 'bg-amber-100 text-amber-700',
+      detail: 'text-amber-700/80',
+    },
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${tones.wrapper}`}>
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 rounded-xl p-2 ${tones.icon}`}>{icon}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className={`text-sm font-black tracking-tight ${tones.title}`}>{title}</p>
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${tones.chip}`}>
+              {timezone}
+            </span>
+          </div>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">{description}</p>
+          <p className={`mt-2 text-[11px] font-semibold uppercase tracking-widest ${tones.detail}`}>{detail}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('es-CO', {
     hour: '2-digit',
@@ -254,7 +322,7 @@ function MatrixRow({ match, expanded, onExpand }: { match: MatrixMatch; expanded
   );
 }
 
-function PushTestPanel() {
+function PushTestPanel({ pushSubscribers, pushEnabled }: { pushSubscribers: number; pushEnabled: boolean }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -272,16 +340,29 @@ function PushTestPanel() {
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-slate-800">Validar notificaciones push</p>
-          <p className="text-xs text-slate-500">Envía una notificación de prueba a tu dispositivo para verificar que VAPID está configurado correctamente.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-slate-900">Validar notificaciones push</p>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
+              pushEnabled ? 'border-lime-200 bg-lime-50 text-lime-700' : 'border-amber-200 bg-amber-50 text-amber-700'
+            }`}>
+              {pushEnabled ? 'VAPID activo' : 'VAPID inactivo'}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+              {pushSubscribers.toLocaleString()} suscripci{pushSubscribers === 1 ? 'ón' : 'ones'}
+            </span>
+          </div>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
+            Envía una notificación de prueba al usuario autenticado para verificar que la configuración push responde.
+            Si tu navegador no tiene una suscripción activa, no vas a ver nada aunque el sistema tenga otros dispositivos registrados.
+          </p>
         </div>
         <button
           onClick={handleTest}
           disabled={loading}
-          className="shrink-0 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
+          className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
           <Send size={13} />
           {loading ? 'Enviando...' : 'Probar push'}
@@ -298,7 +379,7 @@ function PushTestPanel() {
 
 function PushBadge({ sent, failed, devices }: { sent: number | null; failed: number | null; devices: number | null }) {
   if (devices === null) return <span className="text-[10px] text-slate-400">—</span>;
-  if (devices === 0) return <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-400">Sin dispositivos</span>;
+  if (devices === 0) return <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-400">Sin suscripciones</span>;
   if (sent && sent > 0) return <span className="inline-flex items-center gap-1 rounded-full border border-lime-200 bg-lime-50 px-2 py-0.5 text-[10px] font-black text-lime-700"><CheckCircle2 size={10} /> Push {sent}/{devices}</span>;
   return <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700"><XCircle size={10} /> Push falló {failed}/{devices}</span>;
 }
@@ -310,20 +391,20 @@ function HistoryRow({ notification: n }: { notification: NotifRecord }) {
     <div className="cursor-pointer border-b border-slate-200 last:border-0 hover:bg-slate-50" onClick={() => setExpanded((v) => !v)}>
       <div className="grid items-start gap-x-3 px-4 py-3" style={{ gridTemplateColumns: 'auto minmax(0,1fr) auto auto' }}>
         <span className={`mt-0.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${TYPE_BADGES[n.type] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>
-          {TYPE_LABELS[n.type] ?? n.type}
+          {TYPE_LABELS[n.type] ?? text(n.type)}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-800">{n.body}</p>
-          <p className="mt-0.5 truncate text-xs text-slate-500">{n.user.name} — {n.user.email}</p>
-          {n.trigger && <p className="mt-0.5 truncate text-[10px] text-slate-400 italic">↳ {n.trigger}</p>}
+          <p className="truncate text-sm font-medium text-slate-800">{text(n.body)}</p>
+          <p className="mt-0.5 truncate text-xs text-slate-500">{text(n.user.name)} — {text(n.user.email)}</p>
+          {n.trigger && <p className="mt-0.5 truncate text-[10px] text-slate-400 italic">↳ {text(n.trigger)}</p>}
         </div>
         <PushBadge sent={n.pushSent} failed={n.pushFailed} devices={n.pushDevices} />
         <span className="whitespace-nowrap text-xs text-slate-500">{fmtFull(n.sentAt)}</span>
       </div>
       {expanded && (
         <div className="space-y-1 bg-slate-50 px-4 pb-3 pt-2 text-xs text-slate-600">
-          <p><span className="font-semibold text-slate-500">Título: </span>{n.title}</p>
-          {n.trigger && <p><span className="font-semibold text-slate-500">Motivo: </span>{n.trigger}</p>}
+          <p><span className="font-semibold text-slate-500">Título: </span>{text(n.title)}</p>
+          {n.trigger && <p><span className="font-semibold text-slate-500">Motivo: </span>{text(n.trigger)}</p>}
           <div className="flex flex-wrap gap-2 pt-1">
             <PushBadge sent={n.pushSent} failed={n.pushFailed} devices={n.pushDevices} />
             {n.whatsapp !== null && (
@@ -332,8 +413,8 @@ function HistoryRow({ notification: n }: { notification: NotifRecord }) {
                 : <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-400">Sin WhatsApp</span>
             )}
           </div>
-          {n.matchId && <p><span className="text-slate-500">Partido: </span><span className="font-mono text-slate-700">{n.matchId}</span></p>}
-          {n.leagueId && <p><span className="text-slate-500">Liga: </span><span className="font-mono text-slate-700">{n.leagueId}</span></p>}
+          {n.matchId && <p><span className="text-slate-500">Partido: </span><span className="font-mono text-slate-700">{text(n.matchId)}</span></p>}
+          {n.leagueId && <p><span className="text-slate-500">Liga: </span><span className="font-mono text-slate-700">{text(n.leagueId)}</span></p>}
         </div>
       )}
     </div>
@@ -355,19 +436,29 @@ function ChannelCard({ id, info }: { id: string; info: ChannelInfo }) {
           <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-500"><XCircle size={12} /> Inactivo</span>
         )}
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-slate-500">{info.description}</p>
+      <p className="mt-2 text-xs leading-relaxed text-slate-500">{text(info.description)}</p>
+      {typeof info.subscriberCount === 'number' && (
+        <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+          {info.subscriberCount.toLocaleString()} suscripci{info.subscriberCount === 1 ? 'ón' : 'ones'} push
+        </p>
+      )}
+      {typeof info.usersWithPhone === 'number' && (
+        <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+          {info.usersWithPhone.toLocaleString()} usuarios con teléfono
+        </p>
+      )}
     </div>
   );
 }
 
 function SchedulerCard({ scheduler, channelStatus }: { scheduler: SchedulerDef; channelStatus: AutomationStatus['channels'] }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">{scheduler.icon}</span>
+          <span className="text-2xl">{text(scheduler.icon)}</span>
           <div>
-            <p className="text-sm font-semibold text-slate-800">{scheduler.name}</p>
+            <p className="text-sm font-semibold text-slate-900">{text(scheduler.name)}</p>
             <p className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${TYPE_BADGES[scheduler.notifType] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>
               {TYPE_LABELS[scheduler.notifType] ?? scheduler.notifType}
             </p>
@@ -376,9 +467,15 @@ function SchedulerCard({ scheduler, channelStatus }: { scheduler: SchedulerDef; 
         <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-lime-700"><Activity size={12} /> Activo</span>
       </div>
 
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-slate-500">
+          {scheduler.cron}
+        </span>
+      </div>
+
       <div className="mt-3 space-y-2 text-xs text-slate-500">
-        <p><span className="font-semibold text-slate-700">Frecuencia: </span>{scheduler.description}</p>
-        <p><span className="font-semibold text-slate-700">Audiencia: </span>{scheduler.audience}</p>
+        <p><span className="font-semibold text-slate-700">Frecuencia: </span>{text(scheduler.description)}</p>
+        <p><span className="font-semibold text-slate-700">Audiencia: </span>{text(scheduler.audience)}</p>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-200 pt-3">
@@ -454,6 +551,25 @@ export default function AdminAutomation() {
     { id: 'channels', label: 'Canales' },
   ];
 
+  const timeFrames = [
+    {
+      icon: <Clock size={16} />,
+      title: 'Día operativo de partidos',
+      timezone: 'America/Bogota',
+      description: 'La matriz diaria, la sincronización de partidos y la lógica de eventos trabajan sobre el día de Bogotá.',
+      detail: 'Ventana operativa: 00:00–23:59 hora Bogotá',
+      tone: 'sky' as const,
+    },
+    {
+      icon: <RefreshCw size={16} />,
+      title: 'Reset de cuota de requests',
+      timezone: '00:00 UTC',
+      description: 'La API reinicia su cuota exactamente a medianoche UTC. El presupuesto de requests debe leerse con ese corte.',
+      detail: 'Equivale a 19:00 del día anterior en Bogotá',
+      tone: 'amber' as const,
+    },
+  ];
+
   const filteredMatches = useMemo(() => {
     if (!matrix) return [];
     const q = matrixSearch.trim().toLowerCase();
@@ -481,11 +597,13 @@ export default function AdminAutomation() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8">
+      <div className="mx-auto max-w-7xl">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">Procesos automáticos</h1>
           <p className="mt-1 text-sm text-slate-500">
             Revisa canales, tipos de notificación, matriz diaria e historial sin duplicar el panel de sync independiente.
+            La operación de partidos sigue America/Bogota y la cuota de requests corta a las 00:00 UTC.
           </p>
         </div>
         <button
@@ -496,6 +614,25 @@ export default function AdminAutomation() {
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Actualizar
         </button>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-black tracking-tight text-slate-900">Ventanas de tiempo que usa la automatización</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Importante: una cosa es el día operativo de los partidos y otra distinta es el reset de cuota de la API.
+            </p>
+          </div>
+          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            Bogotá ≠ UTC
+          </span>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {timeFrames.map((frame) => (
+            <TimeFrameCard key={frame.title} {...frame} />
+          ))}
+        </div>
       </div>
 
       {status && (
@@ -661,10 +798,10 @@ export default function AdminAutomation() {
               <ChannelCard key={id} id={id} info={info} />
             ))}
           </div>
-          {/* Botón de prueba de push */}
-          <PushTestPanel />
+          <PushTestPanel pushSubscribers={status.stats.pushSubscribers} pushEnabled={status.channels.push?.enabled ?? false} />
         </div>
       )}
+      </div>
     </div>
   );
 }

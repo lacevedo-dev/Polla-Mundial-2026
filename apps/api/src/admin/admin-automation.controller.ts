@@ -51,7 +51,7 @@ export class AdminAutomationController {
       push: {
         enabled: !!vapidKey,
         description: vapidKey
-          ? `${pushCount} dispositivos suscritos`
+          ? `${pushCount} suscripciones push globales`
           : 'VAPID_PUBLIC_KEY no configurado',
         subscriberCount: pushCount,
       },
@@ -399,7 +399,7 @@ export class AdminAutomationController {
       message: result.devices === 0
         ? 'Sin dispositivos suscritos. Activa las notificaciones en el menú lateral primero.'
         : result.sent > 0
-        ? `✓ Push enviado a ${result.sent}/${result.devices} dispositivo(s).`
+        ? `✓ Push enviado al usuario actual a ${result.sent}/${result.devices} dispositivo(s).`
         : `✗ Falló en ${result.failed} dispositivo(s). Verifica VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY.`,
     };
   }

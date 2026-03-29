@@ -52,6 +52,7 @@ describe('RateLimiterService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
     mockFootballConfigService.getDailyLimit.mockResolvedValue(100);
   });
 
@@ -96,6 +97,22 @@ describe('RateLimiterService', () => {
       const result = await service.getUsedRequestsToday();
 
       expect(result).toBe(expectedCount);
+    });
+
+    it('should count requests from 00:00 UTC', async () => {
+      const now = new Date('2026-03-28T15:34:00Z');
+      jest.spyOn(Date, 'now').mockReturnValue(now.getTime());
+      mockPrismaService.apiFootballRequest.count.mockResolvedValue(0);
+
+      await service.getUsedRequestsToday();
+
+      expect(mockPrismaService.apiFootballRequest.count).toHaveBeenCalledWith({
+        where: {
+          createdAt: {
+            gte: new Date('2026-03-28T00:00:00.000Z'),
+          },
+        },
+      });
     });
   });
 

@@ -75,9 +75,9 @@ export class AdaptiveSyncScheduler {
   }
 
   /**
-   * Generate daily plan at midnight
+   * Generate daily plan at midnight UTC
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, { timeZone: 'UTC' })
   async generateDailyPlan() {
     await observeSchedulerJob(this.logger, 'generateDailyPlan', async () => {
       try {
