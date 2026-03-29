@@ -61,6 +61,7 @@ async function main() {
         // Get predictions from source
         const predictions = await prisma.prediction.findMany({
           where: { matchId: source.id },
+          select: { id: true, userId: true, leagueId: true, homeScore: true, awayScore: true, submittedAt: true },
         });
 
         for (const p of predictions) {
@@ -73,6 +74,7 @@ async function main() {
                 leagueId: p.leagueId,
               },
             },
+            select: { id: true, homeScore: true, awayScore: true, submittedAt: true },
           });
 
           if (!existingTargetPred) {
@@ -84,7 +86,7 @@ async function main() {
             movedPredictionsCount++;
           } else {
             // Duplicate prediction, keeping the newer one
-            if (p.createdAt > existingTargetPred.createdAt) {
+            if (p.submittedAt > existingTargetPred.submittedAt) {
                await prisma.prediction.update({
                   where: { id: existingTargetPred.id },
                   data: {

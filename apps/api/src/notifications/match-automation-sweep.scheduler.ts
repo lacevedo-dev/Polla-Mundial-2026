@@ -75,7 +75,7 @@ export class MatchAutomationSweepScheduler {
     const tasks: Array<[string, () => Promise<SchedulerObservationOutcome | void>]> = [
       [
         'closeStaleUnlinkedMatches',
-        () => this.syncPlan.closeStaleUnlinkedMatches(),
+        async () => { await this.syncPlan.closeStaleUnlinkedMatches(); },
       ],
       [
         'sendMatchReminders',
