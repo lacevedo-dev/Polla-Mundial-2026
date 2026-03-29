@@ -12,6 +12,8 @@ Sistema adaptativo de sincronización de resultados de partidos desde API-Footba
 
 ## Configuración
 
+> Las consultas opcionales a `/fixtures/events` se controlan desde la configuración admin con `eventSyncEnabled`. Quedan desactivadas por defecto y solo corren si todavía hay presupuesto de requests.
+
 ### 1. Variables de Entorno
 
 Agrega las siguientes variables a `apps/api/.env`:
@@ -316,4 +318,4 @@ Para problemas o preguntas, revisar:
 
 - The planning view groups status checks for multiple matches into a single planned request when they share the same sync window.
 - Carry-over matches are highlighted as combined status requests, and unlinked matches are marked as link-plus-status batches.
-- Event queries are planned only for halftime and final milestones, and only if budget remains; if a fixture returns no useful events, it is marked as non-retryable so the budget is preserved for the rest of the day.
+- Event queries now run only when `eventSyncEnabled` is enabled in admin config and request budget remains; if a fixture returns no useful events, it is marked as non-retryable so the budget is preserved for the rest of the day.

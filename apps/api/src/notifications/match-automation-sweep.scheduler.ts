@@ -67,6 +67,7 @@ export class MatchAutomationSweepScheduler {
       'sendPredictionClosingAlerts',
       'sendMatchResultNotifications',
       'checkAndSendReports',
+      'sendPendingResultReports',
     ];
     const tasks: Array<[string, () => Promise<SchedulerObservationOutcome | void>]> = [
       [
@@ -84,6 +85,10 @@ export class MatchAutomationSweepScheduler {
       [
         'checkAndSendReports',
         () => this.predictionReportScheduler.checkAndSendReports(context),
+      ],
+      [
+        'sendPendingResultReports',
+        () => this.predictionReportScheduler.sendPendingResultReports(),
       ],
     ];
 

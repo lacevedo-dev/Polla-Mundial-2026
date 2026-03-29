@@ -67,8 +67,8 @@ export class PredictionReportEmailService {
     const text = this.buildPlainText(params);
     const subject = `🔒 Predicciones cerradas: ${params.match.homeTeam} vs ${params.match.awayTeam} | ${params.leagueName}`;
 
-    for (const recipient of params.recipients) {
-      await this.emailQueue.enqueueEmail({
+    const queued = await this.emailQueue.enqueueEmails(
+      params.recipients.map((recipient) => ({
         type: EmailJobType.PREDICTIONS_REPORT,
         priority: EmailJobPriority.MEDIUM,
         required: false,
@@ -84,10 +84,12 @@ export class PredictionReportEmailService {
           params.leagueId ?? params.leagueCode,
           recipient.toLowerCase(),
         ].join(':'),
-      });
-    }
+      })),
+    );
 
-    this.logger.log(`Queued predictions report emails: ${params.recipients.length} recipients`);
+    this.logger.log(
+      `Queued predictions report emails: ${queued.queued}/${params.recipients.length} recipients`,
+    );
   }
 
   async sendResultsReport(params: SendResultParams): Promise<void> {
@@ -100,8 +102,8 @@ export class PredictionReportEmailService {
     const text = this.buildResultPlainText(params);
     const subject = `✅ Resultado final: ${params.match.homeTeam} ${params.match.homeScore}-${params.match.awayScore} ${params.match.awayTeam} | ${params.leagueName}`;
 
-    for (const recipient of params.recipients) {
-      await this.emailQueue.enqueueEmail({
+    const queued = await this.emailQueue.enqueueEmails(
+      params.recipients.map((recipient) => ({
         type: EmailJobType.MATCH_RESULTS_REPORT,
         priority: EmailJobPriority.LOW,
         required: false,
@@ -117,10 +119,12 @@ export class PredictionReportEmailService {
           params.leagueId ?? params.leagueCode,
           recipient.toLowerCase(),
         ].join(':'),
-      });
-    }
+      })),
+    );
 
-    this.logger.log(`Queued results report emails: ${params.recipients.length} recipients`);
+    this.logger.log(
+      `Queued results report emails: ${queued.queued}/${params.recipients.length} recipients`,
+    );
   }
 
   buildHtml(params: Omit<SendReportParams, 'recipients'>): string {

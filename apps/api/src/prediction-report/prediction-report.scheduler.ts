@@ -55,6 +55,45 @@ export class PredictionReportScheduler {
     });
   }
 
+  async sendPendingResultReports(): Promise<SchedulerObservationOutcome> {
+    return await observeSchedulerJob(
+      this.logger,
+      'sendPendingResultReports',
+      async () => {
+        const execution = await tryRunExclusiveBackgroundJob(
+          PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
+          'sendPendingResultReports',
+          () => this.runSendPendingResultReports(),
+        );
+
+        if (!execution.ran) {
+          logExclusiveBackgroundJobSkip(
+            this.logger,
+            'sendPendingResultReports',
+            execution,
+          );
+          return {
+            status: 'skipped',
+            summary: {
+              reason: 'background_lock',
+              lockHolder: execution.skip.holder,
+              heldMs: execution.skip.heldMs,
+              skipCount: execution.skip.skipCount,
+            },
+          };
+        }
+
+        return {
+          status: 'completed',
+          level: 'log',
+          summary: {
+            result: 'send_pending_result_reports_completed',
+          },
+        };
+      },
+    );
+  }
+
   private async runCheckAndSendReports(
     context?: MatchAutomationSweepContext,
   ): Promise<void> {
@@ -62,6 +101,17 @@ export class PredictionReportScheduler {
       await this.reportService.sendPendingReports(context);
     } catch (err: any) {
       this.logger.error(`Error en scheduler de reportes: ${err.message}`, err.stack);
+    }
+  }
+
+  private async runSendPendingResultReports(): Promise<void> {
+    try {
+      await this.reportService.sendPendingResultReports();
+    } catch (err: any) {
+      this.logger.error(
+        `Error en scheduler de resultados: ${err.message}`,
+        err.stack,
+      );
     }
   }
 }

@@ -3,6 +3,7 @@ import { MatchStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PredictionsService } from '../../predictions/predictions.service';
 import { ApiFootballClient } from './api-football-client.service';
+import { ConfigService as FootballConfigService } from './config.service';
 import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
 import { MatchSyncService } from './match-sync.service';
@@ -39,6 +40,10 @@ describe('MatchSyncService', () => {
     canMakeRequest: jest.fn(),
     canMakeRequests: jest.fn(),
     logRequest: jest.fn(),
+  };
+
+  const mockFootballConfigService = {
+    isEventSyncEnabled: jest.fn(),
   };
 
   const mockSyncPlanService = {
@@ -80,11 +85,13 @@ describe('MatchSyncService', () => {
         { provide: MonitoringService, useValue: mockMonitoringService },
         { provide: PredictionReportService, useValue: mockPredictionReportService },
         { provide: SyncEventsService, useValue: mockSyncEventsService },
+        { provide: FootballConfigService, useValue: mockFootballConfigService },
         { provide: PushNotificationsService, useValue: mockPushNotificationsService },
       ],
     }).compile();
 
     service = module.get<MatchSyncService>(MatchSyncService);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -193,6 +200,8 @@ describe('MatchSyncService', () => {
 
   it('marks a fixture as no-data when events return only non-useful payloads', async () => {
     mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(true);
     mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
     mockPrismaService.match.findMany.mockResolvedValue([]);
     mockApiFootballClient.getFixturesByDate.mockResolvedValue({
@@ -284,6 +293,163 @@ describe('MatchSyncService', () => {
         }),
       }),
     );
+  });
+
+  it('skips fixture event queries when event sync is disabled in config', async () => {
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: {
+            id: 999,
+            status: { short: 'HT' },
+          },
+          teams: {
+            home: {
+              id: 999,
+              name: 'England',
+              logo: 'https://media.api-sports.io/football/teams/999.png',
+              winner: null,
+            },
+            away: {
+              id: 888,
+              name: 'France',
+              logo: 'https://media.api-sports.io/football/teams/888.png',
+              winner: null,
+            },
+          },
+          goals: {
+            home: 1,
+            away: 0,
+          },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-1',
+      externalId: '999',
+      homeTeamId: 'team-eng',
+      awayTeamId: 'team-fra',
+      homeScore: null,
+      awayScore: null,
+      statusShort: 'LIVE',
+      eventsNoDataAt: null,
+      homeTeam: {
+        id: 'team-eng',
+        name: 'England',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 999,
+        flagUrl: null,
+        group: 'C',
+      },
+      awayTeam: {
+        id: 'team-fra',
+        name: 'France',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 888,
+        flagUrl: null,
+        group: 'B',
+      },
+    });
+    mockPrismaService.team.findUnique.mockResolvedValue(null);
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-1',
+      status: MatchStatus.LIVE,
+    });
+
+    await service.syncTodayMatchesForTrigger({
+      logType: 'MANUAL_SYNC' as any,
+      summaryLabel: 'Manual sync',
+      triggeredBy: 'manual',
+    });
+
+    expect(mockApiFootballClient.getFixtureEvents).not.toHaveBeenCalled();
+    expect(mockRateLimiterService.canMakeRequest).not.toHaveBeenCalled();
+  });
+
+  it('skips fixture event queries when the remaining request budget is exhausted', async () => {
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(false);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(true);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: {
+            id: 999,
+            status: { short: 'HT' },
+          },
+          teams: {
+            home: {
+              id: 999,
+              name: 'England',
+              logo: 'https://media.api-sports.io/football/teams/999.png',
+              winner: null,
+            },
+            away: {
+              id: 888,
+              name: 'France',
+              logo: 'https://media.api-sports.io/football/teams/888.png',
+              winner: null,
+            },
+          },
+          goals: {
+            home: 1,
+            away: 0,
+          },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-1',
+      externalId: '999',
+      homeTeamId: 'team-eng',
+      awayTeamId: 'team-fra',
+      homeScore: null,
+      awayScore: null,
+      statusShort: 'LIVE',
+      eventsNoDataAt: null,
+      homeTeam: {
+        id: 'team-eng',
+        name: 'England',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 999,
+        flagUrl: null,
+        group: 'C',
+      },
+      awayTeam: {
+        id: 'team-fra',
+        name: 'France',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 888,
+        flagUrl: null,
+        group: 'B',
+      },
+    });
+    mockPrismaService.team.findUnique.mockResolvedValue(null);
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-1',
+      status: MatchStatus.LIVE,
+    });
+
+    await service.syncTodayMatchesForTrigger({
+      logType: 'MANUAL_SYNC' as any,
+      summaryLabel: 'Manual sync',
+      triggeredBy: 'manual',
+    });
+
+    expect(mockRateLimiterService.canMakeRequest).toHaveBeenCalledTimes(1);
+    expect(mockApiFootballClient.getFixtureEvents).not.toHaveBeenCalled();
   });
 
   it('creates skip log and rate-limit alert when today sync cannot run', async () => {

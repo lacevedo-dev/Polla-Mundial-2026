@@ -30,6 +30,7 @@ export interface FootballSyncConfig {
   dailyRequestLimit: number;
   alertThreshold: number;
   autoSyncEnabled: boolean;
+  eventSyncEnabled: boolean;
   peakHoursSyncEnabled: boolean;
   emergencyModeThreshold: number;
   notifyOnError: boolean;
@@ -165,6 +166,7 @@ export interface UpdateConfig {
   dailyRequestLimit?: number;
   alertThreshold?: number;
   autoSyncEnabled?: boolean;
+  eventSyncEnabled?: boolean;
   peakHoursSyncEnabled?: boolean;
   emergencyModeThreshold?: number;
   notifyOnError?: boolean;

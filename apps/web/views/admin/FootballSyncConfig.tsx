@@ -21,6 +21,7 @@ const FootballSyncConfig: React.FC = () => {
         dailyRequestLimit: config.dailyRequestLimit,
         alertThreshold: config.alertThreshold,
         autoSyncEnabled: config.autoSyncEnabled,
+        eventSyncEnabled: config.eventSyncEnabled,
         peakHoursSyncEnabled: config.peakHoursSyncEnabled,
         emergencyModeThreshold: config.emergencyModeThreshold,
         notifyOnError: config.notifyOnError,
@@ -197,6 +198,7 @@ const FootballSyncConfig: React.FC = () => {
           {[
             { key: 'enabled', label: 'Sistema Habilitado' },
             { key: 'autoSyncEnabled', label: 'Sincronización Automática' },
+            { key: 'eventSyncEnabled', label: 'Consultas de Eventos (goles/tarjetas)' },
             { key: 'peakHoursSyncEnabled', label: 'Sync en Horas Pico' },
             { key: 'notifyOnError', label: 'Notificar Errores' },
             { key: 'notifyOnLimit', label: 'Notificar Límites' },

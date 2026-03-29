@@ -102,6 +102,15 @@ export class ConfigService {
     }
 
     // Actualizar configuración
+    if (
+      data.eventSyncEnabled !== undefined &&
+      data.eventSyncEnabled !== config.eventSyncEnabled
+    ) {
+      criticalChanges.push(
+        `Consultas de eventos ${data.eventSyncEnabled ? 'habilitadas' : 'deshabilitadas'}`,
+      );
+    }
+
     const updated = await this.prisma.footballSyncConfig.update({
       where: { id: config.id },
       data: {
@@ -156,6 +165,7 @@ export class ConfigService {
         dailyRequestLimit: 100,
         alertThreshold: 90,
         autoSyncEnabled: true,
+        eventSyncEnabled: false,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -200,6 +210,11 @@ export class ConfigService {
   async isAutoSyncEnabled(): Promise<boolean> {
     const config = await this.getConfig();
     return config.enabled && config.autoSyncEnabled;
+  }
+
+  async isEventSyncEnabled(): Promise<boolean> {
+    const config = await this.getConfig();
+    return config.enabled && config.eventSyncEnabled;
   }
 
   /**
@@ -268,6 +283,7 @@ export class ConfigService {
         dailyRequestLimit: 100,
         alertThreshold: 90,
         autoSyncEnabled: true,
+        eventSyncEnabled: false,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -285,6 +301,7 @@ export class ConfigService {
       dailyRequestLimit: config.dailyRequestLimit,
       alertThreshold: config.alertThreshold,
       autoSyncEnabled: config.autoSyncEnabled,
+      eventSyncEnabled: config.eventSyncEnabled,
       peakHoursSyncEnabled: config.peakHoursSyncEnabled,
       emergencyModeThreshold: config.emergencyModeThreshold,
       notifyOnError: config.notifyOnError,

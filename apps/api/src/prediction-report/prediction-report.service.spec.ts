@@ -7,11 +7,16 @@ describe('PredictionReportService', () => {
     },
     match: {
       update: jest.fn(),
+      findMany: jest.fn(),
+    },
+    emailJob: {
+      findFirst: jest.fn(),
     },
   } as any;
 
   const emailService = {
     sendPredictionsReport: jest.fn(),
+    sendResultsReport: jest.fn(),
   } as any;
 
   let service: PredictionReportService;
@@ -24,7 +29,10 @@ describe('PredictionReportService', () => {
       { userId: 'user-2', points: 3 },
     ]);
     prisma.match.update.mockResolvedValue({});
+    prisma.match.findMany.mockResolvedValue([]);
+    prisma.emailJob.findFirst.mockResolvedValue(null);
     emailService.sendPredictionsReport.mockResolvedValue(undefined);
+    emailService.sendResultsReport.mockResolvedValue(undefined);
   });
 
   it('uses prefetched scheduled context to send pending reports without reloading league audience', async () => {
@@ -87,5 +95,33 @@ describe('PredictionReportService', () => {
       data: { predictionReportSentAt: now },
     });
     expect(prisma.prediction.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues pending finished match result reports only when they are not already queued', async () => {
+    prisma.match.findMany.mockResolvedValue([{ id: 'match-1' }, { id: 'match-2' }]);
+    prisma.emailJob.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'email-job-1' });
+
+    const sendMatchResultsReportSpy = jest
+      .spyOn(service, 'sendMatchResultsReport')
+      .mockResolvedValue(undefined);
+
+    await service.sendPendingResultReports(5);
+
+    expect(prisma.match.findMany).toHaveBeenCalledWith({
+      where: {
+        status: 'FINISHED',
+        homeScore: { not: null },
+        awayScore: { not: null },
+      },
+      select: {
+        id: true,
+      },
+      orderBy: { lastSyncAt: 'desc' },
+      take: 5,
+    });
+    expect(sendMatchResultsReportSpy).toHaveBeenCalledTimes(1);
+    expect(sendMatchResultsReportSpy).toHaveBeenCalledWith('match-1');
   });
 });

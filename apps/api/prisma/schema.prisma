@@ -484,6 +484,7 @@ model FootballSyncConfig {
   dailyRequestLimit      Int      @default(100)
   alertThreshold         Int      @default(90)
   autoSyncEnabled        Boolean  @default(true)
+  eventSyncEnabled       Boolean  @default(false)
   peakHoursSyncEnabled   Boolean  @default(true)
   emergencyModeThreshold Int      @default(10)
   notifyOnError          Boolean  @default(true)

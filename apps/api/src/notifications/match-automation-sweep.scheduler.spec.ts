@@ -19,6 +19,7 @@ describe('MatchAutomationSweepScheduler', () => {
 
   const predictionReportScheduler = {
     checkAndSendReports: jest.fn(),
+    sendPendingResultReports: jest.fn(),
   };
   const prisma = {
     league: { findMany: jest.fn() },
@@ -72,6 +73,9 @@ describe('MatchAutomationSweepScheduler', () => {
     predictionReportScheduler.checkAndSendReports.mockImplementation(async () => {
       order.push('checkAndSendReports');
     });
+    predictionReportScheduler.sendPendingResultReports.mockImplementation(async () => {
+      order.push('sendPendingResultReports');
+    });
 
     await scheduler.runMatchAutomationSweep();
 
@@ -80,6 +84,7 @@ describe('MatchAutomationSweepScheduler', () => {
       'sendPredictionClosingAlerts',
       'sendMatchResultNotifications',
       'checkAndSendReports',
+      'sendPendingResultReports',
     ]);
   });
 
@@ -92,12 +97,13 @@ describe('MatchAutomationSweepScheduler', () => {
     expect(notificationScheduler.sendPredictionClosingAlerts).toHaveBeenCalledTimes(1);
     expect(notificationScheduler.sendMatchResultNotifications).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.checkAndSendReports).toHaveBeenCalledTimes(1);
+    expect(predictionReportScheduler.sendPendingResultReports).toHaveBeenCalledTimes(1);
 
     const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
     expect(payload.summary).toEqual(
       expect.objectContaining({
-        attemptedTasks: 4,
-        completedTasks: 3,
+        attemptedTasks: 5,
+        completedTasks: 4,
         skippedTasks: 0,
         failedTasks: 1,
       }),
@@ -127,6 +133,7 @@ describe('MatchAutomationSweepScheduler', () => {
     expect(notificationScheduler.sendPredictionClosingAlerts).not.toHaveBeenCalled();
     expect(notificationScheduler.sendMatchResultNotifications).not.toHaveBeenCalled();
     expect(predictionReportScheduler.checkAndSendReports).not.toHaveBeenCalled();
+    expect(predictionReportScheduler.sendPendingResultReports).not.toHaveBeenCalled();
 
     resolveFirstTask?.();
     await firstRun;
@@ -134,6 +141,7 @@ describe('MatchAutomationSweepScheduler', () => {
     expect(notificationScheduler.sendPredictionClosingAlerts).toHaveBeenCalledTimes(1);
     expect(notificationScheduler.sendMatchResultNotifications).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.checkAndSendReports).toHaveBeenCalledTimes(1);
+    expect(predictionReportScheduler.sendPendingResultReports).toHaveBeenCalledTimes(1);
     const schedulerJobDebugCall = debugSpy.mock.calls.find((call) =>
       typeof call[0] === 'string' && (call[0] as string).includes('"event":"scheduler_job"'),
     );

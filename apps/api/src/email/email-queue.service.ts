@@ -36,20 +36,7 @@ export class EmailQueueService {
   async enqueueEmail(input: QueueEmailInput): Promise<boolean> {
     try {
       await this.prisma.emailJob.create({
-        data: {
-          type: input.type,
-          priority: input.priority,
-          required: input.required,
-          recipientEmail: input.recipientEmail.trim().toLowerCase(),
-          subject: input.subject,
-          html: input.html,
-          text: input.text,
-          dedupeKey: input.dedupeKey,
-          matchId: input.matchId,
-          leagueId: input.leagueId,
-          scheduledAt: input.scheduledAt ?? new Date(),
-          availableAt: input.scheduledAt ?? new Date(),
-        },
+        data: this.toEmailJobCreateInput(input),
       });
       return true;
     } catch (error) {
@@ -58,6 +45,22 @@ export class EmailQueueService {
       }
       throw error;
     }
+  }
+
+  async enqueueEmails(inputs: QueueEmailInput[]): Promise<{ queued: number; skipped: number }> {
+    if (inputs.length === 0) {
+      return { queued: 0, skipped: 0 };
+    }
+
+    const result = await this.prisma.emailJob.createMany({
+      data: inputs.map((input) => this.toEmailJobCreateInput(input)),
+      skipDuplicates: true,
+    });
+
+    return {
+      queued: result.count,
+      skipped: inputs.length - result.count,
+    };
   }
 
   async enqueueForUser(userId: string, input: Omit<QueueEmailInput, 'recipientEmail'>): Promise<boolean> {
@@ -105,6 +108,25 @@ export class EmailQueueService {
     }
 
     return { processed, sent };
+  }
+
+  private toEmailJobCreateInput(input: QueueEmailInput): Prisma.EmailJobCreateManyInput {
+    const scheduledAt = input.scheduledAt ?? new Date();
+
+    return {
+      type: input.type,
+      priority: input.priority,
+      required: input.required,
+      recipientEmail: input.recipientEmail.trim().toLowerCase(),
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+      dedupeKey: input.dedupeKey,
+      matchId: input.matchId,
+      leagueId: input.leagueId,
+      scheduledAt,
+      availableAt: scheduledAt,
+    };
   }
 
   async dispatchJobById(

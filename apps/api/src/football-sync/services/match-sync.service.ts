@@ -11,6 +11,7 @@ import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
 import { MonitoringService } from './monitoring.service';
 import { SyncEventsService } from './sync-events.service';
+import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import {
   MatchStatus,
@@ -48,6 +49,7 @@ export class MatchSyncService {
     private readonly monitoring: MonitoringService,
     private readonly predictionReport: PredictionReportService,
     private readonly syncEvents: SyncEventsService,
+    private readonly footballConfigService: FootballConfigService,
     private readonly push: PushNotificationsService,
   ) {}
 
@@ -237,6 +239,8 @@ export class MatchSyncService {
         today,
         shouldQueryYesterday ? yesterday : null,
       );
+      const eventSyncEnabled =
+        await this.footballConfigService.isEventSyncEnabled();
 
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
@@ -249,7 +253,9 @@ export class MatchSyncService {
       for (let i = 0; i < fixtures.length; i += this.syncConcurrency) {
         const batch = fixtures.slice(i, i + this.syncConcurrency);
         const results = await Promise.allSettled(
-          batch.map(f => this.updateMatchFromFixture(f)),
+          batch.map((f) =>
+            this.updateMatchFromFixture(f, { eventSyncEnabled }),
+          ),
         );
         for (const r of results) {
           if (r.status === 'fulfilled') {
@@ -386,13 +392,17 @@ export class MatchSyncService {
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
       await this.syncPlan.incrementRequestsUsed();
+      const eventSyncEnabled =
+        await this.footballConfigService.isEventSyncEnabled();
 
       // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
       for (let i = 0; i < response.response.length; i += this.syncConcurrency) {
         const batch = response.response.slice(i, i + this.syncConcurrency);
         const results = await Promise.allSettled(
-          batch.map(f => this.updateMatchFromFixture(f)),
+          batch.map((f) =>
+            this.updateMatchFromFixture(f, { eventSyncEnabled }),
+          ),
         );
         for (const r of results) {
           if (r.status === 'fulfilled' && r.value) updatedCount++;
@@ -444,6 +454,9 @@ export class MatchSyncService {
    */
   private async updateMatchFromFixture(
     fixture: ApiFootballFixture,
+    options: {
+      eventSyncEnabled: boolean;
+    } = { eventSyncEnabled: false },
   ): Promise<boolean> {
     try {
       // Find match by external ID
@@ -504,23 +517,31 @@ export class MatchSyncService {
       const isFinalStatus = ['FT', 'AET', 'PEN'].includes(currentStatusShort ?? '');
       const wasFinalStatus = ['FT', 'AET', 'PEN'].includes(previousStatusShort ?? '');
       const shouldSyncEvents =
+        options.eventSyncEnabled &&
         !match.eventsNoDataAt &&
         (shouldSyncHalftimeEvents || (isFinalStatus && !wasFinalStatus));
 
       if (shouldSyncEvents && fixture.fixture.id) {
-        try {
-          const eventSyncResult = await this.syncMatchEvents(fixture.fixture.id, match.id);
-          if (eventSyncResult.relevantEvents === 0) {
-            await this.prisma.match.update({
-              where: { id: match.id },
-              data: {
-                eventsNoDataAt: new Date(),
-              },
-            });
+        const canSpendEventRequest = await this.rateLimiter.canMakeRequest();
+        if (!canSpendEventRequest) {
+          this.logger.warn(
+            `Skipping fixture events for match ${match.id}: no request budget available`,
+          );
+        } else {
+          try {
+            const eventSyncResult = await this.syncMatchEvents(fixture.fixture.id, match.id);
+            if (eventSyncResult.relevantEvents === 0) {
+              await this.prisma.match.update({
+                where: { id: match.id },
+                data: {
+                  eventsNoDataAt: new Date(),
+                },
+              });
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.logger.warn(`Event sync failed for match ${match.id}: ${message}`);
           }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          this.logger.warn(`Event sync failed for match ${match.id}: ${message}`);
         }
       }
 
@@ -1095,7 +1116,11 @@ export class MatchSyncService {
       // Update match
       if (response.results > 0) {
         const fixture = response.response[0];
-        const updated = await this.updateMatchFromFixture(fixture);
+        const eventSyncEnabled =
+          await this.footballConfigService.isEventSyncEnabled();
+        const updated = await this.updateMatchFromFixture(fixture, {
+          eventSyncEnabled,
+        });
         await this.monitoring.createLog({
           type: SyncLogType.MATCH_SYNC,
           status: updated ? SyncLogStatus.SUCCESS : SyncLogStatus.FAILED,

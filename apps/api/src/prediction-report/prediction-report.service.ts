@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MemberStatus } from '@prisma/client';
+import { EmailJobType, MatchStatus, MemberStatus } from '@prisma/client';
 import {
   getPendingReportMatches,
   getReportAudienceFromLeague,
@@ -159,6 +159,37 @@ export class PredictionReportService {
 
         this.logger.log(`Reporte enviado para match ${match.id}`);
       }
+    }
+  }
+
+  async sendPendingResultReports(limit: number = 3): Promise<void> {
+    const candidates = await this.prisma.match.findMany({
+      where: {
+        status: MatchStatus.FINISHED,
+        homeScore: { not: null },
+        awayScore: { not: null },
+      },
+      select: {
+        id: true,
+      },
+      orderBy: { lastSyncAt: 'desc' },
+      take: limit,
+    });
+
+    for (const match of candidates) {
+      const alreadyQueued = await this.prisma.emailJob.findFirst({
+        where: {
+          matchId: match.id,
+          type: EmailJobType.MATCH_RESULTS_REPORT,
+        },
+        select: { id: true },
+      });
+
+      if (alreadyQueued) {
+        continue;
+      }
+
+      await this.sendMatchResultsReport(match.id);
     }
   }
 
