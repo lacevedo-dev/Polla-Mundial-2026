@@ -814,6 +814,11 @@ export class SyncPlanService {
     // A match without externalId that started more than 130 min ago cannot be
     // synced — exclude it from carry-over to prevent ghost tracking loops.
     const carryOverCutoff = new Date(Date.now() - 130 * 60 * 1000);
+    // A match WITH externalId that started more than 370 min ago is almost
+    // certainly finished regardless of status (130 min match + 30 extra time +
+    // 60 min API delay + 120 min safety margin). Exclude it to prevent stale
+    // SCHEDULED matches from appearing as active carry-overs indefinitely.
+    const carryOverHardCutoff = new Date(Date.now() - 370 * 60 * 1000);
 
     return {
       OR: [
@@ -832,11 +837,18 @@ export class SyncPlanService {
           OR: [
             {
               status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
-              // Only carry forward if it has an externalId OR if it hasn't
-              // definitely ended yet (started less than 130 min ago)
+              // Differentiate cutoff by whether the match has an external ID:
+              // - With externalId: hard cutoff at 370 min (match surely ended by then)
+              // - Without externalId: soft cutoff at 130 min (can't be synced anyway)
               OR: [
-                { externalId: { not: null } },
-                { matchDate: { gte: carryOverCutoff } },
+                {
+                  externalId: { not: null },
+                  matchDate: { gte: carryOverHardCutoff },
+                },
+                {
+                  externalId: null,
+                  matchDate: { gte: carryOverCutoff },
+                },
               ],
             },
             { status: MatchStatus.FINISHED, resultNotificationSentAt: null },
