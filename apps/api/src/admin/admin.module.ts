@@ -9,6 +9,7 @@ import { PredictionsModule } from '../predictions/predictions.module';
 import { LeaguesModule } from '../leagues/leagues.module';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { EmailModule } from '../email/email.module';
+import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { AdminService } from './admin.service';
 import { AdminPaymentsService } from './admin-payments.service';
 import { AdminStatsController } from './admin-stats.controller';
@@ -35,6 +36,7 @@ import { AdminEmailProvidersController } from './admin-email-providers.controlle
     PushNotificationsModule,
     EmailModule,
     AutomationObservabilityModule,
+    PredictionReportModule,
   ],
   controllers: [
     AdminStatsController,
