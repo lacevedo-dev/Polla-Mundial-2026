@@ -167,6 +167,14 @@ const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {
   email: { label: 'Email', icon: <Send size={14} /> },
 };
 
+const STEP_CHANNELS: Record<string, string[]> = {
+  MATCH_REMINDER:       ['push', 'whatsapp'],
+  PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp'],
+  RESULT_NOTIFICATION:  ['push', 'whatsapp'],
+  PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp'],
+  RESULT_REPORT:        ['push', 'inApp', 'whatsapp'],
+};
+
 const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: 'Programado',
   LIVE: 'En curso',
@@ -306,6 +314,7 @@ function StepCell({
   match: OperationsMatch;
 }) {
   const canRetry = step.status === 'FAILED' || step.status === 'OVERDUE';
+  const channels = STEP_CHANNELS[step.key] ?? [];
   return (
     <div
       className={`flex flex-col items-center gap-1 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
@@ -313,6 +322,15 @@ function StepCell({
       title={canRetry && onIncident ? 'Click para ver detalle y reintentar' : undefined}
     >
       <StatusDot state={step.status} />
+      {channels.length > 0 && (
+        <div className="flex gap-0.5 text-slate-300">
+          {channels.map((ch) => (
+            <span key={ch} title={CHANNEL_META[ch]?.label} className="leading-none">
+              {CHANNEL_META[ch]?.icon}
+            </span>
+          ))}
+        </div>
+      )}
       {step.lastStartedAt && (
         <span className="text-[10px] text-slate-500">{fmtTime(step.lastStartedAt)}</span>
       )}
