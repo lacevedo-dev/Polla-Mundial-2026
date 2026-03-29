@@ -43,16 +43,52 @@ interface AutomationStatus {
   stats: { notifLast24h: number; pushSubscribers: number; usersWithPhone: number };
 }
 
-interface EventState {
-  scheduledAt: string;
-  sentCount: number;
-  done: boolean;
-  lastSentAt: string | null;
-  overdue: boolean;
-  closeMinutes?: number;
+type StepState =
+  | 'NOT_APPLICABLE' | 'SCHEDULED' | 'RUNNING' | 'SUCCESS'
+  | 'WARNING' | 'FAILED' | 'SKIPPED' | 'OVERDUE' | 'MANUAL';
+
+interface StepLeague {
+  leagueId: string;
+  leagueName: string;
+  leagueCode: string;
+  status: StepState;
+  scheduledAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  deliveredCount: number | null;
+  failedCount: number | null;
+  audienceCount: number | null;
+  warningCount: number | null;
+  errorMessage?: string | null;
 }
 
-interface MatrixMatch {
+interface OperationsStep {
+  key: string;
+  label: string;
+  status: StepState;
+  scheduledAt?: string | null;
+  lastStartedAt?: string | null;
+  lastFinishedAt?: string | null;
+  errorMessage?: string | null;
+  trigger: string;
+  leagues: StepLeague[];
+}
+
+interface OperationsSync {
+  status: StepState;
+  lastStartedAt?: string | null;
+  lastFinishedAt?: string | null;
+  durationMs?: number | null;
+  recentLogs: Array<{
+    id: string;
+    type: string;
+    status: string;
+    message: string;
+    error: string | null;
+  }>;
+}
+
+interface OperationsMatch {
   id: string;
   trackingScope?: 'TODAY' | 'CARRY_OVER';
   homeTeam: string;
@@ -60,16 +96,14 @@ interface MatrixMatch {
   matchDate: string;
   status: string;
   tournament: string | null;
-  events: {
-    reminder: EventState;
-    closing: EventState;
-    result: EventState & { scheduledAt: string | null };
-  };
+  overallStatus: StepState;
+  sync: OperationsSync;
+  steps: OperationsStep[];
 }
 
-interface TodayMatrix {
+interface DailyOperations {
   date: string;
-  matches: MatrixMatch[];
+  matches: OperationsMatch[];
 }
 
 interface NotifRecord {
@@ -102,10 +136,9 @@ interface HistoryResponse {
 type TabId = 'matrix' | 'history' | 'schedulers' | 'channels';
 
 interface IncidentInfo {
-  match: MatrixMatch;
-  eventKey: 'reminder' | 'closing' | 'result';
+  match: OperationsMatch;
+  step: OperationsStep;
   label: string;
-  step: string;
 }
 
 interface RetryResult {
@@ -237,48 +270,52 @@ function fmtFull(iso: string) {
   });
 }
 
-function EventCell({
-  ev,
-  onOverdueClick,
-}: {
-  ev: EventState & { scheduledAt: string | null };
-  onOverdueClick?: () => void;
-}) {
-  const time = ev.scheduledAt;
-
-  if (ev.done) {
-    return (
-      <div className="flex flex-col items-center gap-1">
-        <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
-          Enviado {ev.sentCount}
-        </span>
-        {ev.lastSentAt && <span className="text-[10px] text-slate-500">{fmtTime(ev.lastSentAt)}</span>}
-      </div>
-    );
-  }
-
-  if (ev.overdue) {
-    return (
-      <div
-        className="flex flex-col items-center gap-1 cursor-pointer"
-        onClick={onOverdueClick}
-        title={onOverdueClick ? 'Click para ver detalle y reintentar' : undefined}
-      >
-        <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600 transition hover:ring-2 hover:ring-red-300/40">
-          Pendiente
-        </span>
-        {time && <span className="text-[10px] text-slate-500">{fmtTime(time)}</span>}
-      </div>
-    );
-  }
-
-  if (!time) return <span className="text-sm text-slate-400">—</span>;
-
+function StatusDot({ state, size = 10 }: { state: StepState; size?: number }) {
+  const colors: Record<StepState, string> = {
+    SUCCESS: '#22c55e',
+    MANUAL: '#22c55e',
+    WARNING: '#f59e0b',
+    SCHEDULED: '#94a3b8',
+    RUNNING: '#3b82f6',
+    FAILED: '#ef4444',
+    OVERDUE: '#ef4444',
+    SKIPPED: '#94a3b8',
+    NOT_APPLICABLE: '#e2e8f0',
+  };
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-600">
-        <Clock size={9} /> {fmtTime(time)}
-      </span>
+    <span
+      style={{
+        display: 'inline-block',
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        backgroundColor: colors[state] ?? '#e2e8f0',
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function StepCell({
+  step,
+  onIncident,
+  match,
+}: {
+  step: OperationsStep;
+  onIncident?: (info: IncidentInfo) => void;
+  match: OperationsMatch;
+}) {
+  const canRetry = step.status === 'FAILED' || step.status === 'OVERDUE';
+  return (
+    <div
+      className={`flex flex-col items-center gap-1 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
+      onClick={canRetry && onIncident ? (e) => { e.stopPropagation(); onIncident({ match, step, label: step.label }); } : undefined}
+      title={canRetry && onIncident ? 'Click para ver detalle y reintentar' : undefined}
+    >
+      <StatusDot state={step.status} />
+      {step.lastStartedAt && (
+        <span className="text-[10px] text-slate-500">{fmtTime(step.lastStartedAt)}</span>
+      )}
     </div>
   );
 }
@@ -289,19 +326,19 @@ function MatrixRow({
   onExpand,
   onIncident,
 }: {
-  match: MatrixMatch;
+  match: OperationsMatch;
   expanded: boolean;
   onExpand: (id: string) => void;
   onIncident?: (info: IncidentInfo) => void;
 }) {
-  const makeIncidentHandler = (eventKey: 'reminder' | 'closing' | 'result', label: string, step: string) =>
-    onIncident ? () => onIncident({ match, eventKey, label, step }) : undefined;
+  const STEP_KEYS = ['MATCH_REMINDER', 'PREDICTION_CLOSING', 'RESULT_NOTIFICATION', 'PREDICTION_REPORT', 'RESULT_REPORT'];
+  const orderedSteps = STEP_KEYS.map((k) => match.steps.find((s) => s.key === k)).filter(Boolean) as OperationsStep[];
 
   return (
     <>
       <div
         className="grid cursor-pointer items-center px-4 py-3 transition-colors hover:bg-slate-50"
-        style={{ gridTemplateColumns: 'minmax(0,1.2fr) auto 1fr 1fr 1fr 1.2rem' }}
+        style={{ gridTemplateColumns: 'minmax(0,1.2fr) auto auto auto 1fr 1fr 1fr 1fr 1fr 1.2rem' }}
         onClick={() => onExpand(match.id)}
       >
         <div className="min-w-0">
@@ -325,34 +362,96 @@ function MatrixRow({
           </span>
         </div>
 
-        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}><EventCell ev={match.events.reminder} onOverdueClick={makeIncidentHandler('reminder', 'Recordatorio', 'MATCH_REMINDER')} /></div>
-        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}><EventCell ev={match.events.closing} onOverdueClick={makeIncidentHandler('closing', 'Cierre predicciones', 'PREDICTION_CLOSING')} /></div>
-        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}><EventCell ev={match.events.result} onOverdueClick={makeIncidentHandler('result', 'Resultado', 'RESULT_NOTIFICATION')} /></div>
+        {/* Estado global */}
+        <div className="flex justify-center px-2">
+          <StatusDot state={match.overallStatus} size={12} />
+        </div>
+
+        {/* Sync */}
+        <div className="flex justify-center px-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col items-center gap-1">
+            <StatusDot state={match.sync.status} />
+            {match.sync.lastStartedAt && (
+              <span className="text-[10px] text-slate-500">{fmtTime(match.sync.lastStartedAt)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Steps */}
+        {orderedSteps.map((step) => (
+          <div key={step.key} className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+            <StepCell step={step} onIncident={onIncident} match={match} />
+          </div>
+        ))}
+
         <div className="flex justify-end text-slate-400">{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</div>
       </div>
 
       {expanded && (
         <div className="border-t border-slate-200 bg-slate-50 px-4 pb-4">
-          <div className="grid gap-3 pt-3 md:grid-cols-3">
-            {([
-              { key: 'reminder', label: 'Recordatorio', type: 'MATCH_REMINDER' },
-              { key: 'closing', label: 'Cierre de predicciones', type: 'PREDICTION_CLOSED' },
-              { key: 'result', label: 'Resultado', type: 'RESULT_PUBLISHED' },
-            ] as const).map(({ key, label, type }) => {
-              const ev = match.events[key];
-              return (
-                <div key={key} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${TYPE_BADGES[type]}`}>{label}</p>
-                  <div className="mt-3 space-y-1 text-xs text-slate-600">
-                    <p><span className="text-slate-500">Programado: </span>{ev.scheduledAt ? fmtFull(ev.scheduledAt) : '—'}</p>
-                    <p><span className="text-slate-500">Enviadas: </span><span className={ev.sentCount > 0 ? 'font-bold text-emerald-700' : 'text-slate-500'}>{ev.sentCount}</span></p>
-                    {ev.lastSentAt && <p><span className="text-slate-500">Último envío: </span>{fmtFull(ev.lastSentAt)}</p>}
-                    {'closeMinutes' in ev && ev.closeMinutes !== undefined && <p><span className="text-slate-500">Cierre configurado: </span>{ev.closeMinutes} min antes</p>}
-                    {ev.overdue && <p className="font-semibold text-red-600">No se ha enviado y ya venció la ventana.</p>}
-                  </div>
+          <div className="space-y-4 pt-3">
+            {/* Bloque Sync */}
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sync partido</p>
+              <div className="flex items-center gap-2 mb-2">
+                <StatusDot state={match.sync.status} />
+                <span className="text-xs font-semibold text-slate-700">{match.sync.status}</span>
+                {match.sync.durationMs && (
+                  <span className="text-[10px] text-slate-500">{(match.sync.durationMs / 1000).toFixed(1)}s</span>
+                )}
+              </div>
+              {match.sync.recentLogs.length > 0 && (
+                <div className="space-y-1">
+                  {match.sync.recentLogs.map((log) => (
+                    <div key={log.id} className="text-[10px] text-slate-500 flex items-center gap-1">
+                      <span className="font-mono">[{log.type}]</span>
+                      <span>{log.message}</span>
+                      {log.error && <span className="text-red-600">— {log.error}</span>}
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            {/* Pasos */}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {match.steps.map((step) => (
+                <div key={step.key} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <StatusDot state={step.status} />
+                    <p className="text-xs font-black text-slate-800">{step.label}</p>
+                  </div>
+                  <div className="space-y-1 text-xs text-slate-600">
+                    {step.scheduledAt && <p><span className="text-slate-400">Programado: </span>{fmtFull(step.scheduledAt)}</p>}
+                    {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
+                    {step.lastFinishedAt && <p><span className="text-slate-400">Fin: </span>{fmtFull(step.lastFinishedAt)}</p>}
+                    {step.errorMessage && step.leagues.length === 0 && (
+                      <p className="text-red-600 font-semibold">{step.errorMessage}</p>
+                    )}
+                  </div>
+                  {step.leagues.length > 0 && (
+                    <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                      {step.leagues.map((league) => (
+                        <div key={league.leagueId} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <StatusDot state={league.status} size={8} />
+                            <span className="text-[10px] font-semibold text-slate-700 truncate">{league.leagueName}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                            {league.deliveredCount !== null && <span>✓ {league.deliveredCount}</span>}
+                            {league.failedCount !== null && league.failedCount > 0 && <span className="text-red-600">✗ {league.failedCount}</span>}
+                            {league.audienceCount !== null && <span>👥 {league.audienceCount}</span>}
+                          </div>
+                          {league.errorMessage && (
+                            <p className="text-[10px] text-red-600 mt-0.5">{league.errorMessage}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -535,17 +634,11 @@ function SchedulerCard({ scheduler, channelStatus }: { scheduler: SchedulerDef; 
   );
 }
 
-function guessErrorSuggestion(isOverdue: boolean, hasDone: boolean): string | null {
-  if (isOverdue && !hasDone) return 'Este paso no se ejecutó cuando correspondía. Podría ser un fallo del scheduler o un lock de concurrencia. Usá el botón de reintento manual.';
-  return null;
-}
-
 function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInfo; onClose: () => void; onRefresh: () => void }) {
   const [retrying, setRetrying] = useState(false);
   const [retryResult, setRetryResult] = useState<RetryResult | null>(null);
 
-  const eventState = incident.match.events[incident.eventKey] as EventState & { scheduledAt: string | null };
-  const suggestion = guessErrorSuggestion(eventState.overdue, eventState.done);
+  const step = incident.step;
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -553,7 +646,7 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
     try {
       const result = await request<RetryResult>('/admin/automation/retry', {
         method: 'POST',
-        body: JSON.stringify({ matchId: incident.match.id, step: incident.step }),
+        body: JSON.stringify({ matchId: incident.match.id, stepKey: step.key }),
       });
       setRetryResult(result);
       if (result.ok) setTimeout(() => { onRefresh(); }, 1500);
@@ -571,7 +664,7 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <AlertTriangle size={16} className="shrink-0 text-amber-500" />
-              <p className="text-sm font-black text-slate-900">Paso sin ejecutar</p>
+              <p className="text-sm font-black text-slate-900">Paso con problema</p>
               <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-700">{incident.label}</span>
             </div>
             <p className="mt-1 truncate text-xs text-slate-500">{incident.match.homeTeam} vs {incident.match.awayTeam}</p>
@@ -581,19 +674,40 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
 
         <div className="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-4">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Detalle del evento</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Detalle del paso</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
-              <p><span className="text-slate-400">Programado: </span>{eventState.scheduledAt ? fmtFull(eventState.scheduledAt) : '—'}</p>
-              <p><span className="text-slate-400">Enviados: </span>{eventState.sentCount}</p>
+              <p><span className="text-slate-400">Programado: </span>{step.scheduledAt ? fmtFull(step.scheduledAt) : '—'}</p>
+              <p><span className="text-slate-400">Estado: </span>{step.status}</p>
               <p><span className="text-slate-400">Partido: </span>{incident.match.status}</p>
-              <p><span className="text-slate-400">Ejecutado: </span>{eventState.done ? 'Sí' : 'No'}</p>
+              {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
             </div>
+            {step.errorMessage && (
+              <p className="mt-2 text-red-600 font-semibold">{step.errorMessage}</p>
+            )}
           </div>
 
-          {suggestion && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-1">Diagnóstico</p>
-              <p className="text-xs text-amber-800">{suggestion}</p>
+          {step.leagues.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Ligas</p>
+              <div className="space-y-2">
+                {step.leagues.map((league) => (
+                  <div key={league.leagueId} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <StatusDot state={league.status} size={8} />
+                      <span className="text-xs font-semibold text-slate-800">{league.leagueName}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{league.leagueCode}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                      {league.deliveredCount !== null && <span>Entregados: <strong className="text-emerald-700">{league.deliveredCount}</strong></span>}
+                      {league.failedCount !== null && league.failedCount > 0 && <span>Fallidos: <strong className="text-red-600">{league.failedCount}</strong></span>}
+                      {league.audienceCount !== null && <span>Audiencia: <strong>{league.audienceCount}</strong></span>}
+                    </div>
+                    {league.errorMessage && (
+                      <p className="mt-1 text-[10px] text-red-600">{league.errorMessage}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -629,7 +743,7 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
 
 export default function AdminAutomation() {
   const [status, setStatus] = useState<AutomationStatus | null>(null);
-  const [matrix, setMatrix] = useState<TodayMatrix | null>(null);
+  const [matrix, setMatrix] = useState<DailyOperations | null>(null);
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -646,7 +760,7 @@ export default function AdminAutomation() {
     try {
       const [statusResponse, matrixResponse] = await Promise.all([
         request<AutomationStatus>('/admin/automation/status'),
-        request<TodayMatrix>('/admin/automation/today-matrix'),
+        request<DailyOperations>('/admin/automation/operations'),
       ]);
       setStatus(statusResponse);
       setMatrix(matrixResponse);
@@ -734,7 +848,7 @@ export default function AdminAutomation() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">Procesos automáticos</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Revisa canales, tipos de notificación, matriz diaria e historial sin duplicar el panel de sync independiente.
+            Revisa canales, tipos de notificación, matriz diaria e historial sin duplicar el panel de sincronización independiente.
             La operación de partidos sigue America/Bogota y la cuota de requests corta a las 00:00 UTC.
           </p>
         </div>
@@ -827,13 +941,17 @@ export default function AdminAutomation() {
           </div>
 
           {filteredMatches.length > 0 ? (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500" style={{ gridTemplateColumns: 'minmax(0,1.2fr) auto 1fr 1fr 1fr 1.2rem' }}>
+            <div className="overflow-x-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500" style={{ gridTemplateColumns: 'minmax(0,1.2fr) auto auto auto 1fr 1fr 1fr 1fr 1fr 1.2rem' }}>
                 <span>Partido</span>
                 <span className="px-3">Hora</span>
+                <span className="text-center px-2">Estado</span>
+                <span className="text-center px-2">Sync</span>
                 <span className="text-center">Recordatorio</span>
                 <span className="text-center">Cierre</span>
                 <span className="text-center">Resultado</span>
+                <span className="text-center">P.Report</span>
+                <span className="text-center">Reportes</span>
                 <span />
               </div>
               <div className="divide-y divide-slate-200">
