@@ -107,6 +107,8 @@ interface MatchesFilters {
     risk?: 'blocked' | 'failing' | 'healthy';
     linkSource?: 'manual' | 'suggested';
     tournamentId?: string;
+    startDate?: string;
+    endDate?: string;
 }
 
 interface AdminMatchesState {
@@ -165,6 +167,8 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
             ...(filters.risk && { risk: filters.risk }),
             ...(filters.linkSource && { linkSource: filters.linkSource }),
             ...(filters.tournamentId && { tournamentId: filters.tournamentId }),
+            ...(filters.startDate && { startDate: filters.startDate }),
+            ...(filters.endDate && { endDate: filters.endDate }),
         });
         set({ isLoading: true, error: null });
         try {

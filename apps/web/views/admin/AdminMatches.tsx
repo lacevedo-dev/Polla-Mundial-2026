@@ -7,7 +7,7 @@ import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
 import TournamentImportModal from '../../components/admin/TournamentImportModal';
 import { useAdminMatchesStore } from '../../stores/admin.matches.store';
-import type { AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
+import type { AdminMatch, AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
 
 const PHASES = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
@@ -36,12 +36,54 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString('es-CO', {
 const formatDateShort = (d: string) =>
   new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
 
+const formatDateInputLabel = (value: string) =>
+  new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T00:00:00`));
+
 const formatTime = (d: string) =>
   new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 
 const formatDateTime = (value?: string | null) => value
   ? new Date(value).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : 'Sin sync';
+
+const getLocalDateKey = (value: string) => {
+  const date = new Date(value);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+const formatDateGroupLabel = (value: string) => {
+  const label = new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(value));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+};
+
+export const groupAdminMatchesByDate = (matches: AdminMatch[]) => {
+  const groups: Array<{ dateKey: string; label: string; matches: AdminMatch[] }> = [];
+
+  matches.forEach((match) => {
+    const dateKey = getLocalDateKey(match.matchDate);
+    const lastGroup = groups[groups.length - 1];
+
+    if (!lastGroup || lastGroup.dateKey !== dateKey) {
+      groups.push({
+        dateKey,
+        label: formatDateGroupLabel(match.matchDate),
+        matches: [match],
+      });
+      return;
+    }
+
+    lastGroup.matches.push(match);
+  });
+
+  return groups;
+};
 
 function resolveFlagUrl(flagUrl?: string | null, code?: string | null): string {
   if (flagUrl) return flagUrl;
@@ -527,9 +569,15 @@ const AdminMatches: React.FC = () => {
 
   const filteredMatches = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return matches;
+    const startDate = filters.startDate ?? '';
+    const endDate = filters.endDate ?? '';
+
     return matches.filter((m) => {
+      const matchDateKey = getLocalDateKey(m.matchDate);
       const dateStr = new Date(m.matchDate).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).toLowerCase();
+      if (startDate && matchDateKey < startDate) return false;
+      if (endDate && matchDateKey > endDate) return false;
+      if (!q) return true;
       return (
         m.homeTeam?.name?.toLowerCase().includes(q) ||
         m.awayTeam?.name?.toLowerCase().includes(q) ||
@@ -540,7 +588,9 @@ const AdminMatches: React.FC = () => {
         dateStr.includes(q)
       );
     });
-  }, [matches, searchQuery]);
+  }, [matches, searchQuery, filters.startDate, filters.endDate]);
+
+  const groupedMatches = React.useMemo(() => groupAdminMatchesByDate(filteredMatches), [filteredMatches]);
 
   const handleRecalculateAll = React.useCallback(async () => {
     if (!window.confirm('¿Recalcular puntos de todos los partidos finalizados? Esto puede tomar unos segundos.')) return;
@@ -714,7 +764,7 @@ const AdminMatches: React.FC = () => {
     setFilters({ risk, linkSource, page: 1 });
   }, [setFilters]);
 
-  const hasActiveFilters = Boolean(filters.phase || filters.status || filters.linked || filters.risk || filters.linkSource || filters.tournamentId);
+  const hasActiveFilters = Boolean(filters.phase || filters.status || filters.linked || filters.risk || filters.linkSource || filters.tournamentId || filters.startDate || filters.endDate);
 
   return (
     <div className="space-y-5">
@@ -824,9 +874,11 @@ const AdminMatches: React.FC = () => {
           {filters.risk && <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white">Riesgo: {filters.risk}</span>}
           {filters.linkSource && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-bold text-violet-700">Origen: {filters.linkSource}</span>}
           {filters.tournamentId && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700">Torneo: {tournaments.find((t) => t.id === filters.tournamentId)?.name ?? filters.tournamentId}</span>}
+          {filters.startDate && <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-bold text-sky-700">Desde: {formatDateInputLabel(filters.startDate)}</span>}
+          {filters.endDate && <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-bold text-sky-700">Hasta: {formatDateInputLabel(filters.endDate)}</span>}
           <button
             type="button"
-            onClick={() => setFilters({ page: 1, phase: undefined, status: undefined, linked: undefined, risk: undefined, linkSource: undefined, tournamentId: undefined })}
+            onClick={() => setFilters({ page: 1, phase: undefined, status: undefined, linked: undefined, risk: undefined, linkSource: undefined, tournamentId: undefined, startDate: undefined, endDate: undefined })}
             className="ml-auto rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50"
           >
             Limpiar filtros
@@ -844,6 +896,26 @@ const AdminMatches: React.FC = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-8 pr-3 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
+        </div>
+        <div className="grid min-w-[240px] flex-1 gap-3 sm:grid-cols-2">
+          <label className="space-y-1.5">
+            <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Desde</span>
+            <input
+              type="date"
+              value={filters.startDate ?? ''}
+              onChange={(e) => setFilters({ startDate: e.target.value || undefined, page: 1 })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Hasta</span>
+            <input
+              type="date"
+              value={filters.endDate ?? ''}
+              onChange={(e) => setFilters({ endDate: e.target.value || undefined, page: 1 })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </label>
         </div>
         <div className="relative">
           <select value={filters.phase ?? ''} onChange={(e) => setFilters({ phase: e.target.value || undefined, page: 1 })} className="appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-8 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
@@ -895,80 +967,93 @@ const AdminMatches: React.FC = () => {
           {searchQuery ? 'Sin resultados para la búsqueda' : 'No se encontraron partidos'}
         </div>
       ) : (
-      <div className="grid gap-3 md:hidden">
-        {filteredMatches.map((match) => {
-          const syncBadge = getSyncBadge(match.lastSyncStatus);
-          const riskBadge = getRiskBadge(match);
-          return (
-            <article key={`${match.id}-mobile`} className={`rounded-[1.5rem] border-l-4 border border-slate-200 bg-white p-4 shadow-sm ${STATUS_CARD_BORDER[match.status] || 'border-l-slate-300'}`}>
-              {/* Tournament header */}
-              {(match.tournamentName || match.round) && (
-                <div className="flex items-center gap-1.5 mb-3">
-                  {match.tournamentLogo && <img src={match.tournamentLogo} alt="" className="h-4 w-4 object-contain" />}
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 truncate">
-                    {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
-                  </p>
-                </div>
-              )}
-              {/* Visual matchup */}
-              <MatchupRow match={match} showScore />
-              {/* Date + phase + status */}
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <p className="text-[11px] text-slate-400">{formatDateShort(match.matchDate)} · {match.phase}</p>
-                <StatusBadge status={match.status} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${riskBadge.className}`}>{riskBadge.label}</span>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${syncBadge.className}`}>{syncBadge.label}</span>
-                {match.externalId ? (
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700">Vinculado</span>
-                ) : (
-                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-700">Sin vinculo</span>
-                )}
-                {match.currentLinkSource && (
-                  <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-black uppercase text-white">
-                    {match.currentLinkSource === 'suggested' ? 'Sugerido' : 'Manual'}
-                  </span>
-                )}
-              </div>
-              <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Sync</dt>
-                  <dd className="mt-1 text-slate-600">{formatDateTime(match.lastSyncAt)}</dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Fixture</dt>
-                  <dd className="mt-1 font-mono text-slate-600">{match.externalId || 'Pendiente de vincular'}</dd>
-                </div>
-                {(match.lastSyncError || match.lastSyncMessage) && (
-                  <div className="col-span-2">
-                    <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Contexto</dt>
-                    <dd className={`mt-1 ${match.lastSyncError ? 'text-rose-600' : 'text-slate-600'}`}>{match.lastSyncError || match.lastSyncMessage}</dd>
-                  </div>
-                )}
-              </dl>
-              <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <summary className="cursor-pointer list-none text-xs font-black uppercase tracking-[0.16em] text-slate-500">
-                  Más contexto
-                </summary>
-                <div className="mt-3 space-y-2 text-xs text-slate-600">
-                  <p><span className="font-black text-slate-800">Syncs:</span> {match.syncCount ? `${match.syncCount}` : '0'}</p>
-                  <p><span className="font-black text-slate-800">Origen:</span> {match.lastSyncTriggeredBy || 'Sin dato'}</p>
-                  <p><span className="font-black text-slate-800">Riesgo:</span> {riskBadge.label}</p>
-                  <p><span className="font-black text-slate-800">Tipo de vínculo:</span> {match.currentLinkSource === 'suggested' ? 'Sugerido' : match.currentLinkSource === 'manual' ? 'Manual' : 'Sin dato'}</p>
-                </div>
-              </details>
-              <div className="mt-4 grid grid-cols-6 gap-2">
-                <button onClick={() => setLinkMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Gestionar vínculo de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Link2 size={14} className="mx-auto" /></button>
-                <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} title={match.externalId ? 'Sincronizar' : 'Auto-vincular y sincronizar'} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
-                <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
-                <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
-                <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
-                <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-rose-600" aria-label={`Eliminar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Trash2 size={14} className="mx-auto" /></button>
-              </div>
-            </article>
-          );
-        })}
+      <div className="grid gap-5 md:hidden">
+        {groupedMatches.map((group) => (
+          <section key={group.dateKey} className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-200" />
+              <p className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+                {group.label}
+              </p>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+            <div className="grid gap-3">
+              {group.matches.map((match) => {
+                const syncBadge = getSyncBadge(match.lastSyncStatus);
+                const riskBadge = getRiskBadge(match);
+                return (
+                  <article key={`${match.id}-mobile`} className={`rounded-[1.5rem] border-l-4 border border-slate-200 bg-white p-4 shadow-sm ${STATUS_CARD_BORDER[match.status] || 'border-l-slate-300'}`}>
+                    {/* Tournament header */}
+                    {(match.tournamentName || match.round) && (
+                      <div className="mb-3 flex items-center gap-1.5">
+                        {match.tournamentLogo && <img src={match.tournamentLogo} alt="" className="h-4 w-4 object-contain" />}
+                        <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">
+                          {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
+                        </p>
+                      </div>
+                    )}
+                    {/* Visual matchup */}
+                    <MatchupRow match={match} showScore />
+                    {/* Date + phase + status */}
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-slate-400">{formatDateShort(match.matchDate)} · {match.phase}</p>
+                      <StatusBadge status={match.status} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${riskBadge.className}`}>{riskBadge.label}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${syncBadge.className}`}>{syncBadge.label}</span>
+                      {match.externalId ? (
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700">Vinculado</span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-700">Sin vinculo</span>
+                      )}
+                      {match.currentLinkSource && (
+                        <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-black uppercase text-white">
+                          {match.currentLinkSource === 'suggested' ? 'Sugerido' : 'Manual'}
+                        </span>
+                      )}
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Sync</dt>
+                        <dd className="mt-1 text-slate-600">{formatDateTime(match.lastSyncAt)}</dd>
+                      </div>
+                      <div className="col-span-2">
+                        <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Fixture</dt>
+                        <dd className="mt-1 font-mono text-slate-600">{match.externalId || 'Pendiente de vincular'}</dd>
+                      </div>
+                      {(match.lastSyncError || match.lastSyncMessage) && (
+                        <div className="col-span-2">
+                          <dt className="font-black uppercase tracking-[0.14em] text-slate-400">Contexto</dt>
+                          <dd className={`mt-1 ${match.lastSyncError ? 'text-rose-600' : 'text-slate-600'}`}>{match.lastSyncError || match.lastSyncMessage}</dd>
+                        </div>
+                      )}
+                    </dl>
+                    <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <summary className="cursor-pointer list-none text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+                        Más contexto
+                      </summary>
+                      <div className="mt-3 space-y-2 text-xs text-slate-600">
+                        <p><span className="font-black text-slate-800">Syncs:</span> {match.syncCount ? `${match.syncCount}` : '0'}</p>
+                        <p><span className="font-black text-slate-800">Origen:</span> {match.lastSyncTriggeredBy || 'Sin dato'}</p>
+                        <p><span className="font-black text-slate-800">Riesgo:</span> {riskBadge.label}</p>
+                        <p><span className="font-black text-slate-800">Tipo de vínculo:</span> {match.currentLinkSource === 'suggested' ? 'Sugerido' : match.currentLinkSource === 'manual' ? 'Manual' : 'Sin dato'}</p>
+                      </div>
+                    </details>
+                    <div className="mt-4 grid grid-cols-6 gap-2">
+                      <button onClick={() => setLinkMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Gestionar vínculo de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Link2 size={14} className="mx-auto" /></button>
+                      <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} title={match.externalId ? 'Sincronizar' : 'Auto-vincular y sincronizar'} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
+                      <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
+                      <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
+                      <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
+                      <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-rose-600" aria-label={`Eliminar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Trash2 size={14} className="mx-auto" /></button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
       )}
 
@@ -1004,66 +1089,79 @@ const AdminMatches: React.FC = () => {
         ) : filteredMatches.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-400">{searchQuery ? 'Sin resultados para la búsqueda' : 'No se encontraron partidos'}</div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filteredMatches.map((match) => {
-              const syncBadge = getSyncBadge(match.lastSyncStatus);
-              const riskBadge = getRiskBadge(match);
-              return (
-                <div key={match.id} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 md:grid-cols-[2fr_1fr_1.2fr_auto]">
-                  <div className="min-w-0">
-                    {(match.tournamentName || match.round) && (
-                      <div className="flex items-center gap-1.5 mb-2">
-                        {match.tournamentLogo && <img src={match.tournamentLogo} alt="" className="h-3.5 w-3.5 object-contain" />}
-                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 truncate">
-                          {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
-                        </p>
-                      </div>
-                    )}
-                    <MatchupRow match={match} showScore />
-                    <p className="mt-1.5 text-[11px] text-slate-400">{formatDate(match.matchDate)} · {match.phase}</p>
-                  </div>
-                  <div className="hidden md:block"><StatusBadge status={match.status} /></div>
-                  <div className="hidden md:block">
-                    {match.externalId ? (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700"><Link2 size={12} /> Vinculado</span>
-                        <p className="text-xs font-mono text-slate-500">{match.externalId}</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${riskBadge.className}`}>{riskBadge.label}</span>
-                          <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${syncBadge.className}`}>{syncBadge.label}</span>
-                          {match.currentLinkSource && (
-                            <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-black uppercase text-white">
-                              {match.currentLinkSource === 'suggested' ? 'Sugerido' : 'Manual'}
-                            </span>
-                          )}
-                          <p className="text-[11px] text-slate-400">{match.syncCount ? `${match.syncCount} syncs` : 'Sin syncs'}</p>
-                        </div>
-                        <p className="text-[11px] text-slate-400">{formatDateTime(match.lastSyncAt)}</p>
-                        {match.lastSyncError ? (
-                          <p className="line-clamp-2 text-[11px] text-rose-600">{match.lastSyncError}</p>
-                        ) : match.lastSyncMessage ? (
-                          <p className="line-clamp-2 text-[11px] text-slate-400">{match.lastSyncMessage}</p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700"><Unlink2 size={12} /> Sin vinculo</span>
-                        <p className="text-[11px] text-slate-400">Pendiente de asociar fixture</p>
-                        <p className="text-[11px] text-slate-400">Riesgo: no se sincroniza hasta vincularse</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => setLinkMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-violet-50 hover:text-violet-600" title={match.externalId ? 'Gestionar vinculo' : 'Vincular'}><Link2 size={14} /></button>
-                    <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title={match.externalId ? 'Sincronizar ahora' : 'Auto-vincular y sincronizar'}><RefreshCw size={14} /></button>
-                    <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Ver y enviar correo de arranque"><Mail size={14} /></button>
-                    <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Ver y enviar correo de cierre"><MailCheck size={14} /></button>
-                    <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>
-                    <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600" title="Eliminar"><Trash2 size={14} /></button>
-                  </div>
+          <div className="space-y-3 py-3">
+            {groupedMatches.map((group) => (
+              <section key={group.dateKey} className="space-y-1">
+                <div className="flex items-center gap-3 px-5">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <p className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {group.label}
+                  </p>
+                  <div className="h-px flex-1 bg-slate-200" />
                 </div>
-              );
-            })}
+                <div className="divide-y divide-slate-100 rounded-[1.5rem] border border-slate-100 bg-white shadow-sm">
+                  {group.matches.map((match) => {
+                    const syncBadge = getSyncBadge(match.lastSyncStatus);
+                    const riskBadge = getRiskBadge(match);
+                    return (
+                      <div key={match.id} className="grid grid-cols-[2fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 md:grid-cols-[2fr_1fr_1.2fr_auto]">
+                        <div className="min-w-0">
+                          {(match.tournamentName || match.round) && (
+                            <div className="mb-2 flex items-center gap-1.5">
+                              {match.tournamentLogo && <img src={match.tournamentLogo} alt="" className="h-3.5 w-3.5 object-contain" />}
+                              <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">
+                                {match.tournamentName}{match.tournamentName && match.round ? ' · ' : ''}{match.round}
+                              </p>
+                            </div>
+                          )}
+                          <MatchupRow match={match} showScore />
+                          <p className="mt-1.5 text-[11px] text-slate-400">{formatDate(match.matchDate)} · {match.phase}</p>
+                        </div>
+                        <div className="hidden md:block"><StatusBadge status={match.status} /></div>
+                        <div className="hidden md:block">
+                          {match.externalId ? (
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700"><Link2 size={12} /> Vinculado</span>
+                              <p className="text-xs font-mono text-slate-500">{match.externalId}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${riskBadge.className}`}>{riskBadge.label}</span>
+                                <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${syncBadge.className}`}>{syncBadge.label}</span>
+                                {match.currentLinkSource && (
+                                  <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-black uppercase text-white">
+                                    {match.currentLinkSource === 'suggested' ? 'Sugerido' : 'Manual'}
+                                  </span>
+                                )}
+                                <p className="text-[11px] text-slate-400">{match.syncCount ? `${match.syncCount} syncs` : 'Sin syncs'}</p>
+                              </div>
+                              <p className="text-[11px] text-slate-400">{formatDateTime(match.lastSyncAt)}</p>
+                              {match.lastSyncError ? (
+                                <p className="line-clamp-2 text-[11px] text-rose-600">{match.lastSyncError}</p>
+                              ) : match.lastSyncMessage ? (
+                                <p className="line-clamp-2 text-[11px] text-slate-400">{match.lastSyncMessage}</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700"><Unlink2 size={12} /> Sin vinculo</span>
+                              <p className="text-[11px] text-slate-400">Pendiente de asociar fixture</p>
+                              <p className="text-[11px] text-slate-400">Riesgo: no se sincroniza hasta vincularse</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setLinkMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-violet-50 hover:text-violet-600" title={match.externalId ? 'Gestionar vinculo' : 'Vincular'}><Link2 size={14} /></button>
+                          <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title={match.externalId ? 'Sincronizar ahora' : 'Auto-vincular y sincronizar'}><RefreshCw size={14} /></button>
+                          <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Ver y enviar correo de arranque"><Mail size={14} /></button>
+                          <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Ver y enviar correo de cierre"><MailCheck size={14} /></button>
+                          <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>
+                          <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600" title="Eliminar"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         )}
       </div>

@@ -1,8 +1,8 @@
 import {
     Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards,
-    NotFoundException, ParseIntPipe, DefaultValuePipe,
+    NotFoundException, ParseIntPipe, DefaultValuePipe, BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Phase, MatchStatus } from '@prisma/client';
 import { IsOptional, IsEnum, IsString, IsNumber, IsDateString } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -61,8 +61,39 @@ export class AdminMatchesController {
         }
     }
 
+    private parseDateComponent(dateValue: string) {
+        const [datePart] = dateValue.split('T');
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+        if (!match) {
+            throw new BadRequestException('startDate/endDate deben tener formato YYYY-MM-DD');
+        }
+
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const probe = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+        if (
+            probe.getUTCFullYear() !== year
+            || probe.getUTCMonth() !== month - 1
+            || probe.getUTCDate() !== day
+        ) {
+            throw new BadRequestException('startDate/endDate no son fechas válidas');
+        }
+
+        return { year, month, day };
+    }
+
+    private buildMatchDateBoundary(dateValue: string, boundary: 'gte' | 'lt') {
+        const { year, month, day } = this.parseDateComponent(dateValue);
+        return boundary === 'gte'
+            ? new Date(Date.UTC(year, month - 1, day, 5, 0, 0))
+            : new Date(Date.UTC(year, month - 1, day + 1, 5, 0, 0));
+    }
+
     @Get()
     @ApiOperation({ summary: 'List all matches' })
+    @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Fecha mínima inclusiva en formato YYYY-MM-DD' })
+    @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Fecha máxima inclusiva en formato YYYY-MM-DD' })
     async findAll(
         @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
         @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
@@ -72,6 +103,8 @@ export class AdminMatchesController {
         @Query('risk') risk?: 'blocked' | 'failing' | 'healthy',
         @Query('linkSource') linkSource?: 'manual' | 'suggested',
         @Query('tournamentId') tournamentId?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
     ) {
         const skip = (page - 1) * limit;
         const linkSourceMatchIds = linkSource
@@ -91,6 +124,11 @@ export class AdminMatchesController {
             ))
             : null;
 
+        const matchDateFilter = {
+            ...(startDate ? { gte: this.buildMatchDateBoundary(startDate, 'gte') } : {}),
+            ...(endDate ? { lt: this.buildMatchDateBoundary(endDate, 'lt') } : {}),
+        };
+
         const where: any = {
             ...(phase && { phase }),
             ...(status && { status }),
@@ -101,6 +139,7 @@ export class AdminMatchesController {
             ...(risk === 'healthy' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'SUCCESS' } } } : {}),
             ...(linkSource ? { id: { in: linkSourceMatchIds?.length ? linkSourceMatchIds : ['__none__'] } } : {}),
             ...(tournamentId ? { tournamentId } : {}),
+            ...((startDate || endDate) ? { matchDate: matchDateFilter } : {}),
         };
 
         const [data, total, summaryMatches] = await Promise.all([
