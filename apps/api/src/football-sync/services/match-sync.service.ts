@@ -746,11 +746,11 @@ export class MatchSyncService {
     elapsed: number | null,
   ): Promise<void> {
     try {
+      // Only fetch userId to avoid loading unnecessary relation data
       const predictions = await this.prisma.prediction.findMany({
         where: { matchId },
-        include: {
-          match: { include: { homeTeam: true, awayTeam: true } },
-        },
+        select: { userId: true },
+        distinct: ['userId'], // Avoid duplicate notifications if user has multiple predictions
       });
 
       if (predictions.length === 0) return;
