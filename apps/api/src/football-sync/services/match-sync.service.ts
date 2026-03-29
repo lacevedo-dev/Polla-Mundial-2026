@@ -492,6 +492,31 @@ export class MatchSyncService {
         match.homeScore !== fixture.goals.home ||
         match.awayScore !== fixture.goals.away;
 
+      // Detect goals (score increased from previous value)
+      const homeGoalsScored = fixture.goals.home !== null &&
+        match.homeScore !== null &&
+        fixture.goals.home > match.homeScore;
+      const awayGoalsScored = fixture.goals.away !== null &&
+        match.awayScore !== null &&
+        fixture.goals.away > match.awayScore;
+
+      // Send push notification for goals during live match
+      if (scoreChanged && status === MatchStatus.LIVE) {
+        const elapsed = fixture.fixture.status.elapsed ?? null;
+        if (homeGoalsScored || awayGoalsScored) {
+          await this.sendGoalPushNotification(
+            match.id,
+            fixture.teams.home.name,
+            fixture.teams.away.name,
+            fixture.goals.home,
+            fixture.goals.away,
+            homeGoalsScored ? fixture.teams.home.name : null,
+            awayGoalsScored ? fixture.teams.away.name : null,
+            elapsed,
+          );
+        }
+      }
+
       // Update match (including elapsed + statusShort for live timer persistence)
       const updatedMatch = await this.prisma.match.update({
         where: { id: match.id },
@@ -704,6 +729,60 @@ export class MatchSyncService {
       }
     } catch (error) {
       this.logger.error(`sendResultPushNotifications failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send push notifications to league members when a goal is scored during a live match
+   */
+  private async sendGoalPushNotification(
+    matchId: string,
+    homeTeamName: string,
+    awayTeamName: string,
+    homeScore: number | null,
+    awayScore: number | null,
+    goalScorerTeam: string | null, // null if no goal for this team
+    awayGoalScorerTeam: string | null,
+    elapsed: number | null,
+  ): Promise<void> {
+    try {
+      const predictions = await this.prisma.prediction.findMany({
+        where: { matchId },
+        include: {
+          match: { include: { homeTeam: true, awayTeam: true } },
+        },
+      });
+
+      if (predictions.length === 0) return;
+
+      const score = `${homeScore ?? '-'}-${awayScore ?? '-'}`;
+      const minute = elapsed ? `${elapsed}'` : '';
+      const goalTeams: string[] = [];
+      if (goalScorerTeam) goalTeams.push(goalScorerTeam);
+      if (awayGoalScorerTeam) goalTeams.push(awayGoalScorerTeam);
+      const goalTeamText = goalTeams.join(' y ');
+
+      const title = '⚽ ¡GOL!';
+      const body = goalTeams.length === 2
+        ? `${goalTeamText} anotar${goalTeams.length > 1 ? 'ron' : ''} — ${homeTeamName} ${score} ${awayTeamName}${minute ? ` ${minute}` : ''}`
+        : `${goalTeamText} marca${goalScorerTeam ? '' : 'n'} — ${homeTeamName} ${score} ${awayTeamName}${minute ? ` ${minute}` : ''}`;
+
+      // Send to all users with predictions for this match (limit to one notification per user per goal event)
+      const notifiedUsers = new Set<string>();
+      for (const prediction of predictions) {
+        if (notifiedUsers.has(prediction.userId)) continue;
+        notifiedUsers.add(prediction.userId);
+
+        await this.push.sendToUser(prediction.userId, {
+          title,
+          body,
+          tag: `goal-${matchId}-${Date.now()}`,
+          requireInteraction: false,
+          data: { matchId, type: 'goal', homeScore, awayScore },
+        });
+      }
+    } catch (error) {
+      this.logger.error(`sendGoalPushNotification failed: ${error.message}`);
     }
   }
 
