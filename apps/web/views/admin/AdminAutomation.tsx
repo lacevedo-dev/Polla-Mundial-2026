@@ -62,6 +62,15 @@ interface StepLeague {
   errorMessage?: string | null;
 }
 
+interface ChannelBreakdown {
+  pushSent?: number;
+  pushFailed?: number;
+  pushDevices?: number;
+  whatsappSentCount?: number;
+  emailQueued?: number;
+  emailFailed?: number;
+}
+
 interface OperationsStep {
   key: string;
   label: string;
@@ -72,6 +81,7 @@ interface OperationsStep {
   errorMessage?: string | null;
   trigger: string;
   leagues: StepLeague[];
+  latestDetails?: { channelBreakdown?: ChannelBreakdown } | null;
 }
 
 interface OperationsSync {
@@ -168,12 +178,32 @@ const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {
 };
 
 const STEP_CHANNELS: Record<string, string[]> = {
-  MATCH_REMINDER:       ['push', 'whatsapp'],
-  PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp'],
+  MATCH_REMINDER:       ['push', 'whatsapp', 'email'],
+  PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp', 'email'],
   RESULT_NOTIFICATION:  ['push', 'whatsapp'],
-  PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp'],
-  RESULT_REPORT:        ['push', 'inApp', 'whatsapp'],
+  PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp', 'email'],
+  RESULT_REPORT:        ['push', 'inApp', 'whatsapp', 'email'],
 };
+
+// Cuántos se enviaron/fallaron por canal, extraído de latestDetails.channelBreakdown
+function getChannelCounters(
+  ch: string,
+  breakdown: ChannelBreakdown | undefined,
+): { sent: number; failed: number } | null {
+  if (!breakdown) return null;
+  switch (ch) {
+    case 'push':
+      return { sent: breakdown.pushSent ?? 0, failed: breakdown.pushFailed ?? 0 };
+    case 'whatsapp':
+      return { sent: breakdown.whatsappSentCount ?? 0, failed: 0 };
+    case 'email':
+      return { sent: breakdown.emailQueued ?? 0, failed: breakdown.emailFailed ?? 0 };
+    case 'inApp':
+      return null; // inApp no genera counters explícitos
+    default:
+      return null;
+  }
+}
 
 const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: 'Programado',
@@ -327,35 +357,50 @@ function StepCell({
 }) {
   const canRetry = step.status === 'FAILED' || step.status === 'OVERDUE';
   const channels = STEP_CHANNELS[step.key] ?? [];
-  const iconColor = STEP_STATE_COLOR[step.status] ?? 'text-slate-300';
-
-  // Totales agregados sobre todas las ligas
-  const totalDelivered = step.leagues.reduce((sum, l) => sum + (l.deliveredCount ?? 0), 0);
-  const totalFailed    = step.leagues.reduce((sum, l) => sum + (l.failedCount ?? 0), 0);
-  const hasCounters    = step.leagues.length > 0 && (totalDelivered > 0 || totalFailed > 0);
+  const breakdown = step.latestDetails?.channelBreakdown;
 
   return (
     <div
-      className={`flex flex-col items-center gap-0.5 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
+      className={`flex flex-col items-center gap-1 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
       onClick={canRetry && onIncident ? (e) => { e.stopPropagation(); onIncident({ match, step, label: step.label }); } : undefined}
       title={canRetry && onIncident ? 'Click para ver detalle y reintentar' : undefined}
     >
       <StatusDot state={step.status} />
+
       {channels.length > 0 && (
-        <div className={`flex gap-0.5 ${iconColor}`}>
-          {channels.map((ch) => (
-            <span key={ch} title={CHANNEL_META[ch]?.label} className="leading-none">
-              {CHANNEL_META[ch]?.icon}
-            </span>
-          ))}
+        <div className="flex flex-col items-center gap-0.5">
+          {channels.map((ch) => {
+            const counters = getChannelCounters(ch, breakdown);
+            // Color del ícono: rojo si tiene fallas, verde si envió, gris si sin datos
+            const hasData   = counters && (counters.sent > 0 || counters.failed > 0);
+            const hasFailed = counters && counters.failed > 0;
+            const iconColor = hasFailed
+              ? 'text-red-500'
+              : hasData
+                ? 'text-emerald-500'
+                : STEP_STATE_COLOR[step.status] ?? 'text-slate-300';
+
+            return (
+              <div key={ch} className="flex items-center gap-0.5" title={CHANNEL_META[ch]?.label}>
+                <span className={`leading-none ${iconColor}`}>
+                  {CHANNEL_META[ch]?.icon}
+                </span>
+                {counters && hasData && (
+                  <span className="text-[9px] font-semibold leading-none">
+                    {counters.sent > 0 && (
+                      <span className="text-emerald-600">✓{counters.sent}</span>
+                    )}
+                    {counters.failed > 0 && (
+                      <span className="text-red-500 ml-0.5">✗{counters.failed}</span>
+                    )}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
-      {hasCounters && (
-        <div className="flex items-center gap-0.5 text-[9px] font-semibold leading-none">
-          <span className="text-emerald-600">✓{totalDelivered}</span>
-          {totalFailed > 0 && <span className="text-red-500">✗{totalFailed}</span>}
-        </div>
-      )}
+
       {step.lastStartedAt && (
         <span className="text-[10px] text-slate-500">{fmtTime(step.lastStartedAt)}</span>
       )}
