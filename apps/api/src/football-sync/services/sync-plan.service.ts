@@ -811,6 +811,9 @@ export class SyncPlanService {
 
   private buildTrackedMatchesWhere(todayStart: Date, todayEnd: Date) {
     const yesterdayStart = this.getYesterdayStart(todayStart);
+    // A match without externalId that started more than 130 min ago cannot be
+    // synced — exclude it from carry-over to prevent ghost tracking loops.
+    const carryOverCutoff = new Date(Date.now() - 130 * 60 * 1000);
 
     return {
       OR: [
@@ -821,17 +824,49 @@ export class SyncPlanService {
           },
         },
         {
+          // Carry-over: yesterday's matches still needing attention
           matchDate: {
             gte: yesterdayStart,
             lt: todayStart,
           },
           OR: [
-            { status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] } },
+            {
+              status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
+              // Only carry forward if it has an externalId OR if it hasn't
+              // definitely ended yet (started less than 130 min ago)
+              OR: [
+                { externalId: { not: null } },
+                { matchDate: { gte: carryOverCutoff } },
+              ],
+            },
             { status: MatchStatus.FINISHED, resultNotificationSentAt: null },
           ],
         },
       ],
     };
+  }
+
+  /**
+   * Force-close stale unlinked matches that started over 24 hours ago and
+   * are still SCHEDULED/LIVE with no externalId — they can never be synced.
+   * Returns the number of matches closed.
+   */
+  async closeStaleUnlinkedMatches(): Promise<number> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
+    const result = await this.prisma.match.updateMany({
+      where: {
+        status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
+        externalId: null,
+        matchDate: { lt: cutoff },
+      },
+      data: { status: MatchStatus.FINISHED },
+    });
+    if (result.count > 0) {
+      this.logger.warn(
+        `[Stale Cleanup] Force-finished ${result.count} unlinked match(es) older than 24h`,
+      );
+    }
+    return result.count;
   }
 
   private isClosedStatus(status: MatchStatus): boolean {

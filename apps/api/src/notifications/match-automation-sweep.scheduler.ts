@@ -11,6 +11,7 @@ import {
   tryRunExclusiveBackgroundJob,
 } from '../prisma/background-job-lock.util';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
+import { SyncPlanService } from '../football-sync/services/sync-plan.service';
 import { buildMatchAutomationSweepContext } from './match-automation-sweep-context';
 import { NotificationScheduler } from './notification.scheduler';
 
@@ -23,6 +24,7 @@ export class MatchAutomationSweepScheduler {
     private readonly prisma: PrismaService,
     private readonly notificationScheduler: NotificationScheduler,
     private readonly predictionReportScheduler: PredictionReportScheduler,
+    private readonly syncPlan: SyncPlanService,
   ) {}
 
   @Cron('* * * * *')
@@ -63,6 +65,7 @@ export class MatchAutomationSweepScheduler {
   private async runSweepTasks(): Promise<SchedulerObservationSummary> {
     const context = await buildMatchAutomationSweepContext(this.prisma);
     const taskNames = [
+      'closeStaleUnlinkedMatches',
       'sendMatchReminders',
       'sendPredictionClosingAlerts',
       'sendMatchResultNotifications',
@@ -70,6 +73,10 @@ export class MatchAutomationSweepScheduler {
       'sendPendingResultReports',
     ];
     const tasks: Array<[string, () => Promise<SchedulerObservationOutcome | void>]> = [
+      [
+        'closeStaleUnlinkedMatches',
+        () => this.syncPlan.closeStaleUnlinkedMatches(),
+      ],
       [
         'sendMatchReminders',
         () => this.notificationScheduler.sendMatchReminders(context),

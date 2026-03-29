@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { FootballSyncModule } from '../football-sync/football-sync.module';
 import { NotificationsService } from './notifications.service';
 import { MatchAutomationSweepScheduler } from './match-automation-sweep.scheduler';
 import { NotificationScheduler } from './notification.scheduler';
@@ -17,6 +18,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PushNotificationsModule,
     PredictionReportModule,
     AutomationObservabilityModule,
+    FootballSyncModule,
   ],
   controllers: [NotificationsController],
   providers: [
