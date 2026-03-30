@@ -709,7 +709,7 @@ export class MonitoringService {
   }
 
   async getDailyLimit(): Promise<number> {
-    const config = await this.footballConfigService.getConfig();
+    const config = await this.getConfig();
     return config?.dailyRequestLimit ?? 100;
   }
 
