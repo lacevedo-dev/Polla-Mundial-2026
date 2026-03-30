@@ -37,6 +37,29 @@ export class NotificationScheduler {
     private readonly twilio: TwilioService,
   ) {}
 
+  /**
+   * Batch-load phone/countryCode for a set of userIds in a single query.
+   * Returns only ACTIVE users — inactive users are absent from the map (treated as skipped).
+   */
+  private async fetchActiveUserContacts(
+    userIds: string[],
+  ): Promise<Map<string, { phone: string | null; countryCode: string | null }>> {
+    if (userIds.length === 0) return new Map();
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds }, status: USER_STATUS.ACTIVE },
+      select: { id: true, phone: true, countryCode: true },
+    });
+    return new Map(users.map((u) => [u.id, { phone: u.phone, countryCode: u.countryCode }]));
+  }
+
+  /**
+   * Send push + WhatsApp + in-app notification to a single user.
+   *
+   * @param userContact Pre-loaded contact info from `fetchActiveUserContacts`.
+   *   - Pass the Map entry if the user exists and is active.
+   *   - Pass `null` if the user was absent from the map (inactive / not found) → skipped.
+   *   - Omit entirely (undefined) only when calling outside a batch loop — triggers a DB fetch.
+   */
   private async notifyUser(
     userId: string,
     type: NotificationType,
@@ -44,13 +67,18 @@ export class NotificationScheduler {
     body: string,
     data: Record<string, unknown>,
     trigger?: string,
+    userContact?: { phone: string | null; countryCode: string | null } | null,
   ): Promise<NotificationDeliveryResult> {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, status: USER_STATUS.ACTIVE },
-      select: { phone: true, countryCode: true },
-    });
+    // Resolve contact: use pre-loaded value when provided, otherwise fetch individually.
+    const contact =
+      userContact !== undefined
+        ? userContact
+        : await this.prisma.user.findFirst({
+            where: { id: userId, status: USER_STATUS.ACTIVE },
+            select: { phone: true, countryCode: true },
+          });
 
-    if (!user) {
+    if (!contact) {
       return {
         pushSent: 0,
         pushFailed: 0,
@@ -64,8 +92,8 @@ export class NotificationScheduler {
 
     let whatsappSent = false;
     if (this.twilio.isEnabled()) {
-      if (user.phone) {
-        const fullPhone = `${user.countryCode ?? '+57'}${user.phone}`;
+      if (contact.phone) {
+        const fullPhone = `${contact.countryCode ?? '+57'}${contact.phone}`;
         try {
           await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);
           whatsappSent = true;
@@ -266,19 +294,20 @@ export class NotificationScheduler {
           let alreadySentCount = 0;
 
           try {
-            // Pre-load all users who already received a reminder for this match
-            // in a SINGLE query before iterating — eliminates per-user N+1 DB hits
-            // and prevents the loop caused by unreliable substring JSON search.
             const memberUserIds = league.members.map((m) => m.userId);
-            const alreadySentReminders = await this.prisma.notification.findMany({
-              where: {
-                userId: { in: memberUserIds },
-                type: NotificationType.MATCH_REMINDER,
-                // Use string_contains on the serialized JSON for matchId key
-                data: { contains: `"matchId":"${match.id}"` },
-              },
-              select: { userId: true },
-            });
+
+            // Batch-load both already-sent check and contact info — one query each.
+            const [alreadySentReminders, userContacts] = await Promise.all([
+              this.prisma.notification.findMany({
+                where: {
+                  userId: { in: memberUserIds },
+                  type: NotificationType.MATCH_REMINDER,
+                  data: { contains: `"matchId":"${match.id}"` },
+                },
+                select: { userId: true },
+              }),
+              this.fetchActiveUserContacts(memberUserIds),
+            ]);
             const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
 
             for (const member of league.members) {
@@ -305,6 +334,7 @@ export class NotificationScheduler {
                 body,
                 { matchId: match.id, leagueId: league.id },
                 `Partido en ~60 min: ${home} vs ${away}`,
+                userContacts.get(userId) ?? null,
               );
               deliveredCount++;
               pushSent += delivery.pushSent;
@@ -534,16 +564,20 @@ export class NotificationScheduler {
             let alreadySentCount = 0;
 
             try {
-              // Pre-load sent users in one query — same pattern as MATCH_REMINDER fix
               const memberUserIds = league.members.map((m) => m.userId);
-              const alreadySentReminders = await this.prisma.notification.findMany({
-                where: {
-                  userId: { in: memberUserIds },
-                  type: NotificationType.PREDICTION_CLOSED,
-                  data: { contains: `"matchId":"${match.id}"` },
-                },
-                select: { userId: true },
-              });
+
+              // Batch-load both already-sent check and contact info — one query each.
+              const [alreadySentReminders, userContacts] = await Promise.all([
+                this.prisma.notification.findMany({
+                  where: {
+                    userId: { in: memberUserIds },
+                    type: NotificationType.PREDICTION_CLOSED,
+                    data: { contains: `"matchId":"${match.id}"` },
+                  },
+                  select: { userId: true },
+                }),
+                this.fetchActiveUserContacts(memberUserIds),
+              ]);
               const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
 
               for (const member of league.members) {
@@ -567,6 +601,7 @@ export class NotificationScheduler {
                   body,
                   { matchId: match.id, leagueId: league.id },
                   `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+                  userContacts.get(userId) ?? null,
                 );
                 deliveredCount++;
                 pushSent += delivery.pushSent;
@@ -753,15 +788,24 @@ export class NotificationScheduler {
           let whatsappSentCount = 0;
           let alreadySentCount = 0;
 
-          for (const [userId, { points, leagueId }] of byUser) {
-            const alreadySent = await this.prisma.notification.findFirst({
+          const resultUserIds = [...byUser.keys()];
+
+          // Batch-load already-sent check and contact info — one query each.
+          const [alreadySentNotifications, userContacts] = await Promise.all([
+            this.prisma.notification.findMany({
               where: {
-                userId,
+                userId: { in: resultUserIds },
                 type: NotificationType.RESULT_PUBLISHED,
                 OR: [{ data: { contains: match.id } }, { data: { contains: notificationKey } }],
               },
-            });
-            if (alreadySent) {
+              select: { userId: true },
+            }),
+            this.fetchActiveUserContacts(resultUserIds),
+          ]);
+          const alreadySentUserIds = new Set(alreadySentNotifications.map((n) => n.userId));
+
+          for (const [userId, { points, leagueId }] of byUser) {
+            if (alreadySentUserIds.has(userId)) {
               alreadySentCount++;
               continue;
             }
@@ -778,6 +822,7 @@ export class NotificationScheduler {
               body,
               { matchId: match.id, leagueId, points, matchNotificationKey: notificationKey },
               `Partido finalizado: ${home} ${score} ${away} | ${points} pts`,
+              userContacts.get(userId) ?? null,
             );
             deliveredCount++;
             pushSent += delivery.pushSent;

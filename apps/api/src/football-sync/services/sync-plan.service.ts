@@ -851,6 +851,9 @@ export class SyncPlanService {
             gte: todayStart,
             lt: todayEnd,
           },
+          // Only track active matches from today — closed matches don't need sync
+          // slots and should not inflate the request budget calculation.
+          status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
         },
         {
           // Carry-over: yesterday's matches still needing attention
@@ -883,26 +886,49 @@ export class SyncPlanService {
   }
 
   /**
-   * Force-close stale unlinked matches that started over 24 hours ago and
-   * are still SCHEDULED/LIVE with no externalId — they can never be synced.
-   * Returns the number of matches closed.
+   * Force-close stale matches that are still SCHEDULED/LIVE past their expected end:
+   * - Unlinked (no externalId): after 24h — can never be synced.
+   * - Linked (has externalId): after 370 min — past the carry-over hard cutoff,
+   *   the match is certainly over even if the sync never confirmed it.
+   * Returns the total number of matches closed.
    */
   async closeStaleUnlinkedMatches(): Promise<number> {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
-    const result = await this.prisma.match.updateMany({
+    const unlinkedCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h
+    const unlinked = await this.prisma.match.updateMany({
       where: {
         status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
         externalId: null,
-        matchDate: { lt: cutoff },
+        matchDate: { lt: unlinkedCutoff },
       },
-      data: { status: MatchStatus.FINISHED },
+      // resultNotificationSentAt suppresses the notification — no real score to report.
+      data: { status: MatchStatus.FINISHED, resultNotificationSentAt: new Date() },
     });
-    if (result.count > 0) {
+
+    // 370 min = 130 min match + 30 extra time + 60 min API delay + 120 min safety margin.
+    // Also set resultNotificationSentAt to suppress the result notification — these matches
+    // were force-closed without a real score, so sending "- - -" would be misleading.
+    const linkedCutoff = new Date(Date.now() - 370 * 60 * 1000);
+    const linked = await this.prisma.match.updateMany({
+      where: {
+        status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
+        externalId: { not: null },
+        matchDate: { lt: linkedCutoff },
+      },
+      data: { status: MatchStatus.FINISHED, resultNotificationSentAt: new Date() },
+    });
+
+    if (unlinked.count > 0) {
       this.logger.warn(
-        `[Stale Cleanup] Force-finished ${result.count} unlinked match(es) older than 24h`,
+        `[Stale Cleanup] Force-finished ${unlinked.count} unlinked match(es) older than 24h`,
       );
     }
-    return result.count;
+    if (linked.count > 0) {
+      this.logger.warn(
+        `[Stale Cleanup] Force-finished ${linked.count} linked match(es) past 370-min carry-over cutoff`,
+      );
+    }
+
+    return unlinked.count + linked.count;
   }
 
   private isClosedStatus(status: MatchStatus): boolean {
