@@ -42,15 +42,24 @@ export function resolveDatabaseUrlForMariaDb(rawDatabaseUrl: string): DatabaseUr
 }
 
 function resolveConnectionUrl(rawDatabaseUrl: string): string {
+    let url: string;
+
     if (rawDatabaseUrl.startsWith(MARIADB_SCHEME_PREFIX)) {
-        return rawDatabaseUrl;
+        url = rawDatabaseUrl;
+    } else if (rawDatabaseUrl.startsWith(MYSQL_SCHEME_PREFIX)) {
+        url = `${MARIADB_SCHEME_PREFIX}${rawDatabaseUrl.slice(MYSQL_SCHEME_PREFIX.length)}`;
+    } else {
+        throw new Error(DATABASE_URL_SCHEME_ERROR_MESSAGE);
     }
 
-    if (rawDatabaseUrl.startsWith(MYSQL_SCHEME_PREFIX)) {
-        return `${MARIADB_SCHEME_PREFIX}${rawDatabaseUrl.slice(MYSQL_SCHEME_PREFIX.length)}`;
+    // Force UTC timezone on the MariaDB driver so all DateTime values are
+    // read/written as UTC regardless of the server's system timezone setting.
+    if (!url.includes('timezone=')) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}timezone=Z`;
     }
 
-    throw new Error(DATABASE_URL_SCHEME_ERROR_MESSAGE);
+    return url;
 }
 
 function resolveHostname(connectionUrl: string): string {
