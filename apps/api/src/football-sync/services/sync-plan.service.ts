@@ -178,8 +178,20 @@ export class SyncPlanService {
       };
     }
 
-    // Calculate requests per match
+    // Calculate requests per match — never exceed available budget
     const requestsPerMatch = Math.floor(availableRequests / totalMatches);
+
+    // Tight budget: fewer than 2 requests per match → extend interval to stretch coverage
+    if (requestsPerMatch < 2) {
+      this.logger.warn(
+        `TIGHT BUDGET: Only ${availableRequests} requests for ${totalMatches} matches (${requestsPerMatch}/match). Switching to CONSERVATIVE.`,
+      );
+      return {
+        intervalMinutes: maxInterval,
+        strategy: SyncStrategy.CONSERVATIVE,
+        estimatedTotal: usedRequests + availableRequests,
+      };
+    }
 
     // If we have live matches, prioritize them
     if (liveMatches > 0) {
@@ -693,9 +705,15 @@ export class SyncPlanService {
       }
     }
 
-    const statusRequests = [...statusRequestMap.values()].sort((left, right) =>
+    // Sort all status requests by scheduledAt (chronological)
+    const allStatusRequests = [...statusRequestMap.values()].sort((left, right) =>
       left.scheduledAt.localeCompare(right.scheduledAt),
     );
+
+    // Hard cap: never plan more requests than what's available.
+    // Prioritize the earliest slots (upcoming matches first).
+    const statusRequests = allStatusRequests.slice(0, available);
+
     const remainingBudget = Math.max(0, available - statusRequests.length);
     const selectedEvents = eventCandidates
       .sort((left, right) => {

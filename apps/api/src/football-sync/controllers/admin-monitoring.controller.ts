@@ -200,6 +200,25 @@ export class AdminMonitoringController {
     };
   }
 
+  @Post('sync/calibrate')
+  @ApiOperation({
+    summary: 'Calibrar contador de requests con valor real de la API',
+    description:
+      'Corrige el contador interno de requests usados con el valor real reportado por API-Football. Usar cuando hay discrepancia entre el dashboard de la API y el sistema.',
+  })
+  async calibrateRequests(
+    @Body() body: { used: number },
+  ): Promise<{ message: string; used: number; available: number }> {
+    const limit = await this.monitoring.getDailyLimit();
+    const available = Math.max(0, limit - body.used);
+    await this.monitoring.calibrateRequestCount(body.used, available);
+    return {
+      message: `Contador calibrado: ${body.used} usados, ${available} disponibles.`,
+      used: body.used,
+      available,
+    };
+  }
+
   @Post('sync/pause')
   @ApiOperation({
     summary: 'Pausar todas las sincronizaciones automáticas',

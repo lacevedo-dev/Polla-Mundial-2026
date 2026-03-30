@@ -708,6 +708,32 @@ export class MonitoringService {
     };
   }
 
+  async getDailyLimit(): Promise<number> {
+    const config = await this.footballConfigService.getConfig();
+    return config?.dailyRequestLimit ?? 100;
+  }
+
+  /**
+   * Calibrate the internal request counter with the real value from API-Football dashboard.
+   * Use when there's a discrepancy between the API dashboard and the internal counter.
+   */
+  async calibrateRequestCount(used: number, available: number): Promise<void> {
+    const today = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().split('T')[0];
+    await this.prisma.dailySyncPlan.upsert({
+      where: { date: today },
+      update: { requestsUsed: used, requestsBudget: available },
+      create: {
+        date: today,
+        totalMatches: 0,
+        requestsUsed: used,
+        requestsBudget: available,
+        intervalMinutes: 30,
+        strategy: 'BALANCED',
+      },
+    });
+    this.logger.log(`Request counter calibrated: ${used} used, ${available} available`);
+  }
+
   private mapToAlertDto(alert: any): FootballSyncAlertDto {
     return {
       id: alert.id,
