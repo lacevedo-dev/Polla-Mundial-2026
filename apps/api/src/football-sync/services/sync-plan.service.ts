@@ -847,12 +847,14 @@ export class SyncPlanService {
     return {
       OR: [
         {
-          matchDate: {
-            gte: todayStart,
-            lt: todayEnd,
-          },
-          // Only track active matches from today — closed matches don't need sync
-          // slots and should not inflate the request budget calculation.
+          // Only track active matches from today that haven't passed their expected
+          // end time. Matches past carryOverHardCutoff (370 min) have no sync slots
+          // anyway and are closed by the stale sweep — excluding them here prevents
+          // them from inflating the request budget before the sweep runs.
+          AND: [
+            { matchDate: { gte: todayStart, lt: todayEnd } },
+            { matchDate: { gte: carryOverHardCutoff } },
+          ],
           status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
         },
         {
