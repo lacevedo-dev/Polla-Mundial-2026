@@ -734,7 +734,7 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
     try {
       const result = await request<RetryResult>('/admin/automation/retry', {
         method: 'POST',
-        body: JSON.stringify({ matchId: incident.match.id, stepKey: step.key }),
+        body: JSON.stringify({ matchId: incident.match.id, step: step.key }),
       });
       setRetryResult(result);
       if (result.ok) setTimeout(() => { onRefresh(); }, 1500);
