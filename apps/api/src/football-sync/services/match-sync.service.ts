@@ -522,15 +522,6 @@ export class MatchSyncService {
         }
       }
 
-      // Sync matchDate from API timestamp if it differs (avoids stale kickoff times)
-      const apiMatchDate = fixture.fixture.timestamp
-        ? new Date(fixture.fixture.timestamp * 1000)
-        : null;
-      const matchDateDriftMs = apiMatchDate
-        ? Math.abs(apiMatchDate.getTime() - match.matchDate.getTime())
-        : 0;
-      const matchDateChanged = matchDateDriftMs > 60_000; // >1 min drift → update
-
       // When a force-closed match (FINISHED + resultNotificationSentAt set) is
       // reported as SCHEDULED or LIVE by the API, clear resultNotificationSentAt
       // so the notification scheduler can fire properly when it actually finishes.
@@ -538,6 +529,17 @@ export class MatchSyncService {
         match.status === MatchStatus.FINISHED &&
         match.resultNotificationSentAt !== null &&
         (status === MatchStatus.SCHEDULED || status === MatchStatus.LIVE);
+
+      // Sync matchDate from API timestamp if it differs (avoids stale kickoff times).
+      // Always update when restoring a force-closed match so closeStaleUnlinkedMatches
+      // doesn't immediately re-close it with the wrong (old) date.
+      const apiMatchDate = fixture.fixture.timestamp
+        ? new Date(fixture.fixture.timestamp * 1000)
+        : null;
+      const matchDateDriftMs = apiMatchDate
+        ? Math.abs(apiMatchDate.getTime() - match.matchDate.getTime())
+        : 0;
+      const matchDateChanged = matchDateDriftMs > 60_000 || wasForceClosedAndNowActive;
 
       // Update match (including elapsed + statusShort for live timer persistence)
       const updatedMatch = await this.prisma.match.update({
