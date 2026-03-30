@@ -183,9 +183,14 @@ export class MatchSyncService {
     const startedAt = Date.now();
 
     try {
-      const todayDate = new Date(Date.now() - 5 * 60 * 60 * 1000);
-      const today = todayDate.toISOString().split('T')[0];
-      const yesterdayDate = new Date(todayDate);
+      // Use Bogotá date (UTC-5) as the date parameter for API-Football.
+      // The API client already sends timezone=America/Bogota, so the API
+      // interprets the date in Bogotá time — matching our 7pm-7pm operational window.
+      // This means 1 single request covers all matches of the operational day,
+      // regardless of their UTC date.
+      const bogotaDate = new Date(Date.now() - 5 * 60 * 60 * 1000);
+      const today = bogotaDate.toISOString().split('T')[0];  // e.g. "2026-03-30" in Bogotá
+      const yesterdayDate = new Date(bogotaDate);
       yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
       const yesterday = yesterdayDate.toISOString().split('T')[0];
 
