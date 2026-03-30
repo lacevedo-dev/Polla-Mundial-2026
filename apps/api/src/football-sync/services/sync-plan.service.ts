@@ -533,6 +533,13 @@ export class SyncPlanService {
       const matchStart = matchDate;
       const matchEnd = new Date(matchDate.getTime() + 130 * 60 * 1000); // match + 10min buffer
 
+      // If the match is past its expected end time but still open, generate one
+      // catch-up sync slot so the API can confirm the real result instead of
+      // waiting for the 370-min force-close to kick in.
+      if (now > matchEnd) {
+        return [now.toISOString()];
+      }
+
       let cursor = new Date(Math.max(now.getTime(), matchStart.getTime() - 5 * 60 * 1000));
 
       while (cursor <= matchEnd && cursor < todayEnd) {
@@ -838,11 +845,11 @@ export class SyncPlanService {
     // A match without externalId that started more than 130 min ago cannot be
     // synced — exclude it from carry-over to prevent ghost tracking loops.
     const carryOverCutoff = new Date(Date.now() - 130 * 60 * 1000);
-    // A match WITH externalId that started more than 370 min ago is almost
-    // certainly finished regardless of status (130 min match + 30 extra time +
-    // 60 min API delay + 120 min safety margin). Exclude it to prevent stale
-    // SCHEDULED matches from appearing as active carry-overs indefinitely.
-    const carryOverHardCutoff = new Date(Date.now() - 370 * 60 * 1000);
+    // A match WITH externalId that started more than 200 min ago is almost
+    // certainly finished regardless of status (130 min match + 30 min extra time +
+    // 40 min buffer). Exclude it to prevent stale SCHEDULED matches from
+    // appearing as active carry-overs indefinitely.
+    const carryOverHardCutoff = new Date(Date.now() - 200 * 60 * 1000);
 
     return {
       OR: [
@@ -906,10 +913,10 @@ export class SyncPlanService {
       data: { status: MatchStatus.FINISHED, resultNotificationSentAt: new Date() },
     });
 
-    // 370 min = 130 min match + 30 extra time + 60 min API delay + 120 min safety margin.
+    // 200 min = 130 min match + 30 min extra time + 40 min buffer.
     // Also set resultNotificationSentAt to suppress the result notification — these matches
     // were force-closed without a real score, so sending "- - -" would be misleading.
-    const linkedCutoff = new Date(Date.now() - 370 * 60 * 1000);
+    const linkedCutoff = new Date(Date.now() - 200 * 60 * 1000);
     const linked = await this.prisma.match.updateMany({
       where: {
         status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
