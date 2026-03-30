@@ -21,7 +21,7 @@ export interface QueueEmailInput {
 
 @Injectable()
 export class EmailQueueService {
-  private static readonly DEFAULT_DISPATCH_BATCH = 5;
+  private static readonly DEFAULT_DISPATCH_BATCH = 30;
   private static readonly MAX_REQUIRED_ATTEMPTS = 6;
   private static readonly MAX_OPTIONAL_ATTEMPTS = 3;
   private static readonly CONNECTION_BACKOFF_MS = 15 * 60_000;
