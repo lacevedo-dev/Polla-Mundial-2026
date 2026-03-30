@@ -605,6 +605,11 @@ export class MonitoringService {
     }
   }
 
+  /**
+   * Get start of today aligned to the API-Football quota window.
+   * The API resets at 00:00 UTC (= 7:00pm Bogotá), so request counts
+   * must be measured from UTC midnight, not Colombia midnight.
+   */
   private getTodayStart(): Date {
     const now = new Date(Date.now());
     return new Date(
@@ -630,6 +635,7 @@ export class MonitoringService {
   /**
    * Get start of today in Colombia timezone (UTC-5).
    * Returns the UTC equivalent of 00:00:00 COT today, i.e. 05:00:00 UTC.
+   * NOTE: used only for Bogotá-relative display, NOT for quota accounting.
    */
   private getBogotaTodayStart(): Date {
     const bogotaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);

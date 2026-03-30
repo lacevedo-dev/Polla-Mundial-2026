@@ -785,16 +785,22 @@ export class SyncPlanService {
   }
 
   /**
-   * Get start of today in Colombia timezone (UTC-5).
-   * Returns the UTC equivalent of 00:00:00 COT today, i.e. 05:00:00 UTC.
+   * Get start of today aligned to the API-Football quota window.
+   * The API resets at 00:00 UTC (= 7:00pm Bogotá), so both the sync plan
+   * and the request budget must use the same UTC midnight boundary.
    */
   private getTodayStart(): Date {
-    const bogotaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
-    const y = bogotaNow.getUTCFullYear();
-    const m = bogotaNow.getUTCMonth();
-    const d = bogotaNow.getUTCDate();
-    // Midnight COT = 05:00 UTC
-    return new Date(Date.UTC(y, m, d, 5, 0, 0));
+    const now = new Date(Date.now());
+    return new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+      ),
+    );
   }
 
   private getTodayEnd(todayStart: Date): Date {
