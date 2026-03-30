@@ -264,7 +264,10 @@ export class SyncPlanService {
 
     const matches = await this.prisma.match.groupBy({
       by: ['status'],
-      where: this.buildTrackedMatchesWhere(todayStart, todayEnd),
+      where: {
+        ...this.buildTrackedMatchesWhere(todayStart, todayEnd),
+        status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
+      },
       _count: true,
     });
 
@@ -582,9 +585,13 @@ export class SyncPlanService {
       return notifications;
     };
 
-    // Distribute available requests across matches
-    const requestsPerMatch = matches.length > 0
-      ? Math.max(1, Math.floor(available / matches.length))
+    // Distribute available requests across ACTIVE matches only — FINISHED matches
+    // have no sync slots and should not dilute the per-match request budget.
+    const activeMatchCount = matches.filter(
+      (m) => m.status === MatchStatus.SCHEDULED || m.status === MatchStatus.LIVE,
+    ).length;
+    const requestsPerMatch = activeMatchCount > 0
+      ? Math.max(1, Math.floor(available / activeMatchCount))
       : 0;
 
     const matchDrafts = matches.map((m) => {
@@ -854,15 +861,14 @@ export class SyncPlanService {
     return {
       OR: [
         {
-          // Only track active matches from today that haven't passed their expected
-          // end time. Matches past carryOverHardCutoff (370 min) have no sync slots
-          // anyway and are closed by the stale sweep — excluding them here prevents
-          // them from inflating the request budget before the sweep runs.
+          // All matches from today's window — FINISHED ones appear in the plan
+          // for visibility but get no sync slots (buildSyncSlots returns [] for them).
+          // Matches past the hard cutoff are excluded since the stale sweep closes
+          // them and they no longer need tracking.
           AND: [
             { matchDate: { gte: todayStart, lt: todayEnd } },
             { matchDate: { gte: carryOverHardCutoff } },
           ],
-          status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
         },
         {
           // Carry-over: yesterday's matches still needing attention
