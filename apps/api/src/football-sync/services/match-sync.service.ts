@@ -522,23 +522,33 @@ export class MatchSyncService {
         }
       }
 
-      // When a force-closed match (FINISHED + resultNotificationSentAt set) is
-      // reported as SCHEDULED or LIVE by the API, clear resultNotificationSentAt
-      // so the notification scheduler can fire properly when it actually finishes.
-      const wasForceClosedAndNowActive =
-        match.status === MatchStatus.FINISHED &&
-        match.resultNotificationSentAt !== null &&
-        (status === MatchStatus.SCHEDULED || status === MatchStatus.LIVE);
-
-      // Sync matchDate from API timestamp if it differs (avoids stale kickoff times).
-      // Always update when restoring a force-closed match so closeStaleUnlinkedMatches
-      // doesn't immediately re-close it with the wrong (old) date.
+      // Sync matchDate from API timestamp if it differs.
       const apiMatchDate = fixture.fixture.timestamp
         ? new Date(fixture.fixture.timestamp * 1000)
         : null;
       const matchDateDriftMs = apiMatchDate
         ? Math.abs(apiMatchDate.getTime() - match.matchDate.getTime())
         : 0;
+
+      // When a force-closed match (FINISHED + resultNotificationSentAt set) is
+      // reported as LIVE by the API, or as SCHEDULED with a kickoff rescheduled to
+      // the FUTURE, restore it and clear resultNotificationSentAt so notifications
+      // fire correctly when it actually finishes.
+      // Do NOT restore if the API still says "NS" with a past kickoff time — that
+      // means the match is cancelled/postponed with no new date, and restoring would
+      // create an infinite close→restore loop with closeStaleUnlinkedMatches.
+      const isActuallyLive = status === MatchStatus.LIVE;
+      const isRescheduledToFuture =
+        status === MatchStatus.SCHEDULED &&
+        apiMatchDate !== null &&
+        apiMatchDate.getTime() > Date.now();
+      const wasForceClosedAndNowActive =
+        match.status === MatchStatus.FINISHED &&
+        match.resultNotificationSentAt !== null &&
+        (isActuallyLive || isRescheduledToFuture);
+
+      // >1 min drift → update. Always update when restoring a force-closed match
+      // so closeStaleUnlinkedMatches doesn't re-close it with the wrong date.
       const matchDateChanged = matchDateDriftMs > 60_000 || wasForceClosedAndNowActive;
 
       // Update match (including elapsed + statusShort for live timer persistence)
