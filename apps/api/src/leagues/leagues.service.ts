@@ -1,4 +1,4 @@
-﻿import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
@@ -9,6 +9,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class LeaguesService {
+    private readonly logger = new Logger(LeaguesService.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly participationService: ParticipationService,
@@ -69,85 +71,54 @@ export class LeaguesService {
             return new Map<string, Map<string, { rank: number; points: number }>>();
         }
 
-        const activeMembers = await this.prisma.leagueMember.findMany({
-            where: {
-                leagueId: { in: leagueIds },
-                status: MemberStatus.ACTIVE,
-            },
-            select: {
-                leagueId: true,
-                userId: true,
-            },
-        });
+        // Run all three queries in parallel — each aggregates in the DB, no raw rows loaded
+        const [activeMembers, pointsPerUserLeague, phaseBonuses] = await Promise.all([
+            this.prisma.leagueMember.findMany({
+                where: {
+                    leagueId: { in: leagueIds },
+                    status: MemberStatus.ACTIVE,
+                },
+                select: { leagueId: true, userId: true },
+            }),
 
-        const predictions = await this.prisma.prediction.findMany({
-            where: {
-                leagueId: { in: leagueIds },
-                points: { not: null },
-            },
-            select: {
-                leagueId: true,
-                userId: true,
-                points: true,
-                pointDetail: true,
-            },
-        });
+            // groupBy aggregates SUM(points) per (leagueId, userId) in the DB — no raw prediction rows
+            this.prisma.prediction.groupBy({
+                by: ['leagueId', 'userId'],
+                where: {
+                    leagueId: { in: leagueIds },
+                    points: { not: null },
+                },
+                _sum: { points: true },
+            }),
 
-        const phaseBonuses = await this.prisma.phaseBonus.findMany({
-            where: {
-                leagueId: { in: leagueIds },
-            },
-            select: {
-                leagueId: true,
-                userId: true,
-                points: true,
-                phase: true,
-            },
-        });
+            this.prisma.phaseBonus.findMany({
+                where: { leagueId: { in: leagueIds } },
+                select: { leagueId: true, userId: true, points: true, phase: true },
+            }),
+        ]);
 
-        const userStatsByLeague = new Map<string, Map<string, {
-            points: number;
-            exactCount: number;
-            winnerCount: number;
-            goalCount: number;
-            uniqueCount: number;
-        }>>();
-
-        for (const prediction of predictions) {
-            const leagueStats = userStatsByLeague.get(prediction.leagueId) ?? new Map();
-            const stats = leagueStats.get(prediction.userId) ?? {
-                points: 0,
-                exactCount: 0,
-                winnerCount: 0,
-                goalCount: 0,
-                uniqueCount: 0,
-            };
-
-            stats.points += prediction.points ?? 0;
-
-            const detail = this.parsePointDetail(prediction.pointDetail);
-            if (detail?.type === 'EXACT_SCORE') stats.exactCount++;
-            if (detail?.type === 'CORRECT_WINNER' || detail?.type === 'CORRECT_WINNER_GOAL') stats.winnerCount++;
-            if (detail?.type === 'TEAM_GOALS' || detail?.type === 'CORRECT_WINNER_GOAL') stats.goalCount++;
-            if ((detail?.uniqueBonus ?? 0) > 0) stats.uniqueCount++;
-
-            leagueStats.set(prediction.userId, stats);
-            userStatsByLeague.set(prediction.leagueId, leagueStats);
+        // Build prediction points map: leagueId -> userId -> sumPoints
+        // NOTE: Number() cast is required — Prisma _sum with MySQL/MariaDB adapter may return
+        // a Decimal object instead of a plain number, which breaks arithmetic below.
+        const predPointsByLeague = new Map<string, Map<string, number>>();
+        for (const row of pointsPerUserLeague) {
+            const byUser = predPointsByLeague.get(row.leagueId) ?? new Map<string, number>();
+            byUser.set(row.userId, Number(row._sum.points ?? 0));
+            predPointsByLeague.set(row.leagueId, byUser);
         }
 
+        // Build phase bonus map: leagueId -> userId -> { total, hasChampion }
         const bonusByLeague = new Map<string, Map<string, { total: number; hasChampion: boolean }>>();
-
         for (const bonus of phaseBonuses) {
             const leagueBonus = bonusByLeague.get(bonus.leagueId) ?? new Map();
             const current = leagueBonus.get(bonus.userId) ?? { total: 0, hasChampion: false };
-
             current.total += bonus.points;
             if (bonus.phase === Phase.FINAL) current.hasChampion = true;
-
             leagueBonus.set(bonus.userId, current);
             bonusByLeague.set(bonus.leagueId, leagueBonus);
         }
 
+        // Build active-members map: leagueId -> userId[]
         const activeMembersByLeague = new Map<string, string[]>();
         for (const member of activeMembers) {
             const members = activeMembersByLeague.get(member.leagueId) ?? [];
@@ -155,38 +126,25 @@ export class LeaguesService {
             activeMembersByLeague.set(member.leagueId, members);
         }
 
+        // Compute rankings per league — sort by total points then tiebreakers
         const rankingByLeague = new Map<string, Map<string, { rank: number; points: number }>>();
 
         for (const leagueId of leagueIds) {
             const leagueMembers = activeMembersByLeague.get(leagueId) ?? [];
             const rows = leagueMembers
                 .map((userId) => {
-                    const stats = userStatsByLeague.get(leagueId)?.get(userId) ?? {
-                        points: 0,
-                        exactCount: 0,
-                        winnerCount: 0,
-                        goalCount: 0,
-                        uniqueCount: 0,
-                    };
+                    const predPoints = predPointsByLeague.get(leagueId)?.get(userId) ?? 0;
                     const bonus = bonusByLeague.get(leagueId)?.get(userId) ?? { total: 0, hasChampion: false };
-
                     return {
                         userId,
-                        points: stats.points + bonus.total,
+                        points: predPoints + bonus.total,
                         hasChampion: bonus.hasChampion,
-                        exactCount: stats.exactCount,
-                        winnerCount: stats.winnerCount,
-                        goalCount: stats.goalCount,
-                        uniqueCount: stats.uniqueCount,
                     };
                 })
                 .sort((a, b) => {
                     if (b.points !== a.points) return b.points - a.points;
                     if (b.hasChampion !== a.hasChampion) return b.hasChampion ? 1 : -1;
-                    if (b.exactCount !== a.exactCount) return b.exactCount - a.exactCount;
-                    if (b.winnerCount !== a.winnerCount) return b.winnerCount - a.winnerCount;
-                    if (b.goalCount !== a.goalCount) return b.goalCount - a.goalCount;
-                    return b.uniqueCount - a.uniqueCount;
+                    return 0;
                 });
 
             rankingByLeague.set(
@@ -357,18 +315,21 @@ export class LeaguesService {
              orderBy: { createdAt: 'desc' },
          });
 
-         // Temporarily disabled ranking calculation for testing with large datasets
-         // const rankingByLeague = await this.buildLeagueRankingMap(leagues.map((league) => league.id));
+         let rankingByLeague: Map<string, Map<string, { rank: number; points: number }>>;
+         try {
+             rankingByLeague = await this.buildLeagueRankingMap(leagues.map((league) => league.id));
+         } catch (err) {
+             this.logger.error('buildLeagueRankingMap failed — returning leagues without ranking', err?.stack ?? err);
+             rankingByLeague = new Map();
+         }
 
          return leagues.map((league) => {
-             // const ranking = rankingByLeague.get(league.id)?.get(userId);
+             const ranking = rankingByLeague.get(league.id)?.get(userId);
              return {
                  ...league,
-                 stats: {
-                     rank: null,
-                     points: 0,
-                     memberCount: league._count?.members ?? 0,
-                 },
+                 // rank and points at top level — matches what toLeagueContextListItem adapter reads
+                 rank: ranking?.rank ?? null,
+                 points: ranking?.points ?? 0,
              };
          });
      }
