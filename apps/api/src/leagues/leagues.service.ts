@@ -335,39 +335,43 @@ export class LeaguesService {
         }
     }
 
-    async findAllByUserId(userId: string) {
-        const leagues = await this.prisma.league.findMany({
-            where: {
-                members: {
-                    some: {
-                        userId,
-                        status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING, MemberStatus.PENDING_PAYMENT] },
-                    },
-                },
-            },
-            include: {
-                _count: {
-                    select: { members: true },
-                },
-                members: {
-                    where: { userId },
-                    select: { role: true, status: true },
-                },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+     async findAllByUserId(userId: string) {
+         const leagues = await this.prisma.league.findMany({
+             where: {
+                 members: {
+                     some: {
+                         userId,
+                         status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING, MemberStatus.PENDING_PAYMENT] },
+                     },
+                 },
+             },
+             include: {
+                 _count: {
+                     select: { members: true },
+                 },
+                 members: {
+                     where: { userId },
+                     select: { role: true, status: true },
+                 },
+             },
+             orderBy: { createdAt: 'desc' },
+         });
 
-        const rankingByLeague = await this.buildLeagueRankingMap(leagues.map((league) => league.id));
+         // Temporarily disabled ranking calculation for testing with large datasets
+         // const rankingByLeague = await this.buildLeagueRankingMap(leagues.map((league) => league.id));
 
-        return leagues.map((league) => {
-            const ranking = rankingByLeague.get(league.id)?.get(userId);
-            return {
-                ...league,
-                rank: ranking?.rank,
-                points: ranking?.points ?? 0,
-            };
-        });
-    }
+         return leagues.map((league) => {
+             // const ranking = rankingByLeague.get(league.id)?.get(userId);
+             return {
+                 ...league,
+                 stats: {
+                     rank: null,
+                     points: 0,
+                     memberCount: league._count?.members ?? 0,
+                 },
+             };
+         });
+     }
 
     async getLeagueDetails(userId: string, leagueId: string) {
         const league = await this.prisma.league.findUnique({
