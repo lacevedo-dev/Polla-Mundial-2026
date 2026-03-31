@@ -1431,6 +1431,7 @@ const Dashboard: React.FC = () => {
         const stored = localStorage.getItem('livePanel_floating');
         return stored === 'true';
     });
+    const [floatingExpanded, setFloatingExpanded] = React.useState(false);
     const draggable = useDraggable({
         initialPosition: { x: 20, y: 100 },
         storageKey: 'livePanel_position',
@@ -1440,6 +1441,23 @@ const Dashboard: React.FC = () => {
     React.useEffect(() => {
         localStorage.setItem('livePanel_floating', String(isFloating));
     }, [isFloating]);
+
+    // Desactivar modo flotante en móvil automáticamente
+    React.useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 768 && isFloating) {
+                setIsFloating(false);
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        handleResize();
+        return () => window.removeEventListener('resize', handleResize);
+    }, [isFloating]);
+
+    // Sincronizar floatingExpanded con expandedMatchId
+    React.useEffect(() => {
+        setFloatingExpanded(!!expandedMatchId);
+    }, [expandedMatchId]);
 
     // My position in leaderboard
     const myEntry = useMemo(
@@ -2094,7 +2112,7 @@ const Dashboard: React.FC = () => {
                     </motion.div>
                 );
 
-                // Modo flotante: panel draggable con posición fija
+                // Modo flotante: panel draggable compacto con posición fija
                 if (isFloating) {
                     return (
                         <div
@@ -2104,31 +2122,180 @@ const Dashboard: React.FC = () => {
                                 left: `${draggable.position.x}px`,
                                 top: `${draggable.position.y}px`,
                                 zIndex: 50,
-                                maxWidth: '380px',
-                                width: '90vw',
+                                width: floatingExpanded ? '340px' : '280px',
+                                maxWidth: '95vw',
                             }}
-                            className="rounded-2xl bg-slate-50 shadow-2xl border border-slate-200"
+                            className="rounded-xl bg-white shadow-2xl border border-slate-300 transition-all duration-300"
                         >
-                            {/* Drag handle + toggle button */}
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-100 rounded-t-2xl">
-                                <div
-                                    onMouseDown={draggable.handleMouseDown}
-                                    onTouchStart={draggable.handleTouchStart}
-                                    className="flex-1 cursor-move flex items-center gap-2 select-none"
-                                >
-                                    <AlignJustify size={14} className="text-slate-400" />
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Partidos en vivo</span>
+                            {/* Drag handle compacto */}
+                            <div
+                                onMouseDown={draggable.handleMouseDown}
+                                onTouchStart={draggable.handleTouchStart}
+                                className="flex items-center justify-between px-2.5 py-1.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-xl cursor-move select-none"
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <AlignJustify size={12} className="text-slate-400" />
+                                    <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-rose-500" />
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-600">En vivo</span>
                                 </div>
-                                <button
-                                    onClick={() => setIsFloating(false)}
-                                    className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors"
-                                    title="Anclar al dashboard"
-                                >
-                                    <Minimize2 size={14} className="text-slate-600" />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setFloatingExpanded(!floatingExpanded); }}
+                                        className="p-1 rounded hover:bg-slate-200 transition-colors"
+                                        title={floatingExpanded ? "Colapsar" : "Expandir"}
+                                    >
+                                        {floatingExpanded ? <ChevronDown size={12} className="text-slate-600" /> : <Plus size={12} className="text-slate-600" />}
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setIsFloating(false); }}
+                                        className="p-1 rounded hover:bg-slate-200 transition-colors"
+                                        title="Anclar al dashboard"
+                                    >
+                                        <Minimize2 size={12} className="text-slate-600" />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="p-3 max-h-[70vh] overflow-y-auto">
-                                {panelContent}
+                            
+                            {/* Contenido compacto */}
+                            <div className="p-2 max-h-[60vh] overflow-y-auto">
+                                {/* Solo chips compactos */}
+                                <div className="grid gap-1.5 grid-cols-2">
+                                    {liveMatches.map(match => {
+                                        const isActive = match.id === expandedMatchId;
+                                        const pH = parseInt(match.prediction.home, 10);
+                                        const pA = parseInt(match.prediction.away, 10);
+                                        const rH = match.result?.home ?? 0;
+                                        const rA = match.result?.away ?? 0;
+                                        const chipStatus = match.saved && !isNaN(pH) && !isNaN(pA) && match.result
+                                            ? (pH === rH && pA === rA ? 'exact' : Math.sign(pH - pA) === Math.sign(rH - rA) ? 'winning' : 'losing')
+                                            : null;
+                                        const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
+                                            ? 'border-lime-500/50'
+                                            : chipStatus === 'losing'
+                                            ? 'border-rose-500/50'
+                                            : 'border-slate-200';
+                                        const scoreColor = chipStatus === 'exact' ? 'text-lime-400' : chipStatus === 'winning' ? 'text-lime-500' : 'text-white';
+
+                                        return (
+                                            <button
+                                                key={match.id}
+                                                onClick={() => handleChipClick(match.id)}
+                                                className={`rounded-lg border transition-all p-1.5
+                                                    ${isActive
+                                                        ? `bg-slate-900 ${borderColor} ring-1 ring-offset-1 ring-slate-400`
+                                                        : `bg-slate-800/90 ${borderColor} hover:bg-slate-800`
+                                                    }`}
+                                            >
+                                                {/* Timer mini */}
+                                                <div className="flex justify-center mb-0.5">
+                                                    <LiveMatchTimerInline
+                                                        matchDate={match.date}
+                                                        elapsed={match.elapsed ?? null}
+                                                        lastSyncAt={liveSync.lastSyncAt}
+                                                        statusShort={match.statusShort}
+                                                    />
+                                                </div>
+                                                {/* Equipos compactos */}
+                                                <div className="flex items-center justify-between gap-1">
+                                                    <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
+                                                        {match.homeFlag && <img src={match.homeFlag} alt="" className="h-3 w-5 rounded-[2px] object-cover" />}
+                                                        <span className="text-[8px] font-bold text-white/60 uppercase leading-none truncate w-full text-center">
+                                                            {match.homeTeamCode || match.homeTeam.slice(0, 3)}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`text-xs font-black tabular-nums leading-none shrink-0 ${scoreColor}`}>
+                                                        {match.result ? `${rH}–${rA}` : '–'}
+                                                    </span>
+                                                    <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
+                                                        {match.awayFlag && <img src={match.awayFlag} alt="" className="h-3 w-5 rounded-[2px] object-cover" />}
+                                                        <span className="text-[8px] font-bold text-white/60 uppercase leading-none truncate w-full text-center">
+                                                            {match.awayTeamCode || match.awayTeam.slice(0, 3)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Panel expandido colapsable */}
+                                <AnimatePresence>
+                                    {floatingExpanded && expandedMatch && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="mt-2 overflow-hidden"
+                                        >
+                                            <div className="rounded-lg bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 p-2.5">
+                                                {/* Info compacta */}
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <LiveMatchTimer
+                                                        matchDate={expandedMatch.date}
+                                                        elapsed={expandedMatch.elapsed ?? null}
+                                                        lastSyncAt={liveSync.lastSyncAt}
+                                                        statusShort={expandedMatch.statusShort}
+                                                    />
+                                                    {expandedPts > 0 && (
+                                                        <span className="rounded-full bg-lime-400/20 px-1.5 py-0.5 font-mono text-[9px] font-black text-lime-300">
+                                                            +{expandedPts}pts
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Barra de progreso mini */}
+                                                <MatchProgressBar
+                                                    matchDate={expandedMatch.date}
+                                                    elapsed={expandedMatch.elapsed ?? null}
+                                                    lastSyncAt={liveSync.lastSyncAt}
+                                                    statusShort={expandedMatch.statusShort}
+                                                    finished={false}
+                                                />
+
+                                                {/* Marcador compacto */}
+                                                <div className="flex items-center justify-between mt-2 text-xs">
+                                                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                                                        {expandedMatch.homeFlag && <img src={expandedMatch.homeFlag} alt="" className="h-4 w-6 rounded object-cover" />}
+                                                        <span className="font-bold text-white truncate text-[10px]">{expandedMatch.homeTeam}</span>
+                                                    </div>
+                                                    <div className="mx-2 shrink-0">
+                                                        <div className="rounded-lg bg-white/10 px-2 py-0.5 tabular-nums text-[11px]">
+                                                            <span className="font-black text-white">{expandedRealHome}</span>
+                                                            <span className="mx-1 text-white/30">–</span>
+                                                            <span className="font-black text-white">{expandedRealAway}</span>
+                                                        </div>
+                                                        {expandedHasPred && (
+                                                            <p className={`mt-0.5 font-mono text-[8px] font-bold text-center ${expandedStatusColor}`}>
+                                                                {expandedPredHome}–{expandedPredAway}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center justify-end gap-1 min-w-0 flex-1">
+                                                        <span className="font-bold text-white truncate text-[10px]">{expandedMatch.awayTeam}</span>
+                                                        {expandedMatch.awayFlag && <img src={expandedMatch.awayFlag} alt="" className="h-4 w-6 rounded object-cover" />}
+                                                    </div>
+                                                </div>
+
+                                                {/* Eventos solo si expandLevel === 2 */}
+                                                {expandLevel === 2 && expandedEvents.length > 0 && (
+                                                    <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-x-2 gap-y-0.5">
+                                                        {expandedEvents.slice(0, 4).map((e, i) => {
+                                                            const isOG = e.detail?.toLowerCase().includes('own goal');
+                                                            const icon = e.type === 'GOAL' ? (isOG ? '⚽OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
+                                                            const min = `${e.minute}'`;
+                                                            return (
+                                                                <span key={i} className="text-[8px] text-white/40">
+                                                                    {icon} {min}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                         </div>
                     );
@@ -2142,13 +2309,14 @@ const Dashboard: React.FC = () => {
                                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
                                 <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
                             </div>
+                            {/* Solo mostrar botón flotante en desktop */}
                             <button
                                 onClick={() => setIsFloating(true)}
-                                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+                                className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
                                 title="Hacer flotante"
                             >
                                 <Maximize2 size={12} className="text-slate-600" />
-                                <span className="text-[9px] font-bold text-slate-600 hidden sm:inline">Flotante</span>
+                                <span className="text-[9px] font-bold text-slate-600 hidden lg:inline">Flotante</span>
                             </button>
                         </div>
                         {panelContent}
