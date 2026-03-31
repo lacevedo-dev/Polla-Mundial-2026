@@ -380,3 +380,20 @@ export interface SyncStatsDto {
     failed: number;
   }>;
 }
+
+export class ImportFixturesWithDataDto {
+  @IsOptional()
+  @IsString()
+  tournamentName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  createTeams?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  overwriteExisting?: boolean;
+
+  // Full fixture data from API-Football (already fetched)
+  fixtures: ApiFootballFixture[];
+}

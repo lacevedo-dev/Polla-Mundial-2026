@@ -63,6 +63,7 @@ export interface ImportResult {
   skipped: number;
   errors: string[];
   dryRun: boolean;
+  matchIds?: string[]; // IDs of imported/updated matches for seeding
 }
 
 export interface ImportOptions {
@@ -193,6 +194,215 @@ export class TournamentImportService {
     };
   }
 
+  /* ─── Import fixtures with data (optimized - no API calls) ─────────── */
+
+  async importFixturesWithData(
+    fixtures: any[],
+    options: { createTeams: boolean; overwriteExisting: boolean },
+    tournamentName: string = 'Amistosos',
+  ): Promise<ImportResult> {
+    const result: ImportResult = {
+      tournamentId: '',
+      tournamentName,
+      fixturesImported: 0,
+      fixturesUpdated: 0,
+      teamsCreated: 0,
+      teamsLinked: 0,
+      skipped: 0,
+      errors: [],
+      dryRun: false,
+      matchIds: [],
+    };
+
+    if (!fixtures || fixtures.length === 0) {
+      throw new Error('No fixtures provided');
+    }
+
+    try {
+      // Extract tournament info from first fixture
+      const firstFixture = fixtures[0];
+      const leagueInfo = firstFixture.league;
+      const leagueId = leagueInfo?.id;
+      const season = leagueInfo?.season;
+      const leagueName = leagueInfo?.name || tournamentName;
+      const leagueCountry = leagueInfo?.country || 'Internacional';
+
+      // Upsert tournament
+      const tournament = await this.prisma.tournament.upsert({
+        where: { apiFootballLeagueId: leagueId || 0 },
+        create: {
+          name: leagueName,
+          country: leagueCountry,
+          type: 'Cup',
+          apiFootballLeagueId: leagueId || 0,
+          season: season || new Date().getFullYear(),
+          active: true,
+        },
+        update: {
+          name: leagueName,
+          season: season || new Date().getFullYear(),
+          active: true,
+        },
+      });
+
+      result.tournamentId = tournament.id;
+      result.tournamentName = leagueName;
+
+      // Extract unique team IDs from all fixtures
+      const teamApiIds = new Set<number>();
+      fixtures.forEach((f: any) => {
+        if (f.teams?.home?.id) teamApiIds.add(f.teams.home.id);
+        if (f.teams?.away?.id) teamApiIds.add(f.teams.away.id);
+      });
+
+      // Build team mapping
+      const teamApiIdToLocalId = new Map<number, string>();
+
+      if (options.createTeams) {
+        // Create/link teams for all unique team IDs
+        for (const teamApiId of teamApiIds) {
+          const teamData = fixtures
+            .flatMap((f: any) => [f.teams?.home, f.teams?.away])
+            .find((t: any) => t?.id === teamApiId);
+
+          if (!teamData) continue;
+
+          const existing = await this.prisma.team.findFirst({
+            where: {
+              OR: [
+                { apiFootballTeamId: teamApiId },
+                { name: { equals: teamData.name } },
+              ],
+            },
+          });
+
+          if (existing) {
+            if (!existing.apiFootballTeamId) {
+              const conflictingTeam = await this.prisma.team.findUnique({
+                where: { apiFootballTeamId: teamApiId },
+                select: { id: true },
+              });
+
+              if (!conflictingTeam || conflictingTeam.id === existing.id) {
+                await this.prisma.team.update({
+                  where: { id: existing.id },
+                  data: { apiFootballTeamId: teamApiId, flagUrl: teamData.logo ?? existing.flagUrl },
+                });
+                result.teamsLinked++;
+              }
+            }
+            teamApiIdToLocalId.set(teamApiId, existing.id);
+          } else {
+            const teamCode = (teamData.name.substring(0, 3)).toUpperCase();
+            const safeName = await this.getUniqueTeamName(teamData.name);
+            const safeCode = await this.getUniqueTeamCode(teamCode);
+
+            const newTeam = await this.prisma.team.create({
+              data: {
+                name: safeName,
+                code: safeCode,
+                shortCode: teamCode.slice(0, 8),
+                flagUrl: teamData.logo,
+                apiFootballTeamId: teamApiId,
+              },
+            });
+            teamApiIdToLocalId.set(teamApiId, newTeam.id);
+            result.teamsCreated++;
+          }
+        }
+      } else {
+        // Only use existing teams
+        const existingTeams = await this.prisma.team.findMany({
+          where: { apiFootballTeamId: { in: Array.from(teamApiIds) } },
+          select: { id: true, apiFootballTeamId: true },
+        });
+        existingTeams.forEach((t) => {
+          if (t.apiFootballTeamId) teamApiIdToLocalId.set(t.apiFootballTeamId, t.id);
+        });
+      }
+
+      // Batch import fixtures
+      for (const fixture of fixtures) {
+        try {
+          const fixtureData = fixture.fixture;
+          const teams = fixture.teams;
+          const goals = fixture.goals;
+          const leagueInfo = fixture.league;
+
+          const homeApiId = teams?.home?.id;
+          const awayApiId = teams?.away?.id;
+          const externalId = String(fixtureData?.id);
+          const round = leagueInfo?.round ?? 'Regular';
+          const phase = mapRoundToPhase(round);
+
+          const homeTeamId = teamApiIdToLocalId.get(homeApiId);
+          const awayTeamId = teamApiIdToLocalId.get(awayApiId);
+
+          if (!homeTeamId || !awayTeamId) {
+            result.skipped++;
+            result.errors.push(`Fixture ${externalId}: teams not found`);
+            continue;
+          }
+
+          const matchDate = fixtureData?.date ? new Date(fixtureData.date) : new Date();
+          const apiStatus = fixtureData?.status?.short;
+          const matchStatus = this.mapApiStatus(apiStatus);
+
+          const homeScore = goals?.home ?? null;
+          const awayScore = goals?.away ?? null;
+          const venueName = fixtureData?.venue?.name ?? null;
+          const venueCity = fixtureData?.venue?.city ?? null;
+          const venueDisplay = [venueName, venueCity].filter(Boolean).join(', ') || null;
+          const matchNumber = fixtureData?.id ? Number(String(fixtureData.id).slice(-4)) : null;
+
+          const existing = await this.prisma.match.findUnique({ where: { externalId } });
+
+          if (existing) {
+            if (options.overwriteExisting) {
+              await this.prisma.match.update({
+                where: { externalId },
+                data: {
+                  homeScore, awayScore, status: matchStatus,
+                  matchDate, round, tournamentId: tournament.id,
+                  phase, venue: venueDisplay, matchNumber,
+                  lastSyncAt: new Date(),
+                },
+              });
+              result.fixturesUpdated++;
+              result.matchIds!.push(existing.id);
+            } else {
+              result.skipped++;
+            }
+          } else {
+            const created = await this.prisma.match.create({
+              data: {
+                homeTeamId, awayTeamId,
+                homeScore, awayScore,
+                phase, round,
+                matchDate,
+                status: matchStatus,
+                externalId,
+                tournamentId: tournament.id,
+                venue: venueDisplay,
+                matchNumber,
+                lastSyncAt: new Date(),
+              },
+            });
+            result.fixturesImported++;
+            result.matchIds!.push(created.id);
+          }
+        } catch (error) {
+          result.errors.push(`Fixture ${fixture.fixture?.id}: ${error.message}`);
+        }
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Import failed: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
   /* ─── Import tournament ──────────────────────────────────────────────── */
 
   async importTournament(
@@ -210,6 +420,7 @@ export class TournamentImportService {
       skipped: 0,
       errors: [],
       dryRun: options.dryRun,
+      matchIds: [],
     };
 
     try {
@@ -391,11 +602,12 @@ export class TournamentImportService {
                 },
               });
               result.fixturesUpdated++;
+              result.matchIds!.push(existing.id);
             } else {
               result.skipped++;
             }
           } else {
-            await this.prisma.match.create({
+            const created = await this.prisma.match.create({
               data: {
                 homeTeamId, awayTeamId,
                 homeScore, awayScore,
@@ -410,6 +622,7 @@ export class TournamentImportService {
               },
             });
             result.fixturesImported++;
+            result.matchIds!.push(created.id);
           }
         } catch (err: any) {
           result.errors.push(`Fixture ${fixture?.fixture?.id}: ${err.message}`);

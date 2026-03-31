@@ -54,6 +54,13 @@ class ImportFixturesDto {
   @IsString() @IsOptional() tournamentName?: string;
 }
 
+class ImportFixturesWithDataDto {
+  @IsArray() fixtures: any[]; // Full fixture data from API-Football
+  @IsBoolean() @IsOptional() createTeams?: boolean;
+  @IsBoolean() @IsOptional() overwriteExisting?: boolean;
+  @IsString() @IsOptional() tournamentName?: string;
+}
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -407,6 +414,20 @@ export class FootballSyncController {
     try {
       return await this.tournamentImport.importFixtures(
         dto.fixtureIds,
+        { createTeams: dto.createTeams ?? true, overwriteExisting: dto.overwriteExisting ?? false },
+        dto.tournamentName ?? 'Amistosos',
+      );
+    } catch (error) {
+      throw new HttpException(`Import failed: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('fixtures/import-with-data')
+  @ApiOperation({ summary: 'Import fixtures with full data (optimized - no duplicate API calls)' })
+  async importFixturesWithData(@Body() dto: ImportFixturesWithDataDto) {
+    try {
+      return await this.tournamentImport.importFixturesWithData(
+        dto.fixtures,
         { createTeams: dto.createTeams ?? true, overwriteExisting: dto.overwriteExisting ?? false },
         dto.tournamentName ?? 'Amistosos',
       );

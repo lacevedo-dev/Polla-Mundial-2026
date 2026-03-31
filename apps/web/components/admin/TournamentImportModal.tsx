@@ -47,6 +47,7 @@ interface ImportResult {
     skipped: number;
     errors: string[];
     dryRun: boolean;
+    matchIds?: string[]; // IDs of imported matches for seeding
 }
 
 interface League {
@@ -429,10 +430,41 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         setImporting(true);
         setImportError('');
         try {
-            const data = await request<ImportResult>('/admin/football/fixtures/import-selection', {
+            // Get full fixture data from results (already fetched and cached)
+            const selectedFixtureData = fixtureResults
+                .filter(f => selectedFixtures.has(f.fixtureId))
+                .map(f => ({
+                    fixture: {
+                        id: f.fixtureId,
+                        date: f.date,
+                        status: { short: f.status, long: f.statusLong },
+                        venue: { name: f.venue, city: null },
+                    },
+                    teams: {
+                        home: { id: f.homeTeam.id, name: f.homeTeam.name, logo: f.homeTeam.logo },
+                        away: { id: f.awayTeam.id, name: f.awayTeam.name, logo: f.awayTeam.logo },
+                    },
+                    goals: {
+                        home: f.homeScore,
+                        away: f.awayScore,
+                    },
+                    league: {
+                        id: f.league.id,
+                        name: f.league.name,
+                        country: f.league.country,
+                        round: f.league.round,
+                    },
+                }));
+            
+            if (selectedFixtureData.length === 0) {
+                throw new Error('No hay partidos seleccionados');
+            }
+
+            // Use optimized endpoint with full data (no duplicate API call)
+            const data = await request<ImportResult>('/admin/football/fixtures/import-with-data', {
                 method: 'POST',
                 body: JSON.stringify({
-                    fixtureIds: [...selectedFixtures],
+                    fixtures: selectedFixtureData,
                     createTeams: dateCreateTeams,
                     overwriteExisting: dateOverwrite,
                     tournamentName: mode === 'team' && selectedTeam ? `Amistosos ${selectedTeam.name}` : 'Amistosos Internacionales',
@@ -441,6 +473,8 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
             setImportResult(data);
             setStep(3);
             refreshUsage();
+            // Load leagues for seed step
+            void loadLeaguesForSeed();
         } catch (e: any) {
             setImportError(e?.message ?? 'Error al importar');
         } finally {
@@ -568,10 +602,17 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         setSeedError('');
         setSeedResult(null);
         try {
-            // Use imported match IDs if available from date/team/id modes, else let backend decide
-            const matchIds = mode === 'date' || mode === 'team' || mode === 'id'
-                ? [...selectedFixtures].map(String)
-                : undefined;
+            // Priority: 1) Imported match IDs, 2) Selected fixtures, 3) Let backend decide
+            let matchIds: string[] | undefined;
+            
+            if (importResult?.matchIds && importResult.matchIds.length > 0) {
+                // Use IDs from imported matches (tournament mode)
+                matchIds = importResult.matchIds;
+            } else if (mode === 'date' || mode === 'team' || mode === 'id') {
+                // Use selected fixtures (date/team/id modes)
+                matchIds = [...selectedFixtures].map(String);
+            }
+            // Otherwise undefined - backend will use recent scheduled matches
 
             const res = await request<SeedResult>('/admin/predictions/bulk-seed', {
                 method: 'POST',
