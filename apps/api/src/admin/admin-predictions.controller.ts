@@ -118,7 +118,7 @@ export class AdminPredictionsController {
         // Validate leagues exist
         const leagues = await this.prisma.league.findMany({
             where: { id: { in: leagueIds } },
-            select: { id: true, name: true, entryFee: true },
+            select: { id: true, name: true, baseFee: true },
         });
         if (leagues.length === 0) throw new BadRequestException('No se encontraron las pollas seleccionadas');
 
@@ -218,10 +218,10 @@ export class AdminPredictionsController {
                     created++;
                 }
 
-                // Simulate payment if requested and league has entry fee
-                if (simulatePayments && league.entryFee > 0) {
+                // Simulate payment if requested and league has base fee
+                if (simulatePayments && league.baseFee && league.baseFee > 0) {
                     const existingPayment = await this.prisma.payment.findFirst({
-                        where: { userId: member.userId, leagueId: league.id, status: 'COMPLETED' },
+                        where: { userId: member.userId, leagueId: league.id, status: 'CONFIRMED' },
                         select: { id: true },
                     });
                     if (!existingPayment) {
@@ -229,12 +229,10 @@ export class AdminPredictionsController {
                             data: {
                                 userId: member.userId,
                                 leagueId: league.id,
-                                amount: league.entryFee,
-                                currency: 'COP',
-                                status: 'COMPLETED',
-                                provider: 'SEED_TEST',
-                                externalId: `seed_${Date.now()}_${member.userId.slice(0, 8)}`,
-                                metadata: { note: 'Pago simulado para testing' },
+                                amount: league.baseFee,
+                                method: 'GATEWAY',
+                                status: 'CONFIRMED',
+                                note: 'Pago simulado para testing (seed)',
                             },
                         });
                         payments++;

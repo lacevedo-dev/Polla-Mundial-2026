@@ -53,7 +53,7 @@ interface League {
     id: string;
     name: string;
     status: string;
-    entryFee: number;
+    baseFee: number | null;
 }
 
 interface SeedResult {
@@ -1618,7 +1618,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                             <p className="text-sm font-bold text-slate-900 truncate">{league.name}</p>
                                                             <p className="text-[10px] text-slate-400 capitalize">
                                                                 {league.status.toLowerCase()}
-                                                                {league.entryFee > 0 && <> · ${league.entryFee.toLocaleString('es-CO')} COP</>}
+                                                                {league.baseFee && league.baseFee > 0 && <> · ${league.baseFee.toLocaleString('es-CO')} COP</>}
                                                             </p>
                                                         </div>
                                                     </label>
@@ -1662,7 +1662,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                         <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
                                             <Zap size={14} className="text-lime-600" /> Simular pagos
                                         </p>
-                                        <p className="text-xs text-slate-500 mt-0.5">Crea registros de pago con estado COMPLETED para cada participante en pollas con cuota de entrada. Útil para probar flujos de pago sin transacciones reales.</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">Crea registros de pago con estado CONFIRMED para cada participante en pollas con cuota base (baseFee). Útil para probar flujos de pago sin transacciones reales.</p>
                                     </div>
                                 </label>
 
