@@ -333,8 +333,9 @@ export class AdminLeaguesController {
                     const testUser = await this.prisma.user.create({
                         data: {
                             email: `test.user.${randomId}@testpolla.local`,
+                            username: `testuser${randomId}`,
                             name: `Test User ${randomId}`,
-                            password: 'hashed_test_password',
+                            passwordHash: '$2b$10$TEST_HASH_FOR_TESTING_ONLY',
                             status: 'ACTIVE',
                             plan: Plan.FREE,
                         },
