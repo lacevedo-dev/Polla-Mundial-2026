@@ -1,10 +1,10 @@
 import {
     Controller, Get, Patch, Post, Delete, Param, Body, Query, UseGuards,
-    NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus,
+    NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus, BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { LeagueStatus, Plan, MemberStatus, ScoringType } from '@prisma/client';
-import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min, IsNotEmpty, IsNumber } from 'class-validator';
+import { LeagueStatus, Plan, MemberStatus, ScoringType, Privacy } from '@prisma/client';
+import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min, IsNotEmpty, IsNumber, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -34,6 +34,24 @@ export class UpdateLeagueAdminDto {
     @IsOptional()
     @IsString()
     primaryTournamentId?: string | null;
+}
+
+export class BulkCreateTestLeaguesDto {
+    @IsInt()
+    @Min(1)
+    count: number;
+
+    @IsInt()
+    @Min(2)
+    membersPerLeague: number;
+
+    @IsOptional()
+    @IsBoolean()
+    useExistingUsers?: boolean;
+
+    @IsOptional()
+    @IsString()
+    namePrefix?: string;
 }
 
 @ApiTags('admin')
@@ -256,5 +274,97 @@ export class AdminLeaguesController {
             where: { leagueId: id },
             orderBy: { ruleType: 'asc' },
         });
+    }
+
+    /* ── Testing utilities ── */
+
+    @Post('bulk-create-test')
+    @ApiOperation({ summary: 'Bulk create test leagues with random users for stress testing' })
+    async bulkCreateTest(@CurrentUser() user: { id: string }, @Body() dto: BulkCreateTestLeaguesDto) {
+        const { count, membersPerLeague, useExistingUsers = false, namePrefix = 'Test League' } = dto;
+
+        if (count > 50) throw new BadRequestException('Máximo 50 pollas por operación');
+        if (membersPerLeague > 100) throw new BadRequestException('Máximo 100 miembros por polla');
+
+        const createdLeagues: any[] = [];
+        let usersPool: { id: string; name: string; email: string }[] = [];
+
+        // Get existing users if requested
+        if (useExistingUsers) {
+            usersPool = await this.prisma.user.findMany({
+                where: { status: 'ACTIVE' },
+                select: { id: true, name: true, email: true },
+                take: 1000,
+            });
+            if (usersPool.length < membersPerLeague) {
+                throw new BadRequestException(`No hay suficientes usuarios activos (${usersPool.length} disponibles, ${membersPerLeague} requeridos)`);
+            }
+        }
+
+        for (let i = 1; i <= count; i++) {
+            const leagueName = `${namePrefix} #${i}`;
+            const code = `TEST${Date.now().toString().slice(-6)}${i.toString().padStart(2, '0')}`;
+
+            // Create league
+            const league = await this.prisma.league.create({
+                data: {
+                    name: leagueName,
+                    description: `Polla de prueba generada automáticamente para stress testing`,
+                    code,
+                    privacy: Privacy.PRIVATE,
+                    maxParticipants: membersPerLeague + 10,
+                    baseFee: Math.random() > 0.5 ? Math.floor(Math.random() * 50000) + 10000 : null,
+                    plan: Plan.FREE,
+                    status: LeagueStatus.ACTIVE,
+                },
+            });
+
+            // Add members
+            const membersToAdd: string[] = [];
+
+            if (useExistingUsers) {
+                // Randomly select from existing users
+                const shuffled = [...usersPool].sort(() => Math.random() - 0.5);
+                membersToAdd.push(...shuffled.slice(0, membersPerLeague).map(u => u.id));
+            } else {
+                // Create random test users
+                for (let j = 1; j <= membersPerLeague; j++) {
+                    const randomId = Math.random().toString(36).substring(2, 10);
+                    const testUser = await this.prisma.user.create({
+                        data: {
+                            email: `test.user.${randomId}@testpolla.local`,
+                            name: `Test User ${randomId}`,
+                            password: 'hashed_test_password',
+                            status: 'ACTIVE',
+                            plan: Plan.FREE,
+                        },
+                    });
+                    membersToAdd.push(testUser.id);
+                }
+            }
+
+            // Create league members
+            await this.prisma.leagueMember.createMany({
+                data: membersToAdd.map(userId => ({
+                    userId,
+                    leagueId: league.id,
+                    status: MemberStatus.ACTIVE,
+                })),
+            });
+
+            createdLeagues.push({
+                id: league.id,
+                name: league.name,
+                code: league.code,
+                members: membersPerLeague,
+            });
+        }
+
+        return {
+            created: count,
+            totalMembers: count * membersPerLeague,
+            leagues: createdLeagues,
+            usedExistingUsers: useExistingUsers,
+        };
     }
 }

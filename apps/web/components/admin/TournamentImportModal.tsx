@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-    AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, ChevronDown,
-    Clock, Download, FlaskConical, Globe, Hash, Info, Loader2, RefreshCw, Search, Shield, Trophy, Users, X, Zap,
+    AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown,
+    Clock, Download, FlaskConical, Globe, Hash, Info, Loader2, Plus, RefreshCw, Search, Shield, Sparkles, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
 
@@ -225,6 +225,14 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [seeding, setSeeding] = useState(false);
     const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
     const [seedError, setSeedError] = useState('');
+    const [creatingLeagues, setCreatingLeagues] = useState(false);
+
+    // Load leagues when entering step 4
+    useEffect(() => {
+        if (step === 4 && leagues.length === 0 && !loadingLeagues) {
+            void loadLeaguesForSeed();
+        }
+    }, [step]);
 
     /* ─ load usage on mount ─ */
     useEffect(() => {
@@ -524,9 +532,38 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         });
     };
 
-    /* ─ seed predictions ─ */
-    const handleSeed = async () => {
-        if (selectedLeagueIds.size === 0) return;
+    /* ─ create test leagues ─ */
+    const handleCreateTestLeagues = async () => {
+        const count = prompt('¿Cuántas pollas de prueba deseas crear? (1-50)', '5');
+        if (!count) return;
+        
+        const members = prompt('¿Cuántos miembros por polla? (2-100)', '10');
+        if (!members) return;
+
+        const useExisting = confirm('¿Usar usuarios existentes? (Cancelar = crear usuarios nuevos)');
+
+        setCreatingLeagues(true);
+        try {
+            const res = await request<{ created: number; totalMembers: number; leagues: any[] }>('/admin/leagues/bulk-create-test', {
+                method: 'POST',
+                body: JSON.stringify({
+                    count: parseInt(count),
+                    membersPerLeague: parseInt(members),
+                    useExistingUsers: useExisting,
+                    namePrefix: 'Polla Test',
+                }),
+            });
+            alert(`✅ Creadas ${res.created} pollas con ${res.totalMembers} miembros totales`);
+            await loadLeaguesForSeed();
+        } catch (e: any) {
+            alert(`❌ Error: ${e?.message ?? 'No se pudieron crear las pollas'}`);
+        } finally {
+            setCreatingLeagues(false);
+        }
+    };
+
+    /* ─ generate seed ─ */
+    const handleGenerateSeed = async () => {
         setSeeding(true);
         setSeedError('');
         setSeedResult(null);
@@ -1577,7 +1614,24 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
                                 {/* League selector */}
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pollas (selecciona una o varias)</label>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pollas (selecciona una o varias)</label>
+                                        <button
+                                            onClick={handleCreateTestLeagues}
+                                            disabled={creatingLeagues}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {creatingLeagues ? (
+                                                <>
+                                                    <Loader2 size={12} className="animate-spin" /> Creando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Plus size={12} /> Crear pollas de prueba
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                     {loadingLeagues ? (
                                         <div className="flex items-center gap-2 py-4 text-sm text-slate-400 justify-center">
                                             <Loader2 size={14} className="animate-spin" /> Cargando pollas…
@@ -1720,25 +1774,33 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                 <div className="flex gap-3">
                                     <button
                                         onClick={() => setStep(3)}
-                                        className="flex-1 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all"
+                                        aria-label="Volver al paso anterior"
                                     >
-                                        Volver
+                                        <ArrowLeft size={16} /> Volver
                                     </button>
                                     <button
-                                        onClick={() => void handleSeed()}
+                                        onClick={() => void handleGenerateSeed()}
                                         disabled={seeding || selectedLeagueIds.size === 0}
-                                        className="flex-1 py-3 rounded-2xl bg-violet-600 text-white font-black uppercase text-sm hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                                        className="flex-1 py-3 rounded-2xl bg-violet-600 text-white font-black uppercase text-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-lg shadow-violet-600/20 hover:shadow-xl hover:shadow-violet-600/30"
+                                        aria-label="Generar pronósticos de prueba"
                                     >
-                                        {seeding
-                                            ? <><Loader2 size={16} className="animate-spin" /> Generando…</>
-                                            : <><FlaskConical size={16} /> Generar pronósticos</>
-                                        }
+                                        {seeding ? (
+                                            <>
+                                                <Loader2 size={16} className="animate-spin" /> Generando…
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles size={16} /> Generar pronósticos
+                                            </>
+                                        )}
                                     </button>
                                     <button
                                         onClick={() => { onImported(); onClose(); }}
-                                        className="flex-1 py-3 rounded-2xl bg-lime-400 text-slate-900 text-sm font-black uppercase hover:bg-lime-500 transition-colors"
+                                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-lime-400 text-slate-900 text-sm font-black uppercase hover:bg-lime-500 transition-all shadow-lg shadow-lime-400/20 hover:shadow-xl hover:shadow-lime-400/30"
+                                        aria-label="Finalizar y cerrar"
                                     >
-                                        Finalizar
+                                        <CheckCircle2 size={16} /> Finalizar
                                     </button>
                                 </div>
                             </motion.div>

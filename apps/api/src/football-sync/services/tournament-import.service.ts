@@ -288,13 +288,25 @@ export class TournamentImportService {
           });
 
           if (existing) {
-            // Link if needed
+            // Link if needed - but only if this apiFootballTeamId is not already assigned to another team
             if (!existing.apiFootballTeamId) {
-              await this.prisma.team.update({
-                where: { id: existing.id },
-                data: { apiFootballTeamId: t.id, flagUrl: t.logo ?? existing.flagUrl },
+              // Check if apiFootballTeamId is already in use by another team
+              const conflictingTeam = await this.prisma.team.findUnique({
+                where: { apiFootballTeamId: t.id },
+                select: { id: true },
               });
-              result.teamsLinked++;
+              
+              // Only update if there's no conflict OR the conflict is with the same team
+              if (!conflictingTeam || conflictingTeam.id === existing.id) {
+                await this.prisma.team.update({
+                  where: { id: existing.id },
+                  data: { apiFootballTeamId: t.id, flagUrl: t.logo ?? existing.flagUrl },
+                });
+                result.teamsLinked++;
+              } else {
+                // Skip linking - apiFootballTeamId already assigned to different team
+                result.errors.push(`Team "${t.name}" (API ID ${t.id}) already linked to different team`);
+              }
             }
             teamApiIdToLocalId.set(t.id, existing.id);
           } else {
@@ -637,21 +649,38 @@ export class TournamentImportService {
 
     if (existing) {
       if (!existing.apiFootballTeamId) {
-        await this.prisma.team.update({
-          where: { id: existing.id },
-          data: {
-            apiFootballTeamId: teamData.id,
-            flagUrl: teamData.logo ?? existing.flagUrl,
-            ...(catalogEntry
-              ? {
-                  code: catalogEntry.code,
-                  shortCode: catalogEntry.shortCode,
-                  group: catalogEntry.group,
-                }
-              : {}),
-          },
+        // Check for conflicts before updating
+        const apiIdConflict = await this.prisma.team.findUnique({
+          where: { apiFootballTeamId: teamData.id },
+          select: { id: true },
         });
-        result.teamsLinked++;
+        
+        const codeConflict = catalogEntry ? await this.prisma.team.findUnique({
+          where: { code: catalogEntry.code },
+          select: { id: true },
+        }) : null;
+
+        // Only update if no conflicts or conflicts are with the same team
+        const hasApiIdConflict = apiIdConflict && apiIdConflict.id !== existing.id;
+        const hasCodeConflict = codeConflict && codeConflict.id !== existing.id;
+
+        if (!hasApiIdConflict && !hasCodeConflict) {
+          await this.prisma.team.update({
+            where: { id: existing.id },
+            data: {
+              apiFootballTeamId: teamData.id,
+              flagUrl: teamData.logo ?? existing.flagUrl,
+              ...(catalogEntry
+                ? {
+                    code: catalogEntry.code,
+                    shortCode: catalogEntry.shortCode,
+                    group: catalogEntry.group,
+                  }
+                : {}),
+            },
+          });
+          result.teamsLinked++;
+        }
       }
       return existing.id;
     }
