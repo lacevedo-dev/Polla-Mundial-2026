@@ -1401,14 +1401,27 @@ const Dashboard: React.FC = () => {
     };
     const topPlayers = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
 
-    // Partido expandido en el panel de chips en vivo
+    // Partido expandido en el panel de chips en vivo (3 estados: null → 1 → 2 → null)
     const [expandedMatchId, setExpandedMatchId] = React.useState<string | null>(null);
+    const [expandLevel, setExpandLevel] = React.useState<1 | 2>(1);
     React.useEffect(() => {
-        if (liveMatches.length > 0 && !expandedMatchId) {
-            setExpandedMatchId(liveMatches[0].id);
-        }
-        if (liveMatches.length === 0) setExpandedMatchId(null);
-    }, [liveMatches, expandedMatchId]);
+        if (liveMatches.length === 0) { setExpandedMatchId(null); setExpandLevel(1); }
+    }, [liveMatches]);
+
+    const handleChipClick = React.useCallback((matchId: string) => {
+        setExpandedMatchId(prev => {
+            if (prev !== matchId) {
+                setExpandLevel(1);
+                return matchId;
+            }
+            if (expandLevel === 1) {
+                setExpandLevel(2);
+                return prev;
+            }
+            setExpandLevel(1);
+            return null;
+        });
+    }, [expandLevel]);
 
     // My position in leaderboard
     const myEntry = useMemo(
@@ -1894,7 +1907,7 @@ const Dashboard: React.FC = () => {
                                 return (
                                     <button
                                         key={match.id}
-                                        onClick={() => setExpandedMatchId(isActive ? null : match.id)}
+                                        onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-2xl border transition-all
                                             flex flex-col items-center px-2 py-2
                                             xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3 xl:gap-3
@@ -2039,25 +2052,28 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {/* Goleadores y tarjetas */}
-                                        {expandedEvents.length > 0 && (
-                                            <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-x-4 gap-y-0.5">
-                                                {expandedEvents.map((e, i) => {
-                                                    const isOG = e.detail?.toLowerCase().includes('own goal');
-                                                    const icon = e.type === 'GOAL' ? (isOG ? '⚽ OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
-                                                    const min  = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
-                                                    return (
-                                                        <span key={i} className="text-[10px] text-white/40">
-                                                            {icon} {!isOG && e.playerName ? e.playerName : ''} {min}
-                                                        </span>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
+                                        {/* Goleadores, tarjetas y fase — solo en nivel 2 */}
+                                        {expandLevel === 2 && (
+                                            <>
+                                                {expandedEvents.length > 0 && (
+                                                    <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-x-4 gap-y-0.5">
+                                                        {expandedEvents.map((e, i) => {
+                                                            const isOG = e.detail?.toLowerCase().includes('own goal');
+                                                            const icon = e.type === 'GOAL' ? (isOG ? '⚽ OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
+                                                            const min  = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                            return (
+                                                                <span key={i} className="text-[10px] text-white/40">
+                                                                    {icon} {!isOG && e.playerName ? e.playerName : ''} {min}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
 
-                                        {/* Fase */}
-                                        {expandedMatch.phase && (
-                                            <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-white/20">{expandedMatch.phase}</p>
+                                                {expandedMatch.phase && (
+                                                    <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-white/20">{expandedMatch.phase}</p>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </motion.div>
