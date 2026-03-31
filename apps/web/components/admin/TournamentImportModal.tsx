@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, ChevronDown,
-    Clock, Download, Globe, Hash, Info, Loader2, RefreshCw, Search, Shield, Trophy, Users, X, Zap,
+    Clock, Download, FlaskConical, Globe, Hash, Info, Loader2, RefreshCw, Search, Shield, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
 
@@ -49,6 +49,22 @@ interface ImportResult {
     dryRun: boolean;
 }
 
+interface League {
+    id: string;
+    name: string;
+    status: string;
+    entryFee: number;
+}
+
+interface SeedResult {
+    strategy: string;
+    leagues: Array<{ name: string; members: number; created: number; skipped: number; payments: number }>;
+    matches: number;
+    totalCreated: number;
+    totalSkipped: number;
+    totalPayments: number;
+}
+
 interface UsageInfo {
     requests: { used: number; limit: number; available: number };
 }
@@ -81,7 +97,7 @@ interface Props {
     onImported: () => void;
 }
 
-const STEP_LABELS = ['Buscar liga', 'Temporada', 'Vista previa', 'Importar'];
+const STEP_LABELS = ['Buscar liga', 'Temporada', 'Vista previa', 'Importar', 'Seed (opcional)'];
 
 /* ─── Popular leagues — Colombia primero ────────────────────────── */
 // Búsqueda por ID numérico: el backend detecta que es número y usa ?id= en vez de ?search=
@@ -198,6 +214,17 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [importing, setImporting] = useState(false);
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [importError, setImportError] = useState('');
+    const [importedMatchIds, setImportedMatchIds] = useState<number[]>([]);
+
+    // Step 4: Seed
+    const [leagues, setLeagues] = useState<League[]>([]);
+    const [loadingLeagues, setLoadingLeagues] = useState(false);
+    const [selectedLeagueIds, setSelectedLeagueIds] = useState<Set<string>>(new Set());
+    const [seedStrategy, setSeedStrategy] = useState<'random' | 'conservative' | 'home_bias' | 'realistic'>('realistic');
+    const [simulatePayments, setSimulatePayments] = useState(true);
+    const [seeding, setSeeding] = useState(false);
+    const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
+    const [seedError, setSeedError] = useState('');
 
     /* ─ load usage on mount ─ */
     useEffect(() => {
@@ -466,10 +493,63 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
             setImportResult(data);
             setStep(3);
             refreshUsage();
+            // Load leagues for seed step
+            void loadLeaguesForSeed();
         } catch (e: any) {
             setImportError(e?.message ?? 'Error al importar');
         } finally {
             setImporting(false);
+        }
+    };
+
+    /* ─ load leagues for seed ─ */
+    const loadLeaguesForSeed = async () => {
+        setLoadingLeagues(true);
+        try {
+            const res = await request<{ data: League[] }>('/admin/leagues?limit=100&page=1');
+            setLeagues(res.data);
+        } catch {
+            /* non-critical */
+        } finally {
+            setLoadingLeagues(false);
+        }
+    };
+
+    /* ─ toggle league selection ─ */
+    const toggleLeague = (id: string) => {
+        setSelectedLeagueIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    /* ─ seed predictions ─ */
+    const handleSeed = async () => {
+        if (selectedLeagueIds.size === 0) return;
+        setSeeding(true);
+        setSeedError('');
+        setSeedResult(null);
+        try {
+            // Use imported match IDs if available from date/team/id modes, else let backend decide
+            const matchIds = mode === 'date' || mode === 'team' || mode === 'id'
+                ? [...selectedFixtures].map(String)
+                : undefined;
+
+            const res = await request<SeedResult>('/admin/predictions/bulk-seed', {
+                method: 'POST',
+                body: JSON.stringify({
+                    leagueIds: [...selectedLeagueIds],
+                    matchIds,
+                    strategy: seedStrategy,
+                    simulatePayments,
+                }),
+            });
+            setSeedResult(res);
+        } catch (e: any) {
+            setSeedError(e?.message ?? 'Error al generar pronósticos');
+        } finally {
+            setSeeding(false);
         }
     };
 
@@ -1475,8 +1555,190 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     <button onClick={onClose} className="flex-1 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors">
                                         Cerrar
                                     </button>
+                                    <button onClick={() => setStep(4)} className="flex-1 py-3 rounded-2xl bg-violet-600 text-white text-sm font-black uppercase hover:bg-violet-700 transition-colors flex items-center justify-center gap-2">
+                                        <FlaskConical size={16} /> Generar datos de prueba
+                                    </button>
                                     <button onClick={() => { onImported(); onClose(); }} className="flex-1 py-3 rounded-2xl bg-lime-400 text-slate-900 text-sm font-black uppercase hover:bg-lime-500 transition-colors">
                                         Ver partidos
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* ── Step 4: Seed test data ── */}
+                        {step === 4 && (
+                            <motion.div key="s4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                                
+                                {/* Info banner */}
+                                <div className="flex items-start gap-2 p-3 bg-violet-50 border border-violet-200 rounded-xl text-xs text-violet-700">
+                                    <FlaskConical size={13} className="shrink-0 mt-0.5" />
+                                    <p>Genera pronósticos de prueba para <strong>todos los participantes activos</strong> de las pollas seleccionadas. Útil para probar el sistema sin ingresar manualmente cada predicción. <strong>Solo crea pronósticos nuevos</strong> (no sobreescribe existentes).</p>
+                                </div>
+
+                                {/* League selector */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pollas (selecciona una o varias)</label>
+                                    {loadingLeagues ? (
+                                        <div className="flex items-center gap-2 py-4 text-sm text-slate-400 justify-center">
+                                            <Loader2 size={14} className="animate-spin" /> Cargando pollas…
+                                        </div>
+                                    ) : leagues.length === 0 ? (
+                                        <p className="text-xs text-slate-500 py-3 text-center">No hay pollas disponibles</p>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <p className="text-[10px] text-slate-500">{leagues.length} pollas disponibles</p>
+                                                <button
+                                                    onClick={() => setSelectedLeagueIds(
+                                                        selectedLeagueIds.size === leagues.length
+                                                            ? new Set()
+                                                            : new Set(leagues.map(l => l.id))
+                                                    )}
+                                                    className="text-[10px] font-bold text-violet-600 hover:text-violet-700"
+                                                >
+                                                    {selectedLeagueIds.size === leagues.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                                                </button>
+                                            </div>
+                                            <div className="space-y-1.5 max-h-52 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                                {leagues.map(league => (
+                                                    <label
+                                                        key={league.id}
+                                                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedLeagueIds.has(league.id) ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-200'}`}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedLeagueIds.has(league.id)}
+                                                            onChange={() => toggleLeague(league.id)}
+                                                            className="w-4 h-4 accent-violet-500 shrink-0"
+                                                        />
+                                                        <div className="w-7 h-7 bg-violet-100 rounded-lg flex items-center justify-center shrink-0">
+                                                            <Trophy size={12} className="text-violet-600" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-bold text-slate-900 truncate">{league.name}</p>
+                                                            <p className="text-[10px] text-slate-400 capitalize">
+                                                                {league.status.toLowerCase()}
+                                                                {league.entryFee > 0 && <> · ${league.entryFee.toLocaleString('es-CO')} COP</>}
+                                                            </p>
+                                                        </div>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Strategy selector */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Estrategia de pronósticos</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {[
+                                            { value: 'realistic', label: 'Realista', desc: '40% empates, distribución FIFA' },
+                                            { value: 'random', label: 'Aleatorio', desc: 'Scores completamente random' },
+                                            { value: 'conservative', label: 'Conservador', desc: 'Mayoría empates y 0-0, 1-1' },
+                                            { value: 'home_bias', label: 'Favorece local', desc: 'Equipo local gana más' },
+                                        ].map(({ value, label, desc }) => (
+                                            <button
+                                                key={value}
+                                                onClick={() => setSeedStrategy(value as any)}
+                                                className={`p-3 rounded-xl border text-left transition-all ${seedStrategy === value ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-200'}`}
+                                            >
+                                                <p className="text-sm font-bold text-slate-900">{label}</p>
+                                                <p className="text-[10px] text-slate-500 mt-0.5">{desc}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Payment simulation */}
+                                <label className="flex items-start gap-3 p-4 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={simulatePayments}
+                                        onChange={(e) => setSimulatePayments(e.target.checked)}
+                                        className="mt-0.5 w-4 h-4 accent-lime-500"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                            <Zap size={14} className="text-lime-600" /> Simular pagos
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-0.5">Crea registros de pago con estado COMPLETED para cada participante en pollas con cuota de entrada. Útil para probar flujos de pago sin transacciones reales.</p>
+                                    </div>
+                                </label>
+
+                                {/* Error */}
+                                {seedError && (
+                                    <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                                        <AlertCircle size={14} /> {seedError}
+                                    </div>
+                                )}
+
+                                {/* Result */}
+                                <AnimatePresence>
+                                    {seedResult && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-4 bg-lime-50 border border-lime-300 rounded-2xl space-y-3"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-7 h-7 bg-lime-400 rounded-full flex items-center justify-center">
+                                                    <Check size={14} strokeWidth={3} className="text-slate-900" />
+                                                </div>
+                                                <p className="text-sm font-black text-slate-900">¡Pronósticos generados!</p>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2 text-xs">
+                                                <div className="bg-white rounded-xl p-3 border border-lime-200 text-center">
+                                                    <p className="text-2xl font-black text-lime-600">{seedResult.totalCreated}</p>
+                                                    <p className="text-slate-500 mt-0.5">creados</p>
+                                                </div>
+                                                <div className="bg-white rounded-xl p-3 border border-lime-200 text-center">
+                                                    <p className="text-2xl font-black text-slate-400">{seedResult.totalSkipped}</p>
+                                                    <p className="text-slate-500 mt-0.5">omitidos</p>
+                                                </div>
+                                                <div className="bg-white rounded-xl p-3 border border-lime-200 text-center">
+                                                    <p className="text-2xl font-black text-amber-600">{seedResult.totalPayments}</p>
+                                                    <p className="text-slate-500 mt-0.5">pagos</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                {seedResult.leagues.map((lg, i) => (
+                                                    <div key={i} className="flex items-center justify-between text-[10px] bg-white rounded-lg p-2 border border-lime-200">
+                                                        <span className="font-bold text-slate-700">{lg.name}</span>
+                                                        <span className="text-slate-500">{lg.members} participantes · {lg.created} pronósticos · {lg.payments} pagos</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 text-center">
+                                                Estrategia: <strong className="capitalize">{seedResult.strategy.replace('_', ' ')}</strong> · {seedResult.matches} partidos
+                                            </p>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                {/* Actions */}
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setStep(3)}
+                                        className="flex-1 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                                    >
+                                        Volver
+                                    </button>
+                                    <button
+                                        onClick={() => void handleSeed()}
+                                        disabled={seeding || selectedLeagueIds.size === 0}
+                                        className="flex-1 py-3 rounded-2xl bg-violet-600 text-white font-black uppercase text-sm hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        {seeding
+                                            ? <><Loader2 size={16} className="animate-spin" /> Generando…</>
+                                            : <><FlaskConical size={16} /> Generar pronósticos</>
+                                        }
+                                    </button>
+                                    <button
+                                        onClick={() => { onImported(); onClose(); }}
+                                        className="flex-1 py-3 rounded-2xl bg-lime-400 text-slate-900 text-sm font-black uppercase hover:bg-lime-500 transition-colors"
+                                    >
+                                        Finalizar
                                     </button>
                                 </div>
                             </motion.div>

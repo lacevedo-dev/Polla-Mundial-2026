@@ -3,21 +3,37 @@ import {
     BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsEnum, IsBoolean } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
+export enum PredictionStrategy {
+    RANDOM = 'random',
+    CONSERVATIVE = 'conservative',
+    HOME_BIAS = 'home_bias',
+    REALISTIC = 'realistic',
+}
+
 export class BulkSeedPredictionsDto {
-    @IsString()
-    leagueId: string;
+    @IsArray()
+    @IsString({ each: true })
+    leagueIds: string[];
 
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
     matchIds?: string[];
+
+    @IsOptional()
+    @IsEnum(PredictionStrategy)
+    strategy?: PredictionStrategy;
+
+    @IsOptional()
+    @IsBoolean()
+    simulatePayments?: boolean;
 }
 
 @ApiTags('admin')
@@ -93,25 +109,20 @@ export class AdminPredictionsController {
     }
 
     @Post('bulk-seed')
-    @ApiOperation({ summary: 'Seed random test predictions for all league members (testing only)' })
+    @ApiOperation({ summary: 'Seed test predictions for league members with strategy and payment simulation' })
     async bulkSeed(@Body() dto: BulkSeedPredictionsDto) {
-        const { leagueId, matchIds } = dto;
+        const { leagueIds, matchIds, strategy = PredictionStrategy.RANDOM, simulatePayments = false } = dto;
 
-        // Validate league exists
-        const league = await this.prisma.league.findUnique({
-            where: { id: leagueId },
-            select: { id: true, name: true },
+        if (leagueIds.length === 0) throw new BadRequestException('Debe seleccionar al menos una polla');
+
+        // Validate leagues exist
+        const leagues = await this.prisma.league.findMany({
+            where: { id: { in: leagueIds } },
+            select: { id: true, name: true, entryFee: true },
         });
-        if (!league) throw new BadRequestException('Liga no encontrada');
+        if (leagues.length === 0) throw new BadRequestException('No se encontraron las pollas seleccionadas');
 
-        // Get all active members of the league
-        const members = await this.prisma.leagueMember.findMany({
-            where: { leagueId, status: 'ACTIVE' },
-            select: { userId: true },
-        });
-        if (members.length === 0) throw new BadRequestException('La liga no tiene participantes activos');
-
-        // Get matches to seed — if matchIds provided use those, else all open upcoming matches
+        // Get matches to seed
         const matchWhere: any = matchIds?.length
             ? { id: { in: matchIds } }
             : {
@@ -126,40 +137,124 @@ export class AdminPredictionsController {
         });
         if (matches.length === 0) throw new BadRequestException('No se encontraron partidos para semillar');
 
-        let created = 0;
-        let skipped = 0;
+        // Score generator based on strategy
+        const generateScores = (): { home: number; away: number } => {
+            switch (strategy) {
+                case PredictionStrategy.CONSERVATIVE:
+                    // Mostly draws and low scores
+                    const conservativeScores = [0, 0, 0, 1, 1, 1, 1, 2];
+                    const home = conservativeScores[Math.floor(Math.random() * conservativeScores.length)];
+                    const away = Math.random() < 0.6 ? home : conservativeScores[Math.floor(Math.random() * conservativeScores.length)];
+                    return { home, away };
 
-        const scores = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 1, 0, 2, 1, 3];
-        const pick = () => scores[Math.floor(Math.random() * scores.length)];
+                case PredictionStrategy.HOME_BIAS:
+                    // Home team favored
+                    const homeScore = [1, 1, 2, 2, 2, 3, 3, 4][Math.floor(Math.random() * 8)];
+                    const awayScore = [0, 0, 0, 1, 1, 2][Math.floor(Math.random() * 6)];
+                    return { home: homeScore, away: awayScore };
 
-        for (const member of members) {
-            for (const match of matches) {
-                const existing = await this.prisma.prediction.findUnique({
-                    where: { userId_matchId_leagueId: { userId: member.userId, matchId: match.id, leagueId } },
-                    select: { id: true },
-                });
-                if (existing) { skipped++; continue; }
+                case PredictionStrategy.REALISTIC:
+                    // Based on FIFA statistics: 40% draws, balanced wins
+                    const rand = Math.random();
+                    if (rand < 0.4) {
+                        // Draw
+                        const score = [0, 1, 1, 2][Math.floor(Math.random() * 4)];
+                        return { home: score, away: score };
+                    } else if (rand < 0.7) {
+                        // Home wins
+                        return { home: [1, 2, 2, 3][Math.floor(Math.random() * 4)], away: [0, 0, 1, 1][Math.floor(Math.random() * 4)] };
+                    } else {
+                        // Away wins
+                        return { home: [0, 0, 1, 1][Math.floor(Math.random() * 4)], away: [1, 2, 2, 3][Math.floor(Math.random() * 4)] };
+                    }
 
-                await this.prisma.prediction.create({
-                    data: {
-                        userId: member.userId,
-                        matchId: match.id,
-                        leagueId,
-                        homeScore: pick(),
-                        awayScore: pick(),
-                        submittedAt: new Date(),
-                    },
-                });
-                created++;
+                case PredictionStrategy.RANDOM:
+                default:
+                    const scores = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 1, 0, 2, 1, 3];
+                    return {
+                        home: scores[Math.floor(Math.random() * scores.length)],
+                        away: scores[Math.floor(Math.random() * scores.length)],
+                    };
             }
+        };
+
+        let totalCreated = 0;
+        let totalSkipped = 0;
+        let totalPayments = 0;
+        const leagueResults: Array<{ name: string; members: number; created: number; skipped: number; payments: number }> = [];
+
+        for (const league of leagues) {
+            // Get all active members
+            const members = await this.prisma.leagueMember.findMany({
+                where: { leagueId: league.id, status: 'ACTIVE' },
+                select: { userId: true },
+            });
+            if (members.length === 0) continue;
+
+            let created = 0;
+            let skipped = 0;
+            let payments = 0;
+
+            for (const member of members) {
+                // Create predictions
+                for (const match of matches) {
+                    const existing = await this.prisma.prediction.findUnique({
+                        where: { userId_matchId_leagueId: { userId: member.userId, matchId: match.id, leagueId: league.id } },
+                        select: { id: true },
+                    });
+                    if (existing) { skipped++; continue; }
+
+                    const { home, away } = generateScores();
+                    await this.prisma.prediction.create({
+                        data: {
+                            userId: member.userId,
+                            matchId: match.id,
+                            leagueId: league.id,
+                            homeScore: home,
+                            awayScore: away,
+                            submittedAt: new Date(),
+                        },
+                    });
+                    created++;
+                }
+
+                // Simulate payment if requested and league has entry fee
+                if (simulatePayments && league.entryFee > 0) {
+                    const existingPayment = await this.prisma.payment.findFirst({
+                        where: { userId: member.userId, leagueId: league.id, status: 'COMPLETED' },
+                        select: { id: true },
+                    });
+                    if (!existingPayment) {
+                        await this.prisma.payment.create({
+                            data: {
+                                userId: member.userId,
+                                leagueId: league.id,
+                                amount: league.entryFee,
+                                currency: 'COP',
+                                status: 'COMPLETED',
+                                provider: 'SEED_TEST',
+                                externalId: `seed_${Date.now()}_${member.userId.slice(0, 8)}`,
+                                metadata: { note: 'Pago simulado para testing' },
+                            },
+                        });
+                        payments++;
+                    }
+                }
+            }
+
+            totalCreated += created;
+            totalSkipped += skipped;
+            totalPayments += payments;
+            leagueResults.push({ name: league.name, members: members.length, created, skipped, payments });
         }
 
         return {
-            league: league.name,
-            members: members.length,
+            strategy,
+            leagues: leagueResults,
             matches: matches.length,
-            created,
-            skipped,
+            totalCreated,
+            totalSkipped,
+            totalPayments,
         };
     }
 
