@@ -2,9 +2,17 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, ChevronDown,
-    Download, Globe, Hash, Info, Loader2, Search, Shield, Trophy, Users, X, Zap,
+    Clock, Download, Globe, Hash, Info, Loader2, RefreshCw, Search, Shield, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
+
+const DATE_CACHE_PREFIX = 'adminFixtureCache_';const DATE_CACHE_TTL_MS = 1000 * 60 * 60 * 12; // 12 horas
+
+interface DateCache {
+    date: string;
+    data: FixtureResult[];
+    fetchedAt: number;
+}
 
 /* ─── types ─────────────────────────────────────────────────────── */
 
@@ -149,12 +157,31 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     // Step 0: Search by date
     const [fixtureDate, setFixtureDate] = useState(() => new Date().toISOString().slice(0, 10));
     const [fixtureResults, setFixtureResults] = useState<FixtureResult[]>([]);
+    const [dateCachedAt, setDateCachedAt] = useState<number | null>(null);
     const [searchingDate, setSearchingDate] = useState(false);
     const [dateError, setDateError] = useState('');
     const [dateTeamFilter, setDateTeamFilter] = useState('');
     const [selectedFixtures, setSelectedFixtures] = useState<Set<number>>(new Set());
     const [dateCreateTeams, setDateCreateTeams] = useState(true);
     const [dateOverwrite, setDateOverwrite] = useState(false);
+
+    // Load cache when date changes
+    useEffect(() => {
+        const raw = localStorage.getItem(`${DATE_CACHE_PREFIX}${fixtureDate}`);
+        if (!raw) { setFixtureResults([]); setDateCachedAt(null); return; }
+        try {
+            const cached: DateCache = JSON.parse(raw);
+            if (Date.now() - cached.fetchedAt < DATE_CACHE_TTL_MS) {
+                setFixtureResults(cached.data);
+                setDateCachedAt(cached.fetchedAt);
+                setSelectedFixtures(new Set());
+            } else {
+                localStorage.removeItem(`${DATE_CACHE_PREFIX}${fixtureDate}`);
+                setFixtureResults([]);
+                setDateCachedAt(null);
+            }
+        } catch { setFixtureResults([]); setDateCachedAt(null); }
+    }, [fixtureDate]);
 
     // Step 1: Season + options
     const [season, setSeason] = useState<number>(new Date().getFullYear());
@@ -182,13 +209,15 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         request<UsageInfo>('/admin/football/usage').then(setUsage).catch(() => null);
     }, []);
 
-    /* ─ derived: filtered date fixtures by team name ─ */
+    /* ─ derived: filtered date fixtures by team name OR league/tournament ─ */
     const filteredDateFixtures = useMemo(() => {
         const q = dateTeamFilter.toLowerCase().trim();
         if (!q) return fixtureResults;
         return fixtureResults.filter(f =>
             f.homeTeam.name.toLowerCase().includes(q) ||
-            f.awayTeam.name.toLowerCase().includes(q)
+            f.awayTeam.name.toLowerCase().includes(q) ||
+            f.league.name.toLowerCase().includes(q) ||
+            f.league.country.toLowerCase().includes(q)
         );
     }, [fixtureResults, dateTeamFilter]);
 
@@ -317,15 +346,33 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     };
 
     /* ─ search by date ─ */
-    const handleSearchByDate = async () => {
+    const handleSearchByDate = async (force = false) => {
         if (!fixtureDate) return;
+        // Use cache unless force refresh
+        if (!force) {
+            const raw = localStorage.getItem(`${DATE_CACHE_PREFIX}${fixtureDate}`);
+            if (raw) {
+                try {
+                    const cached: DateCache = JSON.parse(raw);
+                    if (Date.now() - cached.fetchedAt < DATE_CACHE_TTL_MS) {
+                        setFixtureResults(cached.data);
+                        setDateCachedAt(cached.fetchedAt);
+                        setSelectedFixtures(new Set());
+                        return;
+                    }
+                } catch { /* ignore, re-fetch */ }
+            }
+        }
         setSearchingDate(true);
         setDateError('');
         setFixtureResults([]);
         setSelectedFixtures(new Set());
         try {
             const data = await request<FixtureResult[]>(`/admin/football/fixtures/search?date=${fixtureDate}`);
+            const fetchedAt = Date.now();
             setFixtureResults(data);
+            setDateCachedAt(fetchedAt);
+            localStorage.setItem(`${DATE_CACHE_PREFIX}${fixtureDate}`, JSON.stringify({ date: fixtureDate, data, fetchedAt }));
             refreshUsage();
         } catch (e: any) {
             setDateError(e?.message ?? 'Error al buscar partidos');
@@ -503,13 +550,30 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                 className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                                             />
                                             <button
-                                                onClick={() => void handleSearchByDate()}
+                                                onClick={() => void handleSearchByDate(false)}
                                                 disabled={searchingDate || !fixtureDate}
                                                 className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-900 text-sm font-bold hover:bg-amber-500 disabled:opacity-50 transition-colors"
                                             >
                                                 {searchingDate ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
                                             </button>
                                         </div>
+
+                                        {/* Cache timestamp + force refresh */}
+                                        {dateCachedAt && !searchingDate && (
+                                            <div className="flex items-center justify-between px-1">
+                                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                                                    <Clock size={10} />
+                                                    <span>Consultado {new Date(dateCachedAt).toLocaleString('es-CO', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => void handleSearchByDate(true)}
+                                                    disabled={searchingDate}
+                                                    className="flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 transition-colors"
+                                                >
+                                                    <RefreshCw size={10} /> Actualizar desde API
+                                                </button>
+                                            </div>
+                                        )}
 
                                         {dateError && (
                                             <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
@@ -530,7 +594,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                                     <input
                                                         type="text"
-                                                        placeholder="Filtrar por equipo (ej: Colombia)"
+                                                        placeholder="Filtrar por equipo o torneo (ej: Colombia, UEFA…)"
                                                         value={dateTeamFilter}
                                                         onChange={(e) => setDateTeamFilter(e.target.value)}
                                                         className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"

@@ -1,11 +1,12 @@
 ﻿import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
+import { ChevronDown, Download, Edit3, FileImage, FlaskConical, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
 import TournamentImportModal from '../../components/admin/TournamentImportModal';
+import BulkSeedPredictionsModal from '../../components/admin/BulkSeedPredictionsModal';
 import { useAdminMatchesStore } from '../../stores/admin.matches.store';
 import type { AdminMatch, AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
@@ -553,6 +554,7 @@ const AdminMatches: React.FC = () => {
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
   const [showImportTournament, setShowImportTournament] = React.useState(false);
+  const [showBulkSeed, setShowBulkSeed] = React.useState(false);
   const [recalculating, setRecalculating] = React.useState(false);
   const [recalcResult, setRecalcResult] = React.useState<{ total: number; processed: number; errors: { matchId: string; error: string }[] } | null>(null);
   const [reportFeedback, setReportFeedback] = React.useState<string | null>(null);
@@ -784,6 +786,9 @@ const AdminMatches: React.FC = () => {
           </button>
           <button onClick={() => setShowImportTournament(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition-all hover:bg-amber-100 sm:w-auto">
             <Trophy size={16} /> Importar torneo
+          </button>
+          <button onClick={() => setShowBulkSeed(true)} className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl border border-fuchsia-300 bg-fuchsia-50 px-4 py-2.5 text-sm font-bold text-fuchsia-800 transition-all hover:bg-fuchsia-100 sm:w-auto">
+            <FlaskConical size={16} /> Pronósticos test
           </button>
           <button
             onClick={() => void handleBulkAutoLink()}
@@ -1176,6 +1181,9 @@ const AdminMatches: React.FC = () => {
           onClose={() => setShowImportTournament(false)}
           onImported={() => { fetchMatches(); fetchTeams(); }}
         />
+      )}
+      {showBulkSeed && (
+        <BulkSeedPredictionsModal onClose={() => setShowBulkSeed(false)} />
       )}
       <ConfirmDialog
         open={!!confirmDelete}

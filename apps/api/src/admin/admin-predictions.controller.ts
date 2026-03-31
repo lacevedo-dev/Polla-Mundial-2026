@@ -1,12 +1,24 @@
 import {
-    Controller, Get, Query, UseGuards, ParseIntPipe, DefaultValuePipe,
+    Controller, Get, Post, Body, Query, UseGuards, ParseIntPipe, DefaultValuePipe,
+    BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { IsString, IsOptional, IsArray } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { USER_STATUS } from '../users/user-status.constants';
+
+export class BulkSeedPredictionsDto {
+    @IsString()
+    leagueId: string;
+
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    matchIds?: string[];
+}
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -77,6 +89,77 @@ export class AdminPredictionsController {
             groups: [...groups].sort((left, right) => left.localeCompare(right, 'es')),
             phases: [...phases].sort((left, right) => left.localeCompare(right, 'es')),
             rounds: [...rounds].sort((left, right) => left.localeCompare(right, 'es')),
+        };
+    }
+
+    @Post('bulk-seed')
+    @ApiOperation({ summary: 'Seed random test predictions for all league members (testing only)' })
+    async bulkSeed(@Body() dto: BulkSeedPredictionsDto) {
+        const { leagueId, matchIds } = dto;
+
+        // Validate league exists
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            select: { id: true, name: true },
+        });
+        if (!league) throw new BadRequestException('Liga no encontrada');
+
+        // Get all active members of the league
+        const members = await this.prisma.leagueMember.findMany({
+            where: { leagueId, status: 'ACTIVE' },
+            select: { userId: true },
+        });
+        if (members.length === 0) throw new BadRequestException('La liga no tiene participantes activos');
+
+        // Get matches to seed — if matchIds provided use those, else all open upcoming matches
+        const matchWhere: any = matchIds?.length
+            ? { id: { in: matchIds } }
+            : {
+                matchDate: { gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) },
+                OR: [{ status: 'NS' }, { status: null }],
+              };
+
+        const matches = await this.prisma.match.findMany({
+            where: matchWhere,
+            select: { id: true, homeTeamId: true, awayTeamId: true },
+            take: 200,
+        });
+        if (matches.length === 0) throw new BadRequestException('No se encontraron partidos para semillar');
+
+        let created = 0;
+        let skipped = 0;
+
+        const scores = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 1, 0, 2, 1, 3];
+        const pick = () => scores[Math.floor(Math.random() * scores.length)];
+
+        for (const member of members) {
+            for (const match of matches) {
+                const existing = await this.prisma.prediction.findUnique({
+                    where: { userId_matchId_leagueId: { userId: member.userId, matchId: match.id, leagueId } },
+                    select: { id: true },
+                });
+                if (existing) { skipped++; continue; }
+
+                await this.prisma.prediction.create({
+                    data: {
+                        userId: member.userId,
+                        matchId: match.id,
+                        leagueId,
+                        homeScore: pick(),
+                        awayScore: pick(),
+                        submittedAt: new Date(),
+                    },
+                });
+                created++;
+            }
+        }
+
+        return {
+            league: league.name,
+            members: members.length,
+            matches: matches.length,
+            created,
+            skipped,
         };
     }
 
