@@ -18,7 +18,9 @@ import {
     ListChecks,
     Lock,
     Mail,
+    Maximize2,
     MessageCircle,
+    Minimize2,
     Minus,
     Phone,
     Plus,
@@ -42,6 +44,7 @@ import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
+import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { LiveMatchTimer, LiveMatchTimerInline, MatchProgressBar } from '../components/live/LiveMatchTimer';
 
@@ -1423,6 +1426,21 @@ const Dashboard: React.FC = () => {
         });
     }, [expandLevel]);
 
+    // Modo flotante para el panel de partidos en vivo
+    const [isFloating, setIsFloating] = React.useState(() => {
+        const stored = localStorage.getItem('livePanel_floating');
+        return stored === 'true';
+    });
+    const draggable = useDraggable({
+        initialPosition: { x: 20, y: 100 },
+        storageKey: 'livePanel_position',
+        bounds: 'window',
+    });
+
+    React.useEffect(() => {
+        localStorage.setItem('livePanel_floating', String(isFloating));
+    }, [isFloating]);
+
     // My position in leaderboard
     const myEntry = useMemo(
         () => leaderboard.find((p) => p.id === user?.id || p.username === user?.username),
@@ -1856,7 +1874,7 @@ const Dashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* ── Partidos en vivo — sticky chips ── */}
+            {/* ── Partidos en vivo — sticky o flotante ── */}
             {liveMatches.length > 0 && (() => {
                 const expandedMatch = liveMatches.find(m => m.id === expandedMatchId) ?? null;
                 const expandedPredHome = expandedMatch ? parseInt(expandedMatch.prediction.home, 10) : NaN;
@@ -1874,15 +1892,8 @@ const Dashboard: React.FC = () => {
                 const expandedStatusColor = expandedStatus === 'exact' ? 'text-lime-300' : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
                 const expandedEvents = expandedMatch ? (matchEvents.get(expandedMatch.id) ?? []).filter(e => ['GOAL', 'CARD'].includes(e.type)) : [];
 
-                return (
-                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50 shadow-sm pb-2 pt-2">
+                const panelContent = (
                     <motion.div {...fade(0.04)} className="space-y-2">
-                        {/* Etiqueta */}
-                        <div className="flex items-center gap-1">
-                            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
-                        </div>
-
                         {/*
                           Móvil: chips compactos, auto-fill minmax(88px) → N por fila según ancho
                           Escritorio (xl): 3 columnas igual que el main grid → tarjetas completas
@@ -2081,6 +2092,66 @@ const Dashboard: React.FC = () => {
                         </AnimatePresence>
                         </div>
                     </motion.div>
+                );
+
+                // Modo flotante: panel draggable con posición fija
+                if (isFloating) {
+                    return (
+                        <div
+                            ref={draggable.ref}
+                            style={{
+                                position: 'fixed',
+                                left: `${draggable.position.x}px`,
+                                top: `${draggable.position.y}px`,
+                                zIndex: 50,
+                                maxWidth: '380px',
+                                width: '90vw',
+                            }}
+                            className="rounded-2xl bg-slate-50 shadow-2xl border border-slate-200"
+                        >
+                            {/* Drag handle + toggle button */}
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-100 rounded-t-2xl">
+                                <div
+                                    onMouseDown={draggable.handleMouseDown}
+                                    onTouchStart={draggable.handleTouchStart}
+                                    className="flex-1 cursor-move flex items-center gap-2 select-none"
+                                >
+                                    <AlignJustify size={14} className="text-slate-400" />
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Partidos en vivo</span>
+                                </div>
+                                <button
+                                    onClick={() => setIsFloating(false)}
+                                    className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors"
+                                    title="Anclar al dashboard"
+                                >
+                                    <Minimize2 size={14} className="text-slate-600" />
+                                </button>
+                            </div>
+                            <div className="p-3 max-h-[70vh] overflow-y-auto">
+                                {panelContent}
+                            </div>
+                        </div>
+                    );
+                }
+
+                // Modo sticky: panel anclado arriba del dashboard
+                return (
+                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50 shadow-sm pb-2 pt-2">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1">
+                                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
+                            </div>
+                            <button
+                                onClick={() => setIsFloating(true)}
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+                                title="Hacer flotante"
+                            >
+                                <Maximize2 size={12} className="text-slate-600" />
+                                <span className="text-[9px] font-bold text-slate-600 hidden sm:inline">Flotante</span>
+                            </button>
+                        </div>
+                        {panelContent}
                     </div>
                 );
             })()}
