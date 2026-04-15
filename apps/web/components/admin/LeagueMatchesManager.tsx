@@ -18,8 +18,8 @@ interface LeagueMatchesManagerProps {
 }
 
 export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
-    const [selectedTournament, setSelectedTournament] = useState<string>('');
-    const [selectedPhase, setSelectedPhase] = useState<string>('');
+    const [selectedTournament, setSelectedTournament] = useState<string>('ALL');
+    const [selectedPhase, setSelectedPhase] = useState<string>('ALL');
 
     const {
         leagueMatches,
@@ -41,15 +41,15 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
     useEffect(() => {
         // Cargar partidos cuando cambian los filtros
         fetchLeagueMatches(leagueId, {
-            tournamentId: selectedTournament || undefined,
-            phase: selectedPhase || undefined,
+            tournamentId: selectedTournament !== 'ALL' ? selectedTournament : undefined,
+            phase: selectedPhase !== 'ALL' ? selectedPhase : undefined,
         });
     }, [leagueId, selectedTournament, selectedPhase, fetchLeagueMatches]);
 
     const activeCount = leagueMatches.filter((m) => m.activeInLeague).length;
 
     const handleActivateAll = async () => {
-        if (!selectedTournament) return;
+        if (!selectedTournament || selectedTournament === 'ALL') return;
         try {
             await activateAllTournamentMatches(leagueId, selectedTournament);
         } catch (error) {
@@ -88,7 +88,7 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                         <SelectValue placeholder="Todos los torneos" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todos los torneos</SelectItem>
+                        <SelectItem value="ALL">Todos los torneos</SelectItem>
                         {leagueTournaments.map((t) => (
                             <SelectItem key={t.id} value={t.id}>
                                 {t.name} ({t.season})
@@ -102,7 +102,7 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                         <SelectValue placeholder="Todas las fases" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todas</SelectItem>
+                        <SelectItem value="ALL">Todas</SelectItem>
                         {Object.entries(phaseLabels).map(([key, label]) => (
                             <SelectItem key={key} value={key}>
                                 {label}
@@ -113,7 +113,7 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
 
                 <Button
                     onClick={handleActivateAll}
-                    disabled={!selectedTournament || isLoadingMatches || isSaving}
+                    disabled={selectedTournament === 'ALL' || isLoadingMatches || isSaving}
                 >
                     Activar Todos del Torneo
                 </Button>
