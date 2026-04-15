@@ -225,10 +225,26 @@ export const MatchSelector: React.FC<MatchSelectorProps> = ({
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-3 text-xs text-slate-600">
-                                                                <span className="flex items-center gap-1">
-                                                                    <Calendar size={12} />
-                                                                    {format(new Date(match.date), "d 'de' MMM, HH:mm", { locale: es })}
-                                                                </span>
+                                                                {match.date && (
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Calendar size={12} />
+                                                                        {(() => {
+                                                                            try {
+                                                                                const date = new Date(match.date);
+                                                                                if (isNaN(date.getTime())) return 'Fecha por confirmar';
+                                                                                return format(date, "d 'de' MMM, HH:mm", { locale: es });
+                                                                            } catch {
+                                                                                return 'Fecha por confirmar';
+                                                                            }
+                                                                        })()}
+                                                                    </span>
+                                                                )}
+                                                                {!match.date && (
+                                                                    <span className="flex items-center gap-1 text-slate-400">
+                                                                        <Calendar size={12} />
+                                                                        Fecha por confirmar
+                                                                    </span>
+                                                                )}
                                                                 {match.venue && (
                                                                     <span className="flex items-center gap-1 truncate">
                                                                         <MapPin size={12} />
