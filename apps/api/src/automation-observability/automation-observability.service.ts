@@ -70,7 +70,7 @@ export class AutomationObservabilityService {
           startedAt: new Date(),
           correlationId: input.correlationId ?? null,
           summary: input.summary ?? null,
-          details: input.details ?? Prisma.JsonNull,
+          details: input.details ? JSON.stringify(input.details) : null,
           audienceCount: input.audienceCount ?? null,
         },
       });
@@ -99,7 +99,7 @@ export class AutomationObservabilityService {
           finishedAt: new Date(),
           summary: input.summary ?? null,
           errorMessage: input.errorMessage ?? null,
-          details: input.details ?? Prisma.JsonNull,
+          details: input.details ? JSON.stringify(input.details) : null,
           deliveredCount: input.deliveredCount ?? null,
           failedCount: input.failedCount ?? null,
           warningCount: input.warningCount ?? null,

@@ -313,10 +313,10 @@ export async function recordEmailBacklogAuditSkip(
       completedAt: startedAt,
       durationMs: 0,
       notActionedCount: 0,
-      summary: ({
+      summary: JSON.stringify({
         reason: input.reason,
         ...(input.details ? { details: input.details } : {}),
-      }) as Prisma.InputJsonValue,
+      }),
     },
     select: { id: true, startedAt: true },
   });
@@ -416,7 +416,7 @@ function toAuditRunUpdate(result: EmailBacklogAuditRunResult): Prisma.EmailBackl
     droppedCount: result.droppedCount,
     notActionedCount: result.notActionedCount,
     errorCount: result.errorCount,
-    summary: result.summary as Prisma.InputJsonValue,
+    summary: JSON.stringify(result.summary),
     errorMessage: result.errorMessage,
   };
 }

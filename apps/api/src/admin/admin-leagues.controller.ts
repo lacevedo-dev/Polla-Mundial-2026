@@ -1,6 +1,6 @@
 import {
     Controller, Get, Patch, Post, Delete, Param, Body, Query, UseGuards,
-    NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus, BadRequestException,
+    NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LeagueStatus, Plan, MemberStatus, ScoringType, Privacy, Phase } from '@prisma/client';
