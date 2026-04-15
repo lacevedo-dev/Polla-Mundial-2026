@@ -361,6 +361,12 @@ export class FootballSyncController {
     return this.tournamentImport.listTournaments();
   }
 
+  @Patch('tournaments/:id')
+  @ApiOperation({ summary: 'Update tournament (e.g., toggle active status)' })
+  async updateTournament(@Param('id') id: string, @Body() data: { active?: boolean }) {
+    return this.tournamentImport.updateTournament(id, data);
+  }
+
   @Get('teams/search')
   @ApiOperation({ summary: 'Search teams by name in API-Football' })
   async searchTeams(@Query('name') name: string) {

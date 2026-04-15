@@ -956,7 +956,17 @@ export class TournamentImportService {
   async listTournaments() {
     return this.prisma.tournament.findMany({
       orderBy: [{ active: 'desc' }, { season: 'desc' }, { name: 'asc' }],
-      select: { id: true, name: true, country: true, season: true, logoUrl: true, type: true, active: true },
+      select: { id: true, name: true, country: true, season: true, logoUrl: true, type: true, active: true, createdAt: true, updatedAt: true },
+    });
+  }
+
+  /* ─── Update tournament ──────────────────────────────────────────────── */
+
+  async updateTournament(id: string, data: { active?: boolean }) {
+    return this.prisma.tournament.update({
+      where: { id },
+      data,
+      select: { id: true, name: true, country: true, season: true, logoUrl: true, type: true, active: true, createdAt: true, updatedAt: true },
     });
   }
 
