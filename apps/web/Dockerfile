@@ -9,6 +9,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# ARG para invalidar caché de dependencias cuando cambie package-lock.json
+ARG DEPS_CACHEBUST=1
+
 # Copiar configuración de dependencias y lockfiles
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
