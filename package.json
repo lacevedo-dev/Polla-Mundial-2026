@@ -16,5 +16,8 @@
     "api:build": "npm run build --workspace=@polla-2026/api",
     "baseline:check": "npm run web:test && npm run web:build && npm run api:test && npm run api:e2e && npm run api:build",
     "smoke:release": "node scripts/release-smoke.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-select": "^2.2.6"
   }
 }
