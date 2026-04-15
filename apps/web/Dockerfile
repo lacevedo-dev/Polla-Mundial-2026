@@ -25,6 +25,7 @@ RUN npm ci
 # invalide el cache de Docker desde esta capa hacia adelante (COPY + build).
 # Pasa --build-arg CACHEBUST=$(date +%s) desde Dokploy para forzar rebuild.
 ARG CACHEBUST=1
+RUN echo "Source cache bust: $CACHEBUST"
 
 # Copiar el todo el código del frontend y el paquete compartido
 COPY apps/web ./apps/web
