@@ -56,4 +56,6 @@ export interface LeagueData {
   currency: string;
   plan: 'free' | 'gold' | 'diamond';
   primaryTournamentId?: string;
+  tournamentIds?: string[];
+  matchIds?: string[];
 }

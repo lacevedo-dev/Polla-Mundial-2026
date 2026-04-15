@@ -33,6 +33,8 @@ export interface CreateLeagueRequest {
     stageFees?: CreateLeagueStageFee[];
     distributions?: CreateLeagueDistribution[];
     primaryTournamentId?: string;
+    tournamentIds?: string[];
+    matchIds?: string[];
 }
 
 export interface LeagueApiMember {
@@ -255,6 +257,8 @@ export function toCreateLeagueRequest(input: LeagueData | CreateLeagueRequest): 
         stageFees: stageFees ?? undefined,
         distributions: distributions.length ? distributions : undefined,
         primaryTournamentId: input.primaryTournamentId,
+        tournamentIds: input.tournamentIds,
+        matchIds: input.matchIds,
     };
 }
 

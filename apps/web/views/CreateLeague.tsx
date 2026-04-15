@@ -49,6 +49,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
+import { TournamentSelector } from '../components/league/TournamentSelector';
+import { MatchSelector } from '../components/league/MatchSelector';
 
 // Props eliminadas — navegación via useNavigate
 
@@ -189,7 +191,9 @@ const CreateLeague: React.FC = () => {
       round: { winnersCount: 1, distribution: getInitialDistribution(1, 10) },
       phase: { winnersCount: 1, distribution: getInitialDistribution(1, 10) }
     },
-    currency: 'COP', plan: (authUser?.plan?.toLowerCase() as 'free' | 'gold' | 'diamond') ?? 'free'
+    currency: 'COP', plan: (authUser?.plan?.toLowerCase() as 'free' | 'gold' | 'diamond') ?? 'free',
+    tournamentIds: [],
+    matchIds: []
   });
 
   React.useEffect(() => {
@@ -238,7 +242,7 @@ const CreateLeague: React.FC = () => {
 
   // Validar si la categoría actual sigue activa, sino cambiar a una disponible
   React.useEffect(() => {
-    if (step === 3) {
+    if (step === 5) {
       const isCurrentActive = activeCategory === 'general' ? leagueData.includeBaseFee : leagueData.includeStageFees && leagueData.stageFees[activeCategory as StageType]?.active;
       if (!isCurrentActive) {
         if (leagueData.includeBaseFee) setActiveCategory('general');
@@ -322,6 +326,57 @@ const CreateLeague: React.FC = () => {
   const handleResetToFreeLimit = () => {
     setLeagueData({ ...leagueData, participantsCount: 10 });
   }
+
+  const handleToggleTournament = (tournamentId: string) => {
+    setLeagueData(prev => {
+      const tournamentIds = prev.tournamentIds || [];
+      const isSelected = tournamentIds.includes(tournamentId);
+      return {
+        ...prev,
+        tournamentIds: isSelected
+          ? tournamentIds.filter(id => id !== tournamentId)
+          : [...tournamentIds, tournamentId],
+        primaryTournamentId: isSelected && prev.primaryTournamentId === tournamentId
+          ? undefined
+          : prev.primaryTournamentId || tournamentId
+      };
+    });
+  };
+
+  const handleToggleMatch = (matchId: string) => {
+    setLeagueData(prev => {
+      const matchIds = prev.matchIds || [];
+      const isSelected = matchIds.includes(matchId);
+      return {
+        ...prev,
+        matchIds: isSelected
+          ? matchIds.filter(id => id !== matchId)
+          : [...matchIds, matchId]
+      };
+    });
+  };
+
+  const handleToggleAllMatches = (tournamentId: string, matchIds: string[]) => {
+    setLeagueData(prev => {
+      const currentMatchIds = prev.matchIds || [];
+      const allSelected = matchIds.every(id => currentMatchIds.includes(id));
+      
+      if (allSelected) {
+        return {
+          ...prev,
+          matchIds: currentMatchIds.filter(id => !matchIds.includes(id))
+        };
+      } else {
+        const newMatchIds = [...currentMatchIds];
+        matchIds.forEach(id => {
+          if (!newMatchIds.includes(id)) {
+            newMatchIds.push(id);
+          }
+        });
+        return { ...prev, matchIds: newMatchIds };
+      }
+    });
+  };
 
   const handleAddExistingUser = (name: string) => {
     const newUser: InvitedUser = { id: Math.random().toString(36).substr(2, 9), name, email: `${name.toLowerCase().replace(' ', '.')}@gmail.com`, phone: '3000000000', type: 'existing', avatar: `https://picsum.photos/seed/${name}/40/40` };
@@ -503,7 +558,7 @@ const CreateLeague: React.FC = () => {
               <h3 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
                 CREA TU <span className="text-lime-600">POLLA.</span>
               </h3>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 block">PASO {step} DE 6</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 block">PASO {step} DE 8</span>
             </div>
             <div className="mb-1">
               <Badge color="bg-slate-100 text-slate-600 font-bold text-[9px] px-3 border border-slate-200">
@@ -512,7 +567,7 @@ const CreateLeague: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-1 h-1 w-full mb-6">
-            {[1, 2, 3, 4, 5, 6].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-500' : 'bg-slate-200'}`}></div>)}
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <div key={s} className={`flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-lime-500' : 'bg-slate-200'}`}></div>)}
           </div>
 
           <div className="flex-1 overflow-y-auto scrollbar-hide pr-1">
@@ -562,39 +617,55 @@ const CreateLeague: React.FC = () => {
                       <button onClick={() => setLeagueData({ ...leagueData, privacy: 'private' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'private' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Lock size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Privada</span></button>
                       <button onClick={() => setLeagueData({ ...leagueData, privacy: 'public' })} className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${leagueData.privacy === 'public' ? 'border-lime-500 bg-lime-50/20 text-lime-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}><Globe size={16} /><span className="text-[8px] font-black uppercase tracking-widest">Pública</span></button>
                     </div>
-
-                    {/* Tournament picker */}
-                    <div className="space-y-2 pt-1">
-                      <label className="text-[9px] font-black uppercase text-slate-500 tracking-widest ml-1">Torneo</label>
-                      {!tournamentsLoaded ? (
-                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">Cargando torneos...</div>
-                      ) : tournaments.length === 0 ? (
-                        <div className="h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center px-3 text-xs text-slate-400">No hay torneos importados aún</div>
-                      ) : (
-                        <div className="relative">
-                          <Trophy size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                          <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                          <select
-                            value={leagueData.primaryTournamentId ?? ''}
-                            onChange={(e) => setLeagueData({ ...leagueData, primaryTournamentId: e.target.value || undefined })}
-                            className="w-full appearance-none pl-8 pr-8 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-lime-400"
-                          >
-                            <option value="">Sin torneo (opcional)</option>
-                            {tournaments.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}{t.season ? ` ${t.season}` : ''}{t.country ? ` — ${t.country}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
                   </div>
+                </div>
+                <div className="w-full pt-4">
+                  <Button
+                    variant="primary"
+                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-wider shadow-xl shadow-lime-500/20"
+                    onClick={() => setStep(2)}
+                    disabled={leagueData.name.length < 3}
+                  >
+                    SIGUIENTE PASO <ArrowRight size={18} className="ml-2" />
+                  </Button>
                 </div>
               </div>
             )}
 
             {step === 2 && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                <TournamentSelector
+                  tournaments={tournaments}
+                  selectedIds={leagueData.tournamentIds || []}
+                  onToggle={handleToggleTournament}
+                  onContinue={() => setStep(3)}
+                />
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    className="w-full h-12 rounded-2xl font-bold text-sm"
+                    onClick={() => setStep(1)}
+                  >
+                    <ArrowLeft size={18} className="mr-2" /> ATRÁS
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                <MatchSelector
+                  tournamentIds={leagueData.tournamentIds || []}
+                  selectedMatchIds={leagueData.matchIds || []}
+                  onToggleMatch={handleToggleMatch}
+                  onToggleAllMatches={handleToggleAllMatches}
+                  onContinue={() => setStep(4)}
+                  onBack={() => setStep(2)}
+                />
+              </div>
+            )}
+
+            {step === 4 && (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
                 <Card className={`p-6 rounded-[2.2rem] border-2 transition-all ${leagueData.includeBaseFee ? 'border-lime-500 shadow-xl shadow-lime-500/5' : 'border-slate-200 opacity-60 grayscale'}`}>
                   <div className="flex justify-between items-center mb-4">
@@ -641,7 +712,7 @@ const CreateLeague: React.FC = () => {
               </div>
             )}
 
-            {step === 3 && (
+            {step === 5 && (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 flex flex-col h-full">
 
                 {/* Indicador de Plan de Suscripción RE-DISEÑADO */}
@@ -752,7 +823,7 @@ const CreateLeague: React.FC = () => {
               </div>
             )}
 
-            {step === 4 && (
+            {step === 6 && (
               <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 h-full flex flex-col">
                 <div className="text-center space-y-1"><h4 className="text-xl font-black font-brand uppercase tracking-tighter text-slate-900">INVITA A TU <span className="text-lime-600">GRUPO.</span></h4></div>
                 <Card className="p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3 relative z-10">
@@ -879,7 +950,7 @@ const CreateLeague: React.FC = () => {
               </div>
             )}
 
-            {step === 5 && (
+            {step === 7 && (
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 {/* Summary Card RE-DESIGNED */}
                 <div className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xl mt-4">
@@ -993,7 +1064,7 @@ const CreateLeague: React.FC = () => {
               </div>
             )}
 
-            {step === 6 && (
+            {step === 8 && (
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300 flex flex-col items-center">
                 <div className="text-center space-y-2">
                   <h4 className="text-2xl font-black font-brand uppercase tracking-tighter text-slate-900">
@@ -1192,15 +1263,15 @@ const CreateLeague: React.FC = () => {
           {step !== 6 && (
             <div className="mt-6 flex gap-3 pt-6 border-t border-slate-200 relative z-20">
               {step > 1 && <Button variant="outline" className="w-16 h-16 rounded-[1.8rem] border-slate-300 text-slate-500 hover:text-slate-900" onClick={() => setStep(step - 1)}><ArrowLeft size={24} /></Button>}
-              {step < 6 && (
+              {step < 8 && (
                 <Button
                   variant="secondary"
-                  className={`flex-1 h-16 rounded-[1.8rem] font-black text-[12px] tracking-[0.2em] shadow-2xl transition-all ${step === 3 && isLimitExceeded && leagueData.plan === 'free'
+                  className={`flex-1 h-16 rounded-[1.8rem] font-black text-[12px] tracking-[0.2em] shadow-2xl transition-all ${step === 5 && isLimitExceeded && leagueData.plan === 'free'
                     ? 'bg-slate-200 text-slate-400 hover:bg-slate-200 shadow-none'
                     : 'bg-lime-400 text-slate-950 hover:bg-lime-500'
-                    } ${step === 3 && !isFinancialValid && !isLimitExceeded ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+                    } ${step === 5 && !isFinancialValid && !isLimitExceeded ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                   onClick={() => {
-                    if (step === 3) {
+                    if (step === 5) {
                       if (isLimitExceeded && leagueData.plan === 'free') {
                         navigate('/checkout');
                         return;
@@ -1211,7 +1282,7 @@ const CreateLeague: React.FC = () => {
                   }}
                   disabled={step === 1 && leagueData.name.length < 3}
                 >
-                  {step === 3 && isLimitExceeded && leagueData.plan === 'free' ? 'MEJORAR PLAN PARA CONTINUAR' : 'SIGUIENTE PASO'}
+                  {step === 5 && isLimitExceeded && leagueData.plan === 'free' ? 'MEJORAR PLAN PARA CONTINUAR' : 'SIGUIENTE PASO'}
                   <ArrowRight size={24} className="ml-2" />
                 </Button>
               )}
