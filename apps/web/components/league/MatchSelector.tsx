@@ -6,9 +6,9 @@ import { es } from 'date-fns/locale';
 
 interface Match {
     id: string;
-    homeTeam: { name: string; logoUrl?: string };
-    awayTeam: { name: string; logoUrl?: string };
-    date: string;
+    homeTeam: { name: string; logoUrl?: string; code?: string; flagUrl?: string };
+    awayTeam: { name: string; logoUrl?: string; code?: string; flagUrl?: string };
+    matchDate: string;
     venue?: string;
     phase?: string;
     status: string;
@@ -48,13 +48,21 @@ export const MatchSelector: React.FC<MatchSelectorProps> = ({
             try {
                 const tournamentsData = await request<Tournament[]>('/leagues/tournaments');
                 const tournamentsMap = new Map<string, { tournament: Tournament; matches: Match[] }>();
+                const now = new Date();
 
                 for (const tournamentId of tournamentIds) {
                     const tournament = tournamentsData.find(t => t.id === tournamentId);
                     if (!tournament) continue;
 
                     const matches = await request<Match[]>(`/matches?tournamentId=${tournamentId}&status=SCHEDULED,LIVE`);
-                    tournamentsMap.set(tournamentId, { tournament, matches });
+                    
+                    // Filtrar solo partidos futuros (fecha posterior a la actual)
+                    const futureMatches = matches.filter(match => {
+                        const matchDate = new Date(match.matchDate);
+                        return matchDate > now;
+                    });
+                    
+                    tournamentsMap.set(tournamentId, { tournament, matches: futureMatches });
                 }
 
                 setTournaments(tournamentsMap);
@@ -165,92 +173,106 @@ export const MatchSelector: React.FC<MatchSelectorProps> = ({
                                     <div className="p-3 space-y-2 max-h-96 overflow-y-auto">
                                         {matches.length === 0 ? (
                                             <p className="text-center text-sm text-slate-500 py-8">
-                                                No hay partidos disponibles para este torneo
+                                                No hay partidos futuros disponibles para este torneo
                                             </p>
                                         ) : (
                                             matches.map((match) => {
                                                 const isSelected = selectedMatchIds.includes(match.id);
+                                                const homeFlag = match.homeTeam.flagUrl || (match.homeTeam.code ? `https://flagcdn.com/w80/${match.homeTeam.code.toLowerCase()}.png` : '');
+                                                const awayFlag = match.awayTeam.flagUrl || (match.awayTeam.code ? `https://flagcdn.com/w80/${match.awayTeam.code.toLowerCase()}.png` : '');
+                                                const homeCode = match.homeTeam.code || match.homeTeam.name.substring(0, 3).toUpperCase();
+                                                const awayCode = match.awayTeam.code || match.awayTeam.name.substring(0, 3).toUpperCase();
+                                                
                                                 return (
                                                     <button
                                                         key={match.id}
                                                         onClick={() => onToggleMatch(match.id)}
-                                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                                                        className={`w-full p-3 rounded-xl border-2 transition-all ${
                                                             isSelected
                                                                 ? 'border-lime-500 bg-lime-50/50'
                                                                 : 'border-slate-200 bg-white hover:border-slate-300'
                                                         }`}
                                                     >
-                                                        <div
-                                                            className={`h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                                                                isSelected
-                                                                    ? 'border-lime-500 bg-lime-500'
-                                                                    : 'border-slate-300'
-                                                            }`}
-                                                        >
-                                                            {isSelected && <Check size={12} className="text-white" />}
-                                                        </div>
-
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                    {match.homeTeam.logoUrl && (
-                                                                        <img
-                                                                            src={match.homeTeam.logoUrl}
-                                                                            alt={match.homeTeam.name}
-                                                                            className="h-5 w-5 object-contain"
-                                                                            onError={(e) => {
-                                                                                e.currentTarget.style.display = 'none';
-                                                                            }}
-                                                                        />
-                                                                    )}
-                                                                    <span className="text-sm font-bold text-slate-900 truncate">
-                                                                        {match.homeTeam.name}
-                                                                    </span>
-                                                                </div>
-                                                                <span className="text-xs font-bold text-slate-400">vs</span>
-                                                                <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-                                                                    <span className="text-sm font-bold text-slate-900 truncate">
-                                                                        {match.awayTeam.name}
-                                                                    </span>
-                                                                    {match.awayTeam.logoUrl && (
-                                                                        <img
-                                                                            src={match.awayTeam.logoUrl}
-                                                                            alt={match.awayTeam.name}
-                                                                            className="h-5 w-5 object-contain"
-                                                                            onError={(e) => {
-                                                                                e.currentTarget.style.display = 'none';
-                                                                            }}
-                                                                        />
-                                                                    )}
-                                                                </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className={`h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center ${
+                                                                    isSelected
+                                                                        ? 'border-lime-500 bg-lime-500'
+                                                                        : 'border-slate-300'
+                                                                }`}
+                                                            >
+                                                                {isSelected && <Check size={12} className="text-white" />}
                                                             </div>
-                                                            <div className="flex items-center gap-3 text-xs text-slate-600">
-                                                                {match.date && (
-                                                                    <span className="flex items-center gap-1">
-                                                                        <Calendar size={12} />
-                                                                        {(() => {
-                                                                            try {
-                                                                                const date = new Date(match.date);
-                                                                                if (isNaN(date.getTime())) return 'Fecha por confirmar';
-                                                                                return format(date, "d 'de' MMM, HH:mm", { locale: es });
-                                                                            } catch {
-                                                                                return 'Fecha por confirmar';
-                                                                            }
-                                                                        })()}
-                                                                    </span>
-                                                                )}
-                                                                {!match.date && (
-                                                                    <span className="flex items-center gap-1 text-slate-400">
-                                                                        <Calendar size={12} />
-                                                                        Fecha por confirmar
-                                                                    </span>
-                                                                )}
-                                                                {match.venue && (
-                                                                    <span className="flex items-center gap-1 truncate">
-                                                                        <MapPin size={12} />
-                                                                        {match.venue}
-                                                                    </span>
-                                                                )}
+
+                                                            <div className="flex-1 min-w-0">
+                                                                {/* Equipos con banderas - diseño similar a pronósticos */}
+                                                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2">
+                                                                    {/* Home team */}
+                                                                    <div className="flex items-center gap-2 min-w-0">
+                                                                        {homeFlag && (
+                                                                            <img
+                                                                                src={homeFlag}
+                                                                                alt={homeCode}
+                                                                                className="h-6 w-8 shrink-0 rounded border border-slate-200 object-cover"
+                                                                                onError={(e) => {
+                                                                                    e.currentTarget.style.display = 'none';
+                                                                                }}
+                                                                            />
+                                                                        )}
+                                                                        <span className="text-xs font-black uppercase text-slate-900 truncate">
+                                                                            {homeCode}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {/* VS */}
+                                                                    <span className="text-xs font-bold text-slate-400 px-2">vs</span>
+
+                                                                    {/* Away team */}
+                                                                    <div className="flex items-center gap-2 min-w-0 justify-end">
+                                                                        <span className="text-xs font-black uppercase text-slate-900 truncate">
+                                                                            {awayCode}
+                                                                        </span>
+                                                                        {awayFlag && (
+                                                                            <img
+                                                                                src={awayFlag}
+                                                                                alt={awayCode}
+                                                                                className="h-6 w-8 shrink-0 rounded border border-slate-200 object-cover"
+                                                                                onError={(e) => {
+                                                                                    e.currentTarget.style.display = 'none';
+                                                                                }}
+                                                                            />
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Información del partido */}
+                                                                <div className="flex items-center gap-3 text-xs text-slate-600">
+                                                                    {match.matchDate && (
+                                                                        <span className="flex items-center gap-1">
+                                                                            <Calendar size={12} />
+                                                                            {(() => {
+                                                                                try {
+                                                                                    const date = new Date(match.matchDate);
+                                                                                    if (isNaN(date.getTime())) return 'Fecha por confirmar';
+                                                                                    return format(date, "d 'de' MMM, HH:mm", { locale: es });
+                                                                                } catch {
+                                                                                    return 'Fecha por confirmar';
+                                                                                }
+                                                                            })()}
+                                                                        </span>
+                                                                    )}
+                                                                    {!match.matchDate && (
+                                                                        <span className="flex items-center gap-1 text-slate-400">
+                                                                            <Calendar size={12} />
+                                                                            Fecha por confirmar
+                                                                        </span>
+                                                                    )}
+                                                                    {match.phase && (
+                                                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                                                                            {match.phase}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </button>
