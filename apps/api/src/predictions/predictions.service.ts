@@ -79,7 +79,21 @@ export class PredictionsService {
             throw new ForbiddenException('No eres un miembro activo de esta liga');
         }
 
-        // 2. Obtener información del partido y de la liga (para el tiempo de cierre)
+        // 2. Validar que el partido está activo en la polla
+        const leagueMatch = await this.prisma.leagueMatch.findUnique({
+            where: {
+                leagueId_matchId: {
+                    leagueId,
+                    matchId,
+                },
+            },
+        });
+
+        if (!leagueMatch || !leagueMatch.active) {
+            throw new ForbiddenException('Este partido no está disponible para pronósticos en esta polla');
+        }
+
+        // 3. Obtener información del partido y de la liga (para el tiempo de cierre)
         const [match, league] = await Promise.all([
             this.prisma.match.findUnique({ where: { id: matchId } }),
             this.prisma.league.findUnique({ where: { id: leagueId } }),
@@ -89,7 +103,7 @@ export class PredictionsService {
             throw new NotFoundException('Partido o Liga no encontrados');
         }
 
-        // 3. Validar si el tiempo para predecir ya expiró
+        // 4. Validar si el tiempo para predecir ya expiró
         const now = new Date();
         const matchDate = new Date(match.matchDate);
         const closingTime = new Date(matchDate.getTime() - league.closePredictionMinutes * 60000);

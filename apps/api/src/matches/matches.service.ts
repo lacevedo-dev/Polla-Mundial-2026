@@ -90,27 +90,25 @@ export class MatchesService {
     }
 
     async findByLeague(leagueId: string) {
-        try {
-            const leagueTournaments = await this.prisma.leagueTournament.findMany({
-                where: { leagueId },
-                select: { tournamentId: true },
-            });
+        // Solo retornar partidos con LeagueMatch activo
+        const leagueMatches = await this.prisma.leagueMatch.findMany({
+            where: {
+                leagueId,
+                active: true
+            },
+            select: { matchId: true },
+        });
 
-            // If league has no tournaments assigned, fall back to all matches
-            const where = leagueTournaments.length > 0
-                ? { tournamentId: { in: leagueTournaments.map(lt => lt.tournamentId) } }
-                : {};
-
-            const matches = await this.prisma.match.findMany({
-                where,
-                select: matchWithTeamsSelect,
-                orderBy: { matchDate: 'asc' },
-            });
-
-            return matches.map(toMatchResponse);
-        } catch {
-            // Fallback: return all matches if league-tournament table unavailable
-            return this.findAll();
+        if (leagueMatches.length === 0) {
+            return []; // Sin partidos activos = array vacío
         }
+
+        const matches = await this.prisma.match.findMany({
+            where: { id: { in: leagueMatches.map(lm => lm.matchId) } },
+            select: matchWithTeamsSelect,
+            orderBy: { matchDate: 'asc' },
+        });
+
+        return matches.map(toMatchResponse);
     }
 }

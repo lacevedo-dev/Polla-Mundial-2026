@@ -5,6 +5,7 @@ import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { useAdminLeaguesStore } from '../../stores/admin.leagues.store';
 import StatusBadge from '../../components/admin/StatusBadge';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
+import { LeagueMatchesManager } from '../../components/admin/LeagueMatchesManager';
 import { request } from '../../api';
 
 interface AvailableTournament {
@@ -137,6 +138,7 @@ const AdminLeagueDetail: React.FC = () => {
     const tabs = [
         { value: 'info', label: 'Información' },
         { value: 'tournaments', label: 'Torneos', count: leagueTournaments.length || undefined },
+        { value: 'matches', label: 'Partidos' },
         { value: 'members', label: 'Miembros', count: members.length || undefined },
         { value: 'rules', label: 'Reglas' },
     ];
@@ -342,6 +344,13 @@ const AdminLeagueDetail: React.FC = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </TabsPrimitive.Content>
+
+                {/* MATCHES TAB */}
+                <TabsPrimitive.Content value="matches">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+                        <LeagueMatchesManager leagueId={id!} />
                     </div>
                 </TabsPrimitive.Content>
 
