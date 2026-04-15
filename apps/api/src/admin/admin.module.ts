@@ -20,6 +20,7 @@ import { AdminTeamsController } from './admin-teams.controller';
 import { AdminPlansController } from './admin-plans.controller';
 import { AdminAffiliationsController } from './admin-affiliations.controller';
 import { AdminPredictionsController } from './admin-predictions.controller';
+import { AdminPredictionsStreamController } from './admin-predictions-stream.controller';
 import { AdminSettingsController } from './admin-settings.controller';
 import { AdminPaymentsController } from './admin-payments.controller';
 import { AdminAutomationController } from './admin-automation.controller';
@@ -47,6 +48,7 @@ import { AdminEmailProvidersController } from './admin-email-providers.controlle
     AdminPlansController,
     AdminAffiliationsController,
     AdminPredictionsController,
+    AdminPredictionsStreamController,
     AdminSettingsController,
     AdminPaymentsController,
     AdminAutomationController,

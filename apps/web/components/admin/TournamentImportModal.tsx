@@ -227,6 +227,12 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
     const [seedError, setSeedError] = useState('');
     const [creatingLeagues, setCreatingLeagues] = useState(false);
+    const [seedProgress, setSeedProgress] = useState<{
+        message: string;
+        progress: number;
+        currentLeague?: string;
+        memberProgress?: string;
+    } | null>(null);
 
     // Load leagues when entering step 4
     useEffect(() => {
@@ -578,16 +584,32 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
 
         setCreatingLeagues(true);
         try {
-            const res = await request<{ created: number; totalMembers: number; leagues: any[] }>('/admin/leagues/bulk-create-test', {
+            const res = await request<{ 
+                created: number; 
+                totalMembers: number; 
+                totalTournamentsLinked: number;
+                totalMatchesActivated: number;
+                leagues: any[];
+                tournamentsAvailable: any[];
+            }>('/admin/leagues/bulk-create-test', {
                 method: 'POST',
                 body: JSON.stringify({
                     count: parseInt(count),
                     membersPerLeague: parseInt(members),
                     useExistingUsers: useExisting,
                     namePrefix: 'Polla Test',
+                    linkTournaments: true,
+                    activateMatches: true,
                 }),
             });
-            alert(`✅ Creadas ${res.created} pollas con ${res.totalMembers} miembros totales`);
+            
+            const tournamentsInfo = res.tournamentsAvailable.length > 0 
+                ? `\n🏆 Torneos vinculados: ${res.tournamentsAvailable.map(t => t.name).join(', ')}\n⚽ Partidos activados: ${res.totalMatchesActivated}`
+                : '\n⚠️ No se encontraron torneos activos. Se creó un torneo de prueba.';
+            
+            alert(`✅ Creadas ${res.created} pollas con:\n` +
+                  `👥 ${res.totalMembers} miembros totales` +
+                  tournamentsInfo);
             await loadLeaguesForSeed();
         } catch (e: any) {
             alert(`❌ Error: ${e?.message ?? 'No se pudieron crear las pollas'}`);
@@ -596,26 +618,32 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
         }
     };
 
-    /* ─ generate seed ─ */
+    /* ─ generate seed with streaming ─ */
     const handleGenerateSeed = async () => {
         setSeeding(true);
         setSeedError('');
         setSeedResult(null);
+        setSeedProgress({ message: 'Iniciando generación de pronósticos...', progress: 0 });
+
         try {
             // Priority: 1) Imported match IDs, 2) Selected fixtures, 3) Let backend decide
             let matchIds: string[] | undefined;
             
             if (importResult?.matchIds && importResult.matchIds.length > 0) {
-                // Use IDs from imported matches (tournament mode)
                 matchIds = importResult.matchIds;
             } else if (mode === 'date' || mode === 'team' || mode === 'id') {
-                // Use selected fixtures (date/team/id modes)
                 matchIds = [...selectedFixtures].map(String);
             }
-            // Otherwise undefined - backend will use recent scheduled matches
 
-            const res = await request<SeedResult>('/admin/predictions/bulk-seed', {
+            const token = localStorage.getItem('token');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            
+            const response = await fetch(`${apiUrl}/admin/predictions/bulk-seed-stream`, {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
                 body: JSON.stringify({
                     leagueIds: [...selectedLeagueIds],
                     matchIds,
@@ -623,9 +651,62 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                     simulatePayments,
                 }),
             });
-            setSeedResult(res);
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+
+            if (!reader) {
+                throw new Error('No se pudo obtener el stream de respuesta');
+            }
+
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            if (data.type === 'error') {
+                                setSeedError(data.message);
+                                setSeedProgress(null);
+                            } else if (data.type === 'complete') {
+                                setSeedResult(data.data);
+                                setSeedProgress(null);
+                            } else if (data.type === 'progress' || data.type === 'league_start' || data.type === 'member_complete') {
+                                setSeedProgress({
+                                    message: data.message,
+                                    progress: data.data?.progress || 0,
+                                    currentLeague: data.data?.leagueName,
+                                    memberProgress: data.data?.memberIndex && data.data?.totalMembers 
+                                        ? `${data.data.memberIndex}/${data.data.totalMembers} miembros`
+                                        : undefined,
+                                });
+                            } else if (data.type === 'league_complete') {
+                                setSeedProgress({
+                                    message: data.message,
+                                    progress: data.data?.progress || 0,
+                                });
+                            }
+                        } catch (parseError) {
+                            console.error('Error parsing SSE data:', parseError);
+                        }
+                    }
+                }
+            }
         } catch (e: any) {
             setSeedError(e?.message ?? 'Error al generar pronósticos');
+            setSeedProgress(null);
         } finally {
             setSeeding(false);
         }
@@ -1760,6 +1841,51 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                         <p className="text-xs text-slate-500 mt-0.5">Crea registros de pago con estado CONFIRMED para cada participante en pollas con cuota base (baseFee). Útil para probar flujos de pago sin transacciones reales.</p>
                                     </div>
                                 </label>
+
+                                {/* Progress indicator */}
+                                <AnimatePresence>
+                                    {seedProgress && seeding && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-4 bg-violet-50 border border-violet-300 rounded-2xl space-y-3"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Loader2 size={16} className="animate-spin text-violet-600" />
+                                                <p className="text-sm font-bold text-slate-900">{seedProgress.message}</p>
+                                            </div>
+                                            
+                                            {/* Progress bar */}
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="text-slate-600 font-medium">Progreso general</span>
+                                                    <span className="text-violet-600 font-black">{Math.round(seedProgress.progress)}%</span>
+                                                </div>
+                                                <div className="w-full h-2.5 bg-violet-100 rounded-full overflow-hidden">
+                                                    <motion.div
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${seedProgress.progress}%` }}
+                                                        transition={{ duration: 0.3, ease: 'easeOut' }}
+                                                        className="h-full bg-gradient-to-r from-violet-500 to-violet-600 rounded-full"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Current league and member progress */}
+                                            {seedProgress.currentLeague && (
+                                                <div className="flex items-center justify-between text-xs bg-white rounded-lg p-2.5 border border-violet-200">
+                                                    <div className="flex items-center gap-2">
+                                                        <Trophy size={12} className="text-violet-600" />
+                                                        <span className="font-bold text-slate-700">{seedProgress.currentLeague}</span>
+                                                    </div>
+                                                    {seedProgress.memberProgress && (
+                                                        <span className="text-slate-500 font-medium">{seedProgress.memberProgress}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
 
                                 {/* Error */}
                                 {seedError && (

@@ -52,6 +52,14 @@ export class BulkCreateTestLeaguesDto {
     @IsOptional()
     @IsString()
     namePrefix?: string;
+
+    @IsOptional()
+    @IsBoolean()
+    linkTournaments?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    activateMatches?: boolean;
 }
 
 @ApiTags('admin')
@@ -407,9 +415,16 @@ export class AdminLeaguesController {
     /* ── Testing utilities ── */
 
     @Post('bulk-create-test')
-    @ApiOperation({ summary: 'Bulk create test leagues with random users for stress testing' })
+    @ApiOperation({ summary: 'Bulk create test leagues with random users, tournaments and matches for stress testing' })
     async bulkCreateTest(@CurrentUser() user: { id: string }, @Body() dto: BulkCreateTestLeaguesDto) {
-        const { count, membersPerLeague, useExistingUsers = false, namePrefix = 'Test League' } = dto;
+        const { 
+            count, 
+            membersPerLeague, 
+            useExistingUsers = false, 
+            namePrefix = 'Test League',
+            linkTournaments = true,
+            activateMatches = true,
+        } = dto;
 
         if (count > 50) throw new BadRequestException('Máximo 50 pollas por operación');
         if (membersPerLeague > 100) throw new BadRequestException('Máximo 100 miembros por polla');
@@ -426,6 +441,74 @@ export class AdminLeaguesController {
             });
             if (usersPool.length < membersPerLeague) {
                 throw new BadRequestException(`No hay suficientes usuarios activos (${usersPool.length} disponibles, ${membersPerLeague} requeridos)`);
+            }
+        }
+
+        // Get active tournaments with matches
+        let activeTournaments: any[] = [];
+        let totalMatchesLinked = 0;
+        
+        if (linkTournaments) {
+            activeTournaments = await this.prisma.tournament.findMany({
+                where: { active: true },
+                select: { 
+                    id: true, 
+                    name: true,
+                    _count: { select: { matches: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 5,
+            });
+
+            // If no active tournaments exist, create a test tournament with matches
+            if (activeTournaments.length === 0) {
+                const testTournament = await this.prisma.tournament.create({
+                    data: {
+                        name: 'Torneo de Prueba',
+                        season: new Date().getFullYear(),
+                        country: 'Test',
+                        active: true,
+                        externalId: `test-${Date.now()}`,
+                    },
+                });
+
+                // Get some teams to create test matches
+                const teams = await this.prisma.team.findMany({
+                    take: 10,
+                    select: { id: true },
+                });
+
+                if (teams.length >= 2) {
+                    // Create test matches
+                    const matchesToCreate = [];
+                    const now = new Date();
+                    
+                    for (let i = 0; i < Math.min(10, teams.length / 2); i++) {
+                        const matchDate = new Date(now);
+                        matchDate.setDate(matchDate.getDate() + i);
+                        
+                        matchesToCreate.push({
+                            tournamentId: testTournament.id,
+                            homeTeamId: teams[i * 2].id,
+                            awayTeamId: teams[i * 2 + 1].id,
+                            matchDate,
+                            status: 'NS',
+                            round: `Jornada ${i + 1}`,
+                        });
+                    }
+
+                    if (matchesToCreate.length > 0) {
+                        await this.prisma.match.createMany({
+                            data: matchesToCreate,
+                        });
+                    }
+                }
+
+                activeTournaments = [{
+                    id: testTournament.id,
+                    name: testTournament.name,
+                    _count: { matches: matchesToCreate?.length || 0 },
+                }];
             }
         }
 
@@ -481,19 +564,77 @@ export class AdminLeaguesController {
                 })),
             });
 
+            // Link tournaments and activate matches
+            let linkedTournaments = 0;
+            let activatedMatches = 0;
+
+            if (linkTournaments && activeTournaments.length > 0) {
+                // Link all active tournaments to this league
+                for (const tournament of activeTournaments) {
+                    try {
+                        await this.prisma.leagueTournament.create({
+                            data: {
+                                leagueId: league.id,
+                                tournamentId: tournament.id,
+                            },
+                        });
+                        linkedTournaments++;
+
+                        // Set first tournament as primary
+                        if (linkedTournaments === 1) {
+                            await this.prisma.league.update({
+                                where: { id: league.id },
+                                data: { primaryTournamentId: tournament.id },
+                            });
+                        }
+
+                        // Activate all matches from this tournament if requested
+                        if (activateMatches) {
+                            const matches = await this.prisma.match.findMany({
+                                where: { tournamentId: tournament.id },
+                                select: { id: true },
+                            });
+
+                            if (matches.length > 0) {
+                                await this.prisma.leagueMatch.createMany({
+                                    data: matches.map(match => ({
+                                        leagueId: league.id,
+                                        matchId: match.id,
+                                        active: true,
+                                        addedBy: user.id,
+                                    })),
+                                    skipDuplicates: true,
+                                });
+                                activatedMatches += matches.length;
+                            }
+                        }
+                    } catch (error) {
+                        // Skip if tournament already linked
+                        console.error(`Error linking tournament ${tournament.id} to league ${league.id}:`, error);
+                    }
+                }
+            }
+
+            totalMatchesLinked += activatedMatches;
+
             createdLeagues.push({
                 id: league.id,
                 name: league.name,
                 code: league.code,
                 members: membersPerLeague,
+                tournaments: linkedTournaments,
+                matches: activatedMatches,
             });
         }
 
         return {
             created: count,
             totalMembers: count * membersPerLeague,
+            totalTournamentsLinked: activeTournaments.length * count,
+            totalMatchesActivated: totalMatchesLinked,
             leagues: createdLeagues,
             usedExistingUsers: useExistingUsers,
+            tournamentsAvailable: activeTournaments.map(t => ({ id: t.id, name: t.name, matches: t._count.matches })),
         };
     }
 }
