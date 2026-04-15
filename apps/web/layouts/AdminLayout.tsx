@@ -14,6 +14,7 @@ const primaryNavItems = [
     { to: '/admin', label: 'Dashboard', icon: BarChart3, end: true },
     { to: '/admin/users', label: 'Usuarios', icon: Users },
     { to: '/admin/leagues', label: 'Pollas', icon: Trophy },
+    { to: '/admin/tournaments', label: 'Torneos', icon: Trophy },
     { to: '/admin/matches', label: 'Partidos', icon: Swords },
 ];
 
@@ -37,6 +38,7 @@ const sectionTitles: Record<string, string> = {
     '/admin': 'Dashboard',
     '/admin/users': 'Usuarios',
     '/admin/leagues': 'Pollas',
+    '/admin/tournaments': 'Torneos',
     '/admin/matches': 'Partidos',
     '/admin/plans': 'Planes',
     '/admin/affiliations': 'Afiliaciones',
