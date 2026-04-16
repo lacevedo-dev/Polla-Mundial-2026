@@ -1071,6 +1071,24 @@ const CreateLeague: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* Botones de Navegación */}
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    className="w-full h-12 rounded-2xl font-bold text-sm"
+                    onClick={() => setStep(5)}
+                  >
+                    <ArrowLeft size={18} className="mr-2" /> ATRÁS
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-wider shadow-xl shadow-lime-500/20"
+                    onClick={() => setStep(7)}
+                  >
+                    CONTINUAR <ArrowRight size={18} className="ml-2" />
+                  </Button>
+                </div>
               </div>
             )}
 
