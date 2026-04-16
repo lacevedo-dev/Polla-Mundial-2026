@@ -100,6 +100,29 @@ export class MatchesService {
         });
 
         if (leagueMatches.length === 0) {
+            this.logger.warn(`[findByLeague] No hay partidos activos para leagueId=${leagueId}`);
+            
+            // Diagnóstico: verificar si hay torneos vinculados
+            const leagueTournaments = await this.prisma.leagueTournament.findMany({
+                where: { leagueId },
+                select: { tournamentId: true },
+            });
+            
+            if (leagueTournaments.length === 0) {
+                this.logger.warn(`[findByLeague] La polla ${leagueId} no tiene torneos vinculados`);
+            } else {
+                this.logger.warn(`[findByLeague] La polla ${leagueId} tiene ${leagueTournaments.length} torneos vinculados pero 0 partidos activos en LeagueMatch`);
+                
+                // Verificar cuántos partidos hay disponibles en esos torneos
+                const availableMatches = await this.prisma.match.count({
+                    where: {
+                        tournamentId: { in: leagueTournaments.map(lt => lt.tournamentId) }
+                    }
+                });
+                
+                this.logger.warn(`[findByLeague] Hay ${availableMatches} partidos disponibles en los torneos vinculados que NO están activos en LeagueMatch`);
+            }
+            
             return []; // Sin partidos activos = array vacío
         }
 
@@ -109,6 +132,7 @@ export class MatchesService {
             orderBy: { matchDate: 'asc' },
         });
 
+        this.logger.log(`[findByLeague] Retornando ${matches.length} partidos activos para leagueId=${leagueId}`);
         return matches.map(toMatchResponse);
     }
 }
