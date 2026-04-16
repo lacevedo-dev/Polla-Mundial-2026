@@ -5,7 +5,6 @@ import {
     Clock, Download, FlaskConical, Globe, Hash, Info, Loader2, Plus, RefreshCw, Search, Shield, Sparkles, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
-import { CreateTestLeaguesModal } from './CreateTestLeaguesModal';
 
 const DATE_CACHE_PREFIX = 'adminFixtureCache_';const DATE_CACHE_TTL_MS = 1000 * 60 * 60 * 12; // 12 horas
 
@@ -227,7 +226,13 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [seeding, setSeeding] = useState(false);
     const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
     const [seedError, setSeedError] = useState('');
-    const [showCreateTestModal, setShowCreateTestModal] = useState(false);
+    const [showCreateTestForm, setShowCreateTestForm] = useState(false);
+    const [testLeaguesCount, setTestLeaguesCount] = useState('5');
+    const [testLeaguesMembers, setTestLeaguesMembers] = useState('10');
+    const [testLeaguesUseExisting, setTestLeaguesUseExisting] = useState(false);
+    const [creatingTestLeagues, setCreatingTestLeagues] = useState(false);
+    const [testLeaguesError, setTestLeaguesError] = useState('');
+    const [testLeaguesSuccess, setTestLeaguesSuccess] = useState<any>(null);
     const [seedProgress, setSeedProgress] = useState<{
         message: string;
         progress: number;
@@ -574,12 +579,62 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     };
 
     /* ─ create test leagues ─ */
-    const handleCreateTestLeagues = () => {
-        setShowCreateTestModal(true);
-    };
+    const handleSubmitTestLeagues = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        const countNum = parseInt(testLeaguesCount);
+        const membersNum = parseInt(testLeaguesMembers);
 
-    const handleTestLeaguesSuccess = async () => {
-        await loadLeaguesForSeed();
+        if (isNaN(countNum) || countNum < 1 || countNum > 50) {
+            setTestLeaguesError('El número de pollas debe estar entre 1 y 50');
+            return;
+        }
+
+        if (isNaN(membersNum) || membersNum < 2 || membersNum > 100) {
+            setTestLeaguesError('El número de miembros debe estar entre 2 y 100');
+            return;
+        }
+
+        setCreatingTestLeagues(true);
+        setTestLeaguesError('');
+        setTestLeaguesSuccess(null);
+
+        try {
+            const res = await request<{
+                created: number;
+                totalMembers: number;
+                totalTournamentsLinked: number;
+                totalMatchesActivated: number;
+                leagues: any[];
+                tournamentsAvailable: any[];
+            }>('/admin/leagues/bulk-create-test', {
+                method: 'POST',
+                body: JSON.stringify({
+                    count: countNum,
+                    membersPerLeague: membersNum,
+                    useExistingUsers: testLeaguesUseExisting,
+                    namePrefix: 'Polla Test',
+                    linkTournaments: true,
+                    activateMatches: true,
+                }),
+            });
+            
+            setTestLeaguesSuccess(res);
+            await loadLeaguesForSeed();
+            
+            // Reset form after 3 seconds
+            setTimeout(() => {
+                setShowCreateTestForm(false);
+                setTestLeaguesSuccess(null);
+                setTestLeaguesCount('5');
+                setTestLeaguesMembers('10');
+                setTestLeaguesUseExisting(false);
+            }, 3000);
+        } catch (err: any) {
+            setTestLeaguesError(err.message || 'No se pudieron crear las pollas de prueba');
+        } finally {
+            setCreatingTestLeagues(false);
+        }
     };
 
     /* ─ generate seed with streaming ─ */
@@ -1703,21 +1758,129 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                                     <div className="flex items-center justify-between">
                                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pollas (selecciona una o varias)</label>
                                         <button
-                                            onClick={handleCreateTestLeagues}
-                                            disabled={creatingLeagues}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            onClick={() => setShowCreateTestForm(!showCreateTestForm)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold uppercase transition-colors"
                                         >
-                                            {creatingLeagues ? (
-                                                <>
-                                                    <Loader2 size={12} className="animate-spin" /> Creando...
-                                                </>
+                                            {showCreateTestForm ? (
+                                                <><X size={12} /> Cancelar</>
                                             ) : (
-                                                <>
-                                                    <Plus size={12} /> Crear pollas de prueba
-                                                </>
+                                                <><Plus size={12} /> Crear pollas de prueba</>
                                             )}
                                         </button>
                                     </div>
+
+                                    {/* Formulario expandible para crear pollas de prueba */}
+                                    <AnimatePresence>
+                                        {showCreateTestForm && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <form onSubmit={handleSubmitTestLeagues} className="space-y-3 p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/30">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FlaskConical size={16} className="text-emerald-600" />
+                                                        <h4 className="text-sm font-bold text-emerald-900">Configuración de pollas de prueba</h4>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label htmlFor="test-count" className="block text-[10px] font-bold text-slate-700 mb-1.5">
+                                                                Número de pollas (1-50)
+                                                            </label>
+                                                            <input
+                                                                id="test-count"
+                                                                type="number"
+                                                                min="1"
+                                                                max="50"
+                                                                value={testLeaguesCount}
+                                                                onChange={(e) => setTestLeaguesCount(e.target.value)}
+                                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+                                                                disabled={creatingTestLeagues}
+                                                                required
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label htmlFor="test-members" className="block text-[10px] font-bold text-slate-700 mb-1.5">
+                                                                Miembros por polla (2-100)
+                                                            </label>
+                                                            <input
+                                                                id="test-members"
+                                                                type="number"
+                                                                min="2"
+                                                                max="100"
+                                                                value={testLeaguesMembers}
+                                                                onChange={(e) => setTestLeaguesMembers(e.target.value)}
+                                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+                                                                disabled={creatingTestLeagues}
+                                                                required
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <label className="flex items-start gap-2.5 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={testLeaguesUseExisting}
+                                                            onChange={(e) => setTestLeaguesUseExisting(e.target.checked)}
+                                                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-2 focus:ring-emerald-400/20"
+                                                            disabled={creatingTestLeagues}
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="text-xs font-medium text-slate-900">Usar usuarios existentes</div>
+                                                            <div className="text-[10px] text-slate-500 mt-0.5">Si está desactivado, se crearán usuarios de prueba nuevos</div>
+                                                        </div>
+                                                    </label>
+
+                                                    {testLeaguesError && (
+                                                        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                                                            <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+                                                            <p className="text-xs text-red-900">{testLeaguesError}</p>
+                                                        </div>
+                                                    )}
+
+                                                    {testLeaguesSuccess && (
+                                                        <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                                <p className="text-xs font-bold text-green-900">¡{testLeaguesSuccess.created} pollas creadas!</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-3 gap-2 text-[10px]">
+                                                                <div className="text-center">
+                                                                    <div className="font-bold text-green-900">{testLeaguesSuccess.totalMembers}</div>
+                                                                    <div className="text-green-700">Miembros</div>
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <div className="font-bold text-green-900">{testLeaguesSuccess.totalTournamentsLinked}</div>
+                                                                    <div className="text-green-700">Torneos</div>
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <div className="font-bold text-green-900">{testLeaguesSuccess.totalMatchesActivated}</div>
+                                                                    <div className="text-green-700">Partidos</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <button
+                                                        type="submit"
+                                                        disabled={creatingTestLeagues}
+                                                        className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold uppercase text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                                    >
+                                                        {creatingTestLeagues ? (
+                                                            <><Loader2 size={14} className="animate-spin" /> Creando pollas...</>
+                                                        ) : (
+                                                            <><FlaskConical size={14} /> Crear pollas de prueba</>
+                                                        )}
+                                                    </button>
+                                                </form>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
                                     {loadingLeagues ? (
                                         <div className="flex items-center gap-2 py-4 text-sm text-slate-400 justify-center">
                                             <Loader2 size={14} className="animate-spin" /> Cargando pollas…
@@ -1952,12 +2115,6 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                 )}
             </motion.div>
 
-            {/* Modal para crear pollas de prueba */}
-            <CreateTestLeaguesModal
-                open={showCreateTestModal}
-                onClose={() => setShowCreateTestModal(false)}
-                onSuccess={handleTestLeaguesSuccess}
-            />
         </div>
     );
 };
