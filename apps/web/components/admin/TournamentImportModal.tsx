@@ -5,6 +5,7 @@ import {
     Clock, Download, FlaskConical, Globe, Hash, Info, Loader2, Plus, RefreshCw, Search, Shield, Sparkles, Trophy, Users, X, Zap,
 } from 'lucide-react';
 import { request } from '../../api';
+import { CreateTestLeaguesModal } from './CreateTestLeaguesModal';
 
 const DATE_CACHE_PREFIX = 'adminFixtureCache_';const DATE_CACHE_TTL_MS = 1000 * 60 * 60 * 12; // 12 horas
 
@@ -227,6 +228,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
     const [seedError, setSeedError] = useState('');
     const [creatingLeagues, setCreatingLeagues] = useState(false);
+    const [showCreateTestModal, setShowCreateTestModal] = useState(false);
     const [seedProgress, setSeedProgress] = useState<{
         message: string;
         progress: number;
@@ -573,49 +575,12 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     };
 
     /* ─ create test leagues ─ */
-    const handleCreateTestLeagues = async () => {
-        const count = prompt('¿Cuántas pollas de prueba deseas crear? (1-50)', '5');
-        if (!count) return;
-        
-        const members = prompt('¿Cuántos miembros por polla? (2-100)', '10');
-        if (!members) return;
+    const handleCreateTestLeagues = () => {
+        setShowCreateTestModal(true);
+    };
 
-        const useExisting = confirm('¿Usar usuarios existentes? (Cancelar = crear usuarios nuevos)');
-
-        setCreatingLeagues(true);
-        try {
-            const res = await request<{ 
-                created: number; 
-                totalMembers: number; 
-                totalTournamentsLinked: number;
-                totalMatchesActivated: number;
-                leagues: any[];
-                tournamentsAvailable: any[];
-            }>('/admin/leagues/bulk-create-test', {
-                method: 'POST',
-                body: JSON.stringify({
-                    count: parseInt(count),
-                    membersPerLeague: parseInt(members),
-                    useExistingUsers: useExisting,
-                    namePrefix: 'Polla Test',
-                    linkTournaments: true,
-                    activateMatches: true,
-                }),
-            });
-            
-            const tournamentsInfo = res.tournamentsAvailable.length > 0 
-                ? `\n🏆 Torneos vinculados: ${res.tournamentsAvailable.map(t => t.name).join(', ')}\n⚽ Partidos activados: ${res.totalMatchesActivated}`
-                : '\n⚠️ No se encontraron torneos activos. Se creó un torneo de prueba.';
-            
-            alert(`✅ Creadas ${res.created} pollas con:\n` +
-                  `👥 ${res.totalMembers} miembros totales` +
-                  tournamentsInfo);
-            await loadLeaguesForSeed();
-        } catch (e: any) {
-            alert(`❌ Error: ${e?.message ?? 'No se pudieron crear las pollas'}`);
-        } finally {
-            setCreatingLeagues(false);
-        }
+    const handleTestLeaguesSuccess = async () => {
+        await loadLeaguesForSeed();
     };
 
     /* ─ generate seed with streaming ─ */
@@ -1987,6 +1952,13 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
                     </div>
                 )}
             </motion.div>
+
+            {/* Modal para crear pollas de prueba */}
+            <CreateTestLeaguesModal
+                open={showCreateTestModal}
+                onClose={() => setShowCreateTestModal(false)}
+                onSuccess={handleTestLeaguesSuccess}
+            />
         </div>
     );
 };
