@@ -227,7 +227,6 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
     const [seeding, setSeeding] = useState(false);
     const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
     const [seedError, setSeedError] = useState('');
-    const [creatingLeagues, setCreatingLeagues] = useState(false);
     const [showCreateTestModal, setShowCreateTestModal] = useState(false);
     const [seedProgress, setSeedProgress] = useState<{
         message: string;
