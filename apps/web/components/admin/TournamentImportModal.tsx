@@ -655,7 +655,7 @@ const TournamentImportModal: React.FC<Props> = ({ onClose, onImported }) => {
             }
 
             const token = localStorage.getItem('token');
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3004';
             
             const response = await fetch(`${apiUrl}/admin/predictions/bulk-seed-stream`, {
                 method: 'POST',
