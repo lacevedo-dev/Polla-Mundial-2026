@@ -63,7 +63,7 @@ export class AdminSystemController {
 
                 // 2. Eliminar participaciones (dependen de ligas y usuarios)
                 if (resetOptions.participations) {
-                    const result = await tx.Participation.deleteMany({});
+                    const result = await tx.participationObligation.deleteMany({});
                     counts.participations = result.count;
                 }
 
@@ -80,9 +80,9 @@ export class AdminSystemController {
                     const result = await tx.notification.deleteMany({
                         where: {
                             OR: [
-                                { type: 'INVITATION' },
-                                { type: 'GENERAL' },
-                                { type: 'REMINDER' },
+                                { type: 'INVITE_RECEIVED' },
+                                { type: 'LEAGUE_UPDATE' },
+                                { type: 'MATCH_REMINDER' },
                             ]
                         }
                     });
@@ -100,7 +100,7 @@ export class AdminSystemController {
 
             const result = await this.prisma.$transaction(async (tx) => {
                 const predictions = await tx.prediction.count();
-                const participations = await tx.Participation.count();
+                const participations = await tx.participationObligation.count();
                 const leagues = await tx.league.count();
                 const payments = await tx.payment.count();
                 const orders = await tx.order.count();
