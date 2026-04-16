@@ -6,6 +6,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LeagueStatus, Plan, MemberStatus, ScoringType, Privacy, Phase, MatchStatus } from '@prisma/client';
 import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min, IsNotEmpty, IsNumber, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
+import * as bcrypt from 'bcrypt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -417,17 +418,18 @@ export class AdminLeaguesController {
     @Post('bulk-create-test')
     @ApiOperation({ summary: 'Bulk create test leagues with random users, tournaments and matches for stress testing' })
     async bulkCreateTest(@CurrentUser() user: { id: string }, @Body() dto: BulkCreateTestLeaguesDto) {
-        const { 
-            count, 
-            membersPerLeague, 
-            useExistingUsers = false, 
-            namePrefix = 'Test League',
-            linkTournaments = true,
-            activateMatches = true,
-        } = dto;
+        try {
+            const { 
+                count, 
+                membersPerLeague, 
+                useExistingUsers = false, 
+                namePrefix = 'Test League',
+                linkTournaments = true,
+                activateMatches = true,
+            } = dto;
 
-        if (count > 50) throw new BadRequestException('Máximo 50 pollas por operación');
-        if (membersPerLeague > 100) throw new BadRequestException('Máximo 100 miembros por polla');
+            if (count > 50) throw new BadRequestException('Máximo 50 pollas por operación');
+            if (membersPerLeague > 100) throw new BadRequestException('Máximo 100 miembros por polla');
 
         const createdLeagues: any[] = [];
         let usersPool: { id: string; name: string; email: string }[] = [];
@@ -554,6 +556,9 @@ export class AdminLeaguesController {
                 membersToAdd.push(...shuffled.slice(0, membersPerLeague - 1).map(u => u.id));
             } else {
                 // Create random test users (one less since SUPERADMIN is already included)
+                // Generate a valid bcrypt hash for password "test123" (only once for performance)
+                const testPasswordHash = await bcrypt.hash('test123', 10);
+                
                 for (let j = 1; j < membersPerLeague; j++) {
                     const randomId = Math.random().toString(36).substring(2, 10);
                     const testUser = await this.prisma.user.create({
@@ -561,7 +566,7 @@ export class AdminLeaguesController {
                             email: `test.user.${randomId}@testpolla.local`,
                             username: `testuser${randomId}`,
                             name: `Test User ${randomId}`,
-                            passwordHash: '$2b$10$TEST_HASH_FOR_TESTING_ONLY',
+                            passwordHash: testPasswordHash,
                             status: 'ACTIVE',
                             plan: Plan.FREE,
                         },
@@ -642,14 +647,21 @@ export class AdminLeaguesController {
             });
         }
 
-        return {
-            created: count,
-            totalMembers: count * membersPerLeague,
-            totalTournamentsLinked: activeTournaments.length * count,
-            totalMatchesActivated: totalMatchesLinked,
-            leagues: createdLeagues,
-            usedExistingUsers: useExistingUsers,
-            tournamentsAvailable: activeTournaments.map(t => ({ id: t.id, name: t.name, matches: t._count.matches })),
-        };
+            return {
+                created: count,
+                totalMembers: count * membersPerLeague,
+                totalTournamentsLinked: activeTournaments.length * count,
+                totalMatchesActivated: totalMatchesLinked,
+                leagues: createdLeagues,
+                usedExistingUsers: useExistingUsers,
+                tournamentsAvailable: activeTournaments.map(t => ({ id: t.id, name: t.name, matches: t._count.matches })),
+            };
+        } catch (error) {
+            console.error('Error creating test leagues:', error);
+            throw new HttpException(
+                error.message || 'Error al crear pollas de prueba',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }
