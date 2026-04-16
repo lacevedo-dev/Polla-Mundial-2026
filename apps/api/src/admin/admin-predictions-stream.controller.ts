@@ -1,7 +1,8 @@
 import {
-    Controller, Post, Body, UseGuards, Sse, MessageEvent,
+    Controller, Post, Body, UseGuards, Res,
     BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { IsString, IsArray, IsEnum, IsBoolean } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -9,7 +10,6 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { Observable, Subject } from 'rxjs';
 
 export enum PredictionStrategy {
     RANDOM = 'random',
@@ -48,27 +48,37 @@ interface ProgressEvent {
 export class AdminPredictionsStreamController {
     constructor(private readonly prisma: PrismaService) {}
 
-    @Sse('bulk-seed-stream')
+    @Post('bulk-seed-stream')
     @ApiOperation({ summary: 'Seed predictions with real-time progress streaming' })
-    bulkSeedStream(@CurrentUser() user: { id: string }, @Body() dto: BulkSeedStreamDto): Observable<MessageEvent> {
-        const subject = new Subject<MessageEvent>();
-        
-        // Start async processing
-        this.processBulkSeed(user, dto, subject).catch(error => {
-            subject.next({
-                data: {
-                    type: 'error',
-                    message: error.message || 'Error al generar pronósticos',
-                    data: { error: error.toString() }
-                }
-            } as MessageEvent);
-            subject.complete();
-        });
+    async bulkSeedStream(
+        @CurrentUser() user: { id: string },
+        @Body() dto: BulkSeedStreamDto,
+        @Res() res: Response
+    ) {
+        // Set headers for SSE
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
 
-        return subject.asObservable();
+        const sendEvent = (data: any) => {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        try {
+            await this.processBulkSeed(user, dto, sendEvent);
+            res.end();
+        } catch (error) {
+            sendEvent({
+                type: 'error',
+                message: error.message || 'Error al generar pronósticos',
+                data: { error: error.toString() }
+            });
+            res.end();
+        }
     }
 
-    private async processBulkSeed(user: { id: string }, dto: BulkSeedStreamDto, subject: Subject<MessageEvent>) {
+    private async processBulkSeed(user: { id: string }, dto: BulkSeedStreamDto, sendEvent: (data: any) => void) {
         const { leagueIds, matchIds, strategy = PredictionStrategy.RANDOM, simulatePayments = false } = dto;
 
         try {
@@ -76,13 +86,11 @@ export class AdminPredictionsStreamController {
                 throw new BadRequestException('Debe seleccionar al menos una polla');
             }
 
-            subject.next({
-                data: {
-                    type: 'progress',
-                    message: 'Validando pollas seleccionadas...',
-                    data: { step: 'validation', progress: 0 }
-                }
-            } as MessageEvent);
+            sendEvent({
+                type: 'progress',
+                message: 'Validando pollas seleccionadas...',
+                data: { step: 'validation', progress: 0 }
+            });
 
             // Validate leagues exist
             const leagues = await this.prisma.league.findMany({
@@ -94,13 +102,11 @@ export class AdminPredictionsStreamController {
                 throw new BadRequestException('No se encontraron las pollas seleccionadas');
             }
 
-            subject.next({
-                data: {
-                    type: 'progress',
-                    message: `${leagues.length} polla(s) encontrada(s)`,
-                    data: { step: 'validation', progress: 10, leagues: leagues.length }
-                }
-            } as MessageEvent);
+            sendEvent({
+                type: 'progress',
+                message: `${leagues.length} polla(s) encontrada(s)`,
+                data: { step: 'validation', progress: 10, leagues: leagues.length }
+            });
 
             // Get matches to seed
             const matchWhere: any = matchIds?.length
@@ -120,13 +126,11 @@ export class AdminPredictionsStreamController {
                 throw new BadRequestException('No se encontraron partidos para semillar');
             }
 
-            subject.next({
-                data: {
-                    type: 'progress',
-                    message: `${matches.length} partido(s) encontrado(s)`,
-                    data: { step: 'validation', progress: 20, matches: matches.length }
-                }
-            } as MessageEvent);
+            sendEvent({
+                type: 'progress',
+                message: `${matches.length} partido(s) encontrado(s)`,
+                data: { step: 'validation', progress: 20, matches: matches.length }
+            });
 
             // Score generator based on strategy
             const generateScores = (): { home: number; away: number } => {
@@ -172,19 +176,17 @@ export class AdminPredictionsStreamController {
 
             for (let leagueIndex = 0; leagueIndex < leagues.length; leagueIndex++) {
                 const league = leagues[leagueIndex];
-                
-                subject.next({
+
+                sendEvent({
+                    type: 'league_start',
+                    message: `Procesando polla: ${league.name}`,
                     data: {
-                        type: 'league_start',
-                        message: `Procesando polla: ${league.name}`,
-                        data: { 
-                            leagueIndex, 
-                            totalLeagues: leagues.length,
-                            leagueName: league.name,
-                            progress: 20 + (leagueIndex / leagues.length) * 70
-                        }
+                        leagueIndex,
+                        totalLeagues: leagues.length,
+                        leagueName: league.name,
+                        progress: 20 + (leagueIndex / leagues.length) * 70
                     }
-                } as MessageEvent);
+                });
 
                 // Get all active members
                 const members = await this.prisma.leagueMember.findMany({
@@ -193,13 +195,11 @@ export class AdminPredictionsStreamController {
                 });
 
                 if (members.length === 0) {
-                    subject.next({
-                        data: {
-                            type: 'progress',
-                            message: `Polla ${league.name} no tiene miembros activos, omitiendo...`,
-                            data: { leagueName: league.name }
-                        }
-                    } as MessageEvent);
+                    sendEvent({
+                        type: 'progress',
+                        message: `Polla ${league.name} no tiene miembros activos, omitiendo...`,
+                        data: { leagueName: league.name }
+                    });
                     continue;
                 }
 
@@ -216,14 +216,12 @@ export class AdminPredictionsStreamController {
                             },
                         });
                         members.push({ userId: user.id });
-                        
-                        subject.next({
-                            data: {
-                                type: 'progress',
-                                message: `SUPERADMIN agregado a ${league.name}`,
-                                data: { leagueName: league.name }
-                            }
-                        } as MessageEvent);
+
+                        sendEvent({
+                            type: 'progress',
+                            message: `SUPERADMIN agregado a ${league.name}`,
+                            data: { leagueName: league.name }
+                        });
                     } catch (error) {
                         // Already exists, just add to the list
                         members.push({ userId: user.id });
@@ -236,7 +234,7 @@ export class AdminPredictionsStreamController {
 
                 for (let memberIndex = 0; memberIndex < members.length; memberIndex++) {
                     const member = members[memberIndex];
-                    
+
                     try {
                         // Batch predictions for this member
                         const predictionsToCreate: any[] = [];
@@ -244,12 +242,12 @@ export class AdminPredictionsStreamController {
                         for (const match of matches) {
                             try {
                                 const existing = await this.prisma.prediction.findUnique({
-                                    where: { 
-                                        userId_matchId_leagueId: { 
-                                            userId: member.userId, 
-                                            matchId: match.id, 
-                                            leagueId: league.id 
-                                        } 
+                                    where: {
+                                        userId_matchId_leagueId: {
+                                            userId: member.userId,
+                                            matchId: match.id,
+                                            leagueId: league.id
+                                        }
                                     },
                                     select: { id: true },
                                 });
@@ -330,92 +328,80 @@ export class AdminPredictionsStreamController {
 
                         // Send progress update every member
                         if ((memberIndex + 1) % 5 === 0 || memberIndex === members.length - 1) {
-                            subject.next({
+                            sendEvent({
+                                type: 'member_complete',
+                                message: `${memberIndex + 1}/${members.length} miembros procesados en ${league.name}`,
                                 data: {
-                                    type: 'member_complete',
-                                    message: `${memberIndex + 1}/${members.length} miembros procesados en ${league.name}`,
-                                    data: {
-                                        leagueName: league.name,
-                                        memberIndex: memberIndex + 1,
-                                        totalMembers: members.length,
-                                        created,
-                                        skipped,
-                                        progress: 20 + ((leagueIndex + (memberIndex + 1) / members.length) / leagues.length) * 70
-                                    }
+                                    leagueName: league.name,
+                                    memberIndex: memberIndex + 1,
+                                    totalMembers: members.length,
+                                    created,
+                                    skipped,
+                                    progress: 20 + ((leagueIndex + (memberIndex + 1) / members.length) / leagues.length) * 70
                                 }
-                            } as MessageEvent);
+                            });
                         }
                     } catch (memberError) {
                         // Log member error but continue with next member
                         console.error(`Error processing member ${member.userId} in league ${league.name}:`, memberError);
-                        subject.next({
+                        sendEvent({
+                            type: 'progress',
+                            message: `Error procesando miembro, continuando con el siguiente...`,
                             data: {
-                                type: 'progress',
-                                message: `Error procesando miembro, continuando con el siguiente...`,
-                                data: { 
-                                    leagueName: league.name,
-                                    warning: true 
-                                }
+                                leagueName: league.name,
+                                warning: true
                             }
-                        } as MessageEvent);
+                        });
                     }
                 }
 
                 totalCreated += created;
                 totalSkipped += skipped;
                 totalPayments += payments;
-                leagueResults.push({ 
-                    name: league.name, 
-                    members: members.length, 
-                    created, 
-                    skipped, 
-                    payments 
+                leagueResults.push({
+                    name: league.name,
+                    members: members.length,
+                    created,
+                    skipped,
+                    payments
                 });
 
-                subject.next({
+                sendEvent({
+                    type: 'league_complete',
+                    message: `Completada polla: ${league.name} (${created} creados, ${skipped} omitidos)`,
                     data: {
-                        type: 'league_complete',
-                        message: `Completada polla: ${league.name} (${created} creados, ${skipped} omitidos)`,
-                        data: {
-                            leagueName: league.name,
-                            members: members.length,
-                            created,
-                            skipped,
-                            payments,
-                            progress: 20 + ((leagueIndex + 1) / leagues.length) * 70
-                        }
+                        leagueName: league.name,
+                        members: members.length,
+                        created,
+                        skipped,
+                        payments,
+                        progress: 20 + ((leagueIndex + 1) / leagues.length) * 70
                     }
-                } as MessageEvent);
+                });
             }
 
             // Send final result
-            subject.next({
+            sendEvent({
+                type: 'complete',
+                message: '¡Generación de pronósticos completada!',
                 data: {
-                    type: 'complete',
-                    message: '¡Generación de pronósticos completada!',
-                    data: {
-                        strategy,
-                        leagues: leagueResults,
-                        matches: matches.length,
-                        totalCreated,
-                        totalSkipped,
-                        totalPayments,
-                        progress: 100
-                    }
+                    strategy,
+                    leagues: leagueResults,
+                    matches: matches.length,
+                    totalCreated,
+                    totalSkipped,
+                    totalPayments,
+                    progress: 100
                 }
-            } as MessageEvent);
-
-            subject.complete();
+            });
 
         } catch (error) {
-            subject.next({
-                data: {
-                    type: 'error',
-                    message: error.message || 'Error al generar pronósticos',
-                    data: { error: error.toString() }
-                }
-            } as MessageEvent);
-            subject.complete();
+            sendEvent({
+                type: 'error',
+                message: error.message || 'Error al generar pronósticos',
+                data: { error: error.toString() }
+            });
+            throw error;
         }
     }
 }
