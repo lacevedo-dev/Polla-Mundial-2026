@@ -76,8 +76,8 @@ export class AdminLeaguesController {
 
     @Post()
     @ApiOperation({ summary: 'Create a new league as admin' })
-    async create(@CurrentUser() user: { id: string }, @Body() dto: CreateLeagueDto) {
-        return this.leaguesService.create(user.id, dto);
+    async create(@CurrentUser() user: { userId: string }, @Body() dto: CreateLeagueDto) {
+        return this.leaguesService.create(user.userId, dto);
     }
 
     @Get()
@@ -306,7 +306,7 @@ export class AdminLeaguesController {
     async activateMatch(
         @Param('id') leagueId: string,
         @Param('matchId') matchId: string,
-        @CurrentUser() user: { id: string },
+        @CurrentUser() user: { userId: string },
     ) {
         const match = await this.prisma.match.findUnique({
             where: { id: matchId },
@@ -332,7 +332,7 @@ export class AdminLeaguesController {
 
         await this.prisma.leagueMatch.upsert({
             where: { leagueId_matchId: { leagueId, matchId } },
-            create: { leagueId, matchId, active: true, addedBy: user.id },
+            create: { leagueId, matchId, active: true, addedBy: user.userId },
             update: { active: true },
         });
 
@@ -358,7 +358,7 @@ export class AdminLeaguesController {
     async activateAllTournamentMatches(
         @Param('id') leagueId: string,
         @Param('tournamentId') tournamentId: string,
-        @CurrentUser() user: { id: string },
+        @CurrentUser() user: { userId: string },
     ) {
         const lt = await this.prisma.leagueTournament.findUnique({
             where: { leagueId_tournamentId: { leagueId, tournamentId } },
@@ -374,7 +374,7 @@ export class AdminLeaguesController {
         const operations = matches.map(m =>
             this.prisma.leagueMatch.upsert({
                 where: { leagueId_matchId: { leagueId, matchId: m.id } },
-                create: { leagueId, matchId: m.id, active: true, addedBy: user.id },
+                create: { leagueId, matchId: m.id, active: true, addedBy: user.userId },
                 update: { active: true },
             })
         );
@@ -417,7 +417,7 @@ export class AdminLeaguesController {
 
     @Post('bulk-create-test')
     @ApiOperation({ summary: 'Bulk create test leagues with random users, tournaments and matches for stress testing' })
-    async bulkCreateTest(@CurrentUser() user: { id: string }, @Body() dto: BulkCreateTestLeaguesDto) {
+    async bulkCreateTest(@CurrentUser() user: { userId: string }, @Body() dto: BulkCreateTestLeaguesDto) {
         try {
             const { 
                 count, 
@@ -548,11 +548,11 @@ export class AdminLeaguesController {
             const membersToAdd: string[] = [];
 
             // Always include the current SUPERADMIN user
-            membersToAdd.push(user.id);
+            membersToAdd.push(user.userId);
 
             if (useExistingUsers) {
                 // Randomly select from existing users (excluding the SUPERADMIN already added)
-                const shuffled = [...usersPool].filter(u => u.id !== user.id).sort(() => Math.random() - 0.5);
+                const shuffled = [...usersPool].filter(u => u.id !== user.userId).sort(() => Math.random() - 0.5);
                 membersToAdd.push(...shuffled.slice(0, membersPerLeague - 1).map(u => u.id));
             } else {
                 // Create random test users (one less since SUPERADMIN is already included)
@@ -621,7 +621,7 @@ export class AdminLeaguesController {
                                         leagueId: league.id,
                                         matchId: match.id,
                                         active: true,
-                                        addedBy: user.id,
+                                        addedBy: user.userId,
                                     })),
                                     skipDuplicates: true,
                                 });
