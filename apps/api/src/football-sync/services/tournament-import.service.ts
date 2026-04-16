@@ -219,34 +219,18 @@ export class TournamentImportService {
     }
 
     try {
-      // Extract tournament info from first fixture
-      const firstFixture = fixtures[0];
-      const leagueInfo = firstFixture.league;
-      const leagueId = leagueInfo?.id;
-      const season = leagueInfo?.season;
-      const leagueName = leagueInfo?.name || tournamentName;
-      const leagueCountry = leagueInfo?.country || 'Internacional';
+      // GROUP FIXTURES BY LEAGUE ID (tournament)
+      const fixturesByLeague = new Map<number, any[]>();
 
-      // Upsert tournament
-      const tournament = await this.prisma.tournament.upsert({
-        where: { apiFootballLeagueId: leagueId || 0 },
-        create: {
-          name: leagueName,
-          country: leagueCountry,
-          type: 'Cup',
-          apiFootballLeagueId: leagueId || 0,
-          season: season || new Date().getFullYear(),
-          active: true,
-        },
-        update: {
-          name: leagueName,
-          season: season || new Date().getFullYear(),
-          active: true,
-        },
-      });
+      for (const fixture of fixtures) {
+        const leagueId = fixture.league?.id || 0;
+        if (!fixturesByLeague.has(leagueId)) {
+          fixturesByLeague.set(leagueId, []);
+        }
+        fixturesByLeague.get(leagueId)!.push(fixture);
+      }
 
-      result.tournamentId = tournament.id;
-      result.tournamentName = leagueName;
+      this.logger.log(`Importing fixtures from ${fixturesByLeague.size} different tournament(s)`);
 
       // Extract unique team IDs from all fixtures
       const teamApiIds = new Set<number>();
@@ -255,7 +239,7 @@ export class TournamentImportService {
         if (f.teams?.away?.id) teamApiIds.add(f.teams.away.id);
       });
 
-      // Build team mapping
+      // Build team mapping (shared across all tournaments)
       const teamApiIdToLocalId = new Map<number, string>();
 
       if (options.createTeams) {
@@ -321,80 +305,132 @@ export class TournamentImportService {
         });
       }
 
-      // Batch import fixtures
-      for (const fixture of fixtures) {
+      // PROCESS EACH TOURNAMENT SEPARATELY
+      const tournamentIdMap = new Map<number, string>(); // leagueId -> tournamentId
+      const tournamentNames: string[] = [];
+
+      for (const [leagueId, leagueFixtures] of fixturesByLeague.entries()) {
         try {
-          const fixtureData = fixture.fixture;
-          const teams = fixture.teams;
-          const goals = fixture.goals;
-          const leagueInfo = fixture.league;
+          // Extract tournament info from first fixture of this league
+          const firstFixture = leagueFixtures[0];
+          const leagueInfo = firstFixture.league;
+          const season = leagueInfo?.season;
+          const leagueName = leagueInfo?.name || `${tournamentName} ${leagueId}`;
+          const leagueCountry = leagueInfo?.country || 'Internacional';
+          const leagueLogo = leagueInfo?.logo;
 
-          const homeApiId = teams?.home?.id;
-          const awayApiId = teams?.away?.id;
-          const externalId = String(fixtureData?.id);
-          const round = leagueInfo?.round ?? 'Regular';
-          const phase = mapRoundToPhase(round);
+          // UPSERT tournament (create if not exists, update if exists)
+          const tournament = await this.prisma.tournament.upsert({
+            where: { apiFootballLeagueId: leagueId },
+            create: {
+              name: leagueName,
+              country: leagueCountry,
+              type: 'Cup',
+              logoUrl: leagueLogo,
+              apiFootballLeagueId: leagueId,
+              season: season || new Date().getFullYear(),
+              active: true,
+            },
+            update: {
+              name: leagueName,
+              country: leagueCountry,
+              logoUrl: leagueLogo,
+              season: season || new Date().getFullYear(),
+              active: true,
+            },
+          });
 
-          const homeTeamId = teamApiIdToLocalId.get(homeApiId);
-          const awayTeamId = teamApiIdToLocalId.get(awayApiId);
+          tournamentIdMap.set(leagueId, tournament.id);
+          tournamentNames.push(leagueName);
 
-          if (!homeTeamId || !awayTeamId) {
-            result.skipped++;
-            result.errors.push(`Fixture ${externalId}: teams not found`);
-            continue;
-          }
+          this.logger.log(`Upserted tournament: ${leagueName} (ID: ${tournament.id})`);
 
-          const matchDate = fixtureData?.date ? new Date(fixtureData.date) : new Date();
-          const apiStatus = fixtureData?.status?.short;
-          const matchStatus = this.mapApiStatus(apiStatus);
+          // Import fixtures for this specific tournament
+          for (const fixture of leagueFixtures) {
+            try {
+              const fixtureData = fixture.fixture;
+              const teams = fixture.teams;
+              const goals = fixture.goals;
+              const leagueInfo = fixture.league;
 
-          const homeScore = goals?.home ?? null;
-          const awayScore = goals?.away ?? null;
-          const venueName = fixtureData?.venue?.name ?? null;
-          const venueCity = fixtureData?.venue?.city ?? null;
-          const venueDisplay = [venueName, venueCity].filter(Boolean).join(', ') || null;
-          const matchNumber = fixtureData?.id ? Number(String(fixtureData.id).slice(-4)) : null;
+              const homeApiId = teams?.home?.id;
+              const awayApiId = teams?.away?.id;
+              const externalId = String(fixtureData?.id);
+              const round = leagueInfo?.round ?? 'Regular';
+              const phase = mapRoundToPhase(round);
 
-          const existing = await this.prisma.match.findUnique({ where: { externalId } });
+              const homeTeamId = teamApiIdToLocalId.get(homeApiId);
+              const awayTeamId = teamApiIdToLocalId.get(awayApiId);
 
-          if (existing) {
-            if (options.overwriteExisting) {
-              await this.prisma.match.update({
-                where: { externalId },
-                data: {
-                  homeScore, awayScore, status: matchStatus,
-                  matchDate, round, tournamentId: tournament.id,
-                  phase, venue: venueDisplay, matchNumber,
-                  lastSyncAt: new Date(),
-                },
-              });
-              result.fixturesUpdated++;
-              result.matchIds!.push(existing.id);
-            } else {
-              result.skipped++;
+              if (!homeTeamId || !awayTeamId) {
+                result.skipped++;
+                result.errors.push(`Fixture ${externalId}: teams not found`);
+                continue;
+              }
+
+              const matchDate = fixtureData?.date ? new Date(fixtureData.date) : new Date();
+              const apiStatus = fixtureData?.status?.short;
+              const matchStatus = this.mapApiStatus(apiStatus);
+
+              const homeScore = goals?.home ?? null;
+              const awayScore = goals?.away ?? null;
+              const venueName = fixtureData?.venue?.name ?? null;
+              const venueCity = fixtureData?.venue?.city ?? null;
+              const venueDisplay = [venueName, venueCity].filter(Boolean).join(', ') || null;
+              const matchNumber = fixtureData?.id ? Number(String(fixtureData.id).slice(-4)) : null;
+
+              const existing = await this.prisma.match.findUnique({ where: { externalId } });
+
+              if (existing) {
+                if (options.overwriteExisting) {
+                  await this.prisma.match.update({
+                    where: { externalId },
+                    data: {
+                      homeScore, awayScore, status: matchStatus,
+                      matchDate, round, tournamentId: tournament.id,
+                      phase, venue: venueDisplay, matchNumber,
+                      lastSyncAt: new Date(),
+                    },
+                  });
+                  result.fixturesUpdated++;
+                  result.matchIds!.push(existing.id);
+                } else {
+                  result.skipped++;
+                }
+              } else {
+                const created = await this.prisma.match.create({
+                  data: {
+                    homeTeamId, awayTeamId,
+                    homeScore, awayScore,
+                    phase, round,
+                    matchDate,
+                    status: matchStatus,
+                    externalId,
+                    tournamentId: tournament.id,
+                    venue: venueDisplay,
+                    matchNumber,
+                    lastSyncAt: new Date(),
+                  },
+                });
+                result.fixturesImported++;
+                result.matchIds!.push(created.id);
+              }
+            } catch (error) {
+              result.errors.push(`Fixture ${fixture.fixture?.id}: ${error.message}`);
             }
-          } else {
-            const created = await this.prisma.match.create({
-              data: {
-                homeTeamId, awayTeamId,
-                homeScore, awayScore,
-                phase, round,
-                matchDate,
-                status: matchStatus,
-                externalId,
-                tournamentId: tournament.id,
-                venue: venueDisplay,
-                matchNumber,
-                lastSyncAt: new Date(),
-              },
-            });
-            result.fixturesImported++;
-            result.matchIds!.push(created.id);
           }
         } catch (error) {
-          result.errors.push(`Fixture ${fixture.fixture?.id}: ${error.message}`);
+          this.logger.error(`Failed to process league ${leagueId}: ${error.message}`);
+          result.errors.push(`League ${leagueId}: ${error.message}`);
         }
       }
+
+      // Set result metadata (use first tournament as primary)
+      const firstLeagueId = Array.from(fixturesByLeague.keys())[0];
+      result.tournamentId = tournamentIdMap.get(firstLeagueId) || '';
+      result.tournamentName = tournamentNames.length > 1
+        ? `${tournamentNames.length} tournaments: ${tournamentNames.join(', ')}`
+        : tournamentNames[0] || tournamentName;
 
       return result;
     } catch (error) {

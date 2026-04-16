@@ -449,12 +449,16 @@ export class AdminLeaguesController {
         // Get active tournaments with matches
         let activeTournaments: any[] = [];
         let totalMatchesLinked = 0;
-        
+
         if (linkTournaments) {
+            // First, try to find tournaments that already have matches
             activeTournaments = await this.prisma.tournament.findMany({
-                where: { active: true },
-                select: { 
-                    id: true, 
+                where: {
+                    active: true,
+                    matches: { some: {} }, // Only tournaments with at least one match
+                },
+                select: {
+                    id: true,
                     name: true,
                     _count: { select: { matches: true } },
                 },
@@ -462,67 +466,76 @@ export class AdminLeaguesController {
                 take: 5,
             });
 
-            // If no active tournaments exist, create a test tournament with matches
+            // If no active tournaments with matches exist, create test tournaments and matches
             if (activeTournaments.length === 0) {
-                const testTournament = await this.prisma.tournament.create({
-                    data: {
-                        name: 'Torneo de Prueba',
-                        season: new Date().getFullYear(),
-                        country: 'Test',
-                        active: true,
-                        apiFootballLeagueId: Math.floor(Date.now() / 1000),
-                    },
-                });
-
                 // Get some teams to create test matches
                 const teams = await this.prisma.team.findMany({
-                    take: 10,
-                    select: { id: true },
+                    take: 20, // More teams to create multiple tournaments
+                    select: { id: true, name: true },
                 });
 
-                let createdMatchesCount = 0;
+                if (teams.length >= 4) {
+                    // Create multiple test tournaments instead of just one
+                    const tournamentsToCreate = Math.min(3, Math.floor(teams.length / 4));
 
-                if (teams.length >= 2) {
-                    // Create test matches
-                    const matchesToCreate: Array<{
-                        tournamentId: string;
-                        homeTeamId: string;
-                        awayTeamId: string;
-                        matchDate: Date;
-                        status: MatchStatus;
-                        round: string;
-                        phase: Phase;
-                    }> = [];
-                    const now = new Date();
-                    
-                    for (let i = 0; i < Math.min(10, teams.length / 2); i++) {
-                        const matchDate = new Date(now);
-                        matchDate.setDate(matchDate.getDate() + i);
-                        
-                        matchesToCreate.push({
-                            tournamentId: testTournament.id,
-                            homeTeamId: teams[i * 2].id,
-                            awayTeamId: teams[i * 2 + 1].id,
-                            matchDate,
-                            status: MatchStatus.SCHEDULED,
-                            round: `Jornada ${i + 1}`,
-                            phase: Phase.GROUP,
+                    for (let t = 0; t < tournamentsToCreate; t++) {
+                        const testTournament = await this.prisma.tournament.create({
+                            data: {
+                                name: `Torneo de Prueba ${t + 1}`,
+                                season: new Date().getFullYear(),
+                                country: 'Test',
+                                active: true,
+                                apiFootballLeagueId: Math.floor(Date.now() / 1000) + t,
+                            },
                         });
-                    }
 
-                    if (matchesToCreate.length > 0) {
-                        await this.prisma.match.createMany({
-                            data: matchesToCreate,
-                        });
-                        createdMatchesCount = matchesToCreate.length;
+                        // Create matches for this specific tournament
+                        const matchesToCreate: Array<{
+                            tournamentId: string;
+                            homeTeamId: string;
+                            awayTeamId: string;
+                            matchDate: Date;
+                            status: MatchStatus;
+                            round: string;
+                            phase: Phase;
+                        }> = [];
+                        const now = new Date();
+
+                        // Use different teams for each tournament
+                        const tournamentTeamsStart = t * 4;
+                        const tournamentTeamsEnd = Math.min(tournamentTeamsStart + 8, teams.length);
+                        const tournamentTeams = teams.slice(tournamentTeamsStart, tournamentTeamsEnd);
+
+                        for (let i = 0; i < Math.floor(tournamentTeams.length / 2); i++) {
+                            const matchDate = new Date(now);
+                            matchDate.setDate(matchDate.getDate() + i + (t * 10)); // Stagger dates
+
+                            matchesToCreate.push({
+                                tournamentId: testTournament.id,
+                                homeTeamId: tournamentTeams[i * 2].id,
+                                awayTeamId: tournamentTeams[i * 2 + 1].id,
+                                matchDate,
+                                status: MatchStatus.SCHEDULED,
+                                round: `Jornada ${i + 1}`,
+                                phase: Phase.GROUP,
+                            });
+                        }
+
+                        if (matchesToCreate.length > 0) {
+                            await this.prisma.match.createMany({
+                                data: matchesToCreate,
+                            });
+
+                            activeTournaments.push({
+                                id: testTournament.id,
+                                name: testTournament.name,
+                                _count: { matches: matchesToCreate.length },
+                            });
+                        }
                     }
+                } else {
+                    throw new BadRequestException('No hay suficientes equipos para crear torneos de prueba (mínimo 4 requeridos)');
                 }
-
-                activeTournaments = [{
-                    id: testTournament.id,
-                    name: testTournament.name,
-                    _count: { matches: createdMatchesCount },
-                }];
             }
         }
 
