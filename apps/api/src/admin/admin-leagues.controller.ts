@@ -468,7 +468,7 @@ export class AdminLeaguesController {
                         season: new Date().getFullYear(),
                         country: 'Test',
                         active: true,
-                        externalId: `test-${Date.now()}`,
+                        apiFootballLeagueId: Math.floor(Date.now() / 1000),
                     },
                 });
 
@@ -478,9 +478,18 @@ export class AdminLeaguesController {
                     select: { id: true },
                 });
 
+                let createdMatchesCount = 0;
+
                 if (teams.length >= 2) {
                     // Create test matches
-                    const matchesToCreate = [];
+                    const matchesToCreate: Array<{
+                        tournamentId: string;
+                        homeTeamId: string;
+                        awayTeamId: string;
+                        matchDate: Date;
+                        status: string;
+                        round: string;
+                    }> = [];
                     const now = new Date();
                     
                     for (let i = 0; i < Math.min(10, teams.length / 2); i++) {
@@ -501,13 +510,14 @@ export class AdminLeaguesController {
                         await this.prisma.match.createMany({
                             data: matchesToCreate,
                         });
+                        createdMatchesCount = matchesToCreate.length;
                     }
                 }
 
                 activeTournaments = [{
                     id: testTournament.id,
                     name: testTournament.name,
-                    _count: { matches: matchesToCreate?.length || 0 },
+                    _count: { matches: createdMatchesCount },
                 }];
             }
         }
@@ -533,13 +543,16 @@ export class AdminLeaguesController {
             // Add members
             const membersToAdd: string[] = [];
 
+            // Always include the current SUPERADMIN user
+            membersToAdd.push(user.id);
+
             if (useExistingUsers) {
-                // Randomly select from existing users
-                const shuffled = [...usersPool].sort(() => Math.random() - 0.5);
-                membersToAdd.push(...shuffled.slice(0, membersPerLeague).map(u => u.id));
+                // Randomly select from existing users (excluding the SUPERADMIN already added)
+                const shuffled = [...usersPool].filter(u => u.id !== user.id).sort(() => Math.random() - 0.5);
+                membersToAdd.push(...shuffled.slice(0, membersPerLeague - 1).map(u => u.id));
             } else {
-                // Create random test users
-                for (let j = 1; j <= membersPerLeague; j++) {
+                // Create random test users (one less since SUPERADMIN is already included)
+                for (let j = 1; j < membersPerLeague; j++) {
                     const randomId = Math.random().toString(36).substring(2, 10);
                     const testUser = await this.prisma.user.create({
                         data: {

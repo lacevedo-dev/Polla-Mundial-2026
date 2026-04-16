@@ -7,6 +7,7 @@ import { IsString, IsOptional, IsArray, IsEnum, IsBoolean } from 'class-validato
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
@@ -110,7 +111,7 @@ export class AdminPredictionsController {
 
     @Post('bulk-seed')
     @ApiOperation({ summary: 'Seed test predictions for league members with strategy and payment simulation' })
-    async bulkSeed(@Body() dto: BulkSeedPredictionsDto) {
+    async bulkSeed(@CurrentUser() user: { id: string }, @Body() dto: BulkSeedPredictionsDto) {
         const { leagueIds, matchIds, strategy = PredictionStrategy.RANDOM, simulatePayments = false } = dto;
 
         if (leagueIds.length === 0) throw new BadRequestException('Debe seleccionar al menos una polla');
@@ -190,6 +191,24 @@ export class AdminPredictionsController {
                 select: { userId: true },
             });
             if (members.length === 0) continue;
+
+            // Ensure SUPERADMIN is always included
+            const superadminIsMember = members.some(m => m.userId === user.id);
+            if (!superadminIsMember) {
+                try {
+                    await this.prisma.leagueMember.create({
+                        data: {
+                            userId: user.id,
+                            leagueId: league.id,
+                            status: 'ACTIVE',
+                        },
+                    });
+                    members.push({ userId: user.id });
+                } catch {
+                    // Already exists, just add to the list
+                    members.push({ userId: user.id });
+                }
+            }
 
             let created = 0;
             let skipped = 0;

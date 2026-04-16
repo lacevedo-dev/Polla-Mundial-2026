@@ -7,6 +7,7 @@ import { IsString, IsArray, IsEnum, IsBoolean } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { Observable, Subject } from 'rxjs';
 
@@ -49,11 +50,11 @@ export class AdminPredictionsStreamController {
 
     @Sse('bulk-seed-stream')
     @ApiOperation({ summary: 'Seed predictions with real-time progress streaming' })
-    bulkSeedStream(@Body() dto: BulkSeedStreamDto): Observable<MessageEvent> {
+    bulkSeedStream(@CurrentUser() user: { id: string }, @Body() dto: BulkSeedStreamDto): Observable<MessageEvent> {
         const subject = new Subject<MessageEvent>();
         
         // Start async processing
-        this.processBulkSeed(dto, subject).catch(error => {
+        this.processBulkSeed(user, dto, subject).catch(error => {
             subject.next({
                 data: {
                     type: 'error',
@@ -67,7 +68,7 @@ export class AdminPredictionsStreamController {
         return subject.asObservable();
     }
 
-    private async processBulkSeed(dto: BulkSeedStreamDto, subject: Subject<MessageEvent>) {
+    private async processBulkSeed(user: { id: string }, dto: BulkSeedStreamDto, subject: Subject<MessageEvent>) {
         const { leagueIds, matchIds, strategy = PredictionStrategy.RANDOM, simulatePayments = false } = dto;
 
         try {
@@ -200,6 +201,33 @@ export class AdminPredictionsStreamController {
                         }
                     } as MessageEvent);
                     continue;
+                }
+
+                // Ensure SUPERADMIN is always included (add if not already a member)
+                const superadminIsMember = members.some(m => m.userId === user.id);
+                if (!superadminIsMember) {
+                    // Add SUPERADMIN as member if not already
+                    try {
+                        await this.prisma.leagueMember.create({
+                            data: {
+                                userId: user.id,
+                                leagueId: league.id,
+                                status: 'ACTIVE',
+                            },
+                        });
+                        members.push({ userId: user.id });
+                        
+                        subject.next({
+                            data: {
+                                type: 'progress',
+                                message: `SUPERADMIN agregado a ${league.name}`,
+                                data: { leagueName: league.name }
+                            }
+                        } as MessageEvent);
+                    } catch (error) {
+                        // Already exists, just add to the list
+                        members.push({ userId: user.id });
+                    }
                 }
 
                 let created = 0;
