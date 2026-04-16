@@ -222,7 +222,12 @@ const CreateLeague: React.FC = () => {
     if (hasSavedLeagueData.current) return; // Respect in-progress form data
     const plan = authUser?.plan?.toLowerCase() as 'free' | 'gold' | 'diamond' | undefined;
     if (!plan || plan === leagueData.plan) return;
-    setLeagueData(prev => ({ ...prev, plan }));
+    const maxParticipants = PLAN_LIMITS[plan];
+    setLeagueData(prev => ({ 
+      ...prev, 
+      plan,
+      participantsCount: maxParticipants // Actualizar límite según el plan
+    }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser?.plan]);
 
@@ -1067,7 +1072,24 @@ const CreateLeague: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 gap-2 overflow-y-auto scrollbar-hide pb-2">
                     {invitedUsers.map(user => (
-                      <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14} />}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} • {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14} /></button></div>
+                      <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl">
+                        <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 overflow-hidden">
+                          {user.avatar ? (
+                            <img src={user.avatar} className="w-full h-full rounded-lg object-cover" alt={user.name} />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-slate-200 rounded-lg">
+                              <span className="text-xs font-bold text-slate-600">{user.name.charAt(0).toUpperCase()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} • {user.email}</p>
+                        </div>
+                        <button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600">
+                          <X size={14} />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
