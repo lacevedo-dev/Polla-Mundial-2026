@@ -489,7 +489,7 @@ export class AdminLeaguesController {
                         matchDate: Date;
                         status: string;
                         round: string;
-                        phase: string;
+                        phase: Phase;
                     }> = [];
                     const now = new Date();
                     
@@ -504,7 +504,7 @@ export class AdminLeaguesController {
                             matchDate,
                             status: 'NS',
                             round: `Jornada ${i + 1}`,
-                            phase: 'GROUP_STAGE',
+                            phase: Phase.GROUP_STAGE,
                         });
                     }
 
