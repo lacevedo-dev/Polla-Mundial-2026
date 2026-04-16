@@ -2,11 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
     Users, Trophy, Target, DollarSign, RefreshCw,
-    Swords, CreditCard, TrendingUp, Clock, ChevronRight, AlertTriangle,
+    Swords, CreditCard, TrendingUp, Clock, ChevronRight, AlertTriangle, Trash2, CheckCircle2,
 } from 'lucide-react';
-import { useAdminStore } from '../../stores/admin.store';
+import { useAdminStore, type ResetOptions } from '../../stores/admin.store';
 import AdminStatCard from '../../components/admin/AdminStatCard';
 import StatusBadge from '../../components/admin/StatusBadge';
+import ResetSystemDialog from '../../components/admin/ResetSystemDialog';
 
 /* ─── constants ─── */
 const planConfig = {
@@ -62,13 +63,17 @@ const DashboardSkeleton: React.FC = () => (
 
 /* ─── Main component ─── */
 const AdminDashboard: React.FC = () => {
-    const { stats, isLoading, error, fetchStats } = useAdminStore();
+    const { stats, isLoading, error, fetchStats, resetTestData, testMode, getTestMode, updateTestMode } = useAdminStore();
     const [lastRefreshed, setLastRefreshed] = React.useState<Date | null>(null);
     const [, forceRender] = React.useReducer((x: number) => x + 1, 0);
+    const [showResetDialog, setShowResetDialog] = React.useState(false);
+    const [resetSuccess, setResetSuccess] = React.useState<string | null>(null);
+    const [testModeSuccess, setTestModeSuccess] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         void fetchStats().then(() => setLastRefreshed(new Date()));
-    }, [fetchStats]);
+        void getTestMode();
+    }, [fetchStats, getTestMode]);
 
     /* Update "hace X min" every 30 s */
     React.useEffect(() => {
@@ -79,6 +84,33 @@ const AdminDashboard: React.FC = () => {
     const handleRefresh = async () => {
         await fetchStats();
         setLastRefreshed(new Date());
+    };
+
+    const handleResetSystem = async (options: ResetOptions) => {
+        try {
+            const result = await resetTestData(options);
+            setResetSuccess(result.message);
+            setShowResetDialog(false);
+            // Actualizar estadísticas después del reinicio
+            await fetchStats();
+            setLastRefreshed(new Date());
+            // Limpiar mensaje de éxito después de 5 segundos
+            setTimeout(() => setResetSuccess(null), 5000);
+        } catch (error) {
+            console.error('Error al reiniciar el sistema:', error);
+        }
+    };
+
+    const handleToggleTestMode = async () => {
+        try {
+            const newState = !testMode?.enabled;
+            const result = await updateTestMode(newState);
+            setTestModeSuccess(result.message);
+            // Limpiar mensaje de éxito después de 5 segundos
+            setTimeout(() => setTestModeSuccess(null), 5000);
+        } catch (error) {
+            console.error('Error al cambiar modo prueba:', error);
+        }
     };
 
     if (isLoading && !stats) return <DashboardSkeleton />;
@@ -117,16 +149,88 @@ const AdminDashboard: React.FC = () => {
                         {lastRefreshed ? `Actualizado ${timeAgo(lastRefreshed)}` : 'Vista general de la plataforma'}
                     </p>
                 </div>
-                <button
-                    onClick={handleRefresh}
-                    disabled={isLoading}
-                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all shrink-0"
-                    aria-label="Actualizar estadísticas"
-                >
-                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-                    <span className="hidden sm:inline">Actualizar</span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowResetDialog(true)}
+                        disabled={isLoading || !testMode?.enabled}
+                        className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 shadow-sm hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0"
+                        aria-label="Reiniciar sistema de pruebas"
+                        title={!testMode?.enabled ? 'Activa el modo prueba para usar esta función' : 'Reiniciar sistema de pruebas'}
+                    >
+                        <Trash2 size={14} />
+                        <span className="hidden sm:inline">Reiniciar Sistema</span>
+                    </button>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={isLoading}
+                        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all shrink-0"
+                        aria-label="Actualizar estadísticas"
+                    >
+                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                        <span className="hidden sm:inline">Actualizar</span>
+                    </button>
+                </div>
             </div>
+
+            {/* ── Test Mode Banner ── */}
+            <div className={`rounded-2xl border-2 p-4 transition-all ${
+                testMode?.enabled 
+                    ? 'bg-amber-50 border-amber-300' 
+                    : 'bg-slate-50 border-slate-200'
+            }`}>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            testMode?.enabled ? 'bg-amber-400' : 'bg-slate-300'
+                        }`}>
+                            <AlertTriangle size={20} className="text-white" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                                Modo Prueba {testMode?.enabled ? 'ACTIVADO' : 'DESACTIVADO'}
+                            </p>
+                            <p className="text-xs text-slate-600 mt-0.5">
+                                {testMode?.enabled 
+                                    ? 'Puedes reiniciar el sistema las veces que necesites'
+                                    : 'Activa el modo prueba para usar la función de reinicio'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleToggleTestMode}
+                        disabled={isLoading}
+                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${
+                            testMode?.enabled 
+                                ? 'bg-amber-500 focus:ring-amber-500' 
+                                : 'bg-slate-300 focus:ring-slate-500'
+                        }`}
+                    >
+                        <span
+                            className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                                testMode?.enabled ? 'translate-x-7' : 'translate-x-1'
+                            }`}
+                        />
+                    </button>
+                </div>
+            </div>
+
+            {/* ── Success Messages ── */}
+            {resetSuccess && (
+                <div className="rounded-xl border border-lime-200 bg-lime-50 p-4 text-lime-700 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2">
+                        <CheckCircle2 size={16} />
+                        <p className="text-sm font-bold">{resetSuccess}</p>
+                    </div>
+                </div>
+            )}
+            {testModeSuccess && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-700 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2">
+                        <CheckCircle2 size={16} />
+                        <p className="text-sm font-bold">{testModeSuccess}</p>
+                    </div>
+                </div>
+            )}
 
             {/* ── Stats Grid ── */}
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -312,6 +416,14 @@ const AdminDashboard: React.FC = () => {
                     Ver Pagos
                 </Link>
             </div>
+
+            {/* ── Reset System Dialog ── */}
+            <ResetSystemDialog
+                isOpen={showResetDialog}
+                onClose={() => setShowResetDialog(false)}
+                onConfirm={handleResetSystem}
+                isLoading={isLoading}
+            />
         </div>
     );
 };
