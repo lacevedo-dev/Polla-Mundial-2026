@@ -487,7 +487,7 @@ export class AdminLeaguesController {
                         homeTeamId: string;
                         awayTeamId: string;
                         matchDate: Date;
-                        status: string;
+                        status: MatchStatus;
                         round: string;
                         phase: Phase;
                     }> = [];
