@@ -27,7 +27,7 @@ export class AdminSystemController {
     async resetTestData(@Body() options: ResetSystemDto = {}) {
         // Verificar que el modo prueba está habilitado
         const testModeConfig = await this.adminService.getSystemConfig('test_mode');
-        const isTestModeEnabled = testModeConfig?.value?.enabled === true;
+        const isTestModeEnabled = (testModeConfig?.value as { enabled?: boolean })?.enabled === true;
         
         if (!isTestModeEnabled) {
             throw new BadRequestException('El modo prueba no está habilitado. Actívalo desde la configuración del sistema.');
@@ -63,7 +63,7 @@ export class AdminSystemController {
 
                 // 2. Eliminar participaciones (dependen de ligas y usuarios)
                 if (resetOptions.participations) {
-                    const result = await tx.participation.deleteMany({});
+                    const result = await tx.Participation.deleteMany({});
                     counts.participations = result.count;
                 }
 
@@ -80,9 +80,9 @@ export class AdminSystemController {
                     const result = await tx.notification.deleteMany({
                         where: {
                             OR: [
-                                { type: 'LEAGUE_INVITATION' },
-                                { type: 'LEAGUE_JOINED' },
-                                { type: 'PREDICTION_REMINDER' },
+                                { type: 'INVITATION' },
+                                { type: 'GENERAL' },
+                                { type: 'REMINDER' },
                             ]
                         }
                     });
@@ -100,7 +100,7 @@ export class AdminSystemController {
 
             const result = await this.prisma.$transaction(async (tx) => {
                 const predictions = await tx.prediction.count();
-                const participations = await tx.participation.count();
+                const participations = await tx.Participation.count();
                 const leagues = await tx.league.count();
                 const payments = await tx.payment.count();
                 const orders = await tx.order.count();
@@ -115,7 +115,7 @@ export class AdminSystemController {
             });
 
             // Construir mensaje descriptivo
-            const deletedItems = [];
+            const deletedItems: string[] = [];
             if (resetOptions.predictions && deletedCounts.predictions > 0) deletedItems.push(`${deletedCounts.predictions} predicciones`);
             if (resetOptions.participations && deletedCounts.participations > 0) deletedItems.push(`${deletedCounts.participations} participaciones`);
             if (resetOptions.leagues && deletedCounts.leagues > 0) deletedItems.push(`${deletedCounts.leagues} ligas`);
@@ -154,7 +154,7 @@ export class AdminSystemController {
     async getTestMode() {
         const config = await this.adminService.getSystemConfig('test_mode');
         return {
-            enabled: config?.value?.enabled === true,
+            enabled: (config?.value as { enabled?: boolean })?.enabled === true,
             updatedAt: config?.updatedAt,
         };
     }
