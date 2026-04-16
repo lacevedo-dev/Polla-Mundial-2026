@@ -2,7 +2,7 @@ import {
     Controller, Post, Body, UseGuards, Res,
     BadRequestException,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { IsString, IsArray, IsEnum, IsBoolean } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
