@@ -12,6 +12,8 @@ import {
     SelectValue,
 } from '../ui/select';
 import { format } from 'date-fns';
+import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
 
 interface LeagueMatchesManagerProps {
     leagueId: string;
@@ -20,6 +22,7 @@ interface LeagueMatchesManagerProps {
 export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
     const [selectedTournament, setSelectedTournament] = useState<string>('ALL');
     const [selectedPhase, setSelectedPhase] = useState<string>('ALL');
+    const { showToast } = useToast();
 
     const {
         leagueMatches,
@@ -49,11 +52,25 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
     const activeCount = leagueMatches.filter((m) => m.activeInLeague).length;
 
     const handleActivateAll = async () => {
-        if (!selectedTournament || selectedTournament === 'ALL') return;
+        if (!selectedTournament || selectedTournament === 'ALL') {
+            showToast('Selecciona un torneo específico primero', 'warning');
+            return;
+        }
+        
+        const tournamentName = leagueTournaments.find(t => t.id === selectedTournament)?.name || 'el torneo';
+        const inactiveCount = leagueMatches.filter(m => !m.activeInLeague).length;
+        
+        if (inactiveCount === 0) {
+            showToast('Todos los partidos ya están activos', 'info');
+            return;
+        }
+        
         try {
             await activateAllTournamentMatches(leagueId, selectedTournament);
+            showToast(`✓ ${inactiveCount} partidos de ${tournamentName} activados correctamente`, 'success');
         } catch (error) {
             console.error('Error activating all matches:', error);
+            showToast('Error al activar los partidos. Intenta de nuevo.', 'error');
         }
     };
 
@@ -82,20 +99,28 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
     return (
         <div className="space-y-6">
             {/* Filtros */}
-            <div className="flex gap-4 items-center">
-                <Select value={selectedTournament} onValueChange={setSelectedTournament}>
-                    <SelectTrigger className="w-64">
-                        <SelectValue placeholder="Todos los torneos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">Todos los torneos</SelectItem>
-                        {leagueTournaments.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                                {t.name} ({t.season})
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+            <div className="flex gap-4 items-center flex-wrap">
+                <div className="flex flex-col gap-1">
+                    <Select value={selectedTournament} onValueChange={setSelectedTournament}>
+                        <SelectTrigger className="w-64">
+                            <SelectValue placeholder="Todos los torneos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="ALL">Todos los torneos</SelectItem>
+                            {leagueTournaments.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>
+                                    {t.name} ({t.season})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {selectedTournament === 'ALL' && leagueTournaments.length > 0 && (
+                        <p className="text-xs text-amber-600 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Selecciona un torneo para activar todos sus partidos
+                        </p>
+                    )}
+                </div>
 
                 <Select value={selectedPhase} onValueChange={setSelectedPhase}>
                     <SelectTrigger className="w-48">
@@ -111,12 +136,36 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                     </SelectContent>
                 </Select>
 
-                <Button
-                    onClick={handleActivateAll}
-                    disabled={selectedTournament === 'ALL' || isLoadingMatches || isSaving}
-                >
-                    Activar Todos del Torneo
-                </Button>
+                <div className="relative group">
+                    <Button
+                        onClick={handleActivateAll}
+                        disabled={selectedTournament === 'ALL' || isLoadingMatches || isSaving}
+                        className="flex items-center gap-2"
+                    >
+                        {isSaving ? (
+                            <>
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                Activando...
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle2 className="h-4 w-4" />
+                                Activar Todos del Torneo
+                            </>
+                        )}
+                    </Button>
+                    
+                    {selectedTournament === 'ALL' && !isLoadingMatches && (
+                        <div className="absolute left-0 top-full mt-2 w-64 p-3 bg-amber-50 border border-amber-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            <div className="flex items-start gap-2">
+                                <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                <p className="text-xs text-amber-800">
+                                    Selecciona un torneo específico para activar todos sus partidos de una vez
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Lista de partidos */}
@@ -207,14 +256,43 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
 
             {/* Información adicional */}
             {leagueMatches.length > 0 && (
-                <div className="text-sm text-gray-500">
-                    <p>
-                        Los partidos activos son los que aparecerán disponibles para pronósticos
-                        en esta polla.
-                    </p>
-                    <p className="mt-1">
-                        Los pronósticos existentes se mantienen incluso si desactivas un partido.
-                    </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-900 space-y-2">
+                            <p className="font-medium">
+                                Cómo activar partidos para pronósticos:
+                            </p>
+                            <ul className="list-disc list-inside space-y-1 ml-2">
+                                <li>
+                                    <strong>Activar todos:</strong> Selecciona un torneo específico y haz clic en "Activar Todos del Torneo"
+                                </li>
+                                <li>
+                                    <strong>Activar individual:</strong> Marca el checkbox al lado de cada partido
+                                </li>
+                            </ul>
+                            <p className="text-xs mt-2 text-blue-700">
+                                ℹ️ Los partidos activos aparecerán en la página de pronósticos. Los pronósticos existentes se mantienen incluso si desactivas un partido.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {leagueMatches.length === 0 && !isLoadingMatches && leagueTournaments.length === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-amber-900">
+                            <p className="font-medium mb-2">No hay partidos disponibles</p>
+                            <p>Para agregar partidos a esta polla:</p>
+                            <ol className="list-decimal list-inside space-y-1 ml-2 mt-2">
+                                <li>Ve a la pestaña <strong>"Torneos"</strong></li>
+                                <li>Vincula un torneo a esta polla</li>
+                                <li>Regresa aquí para activar los partidos</li>
+                            </ol>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
