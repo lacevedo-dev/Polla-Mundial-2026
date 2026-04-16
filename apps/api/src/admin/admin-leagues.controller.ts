@@ -3,7 +3,7 @@ import {
     NotFoundException, ParseIntPipe, DefaultValuePipe, HttpException, HttpStatus, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { LeagueStatus, Plan, MemberStatus, ScoringType, Privacy, Phase } from '@prisma/client';
+import { LeagueStatus, Plan, MemberStatus, ScoringType, Privacy, Phase, MatchStatus } from '@prisma/client';
 import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min, IsNotEmpty, IsNumber, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -502,9 +502,9 @@ export class AdminLeaguesController {
                             homeTeamId: teams[i * 2].id,
                             awayTeamId: teams[i * 2 + 1].id,
                             matchDate,
-                            status: 'NS',
+                            status: MatchStatus.SCHEDULED,
                             round: `Jornada ${i + 1}`,
-                            phase: Phase.GROUP_STAGE,
+                            phase: Phase.GROUP,
                         });
                     }
 

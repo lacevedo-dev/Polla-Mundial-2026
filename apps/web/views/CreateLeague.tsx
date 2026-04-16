@@ -84,12 +84,14 @@ const COUNTRY_CODES: Country[] = [
   { code: '+55', name: 'Brasil', iso: 'br', length: 11, placeholder: '11 91234 5678' },
 ];
 
-// Mock database for existing users validation
-const MOCK_DB = [
-  { phone: '3001234567', name: 'Carlos Gomez', email: 'carlos.g@email.com', avatar: 'https://picsum.photos/seed/carlos/40/40' },
-  { phone: '3109876543', name: 'Ana Maria', email: 'ana.m@email.com', avatar: 'https://picsum.photos/seed/ana/40/40' },
-  { phone: '3205551234', name: 'David Torres', email: 'david.t@email.com', avatar: 'https://picsum.photos/seed/david/40/40' },
-];
+// Interface for user search results
+interface SearchedUser {
+  id: string;
+  name: string;
+  email: string;
+  username?: string;
+  avatar?: string;
+}
 
 const MINOR_WORDS = ['de', 'la', 'del', 'el', 'los', 'las', 'y', 'en', 'por', 'con', 'a', 'para', 'o', 'u', 'e'];
 
@@ -166,6 +168,9 @@ const CreateLeague: React.FC = () => {
   const [searchQuery, setSearchQuery] = React.useState(saved?.searchQuery || '');
   const [leagueId] = React.useState<string>(saved?.leagueId || Math.random().toString(36).substr(2, 6).toUpperCase());
   const [foundExistingUser, setFoundExistingUser] = React.useState<boolean>(saved?.foundExistingUser || false);
+  const [searchResults, setSearchResults] = React.useState<SearchedUser[]>([]);
+  const [isSearching, setIsSearching] = React.useState(false);
+  const [showPlanLimitAlert, setShowPlanLimitAlert] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [tournaments, setTournaments] = React.useState<{ id: string; name: string; country?: string; season: number; logoUrl?: string; active: boolean }[]>([]);
@@ -378,11 +383,51 @@ const CreateLeague: React.FC = () => {
     });
   };
 
-  const handleAddExistingUser = (name: string) => {
-    const newUser: InvitedUser = { id: Math.random().toString(36).substr(2, 9), name, email: `${name.toLowerCase().replace(' ', '.')}@gmail.com`, phone: '3000000000', type: 'existing', avatar: `https://picsum.photos/seed/${name}/40/40` };
+  const handleAddExistingUser = (user: SearchedUser) => {
+    // Validar límite del plan
+    if (invitedUsers.length >= leagueData.participantsCount) {
+      setShowPlanLimitAlert(true);
+      return;
+    }
+
+    const newUser: InvitedUser = { 
+      id: user.id, 
+      name: user.name, 
+      email: user.email, 
+      phone: user.username || 'N/A', 
+      type: 'existing', 
+      avatar: user.avatar 
+    };
     setInvitedUsers([...invitedUsers, newUser]);
     setSearchQuery('');
+    setSearchResults([]);
   };
+
+  // Search users from API
+  React.useEffect(() => {
+    const searchUsers = async () => {
+      if (!searchQuery || searchQuery.trim().length < 2) {
+        setSearchResults([]);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const results = await request<SearchedUser[]>(`/users/search?q=${encodeURIComponent(searchQuery.trim())}`);
+        // Filter out already invited users
+        const filtered = results.filter(user => !invitedUsers.some(invited => invited.id === user.id));
+        setSearchResults(filtered);
+      } catch (error) {
+        console.error('[CreateLeague] Error buscando usuarios:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(searchUsers, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, invitedUsers]);
 
   // VALIDATION LOGIC
   const validateAndCheckUser = (phone: string, country: Country) => {
@@ -399,17 +444,9 @@ const CreateLeague: React.FC = () => {
       return true; // Error exists
     } else {
       setInputErrors(prev => ({ ...prev, phone: '' }));
-      // Check DB
-      const existing = MOCK_DB.find(u => u.phone === phone);
-      if (existing) {
-        setNewUserInput({ name: existing.name, email: existing.email, phone: phone });
-        setFoundExistingUser(true);
-        setInputErrors(prev => ({ ...prev, email: '' }));
-      } else {
-        if (foundExistingUser) {
-          setNewUserInput(prev => ({ ...prev, name: '', email: '' }));
-          setFoundExistingUser(false);
-        }
+      // Reset existing user state - validation is now done via search
+      if (foundExistingUser) {
+        setFoundExistingUser(false);
       }
       return false; // No error
     }
@@ -455,6 +492,12 @@ const CreateLeague: React.FC = () => {
   };
 
   const handleAddUser = () => {
+    // Validar límite del plan
+    if (invitedUsers.length >= leagueData.participantsCount) {
+      setShowPlanLimitAlert(true);
+      return;
+    }
+
     // Final Validation
     const phoneError = validateAndCheckUser(newUserInput.phone, selectedCountry) ? inputErrors.phone : "";
     const emailError = validateEmail(newUserInput.email);
@@ -472,8 +515,8 @@ const CreateLeague: React.FC = () => {
           name: newUserInput.name || 'Invitado',
           email: newUserInput.email,
           phone: `${selectedCountry.code} ${newUserInput.phone}`,
-          type: foundExistingUser ? 'existing' : 'new',
-          avatar: foundExistingUser ? MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar : undefined
+          type: 'new',
+          avatar: undefined
         }
       ]);
       setNewUserInput({ name: '', email: '', phone: '' });
@@ -495,8 +538,12 @@ const CreateLeague: React.FC = () => {
     }));
   };
 
-  const existingUsersPool = ["Luis Morales", "Leo Castiblanco", "Nubia Sarmiento", "Carlos Ruiz", "Andres Cepeda"];
-  const filteredSearch = existingUsersPool.filter(u => u.toLowerCase().includes(searchQuery.toLowerCase()) && !invitedUsers.some(i => i.name === u));
+  // Search results are now managed via API call in useEffect
+
+  // Check if user has reached the plan limit
+  const hasReachedPlanLimit = invitedUsers.length >= leagueData.participantsCount;
+  const currentPlanLimit = PLAN_LIMITS[leagueData.plan];
+  const suggestedPlan = leagueData.participantsCount > 50 ? 'diamond' : leagueData.participantsCount > 10 ? 'gold' : 'free';
 
   const filteredCountries = COUNTRY_CODES.filter(c =>
     c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
@@ -826,13 +873,92 @@ const CreateLeague: React.FC = () => {
             {step === 6 && (
               <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 h-full flex flex-col">
                 <div className="text-center space-y-1"><h4 className="text-xl font-black font-brand uppercase tracking-tighter text-slate-900">INVITA A TU <span className="text-lime-600">GRUPO.</span></h4></div>
+                
+                {/* Alerta de límite de plan alcanzado */}
+                {showPlanLimitAlert && (
+                  <Card className="p-5 rounded-[1.8rem] border-2 border-amber-400 bg-amber-50 shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                        <AlertTriangle size={20} className="text-white" />
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <h5 className="text-sm font-black text-amber-900 uppercase mb-1">Límite de Plan Alcanzado</h5>
+                          <p className="text-xs font-medium text-amber-800">
+                            Has alcanzado el límite de <span className="font-black">{currentPlanLimit} invitados</span> para el plan <span className="font-black uppercase">{leagueData.plan}</span>.
+                            {suggestedPlan !== leagueData.plan && (
+                              <> Actualiza a <span className="font-black uppercase">{suggestedPlan}</span> para invitar hasta <span className="font-black">{PLAN_LIMITS[suggestedPlan as keyof typeof PLAN_LIMITS]} personas</span>.</>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              setShowPlanLimitAlert(false);
+                              navigate('/checkout');
+                            }}
+                            className="h-9 rounded-xl font-black text-[9px] uppercase tracking-widest bg-amber-500 hover:bg-amber-600 border-0 shadow-lg"
+                          >
+                            <Crown size={14} className="mr-1.5" /> MEJORAR PLAN
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowPlanLimitAlert(false)}
+                            className="h-9 rounded-xl font-bold text-[9px] uppercase tracking-widest border-amber-300 text-amber-700 hover:bg-amber-100"
+                          >
+                            CERRAR
+                          </Button>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowPlanLimitAlert(false)}
+                        className="text-amber-600 hover:text-amber-800 shrink-0"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </Card>
+                )}
+
                 <Card className="p-5 rounded-[1.8rem] border-slate-200 shadow-sm space-y-3 relative z-10">
-                  <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} /><input type="text" placeholder="Buscar amigos..." className="w-full h-11 pl-11 pr-4 bg-white border border-slate-300 rounded-xl outline-none focus:border-lime-500 font-bold text-xs text-slate-900 placeholder:text-slate-400" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                  {searchQuery && filteredSearch.length > 0 && (
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <input 
+                      type="text" 
+                      placeholder={hasReachedPlanLimit ? "Límite alcanzado - Mejora tu plan" : "Buscar amigos..."} 
+                      className={`w-full h-11 pl-11 pr-4 bg-white border rounded-xl outline-none font-bold text-xs placeholder:text-slate-400 ${hasReachedPlanLimit ? 'border-amber-300 bg-amber-50/30 cursor-not-allowed' : 'border-slate-300 focus:border-lime-500 text-slate-900'}`}
+                      value={searchQuery} 
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      disabled={hasReachedPlanLimit}
+                    />
+                  </div>
+                  {searchQuery && (
                     <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-hide">
-                      {filteredSearch.map(name => (
-                        <button key={name} onClick={() => handleAddExistingUser(name)} className="w-full flex items-center gap-3 p-2.5 hover:bg-lime-50 rounded-xl transition-all"><img src={`https://picsum.photos/seed/${name}/40/40`} className="w-8 h-8 rounded-lg" /><span className="text-xs font-black text-slate-900 uppercase">{name}</span><Plus size={14} className="ml-auto text-lime-500" /></button>
-                      ))}
+                      {isSearching ? (
+                        <div className="p-3 text-center text-xs text-slate-400 font-medium">Buscando...</div>
+                      ) : searchResults.length > 0 ? (
+                        searchResults.map(user => (
+                          <button key={user.id} onClick={() => handleAddExistingUser(user)} className="w-full flex items-center gap-3 p-2.5 hover:bg-lime-50 rounded-xl transition-all">
+                            {user.avatar ? (
+                              <img src={user.avatar} className="w-8 h-8 rounded-lg object-cover" alt={user.name} />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs">
+                                {user.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="flex-1 text-left">
+                              <span className="text-xs font-black text-slate-900 block">{user.name}</span>
+                              <span className="text-[10px] font-medium text-slate-500">{user.email}</span>
+                            </div>
+                            <Plus size={14} className="ml-auto text-lime-500" />
+                          </button>
+                        ))
+                      ) : searchQuery.trim().length >= 2 ? (
+                        <div className="p-3 text-center text-xs text-slate-400 font-medium">No se encontraron usuarios</div>
+                      ) : null}
                     </div>
                   )}
                 </Card>
@@ -916,18 +1042,6 @@ const CreateLeague: React.FC = () => {
                       {inputErrors.email && <p className="text-[9px] text-rose-500 font-bold ml-1 animate-in slide-in-from-top-1">{inputErrors.email}</p>}
                     </div>
 
-                    {foundExistingUser && (
-                      <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-lime-200 shadow-sm animate-in fade-in slide-in-from-top-2">
-                        <img src={MOCK_DB.find(u => u.phone === newUserInput.phone)?.avatar} className="w-10 h-10 rounded-lg shadow-sm" />
-                        <div>
-                          <p className="text-[10px] font-black text-lime-700 uppercase tracking-tight">¡Usuario Encontrado!</p>
-                          <p className="text-[10px] font-bold text-slate-600">{newUserInput.name}</p>
-                        </div>
-                        <div className="ml-auto bg-lime-100 rounded-full p-1">
-                          <CheckCircle2 size={16} className="text-lime-600" />
-                        </div>
-                      </div>
-                    )}
 
                     <Button
                       onClick={handleAddUser}
@@ -940,7 +1054,17 @@ const CreateLeague: React.FC = () => {
                   </div>
                 </Card>
                 <div className="space-y-2 flex-1 overflow-hidden flex flex-col">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1">INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})</span>
+                  <div className="flex items-center justify-between px-1">
+                    <span className={`text-[8px] font-black uppercase tracking-widest ${hasReachedPlanLimit ? 'text-amber-600' : 'text-slate-500'}`}>
+                      INVITADOS ({invitedUsers.length}/{leagueData.participantsCount})
+                    </span>
+                    {hasReachedPlanLimit && (
+                      <div className="flex items-center gap-1">
+                        <AlertCircle size={10} className="text-amber-500" />
+                        <span className="text-[8px] font-bold text-amber-600 uppercase">Límite</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 gap-2 overflow-y-auto scrollbar-hide pb-2">
                     {invitedUsers.map(user => (
                       <div key={user.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-xl"><div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">{user.avatar ? <img src={user.avatar} className="w-full h-full rounded-lg" /> : <UserPlus size={14} />}</div><div className="flex-1"><p className="text-[11px] font-black text-slate-900 uppercase leading-none mb-1">{user.name}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{user.phone} • {user.email}</p></div><button onClick={() => setInvitedUsers(invitedUsers.filter(u => u.id !== user.id))} className="text-rose-400 hover:text-rose-600"><X size={14} /></button></div>
@@ -1055,6 +1179,40 @@ const CreateLeague: React.FC = () => {
                       {/* Decoration */}
                       <div className="absolute -top-10 -right-10 w-32 h-32 bg-lime-500/10 rounded-full blur-2xl"></div>
                     </div>
+
+                    {/* Invitados Section */}
+                    {invitedUsers.length > 0 && (
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                            <Users size={12} /> INVITADOS
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-600">{invitedUsers.length} de {leagueData.participantsCount}</span>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto scrollbar-custom">
+                          {invitedUsers.map(user => (
+                            <div key={user.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-100">
+                              <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 shrink-0">
+                                {user.avatar ? (
+                                  <img src={user.avatar} className="w-full h-full rounded-lg object-cover" alt={user.name} />
+                                ) : (
+                                  <span className="text-xs font-bold">{user.name.charAt(0).toUpperCase()}</span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] font-black text-slate-900 uppercase leading-none truncate">{user.name}</p>
+                                <p className="text-[9px] font-medium text-slate-500 truncate">{user.email}</p>
+                              </div>
+                              <div className="shrink-0">
+                                <Badge color={user.type === 'existing' ? 'bg-lime-100 text-lime-700 border border-lime-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}>
+                                  <span className="text-[8px] font-black uppercase">{user.type === 'existing' ? 'Usuario' : 'Nuevo'}</span>
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <button onClick={() => setStep(2)} className="w-full text-center text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 pt-2">
                       <Eye size={12} /> REVISAR CONFIGURACIÓN
