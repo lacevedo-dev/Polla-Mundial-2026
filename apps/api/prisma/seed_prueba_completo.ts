@@ -41,8 +41,8 @@ const USERS = [
     phone: '3000000000', cc: '+57',
     plan: 'DIAMOND', systemRole: 'SUPERADMIN',
     pass: PASS_SUPER,
-    leagues: ['L1:PLAYER:ACTIVE:paid-gateway', 'L2:PLAYER:ACTIVE:paid-gateway', 'L3:PLAYER:ACTIVE:paid-gateway'],
-    tag: '🔵 SUPERADMIN (3 ligas)',
+    leagues: [],
+    tag: '🔵 SUPERADMIN',
   },
   // ── Admins de liga ──────────────────────────────────────────────────────────
   {
@@ -356,7 +356,6 @@ const FINISHED_RESULTS = {
 type Pred = [number, number] | null;
 const PREDICTIONS: Record<string, Pred[]> = {
   // Finalizados                        COL-BRA  ESP-ARG  FRA-POR  // Programados COL-ARG  BRA-ESP  FRA-GER
-  prueba_superadmin:[[2,1],  [1,1],  [3,0],   [2,0],  [1,1],  [2,1]],  // SUPERADMIN: Perfecto en finalizados
   prueba_admin1:    [[2,1],  [1,1],  [3,0],   [2,1],  [2,2],  [1,1]],  // Perfecto: 15 pts
   prueba_gold1:     [[1,0],  [2,2],  [2,0],   [1,0],  [3,2],  [1,0]],  // Winner: ~6 pts
   prueba_gold2:     [[2,1],  [0,0],  [3,0],   [2,0],  [2,1],  [2,0]],  // Exacto+emp: ~12 pts
