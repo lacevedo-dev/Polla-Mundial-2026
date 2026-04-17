@@ -1417,14 +1417,11 @@ const Dashboard: React.FC = () => {
                 setExpandLevel(1);
                 return matchId;
             }
-            if (expandLevel === 1) {
-                setExpandLevel(2);
-                return prev;
-            }
+            // Si ya está expandido, colapsarlo
             setExpandLevel(1);
             return null;
         });
-    }, [expandLevel]);
+    }, []);
 
     // Modo flotante para el panel de partidos en vivo
     const [isFloating, setIsFloating] = React.useState(() => {
@@ -2004,8 +2001,7 @@ const Dashboard: React.FC = () => {
                             })}
                         </div>
 
-                        {/* Panel expandido — ancho de una columna en escritorio */}
-                        <div className="grid grid-cols-1 xl:grid-cols-3">
+                        {/* Panel expandido — ocupa 3 columnas en escritorio, 1 en móvil */}
                         <AnimatePresence>
                             {expandedMatch && (
                                 <motion.div
@@ -2014,7 +2010,7 @@ const Dashboard: React.FC = () => {
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.22, ease: 'easeOut' as const }}
-                                    className="overflow-hidden xl:col-span-1"
+                                    className="overflow-hidden col-span-1"
                                 >
                                     <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-4">
                                         {/* Timer + estado predicción + pts */}
