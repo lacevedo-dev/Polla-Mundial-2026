@@ -115,7 +115,12 @@ async function main() {
     };
   });
 
-  const emailSvc = new PredictionReportEmailService();
+  // Mock EmailQueueService para testing
+  const mockEmailQueue = {
+    enqueueEmail: async () => ({ success: true }),
+  } as any;
+  
+  const emailSvc = new PredictionReportEmailService(mockEmailQueue);
   const matchInfo = {
     homeTeam:  match.homeTeam.name,
     awayTeam:  match.awayTeam.name,

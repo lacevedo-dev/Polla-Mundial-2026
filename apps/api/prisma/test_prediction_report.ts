@@ -59,7 +59,12 @@ async function main() {
     };
   });
 
-  const emailSvc = new PredictionReportEmailService();
+  // Mock EmailQueueService para testing
+  const mockEmailQueue = {
+    enqueueEmail: async () => ({ success: true }),
+  } as any;
+  
+  const emailSvc = new PredictionReportEmailService(mockEmailQueue);
 
   console.log(`\n📧 Enviando reporte de prueba a: ${testEmail}`);
   console.log(`   Partido: ${match.homeTeam.name} vs ${match.awayTeam.name}`);
