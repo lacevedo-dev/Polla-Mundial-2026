@@ -15,6 +15,8 @@ import {
     type AdminPredictionFilterOption,
 } from '../../stores/admin.predictions.store';
 import AdminPagination from '../../components/admin/AdminPagination';
+import { Tooltip } from '../../components/ui/Tooltip';
+import { PointsBreakdown } from '../../components/ui/PointsBreakdown';
 
 type PointDetail = {
     type: 'EXACT_SCORE' | 'CORRECT_WINNER_GOAL' | 'CORRECT_WINNER' | 'TEAM_GOALS' | 'NONE';
@@ -401,9 +403,17 @@ const AdminPredictions: React.FC = () => {
                                                 <Icon size={14} />
                                                 {meta.label}
                                             </span>
-                                            <p className={`text-lg font-black ${meta.points}`}>
-                                                {prediction.points ?? 0} pts
-                                            </p>
+                                            {detail ? (
+                                                <Tooltip content={<PointsBreakdown detail={detail} compact />}>
+                                                    <p className={`text-lg font-black ${meta.points} cursor-help underline decoration-dotted decoration-2 underline-offset-4`}>
+                                                        {prediction.points ?? 0} pts
+                                                    </p>
+                                                </Tooltip>
+                                            ) : (
+                                                <p className={`text-lg font-black ${meta.points}`}>
+                                                    {prediction.points ?? 0} pts
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 

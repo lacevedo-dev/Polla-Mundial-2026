@@ -55,7 +55,7 @@ export interface SendResultParams {
 export class PredictionReportEmailService {
   private readonly logger = new Logger(PredictionReportEmailService.name);
 
-  constructor(private readonly emailQueue?: EmailQueueService) {}
+  constructor(private readonly emailQueue: EmailQueueService) {}
 
   async sendPredictionsReport(params: SendReportParams): Promise<void> {
     if (!this.emailQueue) {
@@ -93,11 +93,6 @@ export class PredictionReportEmailService {
   }
 
   async sendResultsReport(params: SendResultParams): Promise<void> {
-    if (!this.emailQueue) {
-      this.logger.warn('Results report email queue is not available; skipping queued delivery.');
-      return;
-    }
-
     const html = this.buildResultHtml(params);
     const text = this.buildResultPlainText(params);
     const subject = `✅ Resultado final: ${params.match.homeTeam} ${params.match.homeScore}-${params.match.awayScore} ${params.match.awayTeam} | ${params.leagueName}`;

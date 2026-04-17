@@ -150,6 +150,18 @@ export interface LeaderboardBreakdownDetail {
     id: string;
     points: number;
     summaryLabel: string;
+    pointDetail?: {
+        type: string;
+        exactPoints: number;
+        winnerPoints: number;
+        goalPoints: number;
+        uniqueBonus: number;
+        basePoints: number;
+        phase: string;
+        multiplier: number;
+        total: number;
+        explanation?: string;
+    } | null;
     date: string;
     displayDate: string;
     phase: string;
@@ -378,6 +390,7 @@ export function toLeaderboardBreakdown(
             id: item.id,
             points: item.points,
             summaryLabel: toPointSummaryLabel(item.pointDetail),
+            pointDetail: item.pointDetail,
             date: item.match.matchDate,
             displayDate: toDisplayDate(item.match.matchDate),
             phase: item.match.phase,

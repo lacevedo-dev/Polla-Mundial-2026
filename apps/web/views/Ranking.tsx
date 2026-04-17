@@ -7,6 +7,8 @@ import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type LeaderboardRow } from '../stores/prediction.store';
 import type { LeaderboardCategory } from '../stores/prediction.adapters';
 import { useAuthStore } from '../stores/auth.store';
+import { Tooltip } from '../components/ui/Tooltip';
+import { PointsBreakdown, type PointDetail } from '../components/ui/PointsBreakdown';
 
 // â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -544,8 +546,19 @@ const Ranking: React.FC = () => {
                                                                             <p className="mt-2 text-[11px] font-semibold text-slate-600">{match.summaryLabel}</p>
                                                                         </div>
                                                                         <div className="text-right">
-                                                                            <p className="text-lg font-black text-lime-600">{match.points}</p>
-                                                                            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">pts</p>
+                                                                            {match.pointDetail ? (
+                                                                                <Tooltip content={<PointsBreakdown detail={match.pointDetail as PointDetail} compact />}>
+                                                                                    <div className="cursor-help">
+                                                                                        <p className="text-lg font-black text-lime-600 underline decoration-dotted decoration-2 underline-offset-4">{match.points}</p>
+                                                                                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">pts</p>
+                                                                                    </div>
+                                                                                </Tooltip>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <p className="text-lg font-black text-lime-600">{match.points}</p>
+                                                                                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">pts</p>
+                                                                                </>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>
