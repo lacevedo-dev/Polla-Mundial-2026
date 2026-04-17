@@ -33,6 +33,8 @@ export interface PredictionPointDetail {
     phase: Phase;
     multiplier: number;
     total: number;
+    /** Explicación legible del cálculo (ej: "5 pts (marcador exacto) × 1.5 (eliminatoria) = 7.5 pts") */
+    explanation?: string;
 }
 
 type CalculatePointsResult = { total: number; detail: PredictionPointDetail };
@@ -221,6 +223,11 @@ export class PredictionsService {
             result.detail.uniqueBonus = uniqueBonus;
             result.detail.total = newTotal;
 
+            // Agregar el bono único a la explicación
+            if (uniqueBonus > 0 && result.detail.explanation) {
+                result.detail.explanation = result.detail.explanation.replace(/ = ([\d.]+) pts$/, ` + Única (${uniqueBonus} pts) = ${newTotal} pts`);
+            }
+
             await this.prisma.prediction.update({
                 where: { id: pred.id },
                 data: {
@@ -384,6 +391,26 @@ export class PredictionsService {
         const phaseMultiplier = match.phase !== Phase.GROUP ? PredictionsService.KNOCKOUT_PHASE_MULTIPLIER : 1.0;
         const total = basePoints * phaseMultiplier;
 
+        // Generar explicación legible del cálculo
+        let explanation = '';
+        if (type === 'EXACT_SCORE') {
+            explanation = `Marcador exacto: ${basePoints} pts`;
+        } else if (type === 'CORRECT_WINNER_GOAL') {
+            explanation = `Ganador (${winnerPoints} pts) + Gol (${goalPoints} pt)`;
+        } else if (type === 'CORRECT_WINNER') {
+            explanation = `Ganador correcto: ${winnerPoints} pts`;
+        } else if (type === 'TEAM_GOALS') {
+            explanation = `Gol acertado: ${goalPoints} pt`;
+        } else {
+            explanation = 'Sin aciertos';
+        }
+
+        if (phaseMultiplier !== 1.0) {
+            explanation += ` × ${phaseMultiplier} (eliminatoria) = ${total} pts`;
+        } else if (basePoints > 0) {
+            explanation += ` = ${total} pts`;
+        }
+
         const detail: PredictionPointDetail = {
             type,
             exactPoints,
@@ -394,6 +421,7 @@ export class PredictionsService {
             phase: match.phase,
             multiplier: phaseMultiplier,
             total,
+            explanation,
         };
 
         return { total, detail };

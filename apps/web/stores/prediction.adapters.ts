@@ -129,6 +129,7 @@ export interface LeaderboardBreakdownApiResponse {
             phase: string;
             multiplier: number;
             total: number;
+            explanation?: string;
         } | null;
         prediction: {
             homeScore: number;
@@ -193,6 +194,12 @@ export interface LeaderboardBreakdown {
 function toPointSummaryLabel(pointDetail?: LeaderboardBreakdownApiResponse['matches'][number]['pointDetail'] | null): string {
     if (!pointDetail) return 'Sin puntos';
 
+    // Si existe la explicación, usarla directamente (es más clara y completa)
+    if (pointDetail.explanation) {
+        return pointDetail.explanation;
+    }
+
+    // Fallback para datos antiguos sin explanation
     const parts: string[] = [];
     if (pointDetail.exactPoints > 0) parts.push(`Marcador exacto +${pointDetail.exactPoints}`);
     if (pointDetail.winnerPoints > 0) parts.push(`Ganador +${pointDetail.winnerPoints}`);
