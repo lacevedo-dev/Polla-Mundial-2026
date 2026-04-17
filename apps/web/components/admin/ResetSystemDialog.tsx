@@ -22,6 +22,7 @@ const ResetSystemDialog: React.FC<ResetSystemDialogProps> = ({
         leagues: true,
         payments: true,
         notifications: true,
+        matches: true,
     });
 
     const handleToggle = (key: keyof ResetOptions) => {
@@ -43,6 +44,7 @@ const ResetSystemDialog: React.FC<ResetSystemDialogProps> = ({
         { key: 'leagues' as const, label: 'Ligas', description: 'Eliminar todas las ligas creadas' },
         { key: 'payments' as const, label: 'Pagos y Órdenes', description: 'Eliminar registros de pagos y órdenes' },
         { key: 'notifications' as const, label: 'Notificaciones', description: 'Eliminar notificaciones relacionadas con ligas' },
+        { key: 'matches' as const, label: 'Partidos', description: 'Eliminar todos los partidos y resultados' },
     ];
 
     return (

@@ -34,13 +34,14 @@ export class AdminSystemController {
         }
 
         // Si no se especifica ninguna opción, reiniciar todo
-        const shouldResetAll = !options.predictions && !options.participations && !options.leagues && !options.payments && !options.notifications;
+        const shouldResetAll = !options.predictions && !options.participations && !options.leagues && !options.payments && !options.notifications && !options.matches;
         const resetOptions = {
             predictions: shouldResetAll || options.predictions,
             participations: shouldResetAll || options.participations,
             leagues: shouldResetAll || options.leagues,
             payments: shouldResetAll || options.payments,
             notifications: shouldResetAll || options.notifications,
+            matches: shouldResetAll || options.matches,
         };
 
         try {
@@ -53,6 +54,7 @@ export class AdminSystemController {
                     orders: 0,
                     notifications: 0,
                     leagues: 0,
+                    matches: 0,
                 };
 
                 // 1. Eliminar predicciones (dependen de participaciones y partidos)
@@ -95,6 +97,12 @@ export class AdminSystemController {
                     counts.leagues = result.count;
                 }
 
+                // 6. Eliminar partidos (independiente de otras entidades)
+                if (resetOptions.matches) {
+                    const result = await tx.match.deleteMany({});
+                    counts.matches = result.count;
+                }
+
                 return counts;
             });
 
@@ -104,6 +112,7 @@ export class AdminSystemController {
                 const leagues = await tx.league.count();
                 const payments = await tx.payment.count();
                 const orders = await tx.order.count();
+                const matches = await tx.match.count();
 
                 return {
                     predictions,
@@ -111,6 +120,7 @@ export class AdminSystemController {
                     leagues,
                     payments,
                     orders,
+                    matches,
                 };
             });
 
@@ -123,6 +133,7 @@ export class AdminSystemController {
                 deletedItems.push(`${deletedCounts.payments} pagos y ${deletedCounts.orders} órdenes`);
             }
             if (resetOptions.notifications && deletedCounts.notifications > 0) deletedItems.push(`${deletedCounts.notifications} notificaciones`);
+            if (resetOptions.matches && deletedCounts.matches > 0) deletedItems.push(`${deletedCounts.matches} partidos`);
 
             const message = deletedItems.length > 0
                 ? `Eliminados: ${deletedItems.join(', ')}`
@@ -139,6 +150,7 @@ export class AdminSystemController {
                     leagues: result.leagues,
                     payments: result.payments,
                     orders: result.orders,
+                    matches: result.matches,
                 },
             };
         } catch (error) {

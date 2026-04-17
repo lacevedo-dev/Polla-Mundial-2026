@@ -17,6 +17,7 @@ export interface ResetOptions {
     leagues?: boolean;
     payments?: boolean;
     notifications?: boolean;
+    matches?: boolean;
 }
 
 export interface TestModeConfig {

@@ -20,4 +20,8 @@ export class ResetSystemDto {
     @IsOptional()
     @IsBoolean()
     notifications?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    matches?: boolean;
 }
