@@ -253,7 +253,7 @@ export class NotificationScheduler {
               venue: true,
               homeTeam: { select: { name: true } },
               awayTeam: { select: { name: true } },
-              predictions: { select: { userId: true } },
+              predictions: { select: { userId: true, leagueId: true } },
             },
           });
 
@@ -266,8 +266,126 @@ export class NotificationScheduler {
         );
         const home = match.homeTeam.name;
         const away = match.awayTeam.name;
-        const predictedUserIds = new Set(match.predictions.map((prediction) => prediction.userId));
+        
+        // Agrupar usuarios por partido para evitar notificaciones duplicadas
+        const userLeaguesMap = new Map<string, Array<{ leagueId: string; leagueName?: string; hasPrediction: boolean }>>();
+        const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
 
+        // Construir mapa de usuarios con sus pollas para este partido
+        for (const league of leagues) {
+          for (const member of league.members) {
+            const userId = member.userId;
+            if (!userLeaguesMap.has(userId)) {
+              userLeaguesMap.set(userId, []);
+            }
+            const userPrediction = match.predictions.find(
+              (p) => p.userId === userId && p.leagueId === league.id
+            );
+            userLeaguesMap.get(userId)!.push({
+              leagueId: league.id,
+              hasPrediction: !!userPrediction,
+            });
+          }
+        }
+
+        // Obtener usuarios únicos y sus contactos
+        const allUserIds = [...userLeaguesMap.keys()];
+        const [alreadySentReminders, userContacts] = await Promise.all([
+          this.prisma.notification.findMany({
+            where: {
+              userId: { in: allUserIds },
+              type: NotificationType.MATCH_REMINDER,
+              data: { contains: `"matchId":"${match.id}"` },
+            },
+            select: { userId: true },
+          }),
+          this.fetchActiveUserContacts(allUserIds),
+        ]);
+        const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
+
+        // Enviar una notificación por usuario (agrupada)
+        let totalDelivered = 0;
+        let totalPushSent = 0;
+        let totalPushFailed = 0;
+        let totalPushDevices = 0;
+        let totalWhatsappSent = 0;
+        let totalEmailQueued = 0;
+        let totalAlreadySent = 0;
+
+        for (const [userId, userLeagues] of userLeaguesMap) {
+          const key = `${match.id}:${userId}`;
+          if (notified.has(key) || alreadySentUserIds.has(userId)) {
+            if (alreadySentUserIds.has(userId)) totalAlreadySent++;
+            notified.add(key);
+            continue;
+          }
+
+          const pollasWithPrediction = userLeagues.filter((ul) => ul.hasPrediction).length;
+          const pollasPending = userLeagues.filter((ul) => !ul.hasPrediction).length;
+          const totalPollas = userLeagues.length;
+
+          // Construir mensaje optimizado
+          const title = '⏰ Recordatorio de partido';
+          let body: string;
+          if (totalPollas === 1) {
+            body = pollasWithPrediction > 0
+              ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
+              : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
+          } else {
+            if (pollasPending === 0) {
+              body = `Falta 1 hora para ${home} vs ${away}. Tienes pronósticos guardados en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
+            } else if (pollasWithPrediction === 0) {
+              body = `Falta 1 hora para ${home} vs ${away}. Tienes ${totalPollas} polla${totalPollas > 1 ? 's' : ''} pendiente${totalPollas > 1 ? 's' : ''} de pronóstico.`;
+            } else {
+              body = `Falta 1 hora para ${home} vs ${away}. Tienes ${pollasPending} polla${pollasPending > 1 ? 's' : ''} pendiente${pollasPending > 1 ? 's' : ''} de ${totalPollas}.`;
+            }
+          }
+
+          const delivery = await this.notifyUser(
+            userId,
+            NotificationType.MATCH_REMINDER,
+            title,
+            body,
+            { 
+              matchId: match.id, 
+              leagueIds: userLeagues.map(ul => ul.leagueId),
+              totalPollas,
+              pollasPending,
+              pollasWithPrediction,
+            },
+            `Partido en ~60 min: ${home} vs ${away}`,
+            userContacts.get(userId) ?? null,
+          );
+          totalDelivered++;
+          totalPushSent += delivery.pushSent;
+          totalPushFailed += delivery.pushFailed;
+          totalPushDevices += delivery.pushDevices;
+          totalWhatsappSent += delivery.whatsappSent ? 1 : 0;
+
+          const emailContent = this.matchEmailTemplates.buildReminderEmail({
+            homeTeam: home,
+            awayTeam: away,
+            matchDate: match.matchDate,
+            venue: match.venue ?? undefined,
+            hasPrediction: pollasWithPrediction > 0,
+          });
+
+          await this.queueUserEmail(
+            userId,
+            EmailJobType.MATCH_REMINDER,
+            EmailJobPriority.HIGH,
+            true,
+            `match-reminder:${match.id}:${userId}`,
+            emailContent,
+            match.id,
+            userLeagues[0].leagueId,
+          );
+          totalEmailQueued++;
+
+          notified.add(key);
+        }
+
+        // Registrar observabilidad por liga
         for (const league of leagues) {
           const scheduledAt = this.observability.getScheduledAt(
             AutomationStep.MATCH_REMINDER,
@@ -285,113 +403,37 @@ export class NotificationScheduler {
             audienceCount: league.members.length,
             summary: `Evaluando recordatorio para ${home} vs ${away}`,
           });
-          let deliveredCount = 0;
-          let pushSent = 0;
-          let pushFailed = 0;
-          let pushDevices = 0;
-          let whatsappSentCount = 0;
-          let emailQueued = 0;
-          let alreadySentCount = 0;
 
           try {
-            const memberUserIds = league.members.map((m) => m.userId);
-
-            // Batch-load both already-sent check and contact info — one query each.
-            const [alreadySentReminders, userContacts] = await Promise.all([
-              this.prisma.notification.findMany({
-                where: {
-                  userId: { in: memberUserIds },
-                  type: NotificationType.MATCH_REMINDER,
-                  data: { contains: `"matchId":"${match.id}"` },
-                },
-                select: { userId: true },
-              }),
-              this.fetchActiveUserContacts(memberUserIds),
-            ]);
-            const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
-
-            for (const member of league.members) {
-              const userId = member.userId;
-              const key = `${match.id}:${userId}`;
-              if (notified.has(key)) continue;
-
-              if (alreadySentUserIds.has(userId)) {
-                notified.add(key);
-                alreadySentCount++;
-                continue;
-              }
-
-              const hasPrediction = predictedUserIds.has(userId);
-              const title = 'Recordatorio de partido';
-              const body = hasPrediction
-                ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
-                : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
-
-              const delivery = await this.notifyUser(
-                userId,
-                NotificationType.MATCH_REMINDER,
-                title,
-                body,
-                { matchId: match.id, leagueId: league.id },
-                `Partido en ~60 min: ${home} vs ${away}`,
-                userContacts.get(userId) ?? null,
-              );
-              deliveredCount++;
-              pushSent += delivery.pushSent;
-              pushFailed += delivery.pushFailed;
-              pushDevices += delivery.pushDevices;
-              whatsappSentCount += delivery.whatsappSent ? 1 : 0;
-
-              const emailContent = this.matchEmailTemplates.buildReminderEmail({
-                homeTeam: home,
-                awayTeam: away,
-                matchDate: match.matchDate,
-                venue: match.venue ?? undefined,
-                hasPrediction,
-              });
-
-              await this.queueUserEmail(
-                userId,
-                EmailJobType.MATCH_REMINDER,
-                EmailJobPriority.HIGH,
-                true,
-                `match-reminder:${match.id}:${userId}`,
-                emailContent,
-                match.id,
-                league.id,
-              );
-              emailQueued++;
-
-              notified.add(key);
-            }
 
             await this.observability.finishRun(runId, {
               status:
-                deliveredCount === 0 && alreadySentCount > 0
+                totalDelivered === 0 && totalAlreadySent > 0
                   ? 'SKIPPED'
-                  : pushFailed > 0
+                  : totalPushFailed > 0
                     ? 'WARNING'
-                    : deliveredCount > 0
+                    : totalDelivered > 0
                       ? 'SUCCESS'
                       : 'SKIPPED',
-              summary: deliveredCount > 0
-                ? `Recordatorio procesado para ${league.members.length} miembros`
+              summary: totalDelivered > 0
+                ? `Recordatorio agrupado procesado para ${league.members.length} miembros`
                 : 'No hubo envíos nuevos para este recordatorio.',
-              deliveredCount,
-              failedCount: pushFailed,
-              warningCount: pushFailed > 0 ? pushFailed : 0,
+              deliveredCount: totalDelivered,
+              failedCount: totalPushFailed,
+              warningCount: totalPushFailed > 0 ? totalPushFailed : 0,
               details: {
                 matchId: match.id,
                 leagueId: league.id,
                 channelBreakdown: {
-                  pushSent,
-                  pushFailed,
-                  pushDevices,
-                  whatsappSentCount,
-                  emailQueued,
+                  pushSent: totalPushSent,
+                  pushFailed: totalPushFailed,
+                  pushDevices: totalPushDevices,
+                  whatsappSentCount: totalWhatsappSent,
+                  emailQueued: totalEmailQueued,
                 },
-                alreadySentCount,
+                alreadySentCount: totalAlreadySent,
                 predictedUsers: predictedUserIds.size,
+                groupedNotifications: true,
               },
             });
           } catch (error) {
@@ -401,7 +443,7 @@ export class NotificationScheduler {
               {
                 matchId: match.id,
                 leagueId: league.id,
-                alreadySentCount,
+                alreadySentCount: totalAlreadySent,
               },
               'Falló el procesamiento del recordatorio automático.',
             );
@@ -526,18 +568,131 @@ export class NotificationScheduler {
                 venue: true,
                 homeTeam: { select: { name: true } },
                 awayTeam: { select: { name: true } },
-                predictions: { select: { userId: true } },
+                predictions: { select: { userId: true, leagueId: true } },
               },
             });
 
         for (const match of matches) {
-          const predictedUserIds = new Set(match.predictions.map((prediction) => prediction.userId));
+          const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
           const home = match.homeTeam.name;
           const away = match.awayTeam.name;
           const relevantLeagues = leagues.filter(
             (league) => league.leagueTournaments.length === 0 || league.leagueTournaments.some((entry) => entry.tournamentId === match.tournamentId),
           );
 
+          // Agrupar usuarios por partido para evitar notificaciones duplicadas
+          const userLeaguesMap = new Map<string, Array<{ leagueId: string; hasPrediction: boolean }>>();
+          for (const league of relevantLeagues) {
+            for (const member of league.members) {
+              const userId = member.userId;
+              if (!userLeaguesMap.has(userId)) {
+                userLeaguesMap.set(userId, []);
+              }
+              const userPrediction = match.predictions.find(
+                (p) => p.userId === userId && p.leagueId === league.id
+              );
+              userLeaguesMap.get(userId)!.push({
+                leagueId: league.id,
+                hasPrediction: !!userPrediction,
+              });
+            }
+          }
+
+          // Obtener usuarios únicos y sus contactos
+          const allUserIds = [...userLeaguesMap.keys()];
+          const [alreadySentAlerts, userContacts] = await Promise.all([
+            this.prisma.notification.findMany({
+              where: {
+                userId: { in: allUserIds },
+                type: NotificationType.PREDICTION_CLOSED,
+                data: { contains: `"matchId":"${match.id}"` },
+              },
+              select: { userId: true },
+            }),
+            this.fetchActiveUserContacts(allUserIds),
+          ]);
+          const alreadySentUserIds = new Set(alreadySentAlerts.map((n) => n.userId));
+
+          // Enviar una notificación por usuario (agrupada)
+          let totalDelivered = 0;
+          let totalPushSent = 0;
+          let totalPushFailed = 0;
+          let totalPushDevices = 0;
+          let totalWhatsappSent = 0;
+          let totalEmailQueued = 0;
+          let totalAlreadySent = 0;
+
+          for (const [userId, userLeagues] of userLeaguesMap) {
+            if (alreadySentUserIds.has(userId)) {
+              totalAlreadySent++;
+              continue;
+            }
+
+            const pollasWithPrediction = userLeagues.filter((ul) => ul.hasPrediction).length;
+            const pollasPending = userLeagues.filter((ul) => !ul.hasPrediction).length;
+            const totalPollas = userLeagues.length;
+
+            // Construir mensaje optimizado
+            const title = pollasPending > 0 ? '⚠️ Predicciones cierran pronto' : '⚠️ Predicciones cerrando';
+            let body: string;
+            if (totalPollas === 1) {
+              body = pollasWithPrediction > 0
+                ? `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tu pronóstico ya está guardado.`
+                : `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Envía tu pronóstico ahora.`;
+            } else {
+              if (pollasPending === 0) {
+                body = `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tienes pronósticos en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
+              } else if (pollasWithPrediction === 0) {
+                body = `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Tienes ${totalPollas} polla${totalPollas > 1 ? 's' : ''} pendiente${totalPollas > 1 ? 's' : ''}.`;
+              } else {
+                body = `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Tienes ${pollasPending} polla${pollasPending > 1 ? 's' : ''} pendiente${pollasPending > 1 ? 's' : ''} de ${totalPollas}.`;
+              }
+            }
+
+            const delivery = await this.notifyUser(
+              userId,
+              NotificationType.PREDICTION_CLOSED,
+              title,
+              body,
+              { 
+                matchId: match.id, 
+                leagueIds: userLeagues.map(ul => ul.leagueId),
+                totalPollas,
+                pollasPending,
+                pollasWithPrediction,
+              },
+              `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+              userContacts.get(userId) ?? null,
+            );
+            totalDelivered++;
+            totalPushSent += delivery.pushSent;
+            totalPushFailed += delivery.pushFailed;
+            totalPushDevices += delivery.pushDevices;
+            totalWhatsappSent += delivery.whatsappSent ? 1 : 0;
+
+            const emailContent = this.matchEmailTemplates.buildPredictionClosingEmail({
+              homeTeam: home,
+              awayTeam: away,
+              matchDate: match.matchDate,
+              venue: match.venue ?? undefined,
+              closeMinutes,
+              hasPrediction: pollasWithPrediction > 0,
+            });
+
+            await this.queueUserEmail(
+              userId,
+              EmailJobType.PREDICTION_CLOSING,
+              EmailJobPriority.HIGH,
+              true,
+              `prediction-closing:${match.id}:${userId}`,
+              emailContent,
+              match.id,
+              userLeagues[0].leagueId,
+            );
+            totalEmailQueued++;
+          }
+
+          // Registrar observabilidad por liga
           for (const league of relevantLeagues) {
             const scheduledAt = this.observability.getScheduledAt(
               AutomationStep.PREDICTION_CLOSING,
@@ -555,110 +710,38 @@ export class NotificationScheduler {
               audienceCount: league.members.length,
               summary: `Evaluando cierre de predicciones para ${home} vs ${away}`,
             });
-            let deliveredCount = 0;
-            let pushSent = 0;
-            let pushFailed = 0;
-            let pushDevices = 0;
-            let whatsappSentCount = 0;
-            let emailQueued = 0;
-            let alreadySentCount = 0;
 
             try {
-              const memberUserIds = league.members.map((m) => m.userId);
-
-              // Batch-load both already-sent check and contact info — one query each.
-              const [alreadySentReminders, userContacts] = await Promise.all([
-                this.prisma.notification.findMany({
-                  where: {
-                    userId: { in: memberUserIds },
-                    type: NotificationType.PREDICTION_CLOSED,
-                    data: { contains: `"matchId":"${match.id}"` },
-                  },
-                  select: { userId: true },
-                }),
-                this.fetchActiveUserContacts(memberUserIds),
-              ]);
-              const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
-
-              for (const member of league.members) {
-                const userId = member.userId;
-
-                if (alreadySentUserIds.has(userId)) {
-                  alreadySentCount++;
-                  continue;
-                }
-
-                const hasPrediction = predictedUserIds.has(userId);
-                const title = hasPrediction ? 'Predicciones cerrando' : 'Predicciones cierran pronto';
-                const body = hasPrediction
-                  ? `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tu pronóstico ya está guardado.`
-                  : `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Envía tu pronóstico ahora.`;
-
-                const delivery = await this.notifyUser(
-                  userId,
-                  NotificationType.PREDICTION_CLOSED,
-                  title,
-                  body,
-                  { matchId: match.id, leagueId: league.id },
-                  `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
-                  userContacts.get(userId) ?? null,
-                );
-                deliveredCount++;
-                pushSent += delivery.pushSent;
-                pushFailed += delivery.pushFailed;
-                pushDevices += delivery.pushDevices;
-                whatsappSentCount += delivery.whatsappSent ? 1 : 0;
-
-                const emailContent = this.matchEmailTemplates.buildPredictionClosingEmail({
-                  homeTeam: home,
-                  awayTeam: away,
-                  matchDate: match.matchDate,
-                  venue: match.venue ?? undefined,
-                  closeMinutes,
-                  hasPrediction,
-                });
-
-                await this.queueUserEmail(
-                  userId,
-                  EmailJobType.PREDICTION_CLOSING,
-                  EmailJobPriority.HIGH,
-                  true,
-                  `prediction-closing:${match.id}:${userId}`,
-                  emailContent,
-                  match.id,
-                  league.id,
-                );
-                emailQueued++;
-              }
 
               await this.observability.finishRun(runId, {
                 status:
-                  deliveredCount === 0 && alreadySentCount > 0
+                  totalDelivered === 0 && totalAlreadySent > 0
                     ? 'SKIPPED'
-                    : pushFailed > 0
+                    : totalPushFailed > 0
                       ? 'WARNING'
-                      : deliveredCount > 0
+                      : totalDelivered > 0
                         ? 'SUCCESS'
                         : 'SKIPPED',
-                summary: deliveredCount > 0
-                  ? `Cierre procesado para ${league.members.length} miembros`
+                summary: totalDelivered > 0
+                  ? `Cierre agrupado procesado para ${league.members.length} miembros`
                   : 'No hubo alertas nuevas de cierre para esta polla.',
-                deliveredCount,
-                failedCount: pushFailed,
-                warningCount: pushFailed > 0 ? pushFailed : 0,
+                deliveredCount: totalDelivered,
+                failedCount: totalPushFailed,
+                warningCount: totalPushFailed > 0 ? totalPushFailed : 0,
                 details: {
                   matchId: match.id,
                   leagueId: league.id,
                   closeMinutes,
                   channelBreakdown: {
-                    pushSent,
-                    pushFailed,
-                    pushDevices,
-                    whatsappSentCount,
-                    emailQueued,
+                    pushSent: totalPushSent,
+                    pushFailed: totalPushFailed,
+                    pushDevices: totalPushDevices,
+                    whatsappSentCount: totalWhatsappSent,
+                    emailQueued: totalEmailQueued,
                   },
-                  alreadySentCount,
+                  alreadySentCount: totalAlreadySent,
                   predictedUsers: predictedUserIds.size,
+                  groupedNotifications: true,
                 },
               });
             } catch (error) {
@@ -669,7 +752,7 @@ export class NotificationScheduler {
                   matchId: match.id,
                   leagueId: league.id,
                   closeMinutes,
-                  alreadySentCount,
+                  alreadySentCount: totalAlreadySent,
                 },
                 'Falló el procesamiento del cierre automático.',
               );
@@ -767,15 +850,22 @@ export class NotificationScheduler {
         const home = match.homeTeam.name;
         const away = match.awayTeam.name;
         const score = `${match.homeScore ?? '-'}-${match.awayScore ?? '-'}`;
-        const byUser = new Map<string, { points: number; leagueId: string | null }>();
+        
+        // Agrupar por usuario con todas sus pollas y puntos
+        const byUser = new Map<string, { totalPoints: number; pollas: Array<{ leagueId: string; points: number }> }>();
 
         for (const prediction of match.predictions) {
-          if (!byUser.has(prediction.userId)) {
-            byUser.set(prediction.userId, {
-              points: Math.round(prediction.points ?? 0),
-              leagueId: prediction.leagueId ?? null,
-            });
+          const userId = prediction.userId;
+          const points = Math.round(prediction.points ?? 0);
+          const leagueId = prediction.leagueId ?? '';
+          
+          if (!byUser.has(userId)) {
+            byUser.set(userId, { totalPoints: 0, pollas: [] });
           }
+          
+          const userData = byUser.get(userId)!;
+          userData.totalPoints += points;
+          userData.pollas.push({ leagueId, points });
         }
 
         processedNotificationKeys.add(notificationKey);
@@ -804,24 +894,48 @@ export class NotificationScheduler {
           ]);
           const alreadySentUserIds = new Set(alreadySentNotifications.map((n) => n.userId));
 
-          for (const [userId, { points, leagueId }] of byUser) {
+          for (const [userId, { totalPoints, pollas }] of byUser) {
             if (alreadySentUserIds.has(userId)) {
               alreadySentCount++;
               continue;
             }
 
-            const title = points >= 5 ? 'Acertaste el marcador exacto' : 'Resultado publicado';
-            const body = points >= 5
-              ? `${home} ${score} ${away}. Acertaste el marcador y ganaste ${points} puntos.`
-              : `${home} ${score} ${away}. Ganaste ${points} puntos.`;
+            const maxPoints = Math.max(...pollas.map(p => p.points));
+            const hasExactScore = maxPoints >= 5;
+            const totalPollas = pollas.length;
+            
+            // Construir mensaje optimizado
+            let title: string;
+            let body: string;
+            
+            if (totalPollas === 1) {
+              title = hasExactScore ? '🎯 Acertaste el marcador exacto' : '✅ Resultado publicado';
+              body = hasExactScore
+                ? `${home} ${score} ${away}. Acertaste el marcador y ganaste ${totalPoints} puntos.`
+                : `${home} ${score} ${away}. Ganaste ${totalPoints} puntos.`;
+            } else {
+              title = hasExactScore ? '🎯 Acertaste el marcador exacto' : '✅ Resultado publicado';
+              if (hasExactScore) {
+                body = `${home} ${score} ${away}. Acertaste en ${pollas.filter(p => p.points >= 5).length} de ${totalPollas} polla${totalPollas > 1 ? 's' : ''}. Total: ${totalPoints} puntos.`;
+              } else {
+                body = `${home} ${score} ${away}. Ganaste ${totalPoints} puntos en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
+              }
+            }
 
             const delivery = await this.notifyUser(
               userId,
               NotificationType.RESULT_PUBLISHED,
               title,
               body,
-              { matchId: match.id, leagueId, points, matchNotificationKey: notificationKey },
-              `Partido finalizado: ${home} ${score} ${away} | ${points} pts`,
+              { 
+                matchId: match.id, 
+                leagueIds: pollas.map(p => p.leagueId),
+                totalPoints,
+                totalPollas,
+                hasExactScore,
+                matchNotificationKey: notificationKey,
+              },
+              `Partido finalizado: ${home} ${score} ${away} | ${totalPoints} pts`,
               userContacts.get(userId) ?? null,
             );
             deliveredCount++;
