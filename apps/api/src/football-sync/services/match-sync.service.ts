@@ -636,6 +636,12 @@ export class MatchSyncService {
         timestamp: new Date().toISOString(),
       });
 
+      // Auto-activate match in LeagueMatch if it has predictions but is not yet active
+      const transitionedToLive = match.status !== MatchStatus.LIVE && status === MatchStatus.LIVE;
+      if (transitionedToLive) {
+        await this.autoActivateMatchInLeagues(match.id);
+      }
+
       const transitionedToFinished = match.status !== MatchStatus.FINISHED && status === MatchStatus.FINISHED;
 
       // When the match reaches FINISHED we must calculate points and enqueue the
@@ -1436,5 +1442,60 @@ export class MatchSyncService {
   private getBogotaDateKey(date: Date): string {
     const bogotaDate = new Date(date.getTime() - 5 * 60 * 60 * 1000);
     return bogotaDate.toISOString().split('T')[0];
+  }
+
+  /**
+   * Auto-activate a match in LeagueMatch for all leagues that have predictions for it.
+   * This ensures that matches with predictions are visible in the dashboard.
+   */
+  private async autoActivateMatchInLeagues(matchId: string): Promise<void> {
+    try {
+      // Find all leagues that have predictions for this match
+      const leaguesWithPredictions = await this.prisma.prediction.findMany({
+        where: { matchId },
+        select: { leagueId: true },
+        distinct: ['leagueId'],
+      });
+
+      if (leaguesWithPredictions.length === 0) {
+        return;
+      }
+
+      // Check which leagues already have this match activated
+      const existingLeagueMatches = await this.prisma.leagueMatch.findMany({
+        where: {
+          matchId,
+          leagueId: { in: leaguesWithPredictions.map((p) => p.leagueId) },
+        },
+        select: { leagueId: true },
+      });
+
+      const existingLeagueIds = new Set(existingLeagueMatches.map((lm) => lm.leagueId));
+      const leaguesToActivate = leaguesWithPredictions.filter(
+        (p) => !existingLeagueIds.has(p.leagueId),
+      );
+
+      if (leaguesToActivate.length === 0) {
+        return;
+      }
+
+      // Insert LeagueMatch records for leagues that don't have it yet
+      await this.prisma.leagueMatch.createMany({
+        data: leaguesToActivate.map((p) => ({
+          leagueId: p.leagueId,
+          matchId,
+          active: true,
+        })),
+        skipDuplicates: true,
+      });
+
+      this.logger.log(
+        `Auto-activated match ${matchId} in ${leaguesToActivate.length} league(s) with predictions`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to auto-activate match ${matchId} in leagues: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }
