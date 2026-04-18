@@ -4,7 +4,7 @@ import {
     BarChart3, Users, Trophy, Swords, CreditCard, Layers,
     Settings, LogOut, Shield, X, Target, ArrowLeft, RefreshCw,
     Sparkles, Coins, ChevronLeft, ChevronRight, MoreHorizontal,
-    PanelLeftClose, PanelLeftOpen, Bell, Mail,
+    PanelLeftClose, PanelLeftOpen, Bell, Mail, TestTube,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { useFootballSyncStore } from '../stores/football-sync.store';
@@ -29,6 +29,7 @@ const secondaryNavItems = [
     { to: '/admin/automation', label: 'Automatización', icon: Bell },
     { to: '/admin/email-providers', label: 'SMTP / Correo', icon: Mail },
     { to: '/admin/email-logs', label: 'Logs de Email', icon: Mail },
+    { to: '/admin/email-testing', label: 'Testing de Email', icon: TestTube },
     { to: '/admin/settings', label: 'Sistema', icon: Settings },
 ];
 
@@ -50,6 +51,7 @@ const sectionTitles: Record<string, string> = {
     '/admin/automation': 'Automatización',
     '/admin/email-providers': 'SMTP / Correo',
     '/admin/email-logs': 'Logs de Email',
+    '/admin/email-testing': 'Testing de Email',
     '/admin/settings': 'Sistema',
 };
 
