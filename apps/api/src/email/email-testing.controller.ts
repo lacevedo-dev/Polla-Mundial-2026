@@ -8,7 +8,7 @@ import { EmailQueueService } from './email-queue.service';
 
 @Controller('email-testing')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('SUPERADMIN')
 export class EmailTestingController {
   constructor(
     private readonly emailTestingService: EmailTestingService,
