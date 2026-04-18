@@ -28,6 +28,7 @@ const secondaryNavItems = [
     { to: '/admin/football-sync/plan', label: 'Plan de Sync', icon: BarChart3 },
     { to: '/admin/automation', label: 'Automatización', icon: Bell },
     { to: '/admin/email-providers', label: 'SMTP / Correo', icon: Mail },
+    { to: '/admin/email-logs', label: 'Logs de Email', icon: Mail },
     { to: '/admin/settings', label: 'Sistema', icon: Settings },
 ];
 
@@ -48,6 +49,7 @@ const sectionTitles: Record<string, string> = {
     '/admin/football-sync': 'Football Sync',
     '/admin/automation': 'Automatización',
     '/admin/email-providers': 'SMTP / Correo',
+    '/admin/email-logs': 'Logs de Email',
     '/admin/settings': 'Sistema',
 };
 

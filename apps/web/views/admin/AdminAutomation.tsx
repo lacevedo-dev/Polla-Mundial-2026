@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
@@ -346,6 +347,131 @@ const STEP_STATE_COLOR: Record<StepState, string> = {
   OVERDUE:        'text-red-500',
 };
 
+// Componente de Tooltip para mostrar información detallada del canal
+function ChannelTooltip({
+  channel,
+  counters,
+  step,
+  children,
+}: {
+  channel: string;
+  counters: { sent: number; failed: number } | null;
+  step: OperationsStep;
+  children: React.ReactNode;
+}) {
+  const [showTooltip, setShowTooltip] = React.useState(false);
+  const [touchTimeout, setTouchTimeout] = React.useState<NodeJS.Timeout | null>(null);
+  const meta = CHANNEL_META[channel];
+
+  if (!counters && step.status === 'NOT_APPLICABLE') {
+    return <>{children}</>;
+  }
+
+  const total = counters ? counters.sent + counters.failed : 0;
+  const successRate = total > 0 ? ((counters!.sent / total) * 100).toFixed(0) : '0';
+
+  const handleTouchStart = () => {
+    const timeout = setTimeout(() => {
+      setShowTooltip(true);
+    }, 300);
+    setTouchTimeout(timeout);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimeout) {
+      clearTimeout(touchTimeout);
+      setTouchTimeout(null);
+    }
+    setTimeout(() => setShowTooltip(false), 2000);
+  };
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {children}
+      {showTooltip && (
+        <div className="pointer-events-none absolute left-1/2 bottom-full mb-2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-1 duration-150">
+          <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-800 px-3 py-2.5 shadow-2xl min-w-[200px] backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="rounded-lg bg-slate-700/50 p-1.5">
+                <span className="text-white">{meta?.icon}</span>
+              </div>
+              <p className="text-xs font-black text-white tracking-wide">{meta?.label || channel}</p>
+            </div>
+            <div className="space-y-1.5 text-[11px]">
+              {counters ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 py-0.5">
+                    <span className="text-slate-400 font-medium">Total:</span>
+                    <span className="font-bold text-white tabular-nums">{total}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-0.5">
+                    <span className="text-slate-400 font-medium">Enviados:</span>
+                    <span className="font-bold text-emerald-400 tabular-nums">✓ {counters.sent}</span>
+                  </div>
+                  {counters.failed > 0 && (
+                    <div className="flex items-center justify-between gap-3 py-0.5">
+                      <span className="text-slate-400 font-medium">Fallidos:</span>
+                      <span className="font-bold text-red-400 tabular-nums">✗ {counters.failed}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3 pt-1.5 mt-1.5 border-t border-slate-700/60">
+                    <span className="text-slate-400 font-medium">Tasa éxito:</span>
+                    <span className={`font-black tabular-nums ${parseInt(successRate) >= 90 ? 'text-emerald-400' : parseInt(successRate) >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
+                      {successRate}%
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-slate-400 py-1">
+                  {step.status === 'SCHEDULED' ? '⏰ Programado' : '— Sin datos'}
+                </p>
+              )}
+            </div>
+            {channel === 'email' && counters && (counters.sent > 0 || counters.failed > 0) && (
+              <div className="mt-2 pt-2 border-t border-slate-700 space-y-1">
+                <p className="text-[10px] text-amber-400">💡 Click: Ver todos los logs</p>
+                {counters.failed > 0 && (
+                  <p className="text-[10px] text-red-400">⇧ Shift+Click: Solo fallidos</p>
+                )}
+              </div>
+            )}
+            {channel === 'email' && (!counters || (counters.sent === 0 && counters.failed === 0)) && (
+              <p className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-slate-500">
+                {step.status === 'SCHEDULED' ? 'Programado - Sin envíos aún' : 'Sin datos de envío'}
+              </p>
+            )}
+            {channel === 'push' && (
+              <p className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-slate-500">
+                Notificaciones push
+              </p>
+            )}
+            {channel === 'whatsapp' && (
+              <p className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-slate-500">
+                Mensajes WhatsApp
+              </p>
+            )}
+            {channel === 'inApp' && (
+              <p className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-slate-500">
+                Notificaciones in-app
+              </p>
+            )}
+          </div>
+          {/* Flecha del tooltip */}
+          <div className="absolute left-1/2 top-full -translate-x-1/2 -mt-px">
+            <div className="border-4 border-transparent border-t-slate-900" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepCell({
   step,
   onIncident,
@@ -355,9 +481,44 @@ function StepCell({
   onIncident?: (info: IncidentInfo) => void;
   match: OperationsMatch;
 }) {
+  const navigate = useNavigate();
   const canRetry = step.status === 'FAILED' || step.status === 'OVERDUE';
   const channels = STEP_CHANNELS[step.key] ?? [];
   const breakdown = step.latestDetails?.channelBreakdown;
+
+  // Mapeo de step keys a EmailJobType
+  const stepKeyToEmailType: Record<string, string> = {
+    'MATCH_REMINDER': 'MATCH_REMINDER',
+    'PREDICTION_CLOSING': 'PREDICTION_CLOSED',
+    'RESULT_NOTIFICATION': 'RESULT_PUBLISHED',
+    'PREDICTION_REPORT': 'RESULT_PUBLISHED',
+    'RESULT_REPORT': 'RESULT_PUBLISHED',
+  };
+
+  const handleChannelClick = (e: React.MouseEvent, channel: string) => {
+    e.stopPropagation();
+
+    // Solo email tiene vista de logs por ahora
+    if (channel === 'email') {
+      const emailType = stepKeyToEmailType[step.key];
+      if (emailType) {
+        const params = new URLSearchParams({ type: emailType });
+        if (match.id) params.set('matchId', match.id);
+
+        // Si hay fallos, navegar directamente a la vista de fallidos
+        const counters = getChannelCounters(channel, breakdown);
+        if (counters && counters.failed > 0 && e.shiftKey) {
+          // Shift+Click: Ver solo fallidos
+          params.set('status', 'FAILED');
+        }
+
+        navigate(`/admin/email-logs?${params.toString()}`);
+      }
+    }
+
+    // Para otros canales, podrías agregar más navegación en el futuro
+    // Por ejemplo: whatsapp logs, push notification logs, etc.
+  };
 
   return (
     <div
@@ -380,22 +541,32 @@ function StepCell({
                 ? 'text-emerald-500'
                 : STEP_STATE_COLOR[step.status] ?? 'text-slate-300';
 
+            // Hacer los iconos de canales clickeables
+            const isClickable = ch === 'email'; // Por ahora solo email, expandir en el futuro
+
             return (
-              <div key={ch} className="flex items-center gap-0.5" title={CHANNEL_META[ch]?.label}>
-                <span className={`leading-none ${iconColor}`}>
-                  {CHANNEL_META[ch]?.icon}
-                </span>
-                {counters && hasData && (
-                  <span className="text-[9px] font-semibold leading-none">
-                    {counters.sent > 0 && (
-                      <span className="text-emerald-600">✓{counters.sent}</span>
-                    )}
-                    {counters.failed > 0 && (
-                      <span className="text-red-500 ml-0.5">✗{counters.failed}</span>
-                    )}
+              <ChannelTooltip key={ch} channel={ch} counters={counters} step={step}>
+                <div
+                  className={`flex items-center gap-0.5 ${isClickable ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
+                  onClick={isClickable ? (e) => handleChannelClick(e, ch) : undefined}
+                  role={isClickable ? 'button' : undefined}
+                  aria-label={isClickable ? `Ver logs de ${CHANNEL_META[ch]?.label}` : undefined}
+                >
+                  <span className={`leading-none ${iconColor}`}>
+                    {CHANNEL_META[ch]?.icon}
                   </span>
-                )}
-              </div>
+                  {counters && hasData && (
+                    <span className="text-[9px] font-semibold leading-none">
+                      {counters.sent > 0 && (
+                        <span className="text-emerald-600">✓{counters.sent}</span>
+                      )}
+                      {counters.failed > 0 && (
+                        <span className="text-red-500 ml-0.5">✗{counters.failed}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              </ChannelTooltip>
             );
           })}
         </div>

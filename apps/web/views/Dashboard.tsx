@@ -1908,12 +1908,12 @@ const Dashboard: React.FC = () => {
                 const expandedEvents = expandedMatch ? (matchEvents.get(expandedMatch.id) ?? []).filter(e => ['GOAL', 'CARD'].includes(e.type)) : [];
 
                 const panelContent = (
-                    <motion.div {...fade(0.04)} className="space-y-2">
+                    <motion.div {...fade(0.04)} className="space-y-2 xl:space-y-3">
                         {/*
                           Móvil: chips compactos, auto-fill minmax(88px) → N por fila según ancho
                           Escritorio (xl): 3 columnas igual que el main grid → tarjetas completas
                         */}
-                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))] xl:grid-cols-3">
+                        <div className="grid gap-2 xl:gap-3 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))] xl:grid-cols-2 2xl:grid-cols-3">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
@@ -1936,10 +1936,10 @@ const Dashboard: React.FC = () => {
                                         onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-2xl border transition-all
                                             flex flex-col items-center px-2 py-2
-                                            xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3 xl:gap-3
+                                            xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3 xl:gap-3 xl:min-h-[84px] xl:rounded-3xl
                                             ${isActive
-                                                ? `bg-slate-900 ${borderColor} shadow-md`
-                                                : `bg-slate-900/60 ${borderColor} hover:bg-slate-900`
+                                                ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
+                                                : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
                                             }`}
                                         aria-expanded={isActive}
                                         aria-label={`${match.homeTeam} vs ${match.awayTeam}`}
@@ -2010,9 +2010,9 @@ const Dashboard: React.FC = () => {
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.22, ease: 'easeOut' as const }}
-                                    className="overflow-hidden col-span-1"
+                                    className="overflow-hidden"
                                 >
-                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-4">
+                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-4 xl:rounded-3xl xl:border-rose-400/35 xl:p-5">
                                         {/* Timer + estado predicción + pts */}
                                         <div className="flex items-center justify-between mb-3">
                                             <div className="flex items-center gap-2">
@@ -2104,7 +2104,6 @@ const Dashboard: React.FC = () => {
                                 </motion.div>
                             )}
                         </AnimatePresence>
-                        </div>
                     </motion.div>
                 );
 
@@ -2299,7 +2298,7 @@ const Dashboard: React.FC = () => {
 
                 // Modo sticky: panel anclado arriba del dashboard
                 return (
-                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50 shadow-sm pb-2 pt-2">
+                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50/95 shadow-sm pb-2 pt-2 md:pb-3 md:pt-3 backdrop-blur supports-[backdrop-filter]:bg-slate-50/85">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1">
                                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
@@ -2315,7 +2314,9 @@ const Dashboard: React.FC = () => {
                                 <span className="text-[9px] font-bold text-slate-600 hidden lg:inline">Flotante</span>
                             </button>
                         </div>
-                        {panelContent}
+                        <div className="md:rounded-2xl md:border md:border-slate-200 md:bg-white/90 md:p-3 md:shadow-sm">
+                            {panelContent}
+                        </div>
                     </div>
                 );
             })()}

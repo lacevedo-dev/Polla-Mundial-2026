@@ -25,6 +25,7 @@ import { AdminSettingsController } from './admin-settings.controller';
 import { AdminPaymentsController } from './admin-payments.controller';
 import { AdminAutomationController } from './admin-automation.controller';
 import { AdminEmailProvidersController } from './admin-email-providers.controller';
+import { AdminEmailLogsController } from './admin-email-logs.controller';
 import { AdminSystemController } from './admin-system.controller';
 
 @Module({
@@ -54,6 +55,7 @@ import { AdminSystemController } from './admin-system.controller';
     AdminPaymentsController,
     AdminAutomationController,
     AdminEmailProvidersController,
+    AdminEmailLogsController,
     AdminSystemController,
   ],
   providers: [AdminService, AdminPaymentsService, Reflector],
