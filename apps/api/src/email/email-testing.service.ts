@@ -147,35 +147,49 @@ export class EmailTestingService {
     const timestamp = new Date();
 
     try {
-      const providers = await this.providerConfigService.getProviders();
-      if (providers.length === 0) {
-        throw new Error('No hay proveedores de correo configurados');
-      }
-
-      const provider = providers[0];
-      const transporter = nodemailer.createTransport({
-        host: provider.host,
-        port: provider.port,
-        secure: provider.secure,
-        auth: provider.user && provider.pass ? { user: provider.user, pass: provider.pass } : undefined,
-      } as nodemailer.TransportOptions);
-
-      const from = provider.fromName ? `${provider.fromName} <${provider.fromEmail}>` : provider.fromEmail;
-
-      const result = await transporter.sendMail({
-        from,
-        to: recipientEmail,
-        subject,
+      // Usar el sistema de cola para obtener el proveedor óptimo con rotación
+      // Esto asegura que se use el mismo algoritmo de selección que el resto de la plataforma
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.CUSTOM,
+        priority: EmailJobPriority.HIGH,
+        required: false,
+        recipientEmail,
+        subject: '🧪 [TEST] ' + subject,
         html,
         text,
+        dedupeKey: `test-direct-${Date.now()}-${Math.random()}`,
       });
 
-      this.logger.log(`Correo de prueba enviado a ${recipientEmail} (messageId: ${result.messageId})`);
+      if (!queued) {
+        throw new Error('No se pudo encolar el correo (posible email en lista negra o sin proveedores disponibles)');
+      }
+
+      // Obtener el trabajo recién creado
+      const job = await this.prisma.emailJob.findFirst({
+        where: {
+          recipientEmail: recipientEmail.trim().toLowerCase(),
+          subject: '🧪 [TEST] ' + subject,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!job) {
+        throw new Error('No se pudo encontrar el trabajo encolado');
+      }
+
+      // Despachar inmediatamente usando el sistema de rotación de proveedores
+      const result = await this.emailQueue.dispatchJobById(job.id);
+
+      if (!result.sent) {
+        throw new Error(result.job.lastError || 'Error desconocido al enviar');
+      }
+
+      this.logger.log(`Correo de prueba enviado a ${recipientEmail} via ${result.job.providerKey || 'unknown'}`);
 
       return {
         success: true,
-        messageId: result.messageId,
-        provider: provider.key,
+        messageId: job.id,
+        provider: result.job.providerKey || 'unknown',
         timestamp,
         recipientEmail,
         subject,

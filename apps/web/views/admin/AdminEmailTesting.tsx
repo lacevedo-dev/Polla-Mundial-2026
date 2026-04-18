@@ -360,9 +360,30 @@ export default function AdminEmailTesting() {
                 <Alert>
                   <Server className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>Proveedor que se usará:</strong> {nextProvider.fromEmail} ({nextProvider.key})
+                    <div className="space-y-1">
+                      <div>
+                        <strong>Proveedor que se usará:</strong> {nextProvider.fromEmail} ({nextProvider.key})
+                      </div>
+                      <div>
+                        <strong>Cuota disponible:</strong> {nextProvider.remainingQuota} de {nextProvider.dailyLimit} 
+                        ({((nextProvider.sentToday / nextProvider.dailyLimit) * 100).toFixed(1)}% usado)
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        ℹ️ El sistema rota automáticamente entre {providerStatus?.totalProviders || 0} proveedores 
+                        usando el que tenga menor uso para balancear la carga.
+                      </div>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!nextProvider && providerStatus && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>⚠️ No hay proveedores disponibles</strong>
                     <br />
-                    <strong>Cuota disponible:</strong> {nextProvider.remainingQuota} de {nextProvider.dailyLimit}
+                    Todos los proveedores están bloqueados o han alcanzado su cuota diaria.
                   </AlertDescription>
                 </Alert>
               )}
