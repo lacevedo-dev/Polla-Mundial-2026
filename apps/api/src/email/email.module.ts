@@ -12,11 +12,13 @@ import { EmailProviderConfigService } from './email-provider-config.service';
 import { EmailQueueService } from './email-queue.service';
 import { EmailService } from './email.service';
 import { MatchEmailTemplateService } from './match-email-template.service';
+import { EmailTestingController } from './email-testing.controller';
+import { EmailTestingService } from './email-testing.service';
 
 @Global()
 @Module({
   imports: [ScheduleModule, PrismaModule],
-  controllers: [EmailBlacklistController],
+  controllers: [EmailBlacklistController, EmailTestingController],
   providers: [
     EmailService,
     EmailBacklogAuditService,
@@ -28,6 +30,7 @@ import { MatchEmailTemplateService } from './match-email-template.service';
     MatchEmailTemplateService,
     EmailDispatcherScheduler,
     EmailBacklogAuditScheduler,
+    EmailTestingService,
   ],
   exports: [
     EmailService,
@@ -38,6 +41,7 @@ import { MatchEmailTemplateService } from './match-email-template.service';
     EmailProviderConfigService,
     EmailQueueService,
     MatchEmailTemplateService,
+    EmailTestingService,
   ],
 })
 export class EmailModule {}
