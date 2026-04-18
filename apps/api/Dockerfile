@@ -19,8 +19,10 @@ COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 
-# Instalar todas las dependencias (usando npm ci)
-RUN npm ci
+# Instalar todas las dependencias (usando npm ci con retry para mayor resiliencia)
+RUN npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
+    npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
+    npm ci
 
 # Copiar el código fuente completo del API y el paquete compartido
 COPY apps/api ./apps/api
