@@ -107,6 +107,7 @@ export class EmailTestingService {
             homeScore: 2,
             awayScore: 1,
             points: 10,
+            matchDate: new Date(),
           });
           subject = '🧪 [TEST] ' + resultContent.subject;
           html = resultContent.html;
