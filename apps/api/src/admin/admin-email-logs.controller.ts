@@ -1,6 +1,8 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminGuard } from './admin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { EmailJobStatus, EmailJobType } from '@prisma/client';
 
 interface EmailLogFilters {
@@ -66,7 +68,8 @@ interface EmailLogResponse {
 }
 
 @Controller('admin/email-logs')
-@UseGuards(AdminGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SUPERADMIN')
 export class AdminEmailLogsController {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -124,7 +127,11 @@ export class AdminEmailLogsController {
       }),
       this.prisma.match.findMany({
         where: { id: { in: matchIds } },
-        select: { id: true, homeTeam: true, awayTeam: true },
+        select: {
+          id: true,
+          homeTeam: { select: { name: true } },
+          awayTeam: { select: { name: true } },
+        },
       }),
       this.prisma.emailBlacklist.findMany({
         where: { email: { in: emails } },
@@ -145,8 +152,8 @@ export class AdminEmailLogsController {
         ...log,
         leagueName: league?.name || null,
         leagueCode: league?.code || null,
-        matchHomeTeam: match?.homeTeam || null,
-        matchAwayTeam: match?.awayTeam || null,
+        matchHomeTeam: match?.homeTeam?.name || null,
+        matchAwayTeam: match?.awayTeam?.name || null,
         blacklistInfo: blacklistEntry
           ? {
               isBlacklisted: true,
