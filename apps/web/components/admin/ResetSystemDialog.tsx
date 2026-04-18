@@ -23,6 +23,11 @@ const ResetSystemDialog: React.FC<ResetSystemDialogProps> = ({
         payments: true,
         notifications: true,
         matches: true,
+        auditLogs: false,
+        emailLogs: false,
+        automationLogs: false,
+        footballSyncLogs: false,
+        syncPlans: false,
     });
 
     const handleToggle = (key: keyof ResetOptions) => {
@@ -38,13 +43,21 @@ const ResetSystemDialog: React.FC<ResetSystemDialogProps> = ({
 
     const hasSelection = Object.values(selectedOptions).some(v => v);
 
-    const options = [
+    const mainDataOptions = [
         { key: 'predictions' as const, label: 'Predicciones', description: 'Eliminar todas las predicciones de usuarios' },
         { key: 'participations' as const, label: 'Participaciones', description: 'Eliminar participaciones en ligas' },
         { key: 'leagues' as const, label: 'Ligas', description: 'Eliminar todas las ligas creadas' },
         { key: 'payments' as const, label: 'Pagos y Órdenes', description: 'Eliminar registros de pagos y órdenes' },
         { key: 'notifications' as const, label: 'Notificaciones', description: 'Eliminar notificaciones relacionadas con ligas' },
         { key: 'matches' as const, label: 'Partidos', description: 'Eliminar todos los partidos y resultados' },
+    ];
+
+    const logOptions = [
+        { key: 'auditLogs' as const, label: 'Logs de Auditoría', description: 'Eliminar registros de acciones de usuarios' },
+        { key: 'emailLogs' as const, label: 'Logs de Emails', description: 'Eliminar registros de emails enviados y pendientes' },
+        { key: 'automationLogs' as const, label: 'Logs de Automatización', description: 'Eliminar registros de ejecuciones automáticas' },
+        { key: 'footballSyncLogs' as const, label: 'Logs de Sincronización', description: 'Eliminar logs de sincronización con API Football' },
+        { key: 'syncPlans' as const, label: 'Planes de Sincronización', description: 'Eliminar planificación de sincronizaciones' },
     ];
 
     return (
@@ -85,32 +98,74 @@ const ResetSystemDialog: React.FC<ResetSystemDialogProps> = ({
                         </div>
 
                         {/* Options */}
-                        <div className="space-y-3 mb-6">
-                            {options.map(option => (
-                                <label
-                                    key={option.key}
-                                    className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                                        selectedOptions[option.key]
-                                            ? 'bg-rose-50 border-rose-300'
-                                            : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-                                    }`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedOptions[option.key]}
-                                        onChange={() => handleToggle(option.key)}
-                                        className="mt-0.5 w-5 h-5 rounded border-2 border-slate-300 text-rose-600 focus:ring-2 focus:ring-rose-500 focus:ring-offset-0 cursor-pointer"
-                                    />
-                                    <div className="flex-1">
-                                        <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                                            {option.label}
-                                        </p>
-                                        <p className="text-xs text-slate-500 mt-0.5">
-                                            {option.description}
-                                        </p>
-                                    </div>
-                                </label>
-                            ))}
+                        <div className="space-y-4 mb-6">
+                            {/* DATOS PRINCIPALES */}
+                            <div>
+                                <h3 className="text-xs font-black text-slate-600 uppercase tracking-wider mb-2 px-1">
+                                    Datos Principales
+                                </h3>
+                                <div className="space-y-2">
+                                    {mainDataOptions.map(option => (
+                                        <label
+                                            key={option.key}
+                                            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                                selectedOptions[option.key]
+                                                    ? 'bg-rose-50 border-rose-300'
+                                                    : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedOptions[option.key]}
+                                                onChange={() => handleToggle(option.key)}
+                                                className="mt-0.5 w-4 h-4 rounded border-2 border-slate-300 text-rose-600 focus:ring-2 focus:ring-rose-500 focus:ring-offset-0 cursor-pointer"
+                                            />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                                                    {option.label}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    {option.description}
+                                                </p>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* LOGS Y PROCESOS */}
+                            <div>
+                                <h3 className="text-xs font-black text-slate-600 uppercase tracking-wider mb-2 px-1">
+                                    Logs y Procesos
+                                </h3>
+                                <div className="space-y-2">
+                                    {logOptions.map(option => (
+                                        <label
+                                            key={option.key}
+                                            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                                selectedOptions[option.key]
+                                                    ? 'bg-amber-50 border-amber-300'
+                                                    : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedOptions[option.key]}
+                                                onChange={() => handleToggle(option.key)}
+                                                className="mt-0.5 w-4 h-4 rounded border-2 border-slate-300 text-amber-600 focus:ring-2 focus:ring-amber-500 focus:ring-offset-0 cursor-pointer"
+                                            />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                                                    {option.label}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    {option.description}
+                                                </p>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
 
                         {/* Actions */}

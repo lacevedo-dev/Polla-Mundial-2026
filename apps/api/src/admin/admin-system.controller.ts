@@ -34,7 +34,7 @@ export class AdminSystemController {
         }
 
         // Si no se especifica ninguna opción, reiniciar todo
-        const shouldResetAll = !options.predictions && !options.participations && !options.leagues && !options.payments && !options.notifications && !options.matches;
+        const shouldResetAll = !options.predictions && !options.participations && !options.leagues && !options.payments && !options.notifications && !options.matches && !options.auditLogs && !options.emailLogs && !options.automationLogs && !options.footballSyncLogs && !options.syncPlans;
         const resetOptions = {
             predictions: shouldResetAll || options.predictions,
             participations: shouldResetAll || options.participations,
@@ -42,6 +42,11 @@ export class AdminSystemController {
             payments: shouldResetAll || options.payments,
             notifications: shouldResetAll || options.notifications,
             matches: shouldResetAll || options.matches,
+            auditLogs: shouldResetAll || options.auditLogs,
+            emailLogs: shouldResetAll || options.emailLogs,
+            automationLogs: shouldResetAll || options.automationLogs,
+            footballSyncLogs: shouldResetAll || options.footballSyncLogs,
+            syncPlans: shouldResetAll || options.syncPlans,
         };
 
         try {
@@ -55,6 +60,13 @@ export class AdminSystemController {
                     notifications: 0,
                     leagues: 0,
                     matches: 0,
+                    auditLogs: 0,
+                    emailJobs: 0,
+                    automationRuns: 0,
+                    footballSyncLogs: 0,
+                    apiFootballRequests: 0,
+                    footballSyncAlerts: 0,
+                    dailySyncPlans: 0,
                 };
 
                 // 1. Eliminar predicciones (dependen de participaciones y partidos)
@@ -91,16 +103,50 @@ export class AdminSystemController {
                     counts.notifications = result.count;
                 }
 
-                // 5. Eliminar ligas (debe ser último porque otras entidades dependen de él)
+                // 5. Eliminar logs de automatización (antes de ligas/partidos)
+                if (resetOptions.automationLogs) {
+                    const result = await tx.automationRun.deleteMany({});
+                    counts.automationRuns = result.count;
+                }
+
+                // 6. Eliminar logs de emails (antes de ligas/partidos)
+                if (resetOptions.emailLogs) {
+                    const result = await tx.emailJob.deleteMany({});
+                    counts.emailJobs = result.count;
+                }
+
+                // 7. Eliminar logs de auditoría (antes de ligas)
+                if (resetOptions.auditLogs) {
+                    const result = await tx.auditLog.deleteMany({});
+                    counts.auditLogs = result.count;
+                }
+
+                // 8. Eliminar ligas (debe ser último porque otras entidades dependen de él)
                 if (resetOptions.leagues) {
                     const result = await tx.league.deleteMany({});
                     counts.leagues = result.count;
                 }
 
-                // 6. Eliminar partidos (independiente de otras entidades)
+                // 9. Eliminar logs de sincronización de fútbol (antes de partidos)
+                if (resetOptions.footballSyncLogs) {
+                    const syncLogsResult = await tx.footballSyncLog.deleteMany({});
+                    const alertsResult = await tx.footballSyncAlert.deleteMany({});
+                    const requestsResult = await tx.apiFootballRequest.deleteMany({});
+                    counts.footballSyncLogs = syncLogsResult.count;
+                    counts.footballSyncAlerts = alertsResult.count;
+                    counts.apiFootballRequests = requestsResult.count;
+                }
+
+                // 10. Eliminar partidos (independiente de otras entidades)
                 if (resetOptions.matches) {
                     const result = await tx.match.deleteMany({});
                     counts.matches = result.count;
+                }
+
+                // 11. Eliminar planes de sincronización (independiente)
+                if (resetOptions.syncPlans) {
+                    const result = await tx.dailySyncPlan.deleteMany({});
+                    counts.dailySyncPlans = result.count;
                 }
 
                 return counts;
@@ -134,6 +180,14 @@ export class AdminSystemController {
             }
             if (resetOptions.notifications && deletedCounts.notifications > 0) deletedItems.push(`${deletedCounts.notifications} notificaciones`);
             if (resetOptions.matches && deletedCounts.matches > 0) deletedItems.push(`${deletedCounts.matches} partidos`);
+            if (resetOptions.auditLogs && deletedCounts.auditLogs > 0) deletedItems.push(`${deletedCounts.auditLogs} logs de auditoría`);
+            if (resetOptions.emailLogs && deletedCounts.emailJobs > 0) deletedItems.push(`${deletedCounts.emailJobs} logs de emails`);
+            if (resetOptions.automationLogs && deletedCounts.automationRuns > 0) deletedItems.push(`${deletedCounts.automationRuns} logs de automatización`);
+            if (resetOptions.footballSyncLogs && (deletedCounts.footballSyncLogs > 0 || deletedCounts.apiFootballRequests > 0 || deletedCounts.footballSyncAlerts > 0)) {
+                const total = deletedCounts.footballSyncLogs + deletedCounts.apiFootballRequests + deletedCounts.footballSyncAlerts;
+                deletedItems.push(`${total} logs de sincronización`);
+            }
+            if (resetOptions.syncPlans && deletedCounts.dailySyncPlans > 0) deletedItems.push(`${deletedCounts.dailySyncPlans} planes de sincronización`);
 
             const message = deletedItems.length > 0
                 ? `Eliminados: ${deletedItems.join(', ')}`

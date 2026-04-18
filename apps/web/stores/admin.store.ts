@@ -18,6 +18,11 @@ export interface ResetOptions {
     payments?: boolean;
     notifications?: boolean;
     matches?: boolean;
+    auditLogs?: boolean;
+    emailLogs?: boolean;
+    automationLogs?: boolean;
+    footballSyncLogs?: boolean;
+    syncPlans?: boolean;
 }
 
 export interface TestModeConfig {
