@@ -133,7 +133,7 @@ export class EmailTestingController {
 
   @Get('providers-debug')
   async getProvidersDebug() {
-    // Obtener TODOS los proveedores de la BD, incluyendo inactivos
+    // Obtener TODOS los proveedores de la BD
     const allProviders = await this.prisma.emailProviderAccount.findMany({
       where: {
         deletedAt: null,
@@ -147,19 +147,51 @@ export class EmailTestingController {
         smtpPort: true,
         active: true,
         dailyLimit: true,
+        smtpPassEncrypted: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    const activeCount = allProviders.filter(p => p.active).length;
-    const inactiveCount = allProviders.filter(p => !p.active).length;
+    // Intentar obtener proveedores a través del servicio (con desencriptación)
+    const loadedProviders = await this.emailTestingService['providerConfigService'].getProviders();
+
+    // Verificar cuáles proveedores fallaron al cargar
+    const loadedKeys = new Set(loadedProviders.map(p => p.key));
+    const failedProviders = allProviders.filter(p => p.active && !loadedKeys.has(p.key));
 
     return {
-      total: allProviders.length,
-      active: activeCount,
-      inactive: inactiveCount,
-      providers: allProviders,
+      inDatabase: {
+        total: allProviders.length,
+        active: allProviders.filter(p => p.active).length,
+        inactive: allProviders.filter(p => !p.active).length,
+      },
+      loaded: {
+        total: loadedProviders.length,
+        providers: loadedProviders.map(p => ({
+          key: p.key,
+          fromEmail: p.fromEmail,
+          host: p.host,
+          port: p.port,
+          dailyLimit: p.dailyLimit,
+        })),
+      },
+      failed: {
+        total: failedProviders.length,
+        reason: 'Probablemente error de desencriptación de contraseña',
+        providers: failedProviders.map(p => ({
+          key: p.key,
+          fromEmail: p.fromEmail,
+          hasEncryptedPassword: !!p.smtpPassEncrypted,
+        })),
+      },
+      allProvidersInDB: allProviders.map(p => ({
+        key: p.key,
+        name: p.name,
+        fromEmail: p.fromEmail,
+        active: p.active,
+        hasEncryptedPassword: !!p.smtpPassEncrypted,
+      })),
     };
   }
 }
