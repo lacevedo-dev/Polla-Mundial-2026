@@ -250,7 +250,7 @@ export class EmailTestingService {
     ]);
 
     const recentJobs = await this.prisma.emailJob.findMany({
-      take: 10,
+      take: 20,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -258,6 +258,9 @@ export class EmailTestingService {
         status: true,
         recipientEmail: true,
         subject: true,
+        html: true,
+        text: true,
+        providerKey: true,
         createdAt: true,
         sentAt: true,
         lastError: true,

@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards, Param, Delete } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { EmailTestingService } from './email-testing.service';
 import { DispatchEmailJobDto, TestEmailDto, TestEmailQueueDto } from './dto/test-email.dto';
 import { EmailQueueService } from './email-queue.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EmailBlacklistService } from './email-blacklist.service';
 
 @Controller('email-testing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,6 +15,8 @@ export class EmailTestingController {
   constructor(
     private readonly emailTestingService: EmailTestingService,
     private readonly emailQueueService: EmailQueueService,
+    private readonly prisma: PrismaService,
+    private readonly blacklistService: EmailBlacklistService,
   ) {}
 
   @Post('send-test')
@@ -86,5 +90,44 @@ export class EmailTestingController {
   @Get('validate-config')
   async validateConfiguration() {
     return this.emailTestingService.validateEmailConfiguration();
+  }
+
+  @Get('active-users')
+  async getActiveUsers() {
+    const users = await this.prisma.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        emailVerified: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        username: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+      take: 100,
+    });
+
+    return { users, total: users.length };
+  }
+
+  @Get('blacklist')
+  async getBlacklist() {
+    const entries = await this.prisma.emailBlacklist.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return { entries, total: entries.length };
+  }
+
+  @Delete('blacklist/:email')
+  async removeFromBlacklist(@Param('email') email: string) {
+    await this.blacklistService.removeFromBlacklist(email);
+    return { success: true, message: `Email ${email} removido de la lista negra` };
   }
 }
