@@ -145,6 +145,8 @@ export class EmailTestingService {
     text: string,
   ): Promise<EmailTestResult> {
     const timestamp = new Date();
+    const maxAttempts = 3; // Intentar con hasta 3 proveedores diferentes
+    const errors: string[] = [];
 
     try {
       // Usar el sistema de cola para obtener el proveedor óptimo con rotación
@@ -177,19 +179,52 @@ export class EmailTestingService {
         throw new Error('No se pudo encontrar el trabajo encolado');
       }
 
-      // Despachar inmediatamente usando el sistema de rotación de proveedores
-      const result = await this.emailQueue.dispatchJobById(job.id);
+      // Intentar enviar con reintentos automáticos usando diferentes proveedores
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        this.logger.log(`Intento ${attempt}/${maxAttempts} de envío a ${recipientEmail}`);
+        
+        const result = await this.emailQueue.dispatchJobById(job.id);
 
-      if (!result.sent) {
-        throw new Error(result.job.lastError || 'Error desconocido al enviar');
+        // Obtener el trabajo actualizado con todos los detalles
+        const updatedJob = await this.prisma.emailJob.findUnique({
+          where: { id: job.id },
+        });
+
+        const providerUsed = updatedJob?.providerKey || result.job.providerKey || 'ninguno';
+
+        if (result.sent) {
+          this.logger.log(`✅ Correo de prueba enviado a ${recipientEmail} via ${providerUsed} (intento ${attempt}/${maxAttempts})`);
+          
+          return {
+            success: true,
+            messageId: updatedJob?.id || job.id,
+            provider: providerUsed,
+            timestamp,
+            recipientEmail,
+            subject,
+          };
+        }
+
+        // Si falló, registrar el error y continuar con el siguiente intento
+        const errorMsg = updatedJob?.lastError || result.job.lastError || 'Error desconocido';
+        errors.push(`Intento ${attempt} (${providerUsed}): ${errorMsg}`);
+        
+        this.logger.warn(`❌ Intento ${attempt}/${maxAttempts} falló via ${providerUsed}: ${errorMsg}`);
+
+        // Si no es el último intento, esperar un poco antes de reintentar
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos
+        }
       }
 
-      this.logger.log(`Correo de prueba enviado a ${recipientEmail} via ${result.job.providerKey || 'unknown'}`);
-
+      // Si llegamos aquí, todos los intentos fallaron
+      const allErrors = errors.join('\n');
+      this.logger.error(`❌ Todos los intentos fallaron para ${recipientEmail}:\n${allErrors}`);
+      
       return {
-        success: true,
-        messageId: job.id,
-        provider: result.job.providerKey || 'unknown',
+        success: false,
+        error: `Agotados ${maxAttempts} intentos con diferentes proveedores:\n${allErrors}`,
+        provider: 'múltiples',
         timestamp,
         recipientEmail,
         subject,

@@ -522,14 +522,27 @@ export default function AdminEmailTesting() {
                     {testResult.success ? (
                       <div className="space-y-1">
                         <p className="font-semibold">✅ Correo enviado exitosamente</p>
-                        <p className="text-sm">Destinatario: {testResult.recipientEmail}</p>
-                        {testResult.messageId && <p className="text-sm">ID: {testResult.messageId}</p>}
-                        {testResult.provider && <p className="text-sm">Proveedor: {testResult.provider}</p>}
+                        <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
+                        <p className="text-sm"><strong>Proveedor usado:</strong> {testResult.provider || 'No especificado'}</p>
+                        {testResult.messageId && <p className="text-sm"><strong>ID del trabajo:</strong> {testResult.messageId}</p>}
+                        <p className="text-xs text-muted-foreground mt-2">
+                          ℹ️ Verifica tu bandeja de entrada. Si no llega, revisa la cola de correos para ver el estado.
+                        </p>
                       </div>
                     ) : (
                       <div className="space-y-1">
                         <p className="font-semibold">❌ Error al enviar correo</p>
-                        <p className="text-sm">{testResult.error}</p>
+                        <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
+                        {testResult.provider && testResult.provider !== 'ninguno' && (
+                          <p className="text-sm"><strong>Proveedor intentado:</strong> {testResult.provider}</p>
+                        )}
+                        <div className="mt-2 p-2 bg-red-50 rounded text-xs">
+                          <strong>Detalles del error:</strong>
+                          <pre className="mt-1 whitespace-pre-wrap">{testResult.error}</pre>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          💡 El sistema intentará automáticamente con otros proveedores si el correo está en cola.
+                        </p>
                       </div>
                     )}
                   </AlertDescription>
