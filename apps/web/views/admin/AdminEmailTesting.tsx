@@ -297,6 +297,23 @@ export default function AdminEmailTesting() {
     }
   };
 
+  const unblockAllProviders = async () => {
+    if (!confirm('¿Desbloquear TODOS los proveedores SMTP? Esto limpiará todos los bloqueos.')) return;
+
+    setLoadingProviders(true);
+    try {
+      const response: any = await request('/email-testing/unblock-all-providers', {
+        method: 'POST',
+      });
+      alert(`✅ ${response.message}\n\nProveedores desbloqueados: ${response.accountsUnblocked}\nRegistros limpiados: ${response.usageRecordsCleared}`);
+      await loadProviderStatus();
+    } catch (error: any) {
+      alert('❌ Error desbloqueando proveedores: ' + error.message);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
   const formatDate = (date: string | null) => {
     if (!date) return '—';
     return new Date(date).toLocaleString('es-CO', {
@@ -669,10 +686,16 @@ export default function AdminEmailTesting() {
                   <CardTitle>Estado de Proveedores SMTP</CardTitle>
                   <CardDescription>Monitoreo de proveedores de correo y cuotas diarias</CardDescription>
                 </div>
-                <Button onClick={loadProviderStatus} disabled={loadingProviders} variant="outline" size="sm">
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loadingProviders ? 'animate-spin' : ''}`} />
-                  Actualizar
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={unblockAllProviders} disabled={loadingProviders} variant="destructive" size="sm">
+                    <ShieldAlert className="w-4 h-4 mr-2" />
+                    Desbloquear Todos
+                  </Button>
+                  <Button onClick={loadProviderStatus} disabled={loadingProviders} variant="outline" size="sm">
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loadingProviders ? 'animate-spin' : ''}`} />
+                    Actualizar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
