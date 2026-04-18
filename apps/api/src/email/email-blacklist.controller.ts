@@ -1,11 +1,13 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { AdminGuard } from '../auth/guards/admin.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { EmailBlacklistService } from './email-blacklist.service';
 import { EmailBlacklistReason } from '@prisma/client';
 
 @Controller('admin/email-blacklist')
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SUPERADMIN')
 export class EmailBlacklistController {
   constructor(private readonly blacklistService: EmailBlacklistService) {}
 

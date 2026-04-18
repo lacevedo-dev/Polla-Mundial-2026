@@ -4,6 +4,7 @@ import { EmailJobPriority, EmailJobType } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 
 import { EmailProviderAccountsService } from '../src/email/email-provider-accounts.service';
+import { EmailBlacklistService } from '../src/email/email-blacklist.service';
 import { EmailProviderConfigService } from '../src/email/email-provider-config.service';
 import type { EmailProviderConfig } from '../src/email/email-provider-config.service';
 import { EmailProviderCryptoService } from '../src/email/email-provider-crypto.service';
@@ -21,7 +22,8 @@ async function main() {
   const crypto = new EmailProviderCryptoService();
   const accounts = new EmailProviderAccountsService(prisma, crypto);
   const providerConfig = new EmailProviderConfigService(accounts);
-  const emailQueue = new EmailQueueService(prisma, providerConfig);
+  const blacklist = new EmailBlacklistService(prisma);
+  const emailQueue = new EmailQueueService(prisma, providerConfig, blacklist);
 
   const providers = await providerConfig.getProviders();
   const selectedProvider = providers.find((provider) => provider.key === requestedProviderKey);
