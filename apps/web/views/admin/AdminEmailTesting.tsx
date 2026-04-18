@@ -20,7 +20,7 @@ import {
   TrendingUp,
   Database
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { request } from '../../api';
 
 enum EmailTestType {
   VERIFICATION = 'verification',
@@ -108,20 +108,23 @@ export default function AdminEmailTesting() {
     setTestResult(null);
 
     try {
-      const response = await api.post('/email-testing/send-test', {
-        recipientEmail,
-        type: emailType,
-        userName: emailType === EmailTestType.VERIFICATION ? userName : undefined,
-        subject: emailType === EmailTestType.CUSTOM ? customSubject : undefined,
-        htmlContent: emailType === EmailTestType.CUSTOM ? customHtml : undefined,
-        textContent: emailType === EmailTestType.CUSTOM ? customText : undefined,
+      const response = await request('/email-testing/send-test', {
+        method: 'POST',
+        body: JSON.stringify({
+          recipientEmail,
+          type: emailType,
+          userName: emailType === EmailTestType.VERIFICATION ? userName : undefined,
+          subject: emailType === EmailTestType.CUSTOM ? customSubject : undefined,
+          htmlContent: emailType === EmailTestType.CUSTOM ? customHtml : undefined,
+          textContent: emailType === EmailTestType.CUSTOM ? customText : undefined,
+        }),
       });
 
-      setTestResult(response.data);
+      setTestResult(response);
     } catch (error: any) {
       setTestResult({
         success: false,
-        error: error.response?.data?.message || error.message || 'Error desconocido',
+        error: error.message || 'Error desconocido',
         timestamp: new Date(),
         recipientEmail,
         subject: 'Error',
@@ -141,24 +144,27 @@ export default function AdminEmailTesting() {
     setTestResult(null);
 
     try {
-      const response = await api.post('/email-testing/test-queue', {
-        recipientEmail,
-        subject: customSubject || 'Correo de prueba de cola',
-        html: customHtml || '<p>Este es un correo de prueba de la cola.</p>',
-        text: customText || 'Este es un correo de prueba de la cola.',
+      const response: any = await request('/email-testing/test-queue', {
+        method: 'POST',
+        body: JSON.stringify({
+          recipientEmail,
+          subject: customSubject || 'Correo de prueba de cola',
+          html: customHtml || '<p>Este es un correo de prueba de la cola.</p>',
+          text: customText || 'Este es un correo de prueba de la cola.',
+        }),
       });
 
       setTestResult({
-        success: response.data.success,
-        messageId: response.data.jobId,
-        timestamp: response.data.timestamp,
+        success: response.success,
+        messageId: response.jobId,
+        timestamp: response.timestamp,
         recipientEmail,
         subject: 'Encolado en sistema de correos',
       });
     } catch (error: any) {
       setTestResult({
         success: false,
-        error: error.response?.data?.message || error.message || 'Error desconocido',
+        error: error.message || 'Error desconocido',
         timestamp: new Date(),
         recipientEmail,
         subject: 'Error',
@@ -171,8 +177,8 @@ export default function AdminEmailTesting() {
   const loadQueueStatus = async () => {
     setLoadingQueue(true);
     try {
-      const response = await api.get('/email-testing/queue-status');
-      setQueueStatus(response.data);
+      const response: any = await request('/email-testing/queue-status');
+      setQueueStatus(response);
     } catch (error) {
       console.error('Error cargando estado de cola:', error);
     } finally {
@@ -183,8 +189,8 @@ export default function AdminEmailTesting() {
   const loadProviderStatus = async () => {
     setLoadingProviders(true);
     try {
-      const response = await api.get('/email-testing/provider-status');
-      setProviderStatus(response.data);
+      const response: any = await request('/email-testing/provider-status');
+      setProviderStatus(response);
     } catch (error) {
       console.error('Error cargando estado de proveedores:', error);
     } finally {
@@ -195,8 +201,10 @@ export default function AdminEmailTesting() {
   const dispatchPendingJobs = async () => {
     setLoadingQueue(true);
     try {
-      const response = await api.post('/email-testing/dispatch-pending?limit=30');
-      alert(`Procesados: ${response.data.processed}, Enviados: ${response.data.sent}`);
+      const response: any = await request('/email-testing/dispatch-pending?limit=30', {
+        method: 'POST',
+      });
+      alert(`Procesados: ${response.processed}, Enviados: ${response.sent}`);
       await loadQueueStatus();
     } catch (error: any) {
       alert('Error procesando cola: ' + (error.response?.data?.message || error.message));
