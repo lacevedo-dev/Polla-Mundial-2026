@@ -150,7 +150,7 @@ export class EmailTestingService {
       // Usar el sistema de cola para obtener el proveedor óptimo con rotación
       // Esto asegura que se use el mismo algoritmo de selección que el resto de la plataforma
       const queued = await this.emailQueue.enqueueEmail({
-        type: EmailJobType.CUSTOM,
+        type: EmailJobType.MATCH_REMINDER,
         priority: EmailJobPriority.HIGH,
         required: false,
         recipientEmail,
