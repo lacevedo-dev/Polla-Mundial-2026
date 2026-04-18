@@ -131,6 +131,44 @@ export class EmailTestingController {
     return { success: true, message: `Email ${email} removido de la lista negra` };
   }
 
+  @Post('unblock-all-providers')
+  async unblockAllProviders() {
+    const now = new Date();
+    
+    // Desbloquear todas las cuentas de proveedores
+    const accountsUpdated = await this.prisma.emailProviderAccount.updateMany({
+      where: {
+        deletedAt: null,
+        blockedUntil: { not: null },
+      },
+      data: {
+        blockedUntil: null,
+        lastError: null,
+      },
+    });
+
+    // Desbloquear todos los registros de uso
+    const usageUpdated = await this.prisma.emailProviderUsage.updateMany({
+      where: {
+        blockedUntil: { not: null },
+      },
+      data: {
+        blockedUntil: null,
+        lastError: null,
+      },
+    });
+
+    // Invalidar caché de proveedores
+    this.emailTestingService['providerConfigService'].invalidateCache();
+
+    return {
+      success: true,
+      accountsUnblocked: accountsUpdated.count,
+      usageRecordsCleared: usageUpdated.count,
+      message: 'Todos los proveedores han sido desbloqueados',
+    };
+  }
+
   @Get('providers-debug')
   async getProvidersDebug() {
     // Obtener TODOS los proveedores de la BD
