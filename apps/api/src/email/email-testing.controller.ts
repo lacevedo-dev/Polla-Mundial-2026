@@ -130,4 +130,36 @@ export class EmailTestingController {
     await this.blacklistService.removeFromBlacklist(email);
     return { success: true, message: `Email ${email} removido de la lista negra` };
   }
+
+  @Get('providers-debug')
+  async getProvidersDebug() {
+    // Obtener TODOS los proveedores de la BD, incluyendo inactivos
+    const allProviders = await this.prisma.emailProviderAccount.findMany({
+      where: {
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        fromEmail: true,
+        smtpHost: true,
+        smtpPort: true,
+        active: true,
+        dailyLimit: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const activeCount = allProviders.filter(p => p.active).length;
+    const inactiveCount = allProviders.filter(p => !p.active).length;
+
+    return {
+      total: allProviders.length,
+      active: activeCount,
+      inactive: inactiveCount,
+      providers: allProviders,
+    };
+  }
 }
