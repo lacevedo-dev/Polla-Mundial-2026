@@ -101,13 +101,12 @@ export class EmailTestingService {
           break;
 
         case EmailTestType.MATCH_RESULT:
-          const resultContent = this.matchEmailTemplates.buildMatchResultEmail({
+          const resultContent = this.matchEmailTemplates.buildResultSummaryEmail({
             homeTeam: 'México',
             awayTeam: 'Chile',
             homeScore: 2,
             awayScore: 1,
-            userPoints: 10,
-            isExactScore: true,
+            points: 10,
           });
           subject = '🧪 [TEST] ' + resultContent.subject;
           html = resultContent.html;
@@ -124,17 +123,8 @@ export class EmailTestingService {
           throw new Error(`Tipo de correo de prueba no soportado: ${type}`);
       }
 
-      if (type !== EmailTestType.VERIFICATION) {
-        const result = await this.sendDirectEmail(recipientEmail, subject, html, text);
-        return result;
-      }
-
-      return {
-        success: true,
-        timestamp,
-        recipientEmail,
-        subject,
-      };
+      const result = await this.sendDirectEmail(recipientEmail, subject, html, text);
+      return result;
     } catch (error) {
       this.logger.error(`Error enviando correo de prueba: ${error instanceof Error ? error.message : String(error)}`);
       return {
@@ -320,7 +310,7 @@ export class EmailTestingService {
           remainingQuota: provider.dailyLimit - (usage?.sentCount ?? 0),
           isBlocked: (provider.blockedUntil && provider.blockedUntil > now) || (usage?.blockedUntil && usage.blockedUntil > now),
           blockedUntil: provider.blockedUntil || usage?.blockedUntil || null,
-          lastError: provider.lastError || usage?.lastError || account?.lastError || null,
+          lastError: usage?.lastError || account?.lastError || null,
           lastUsedAt: account?.lastUsedAt || null,
         };
       }),
