@@ -3,6 +3,7 @@ import { EmailJob, EmailJobPriority, EmailJobStatus, Prisma } from '@prisma/clie
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailProviderConfig, EmailProviderConfigService } from './email-provider-config.service';
+import { EmailBlacklistService } from './email-blacklist.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
 export interface QueueEmailInput {
@@ -31,9 +32,19 @@ export class EmailQueueService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly providerConfigService: EmailProviderConfigService,
+    private readonly emailBlacklistService: EmailBlacklistService,
   ) {}
 
   async enqueueEmail(input: QueueEmailInput): Promise<boolean> {
+    // Verificar si el email está en la lista negra
+    const blacklistCheck = await this.emailBlacklistService.isBlacklisted(input.recipientEmail);
+    if (blacklistCheck.isBlacklisted) {
+      this.logger.debug(
+        `Skipping blacklisted email: ${input.recipientEmail} (reason: ${blacklistCheck.reason})`,
+      );
+      return false;
+    }
+
     try {
       await this.prisma.emailJob.create({
         data: this.toEmailJobCreateInput(input),
@@ -286,6 +297,26 @@ export class EmailQueueService {
     const message = error instanceof Error ? error.message : String(error);
     const isRateLimited = this.isRateLimitError(message);
     const isTransientConnectionFailure = this.isTransientConnectionError(message);
+    const isRecipientError = this.isRecipientError(message);
+
+    // Si es error de destinatario (bounce, dirección inválida), registrar en blacklist
+    if (isRecipientError) {
+      const job = await this.prisma.emailJob.findUnique({
+        where: { id: jobId },
+        select: { recipientEmail: true },
+      });
+      if (job) {
+        const blacklistResult = await this.emailBlacklistService.recordFailure(
+          job.recipientEmail,
+          message,
+        );
+        if (blacklistResult.blocked) {
+          this.logger.warn(
+            `Recipient ${job.recipientEmail} auto-blocked after bounce/invalid address`,
+          );
+        }
+      }
+    }
 
     if (isRateLimited) {
       await this.blockProvider(provider.key, now, message, 60 * 60_000);
@@ -301,7 +332,7 @@ export class EmailQueueService {
     const maxAttempts = required
       ? EmailQueueService.MAX_REQUIRED_ATTEMPTS
       : EmailQueueService.MAX_OPTIONAL_ATTEMPTS;
-    const shouldRetry = attempts < maxAttempts;
+    const shouldRetry = attempts < maxAttempts && !isRecipientError; // No reintentar si es error del destinatario
     const exhaustedStatus = required ? EmailJobStatus.FAILED : EmailJobStatus.DROPPED;
 
     await this.prisma.emailJob.update({
@@ -421,6 +452,20 @@ export class EmailQueueService {
       || normalized.includes('socket closed unexpectedly')
       || normalized.includes('unable to establish tls')
       || normalized.includes('read econnreset');
+  }
+
+  private isRecipientError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('invalid address')
+      || normalized.includes('mailbox not found')
+      || normalized.includes('user unknown')
+      || normalized.includes('recipient rejected')
+      || normalized.includes('address rejected')
+      || normalized.includes('no such user')
+      || normalized.includes('550 5.1.1')  // Mailbox not found
+      || normalized.includes('550 5.7.1')  // Relay denied
+      || normalized.includes('551 5.1.1')  // User unknown
+      || normalized.includes('554 5.7.1'); // Relay access denied
   }
 
   private computeBackoffMs(attemptCount: number, rateLimited: boolean, transientConnectionFailure: boolean): number {

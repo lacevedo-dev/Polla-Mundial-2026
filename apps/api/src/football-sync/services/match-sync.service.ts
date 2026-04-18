@@ -674,11 +674,8 @@ export class MatchSyncService {
           () => this.predictionReport.sendMatchResultsReport(match.id),
         );
 
-        // Send push notifications for match result + points (CAMBIO 3)
-        await this.runFinishedMatchSideEffect(
-          `send result push for match ${match.id}`,
-          () => this.sendResultPushNotifications(match.id, fixture.goals.home, fixture.goals.away),
-        );
+        // Las notificaciones push de resultados se envían desde NotificationScheduler.sendMatchResultNotifications()
+        // en el sweep automático cada minuto, que ya tiene lógica de agrupamiento por usuario y prevención de duplicados.
       }
 
       return true;
@@ -742,47 +739,6 @@ export class MatchSyncService {
       relevantEvents,
       rawEvents: events.length,
     };
-  }
-
-  /**
-   * Send push notifications to all league members with predictions for this match (CAMBIO 3)
-   */
-  private async sendResultPushNotifications(
-    matchId: string,
-    homeScore: number | null,
-    awayScore: number | null,
-  ): Promise<void> {
-    try {
-      const predictions = await this.prisma.prediction.findMany({
-        where: { matchId },
-        include: {
-          match: { include: { homeTeam: true, awayTeam: true } },
-        },
-      });
-
-      for (const prediction of predictions) {
-        const pts = Math.round(prediction.points ?? 0);
-        const home = prediction.match.homeTeam.name;
-        const away = prediction.match.awayTeam.name;
-        const score = `${homeScore ?? '-'}-${awayScore ?? '-'}`;
-
-        if (pts >= 5) {
-          await this.push.sendToUser(prediction.userId, {
-            title: 'ðŸŽ¯ Â¡Marcador exacto!',
-            body: `${home} ${score} ${away} â€” +${pts} pts`,
-            data: { matchId, points: pts },
-          });
-        } else {
-          await this.push.sendToUser(prediction.userId, {
-            title: 'âœ… Resultado publicado',
-            body: `${home} ${score} ${away} â€” ganaste ${pts} pts`,
-            data: { matchId, points: pts },
-          });
-        }
-      }
-    } catch (error) {
-      this.logger.error(`sendResultPushNotifications failed: ${error.message}`);
-    }
   }
 
   /**

@@ -694,6 +694,25 @@ model EmailProviderAccount {
   @@index([key, blockedUntil])
 }
 
+model EmailBlacklist {
+  id           String               @id @default(cuid())
+  email        String               @unique @db.VarChar(320)
+  reason       EmailBlacklistReason @default(BOUNCE)
+  failureCount Int                  @default(1)
+  lastFailure  DateTime             @default(now())
+  lastError    String?              @db.Text
+  autoBlocked  Boolean              @default(true)
+  blockedAt    DateTime             @default(now())
+  blockedBy    String?
+  notes        String?              @db.Text
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([email])
+  @@index([reason])
+  @@index([autoBlocked])
+}
+
 model EmailBacklogAuditRun {
   id                         String                   @id @default(cuid())
   trigger                    EmailBacklogAuditTrigger
@@ -979,6 +998,14 @@ enum EmailJobStatus {
   FAILED
   DEFERRED
   DROPPED
+}
+
+enum EmailBlacklistReason {
+  BOUNCE
+  INVALID_ADDRESS
+  SPAM_COMPLAINT
+  MANUAL
+  REPEATED_FAILURE
 }
 
 enum EmailBacklogAuditTrigger {
