@@ -2104,6 +2104,7 @@ const Dashboard: React.FC = () => {
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                        </div>
                     </motion.div>
                 );
 
