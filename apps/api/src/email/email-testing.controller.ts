@@ -294,14 +294,11 @@ export class EmailTestingController {
         },
       });
 
-      // Invalidar caché para que se recarguen los proveedores
-      await this.emailTestingService.invalidateProviderCache();
-
       return {
         success: true,
         totalProviders: result.count,
         message: `Actualizadas ${result.count} contraseñas con la encriptación que funciona`,
-        note: 'Todos los proveedores ahora usan la misma contraseña encriptada del proveedor default',
+        note: 'Todos los proveedores ahora usan la misma contraseña encriptada del proveedor default. Reinicia el servidor para que se recarguen.',
       };
     } catch (error) {
       return {
