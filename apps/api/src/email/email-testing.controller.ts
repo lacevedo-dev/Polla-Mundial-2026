@@ -265,40 +265,41 @@ export class EmailTestingController {
     }
 
     try {
-      // Obtener el proveedor "default" que SÍ funciona
-      const defaultProvider = await this.prisma.emailProviderAccount.findFirst({
+      // Obtener todos los proveedores activos
+      const providers = await this.prisma.emailProviderAccount.findMany({
         where: {
-          key: 'default',
           deletedAt: null,
+          active: true,
         },
       });
 
-      if (!defaultProvider) {
+      if (providers.length === 0) {
         return {
           success: false,
-          error: 'No se encontró el proveedor default',
+          error: 'No se encontraron proveedores activos',
         };
       }
 
-      // Usar la contraseña encriptada del proveedor default (que SÍ funciona)
-      const workingEncryptedPassword = defaultProvider.smtpPassEncrypted;
-      
-      // Actualizar TODOS los proveedores activos con esta contraseña
+      // Encriptar la contraseña con la clave actual
+      const cryptoService = this.emailTestingService['providerAccountsService']['cryptoService'];
+      const newEncryptedPassword = cryptoService.encrypt(password);
+
+      // Actualizar TODOS los proveedores con la nueva contraseña encriptada
       const result = await this.prisma.emailProviderAccount.updateMany({
         where: {
           deletedAt: null,
           active: true,
         },
         data: {
-          smtpPassEncrypted: workingEncryptedPassword,
+          smtpPassEncrypted: newEncryptedPassword,
         },
       });
 
       return {
         success: true,
         totalProviders: result.count,
-        message: `Actualizadas ${result.count} contraseñas con la encriptación que funciona`,
-        note: 'Todos los proveedores ahora usan la misma contraseña encriptada del proveedor default. Reinicia el servidor para que se recarguen.',
+        message: `Re-encriptadas ${result.count} contraseñas con la clave actual`,
+        note: 'Reinicia el servidor para que los proveedores se recarguen con las nuevas contraseñas.',
       };
     } catch (error) {
       return {
