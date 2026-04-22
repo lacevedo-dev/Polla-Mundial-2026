@@ -979,6 +979,7 @@ enum AutomationRunTrigger {
 }
 
 enum EmailJobType {
+  VERIFICATION
   MATCH_REMINDER
   PREDICTION_CLOSING
   PREDICTIONS_REPORT

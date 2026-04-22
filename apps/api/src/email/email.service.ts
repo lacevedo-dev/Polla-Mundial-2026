@@ -1,30 +1,12 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
-import { EmailProviderConfigService } from './email-provider-config.service';
+import { EmailJobPriority, EmailJobType } from '@prisma/client';
+import { EmailQueueService } from './email-queue.service';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly transporter: nodemailer.Transporter | null;
-  private readonly from: string;
 
-  constructor(private readonly providerConfigService: EmailProviderConfigService) {
-    const provider = this.providerConfigService.getProviders()[0];
-    if (!provider) {
-      this.transporter = null;
-      this.from = 'noreply@polla2026.com';
-      this.logger.warn('No SMTP provider configured for EmailService; verification emails will be skipped.');
-      return;
-    }
-
-    this.from = provider.fromName ? `${provider.fromName} <${provider.fromEmail}>` : provider.fromEmail;
-    this.transporter = nodemailer.createTransport({
-      host: provider.host,
-      port: provider.port,
-      secure: provider.secure,
-      auth: provider.user && provider.pass ? { user: provider.user, pass: provider.pass } : undefined,
-    } as nodemailer.TransportOptions);
-  }
+  constructor(private readonly emailQueue: EmailQueueService) {}
 
   async sendVerificationEmail(
     email: string,
@@ -32,25 +14,30 @@ export class EmailService {
     userName: string,
     appUrl: string = process.env.APP_URL || 'https://polla2026.com',
   ): Promise<void> {
-    if (!this.transporter) return;
-
     try {
       const verificationLink = `${appUrl}/verify-email?token=${token}`;
       const html = this.getEmailTemplate(userName, verificationLink, token);
       const text = this.getPlainTextTemplate(userName, verificationLink, token);
 
-      const result = await this.transporter.sendMail({
-        from: this.from,
-        to: email,
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.VERIFICATION,
+        priority: EmailJobPriority.HIGH,
+        required: true,
+        recipientEmail: email,
         subject: 'Verifica tu correo para Polla 2026',
         html,
         text,
+        dedupeKey: `verification:${email}:${token}`,
       });
 
-      this.logger.log(`Verification email sent to ${email} (messageId: ${result.messageId})`);
+      if (queued) {
+        this.logger.log(`Verification email queued for ${email} with token ${token}`);
+      } else {
+        this.logger.warn(`Verification email for ${email} was not queued (possible duplicate or blacklisted)`);
+      }
     } catch (error) {
       this.logger.error(
-        `Failed to send verification email to ${email}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to queue verification email for ${email}: ${error instanceof Error ? error.message : String(error)}`,
         error instanceof Error ? error.stack : undefined,
       );
     }
@@ -62,21 +49,33 @@ export class EmailService {
     userName: string,
     appUrl: string = process.env.APP_URL || 'https://polla2026.com',
   ): Promise<void> {
-    if (!this.transporter) return;
+    try {
+      const verificationLink = `${appUrl}/verify-email?token=${token}`;
+      const html = this.getEmailTemplate(userName, verificationLink, token, 'Nuevo código de verificación');
+      const text = this.getPlainTextTemplate(userName, verificationLink, token, 'Nuevo código de verificación');
 
-    const verificationLink = `${appUrl}/verify-email?token=${token}`;
-    const html = this.getEmailTemplate(userName, verificationLink, token, 'Nuevo código de verificación');
-    const text = this.getPlainTextTemplate(userName, verificationLink, token, 'Nuevo código de verificación');
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.VERIFICATION,
+        priority: EmailJobPriority.HIGH,
+        required: true,
+        recipientEmail: email,
+        subject: 'Nuevo código de verificación para Polla 2026',
+        html,
+        text,
+        dedupeKey: `verification-resend:${email}:${token}`,
+      });
 
-    const result = await this.transporter.sendMail({
-      from: this.from,
-      to: email,
-      subject: 'Nuevo código de verificación para Polla 2026',
-      html,
-      text,
-    });
-
-    this.logger.log(`Resend verification email sent to ${email} (messageId: ${result.messageId})`);
+      if (queued) {
+        this.logger.log(`Resend verification email queued for ${email} with token ${token}`);
+      } else {
+        this.logger.warn(`Resend verification email for ${email} was not queued (possible duplicate or blacklisted)`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue resend verification email for ${email}: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
   }
 
   private getEmailTemplate(userName: string, verificationLink: string, token: string, title = 'Verifica tu correo'): string {
