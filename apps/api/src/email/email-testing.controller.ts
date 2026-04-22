@@ -191,6 +191,25 @@ export class EmailTestingController {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Intentar desencriptar cada proveedor manualmente para ver errores
+    const cryptoService = this.emailTestingService['providerAccountsService']['cryptoService'];
+    const decryptionResults = allProviders.map(p => {
+      try {
+        const decrypted = cryptoService.decrypt(p.smtpPassEncrypted);
+        return {
+          key: p.key,
+          success: true,
+          passwordLength: decrypted?.length || 0,
+        };
+      } catch (error) {
+        return {
+          key: p.key,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    });
+
     // Intentar obtener proveedores a través del servicio (con desencriptación)
     const loadedProviders = await this.emailTestingService['providerConfigService'].getProviders();
 
@@ -216,12 +235,16 @@ export class EmailTestingController {
       },
       failed: {
         total: failedProviders.length,
-        reason: 'Probablemente error de desencriptación de contraseña',
         providers: failedProviders.map(p => ({
           key: p.key,
           fromEmail: p.fromEmail,
           hasEncryptedPassword: !!p.smtpPassEncrypted,
         })),
+      },
+      decryptionTest: {
+        successful: decryptionResults.filter(r => r.success).length,
+        failed: decryptionResults.filter(r => !r.success).length,
+        details: decryptionResults,
       },
       allProvidersInDB: allProviders.map(p => ({
         key: p.key,
@@ -229,6 +252,7 @@ export class EmailTestingController {
         fromEmail: p.fromEmail,
         active: p.active,
         hasEncryptedPassword: !!p.smtpPassEncrypted,
+        encryptedValue: p.smtpPassEncrypted?.substring(0, 30) + '...',
       })),
     };
   }
