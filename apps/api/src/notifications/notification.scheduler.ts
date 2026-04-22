@@ -150,6 +150,52 @@ export class NotificationScheduler {
     });
   }
 
+  /**
+   * Obtiene datos completos de las pollas para un usuario, incluyendo participantes
+   */
+  private async getLeagueDataForUser(
+    leagueIds: string[],
+    matchId: string,
+  ): Promise<Array<{
+    id: string;
+    name: string;
+    hasPrediction: boolean;
+    participants: Array<{ name: string; hasPrediction: boolean }>;
+  }>> {
+    const leagues = await this.prisma.league.findMany({
+      where: { id: { in: leagueIds } },
+      select: {
+        id: true,
+        name: true,
+        members: {
+          where: { status: 'ACTIVE' },
+          select: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                predictions: {
+                  where: { matchId, leagueId: { in: leagueIds } },
+                  select: { leagueId: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return leagues.map((league) => ({
+      id: league.id,
+      name: league.name,
+      hasPrediction: false, // Se establecerá desde el contexto del usuario
+      participants: league.members.map((member) => ({
+        name: member.user.name ?? 'Usuario',
+        hasPrediction: member.user.predictions.some((p) => p.leagueId === league.id),
+      })),
+    }));
+  }
+
   private async getLeaguesForMatch(
     tournamentId: string | null,
     context?: MatchAutomationSweepContext,
@@ -362,13 +408,41 @@ export class NotificationScheduler {
           totalPushDevices += delivery.pushDevices;
           totalWhatsappSent += delivery.whatsappSent ? 1 : 0;
 
-          const emailContent = this.matchEmailTemplates.buildReminderEmail({
-            homeTeam: home,
-            awayTeam: away,
-            matchDate: match.matchDate,
-            venue: match.venue ?? undefined,
-            hasPrediction: pollasWithPrediction > 0,
+          // Obtener datos completos de las pollas con participantes
+          const leagueData = await this.getLeagueDataForUser(
+            userLeagues.map(ul => ul.leagueId),
+            match.id,
+          );
+
+          // Actualizar hasPrediction para cada polla según el usuario actual
+          const leaguesWithUserStatus = leagueData.map((league) => {
+            const userLeague = userLeagues.find(ul => ul.leagueId === league.id);
+            return {
+              ...league,
+              hasPrediction: userLeague?.hasPrediction ?? false,
+            };
           });
+
+          const emailContent = totalPollas > 1
+            ? this.matchEmailTemplates.buildMultiLeagueReminderEmail({
+                homeTeam: home,
+                awayTeam: away,
+                matchDate: match.matchDate,
+                venue: match.venue ?? undefined,
+                leagues: leaguesWithUserStatus.map(league => ({
+                  leagueName: league.name,
+                  leagueId: league.id,
+                  hasPrediction: league.hasPrediction,
+                  participants: league.participants,
+                })),
+              })
+            : this.matchEmailTemplates.buildReminderEmail({
+                homeTeam: home,
+                awayTeam: away,
+                matchDate: match.matchDate,
+                venue: match.venue ?? undefined,
+                hasPrediction: pollasWithPrediction > 0,
+              });
 
           await this.queueUserEmail(
             userId,
@@ -670,14 +744,43 @@ export class NotificationScheduler {
             totalPushDevices += delivery.pushDevices;
             totalWhatsappSent += delivery.whatsappSent ? 1 : 0;
 
-            const emailContent = this.matchEmailTemplates.buildPredictionClosingEmail({
-              homeTeam: home,
-              awayTeam: away,
-              matchDate: match.matchDate,
-              venue: match.venue ?? undefined,
-              closeMinutes,
-              hasPrediction: pollasWithPrediction > 0,
+            // Obtener datos completos de las pollas con participantes
+            const leagueData = await this.getLeagueDataForUser(
+              userLeagues.map(ul => ul.leagueId),
+              match.id,
+            );
+
+            // Actualizar hasPrediction para cada polla según el usuario actual
+            const leaguesWithUserStatus = leagueData.map((league) => {
+              const userLeague = userLeagues.find(ul => ul.leagueId === league.id);
+              return {
+                ...league,
+                hasPrediction: userLeague?.hasPrediction ?? false,
+              };
             });
+
+            const emailContent = totalPollas > 1
+              ? this.matchEmailTemplates.buildMultiLeaguePredictionClosingEmail({
+                  homeTeam: home,
+                  awayTeam: away,
+                  matchDate: match.matchDate,
+                  venue: match.venue ?? undefined,
+                  closeMinutes,
+                  leagues: leaguesWithUserStatus.map(league => ({
+                    leagueName: league.name,
+                    leagueId: league.id,
+                    hasPrediction: league.hasPrediction,
+                    participants: league.participants,
+                  })),
+                })
+              : this.matchEmailTemplates.buildPredictionClosingEmail({
+                  homeTeam: home,
+                  awayTeam: away,
+                  matchDate: match.matchDate,
+                  venue: match.venue ?? undefined,
+                  closeMinutes,
+                  hasPrediction: pollasWithPrediction > 0,
+                });
 
             await this.queueUserEmail(
               userId,
@@ -1059,7 +1162,7 @@ export class NotificationScheduler {
         venue: true,
         homeTeam: { select: { name: true } },
         awayTeam: { select: { name: true } },
-        predictions: { select: { userId: true } },
+        predictions: { select: { userId: true, leagueId: true } },
       },
     });
     if (!match) return;
@@ -1073,17 +1176,118 @@ export class NotificationScheduler {
 
     const home = match.homeTeam.name;
     const away = match.awayTeam.name;
-    const predictedUserIds = new Set(match.predictions.map(p => p.userId));
 
+    // Agrupar usuarios por partido para evitar notificaciones duplicadas
+    const userLeaguesMap = new Map<string, Array<{ leagueId: string; hasPrediction: boolean }>>();
+    const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
+
+    // Construir mapa de usuarios con sus pollas para este partido
     for (const league of leagues) {
       for (const member of league.members) {
-        const hasPrediction = predictedUserIds.has(member.userId);
-        const title = 'Recordatorio de partido';
-        const body = hasPrediction
+        const userId = member.userId;
+        if (!userLeaguesMap.has(userId)) {
+          userLeaguesMap.set(userId, []);
+        }
+        const userPrediction = match.predictions.find(
+          (p) => p.userId === userId && p.leagueId === league.id
+        );
+        userLeaguesMap.get(userId)!.push({
+          leagueId: league.id,
+          hasPrediction: !!userPrediction,
+        });
+      }
+    }
+
+    // Obtener contactos de usuarios
+    const allUserIds = [...userLeaguesMap.keys()];
+    const userContacts = await this.fetchActiveUserContacts(allUserIds);
+
+    // Enviar una notificación por usuario (agrupada)
+    for (const [userId, userLeagues] of userLeaguesMap) {
+      const pollasWithPrediction = userLeagues.filter((ul) => ul.hasPrediction).length;
+      const pollasPending = userLeagues.filter((ul) => !ul.hasPrediction).length;
+      const totalPollas = userLeagues.length;
+
+      // Construir mensaje optimizado
+      const title = '⏰ Recordatorio de partido';
+      let body: string;
+      if (totalPollas === 1) {
+        body = pollasWithPrediction > 0
           ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
           : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
-        await this.notifyUser(member.userId, NotificationType.MATCH_REMINDER, title, body, { matchId: match.id, leagueId: league.id }, `[MANUAL] Partido en ~60 min: ${home} vs ${away}`);
+      } else {
+        if (pollasPending === 0) {
+          body = `Falta 1 hora para ${home} vs ${away}. Tienes pronósticos guardados en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
+        } else if (pollasWithPrediction === 0) {
+          body = `Falta 1 hora para ${home} vs ${away}. Tienes ${totalPollas} polla${totalPollas > 1 ? 's' : ''} pendiente${totalPollas > 1 ? 's' : ''} de pronóstico.`;
+        } else {
+          body = `Falta 1 hora para ${home} vs ${away}. Tienes ${pollasPending} polla${pollasPending > 1 ? 's' : ''} pendiente${pollasPending > 1 ? 's' : ''} de ${totalPollas}.`;
+        }
       }
+
+      await this.notifyUser(
+        userId,
+        NotificationType.MATCH_REMINDER,
+        title,
+        body,
+        {
+          matchId: match.id,
+          leagueIds: userLeagues.map(ul => ul.leagueId),
+          totalPollas,
+          pollasPending,
+          pollasWithPrediction,
+        },
+        `[MANUAL] Partido en ~60 min: ${home} vs ${away}`,
+        userContacts.get(userId) ?? null,
+      );
+
+      // Obtener datos completos de las pollas con participantes
+      const leagueData = await this.getLeagueDataForUser(
+        userLeagues.map(ul => ul.leagueId),
+        match.id,
+      );
+
+      // Actualizar hasPrediction para cada polla según el usuario actual
+      const leaguesWithUserStatus = leagueData.map((league) => {
+        const userLeague = userLeagues.find(ul => ul.leagueId === league.id);
+        return {
+          ...league,
+          hasPrediction: userLeague?.hasPrediction ?? false,
+        };
+      });
+
+      // Enviar email agrupado
+      const emailContent = totalPollas > 1
+        ? this.matchEmailTemplates.buildMultiLeagueReminderEmail({
+            homeTeam: home,
+            awayTeam: away,
+            matchDate: match.matchDate,
+            venue: match.venue ?? undefined,
+            leagues: leaguesWithUserStatus.map(league => ({
+              leagueName: league.name,
+              leagueId: league.id,
+              hasPrediction: league.hasPrediction,
+              participants: league.participants,
+            })),
+          })
+        : this.matchEmailTemplates.buildReminderEmail({
+            homeTeam: home,
+            awayTeam: away,
+            matchDate: match.matchDate,
+            venue: match.venue ?? undefined,
+            hasPrediction: pollasWithPrediction > 0,
+          });
+
+      await this.queueUserEmail(
+        userId,
+        EmailJobType.MATCH_REMINDER,
+        EmailJobPriority.HIGH,
+        true,
+        `match-reminder:${match.id}:${userId}`,
+        emailContent,
+        match.id,
+        userLeagues[0].leagueId,
+      );
     }
   }
 
@@ -1098,7 +1302,7 @@ export class NotificationScheduler {
         venue: true,
         homeTeam: { select: { name: true } },
         awayTeam: { select: { name: true } },
-        predictions: { select: { userId: true } },
+        predictions: { select: { userId: true, leagueId: true } },
       },
     });
     if (!match) return;
@@ -1115,18 +1319,122 @@ export class NotificationScheduler {
 
     const home = match.homeTeam.name;
     const away = match.awayTeam.name;
-    const predictedUserIds = new Set(match.predictions.map(p => p.userId));
 
+    // Determinar closeMinutes (tomar el primer valor de las ligas, ya que se agrupa por partido)
+    const closeMinutes = leagues[0]?.closePredictionMinutes ?? 15;
+
+    // Agrupar usuarios por partido para evitar notificaciones duplicadas
+    const userLeaguesMap = new Map<string, Array<{ leagueId: string; hasPrediction: boolean }>>();
+
+    // Construir mapa de usuarios con sus pollas para este partido
     for (const league of leagues) {
-      const closeMinutes = league.closePredictionMinutes ?? 15;
       for (const member of league.members) {
-        const hasPrediction = predictedUserIds.has(member.userId);
-        const title = hasPrediction ? 'Predicciones cerrando' : 'Predicciones cierran pronto';
-        const body = hasPrediction
+        const userId = member.userId;
+        if (!userLeaguesMap.has(userId)) {
+          userLeaguesMap.set(userId, []);
+        }
+        const userPrediction = match.predictions.find(
+          (p) => p.userId === userId && p.leagueId === league.id
+        );
+        userLeaguesMap.get(userId)!.push({
+          leagueId: league.id,
+          hasPrediction: !!userPrediction,
+        });
+      }
+    }
+
+    // Obtener contactos de usuarios
+    const allUserIds = [...userLeaguesMap.keys()];
+    const userContacts = await this.fetchActiveUserContacts(allUserIds);
+
+    // Enviar una notificación por usuario (agrupada)
+    for (const [userId, userLeagues] of userLeaguesMap) {
+      const pollasWithPrediction = userLeagues.filter((ul) => ul.hasPrediction).length;
+      const pollasPending = userLeagues.filter((ul) => !ul.hasPrediction).length;
+      const totalPollas = userLeagues.length;
+
+      // Construir mensaje optimizado
+      const title = pollasPending > 0 ? '⚠️ Predicciones cierran pronto' : '⚠️ Predicciones cerrando';
+      let body: string;
+      if (totalPollas === 1) {
+        body = pollasWithPrediction > 0
           ? `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tu pronóstico ya está guardado.`
           : `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Envía tu pronóstico ahora.`;
-        await this.notifyUser(member.userId, NotificationType.PREDICTION_CLOSED, title, body, { matchId: match.id, leagueId: league.id }, `[MANUAL] Cierre en ${closeMinutes} min: ${home} vs ${away}`);
+      } else {
+        if (pollasPending === 0) {
+          body = `Las predicciones para ${home} vs ${away} cierran en ${closeMinutes} minutos. Tienes pronósticos en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
+        } else if (pollasWithPrediction === 0) {
+          body = `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Tienes ${totalPollas} polla${totalPollas > 1 ? 's' : ''} pendiente${totalPollas > 1 ? 's' : ''}.`;
+        } else {
+          body = `Quedan ${closeMinutes} minutos para ${home} vs ${away}. Tienes ${pollasPending} polla${pollasPending > 1 ? 's' : ''} pendiente${pollasPending > 1 ? 's' : ''} de ${totalPollas}.`;
+        }
       }
+
+      await this.notifyUser(
+        userId,
+        NotificationType.PREDICTION_CLOSED,
+        title,
+        body,
+        {
+          matchId: match.id,
+          leagueIds: userLeagues.map(ul => ul.leagueId),
+          totalPollas,
+          pollasPending,
+          pollasWithPrediction,
+        },
+        `[MANUAL] Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+        userContacts.get(userId) ?? null,
+      );
+
+      // Obtener datos completos de las pollas con participantes
+      const leagueData = await this.getLeagueDataForUser(
+        userLeagues.map(ul => ul.leagueId),
+        match.id,
+      );
+
+      // Actualizar hasPrediction para cada polla según el usuario actual
+      const leaguesWithUserStatus = leagueData.map((league) => {
+        const userLeague = userLeagues.find(ul => ul.leagueId === league.id);
+        return {
+          ...league,
+          hasPrediction: userLeague?.hasPrediction ?? false,
+        };
+      });
+
+      // Enviar email agrupado
+      const emailContent = totalPollas > 1
+        ? this.matchEmailTemplates.buildMultiLeaguePredictionClosingEmail({
+            homeTeam: home,
+            awayTeam: away,
+            matchDate: match.matchDate,
+            venue: match.venue ?? undefined,
+            closeMinutes,
+            leagues: leaguesWithUserStatus.map(league => ({
+              leagueName: league.name,
+              leagueId: league.id,
+              hasPrediction: league.hasPrediction,
+              participants: league.participants,
+            })),
+          })
+        : this.matchEmailTemplates.buildPredictionClosingEmail({
+            homeTeam: home,
+            awayTeam: away,
+            matchDate: match.matchDate,
+            venue: match.venue ?? undefined,
+            closeMinutes,
+            hasPrediction: pollasWithPrediction > 0,
+          });
+
+      await this.queueUserEmail(
+        userId,
+        EmailJobType.PREDICTION_CLOSING,
+        EmailJobPriority.HIGH,
+        true,
+        `prediction-closing:${match.id}:${userId}`,
+        emailContent,
+        match.id,
+        userLeagues[0].leagueId,
+      );
     }
   }
 
