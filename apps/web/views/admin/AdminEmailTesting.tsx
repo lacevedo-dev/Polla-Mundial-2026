@@ -199,46 +199,6 @@ export default function AdminEmailTesting() {
     }
   };
 
-  const unblockAllProviders = async () => {
-    setLoadingProviders(true);
-    try {
-      const response: any = await request('/email-testing/unblock-all-providers', {
-        method: 'POST',
-      });
-      
-      alert(`✅ ${response.message}\n\n` +
-            `Cuentas desbloqueadas: ${response.accountsUnblocked}\n` +
-            `Registros de uso limpiados: ${response.usageRecordsCleared}`);
-      
-      // Recargar estado de proveedores
-      await loadProviderStatus();
-    } catch (error) {
-      console.error('Error desbloqueando proveedores:', error);
-      alert('❌ Error al desbloquear proveedores. Revisa la consola para más detalles.');
-    } finally {
-      setLoadingProviders(false);
-    }
-  };
-
-  const refreshProviders = async () => {
-    setLoadingProviders(true);
-    try {
-      // Invalidar caché y recargar
-      await request('/email-testing/unblock-all-providers', {
-        method: 'POST',
-      });
-      
-      // Recargar estado
-      await loadProviderStatus();
-      
-      alert('✅ Proveedores actualizados correctamente');
-    } catch (error) {
-      console.error('Error actualizando proveedores:', error);
-      alert('❌ Error al actualizar proveedores');
-    } finally {
-      setLoadingProviders(false);
-    }
-  };
 
   const handleSendTest = async () => {
     if (!recipientEmail) {
