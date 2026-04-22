@@ -47,6 +47,7 @@ import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { LiveMatchTimer, LiveMatchTimerInline, MatchProgressBar } from '../components/live/LiveMatchTimer';
+import { PushNotificationCard } from '../components/PushNotificationPrompt';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
@@ -1725,6 +1726,9 @@ const Dashboard: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* ── Push Notification Prompt ── */}
+            <PushNotificationCard />
 
             {/* ── Header ── */}
             <motion.header {...fade(0)} className="space-y-3">

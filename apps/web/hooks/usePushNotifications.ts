@@ -21,55 +21,101 @@ export function usePushNotifications() {
   });
 
   React.useEffect(() => {
-    const supported =
-      'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    const checkPushStatus = async () => {
+      // 1. Verificar soporte del navegador
+      const supported =
+        'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
-    const permission = supported
-      ? (Notification.permission as PermissionState)
-      : 'unsupported';
+      if (!supported) {
+        setState((s) => ({ ...s, supported: false, permission: 'unsupported' }));
+        return;
+      }
 
-    if (!supported) {
-      setState((s) => ({ ...s, supported: false, permission: 'unsupported' }));
-      return;
-    }
+      // 2. Obtener estado actual de permisos
+      const permission = Notification.permission as PermissionState;
 
-    setState((s) => ({ ...s, supported: true, permission }));
+      // 3. Verificar si hay suscripción activa
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const subscription = await reg.pushManager.getSubscription();
+        
+        // 4. Actualizar estado completo
+        setState((s) => ({
+          ...s,
+          supported: true,
+          permission,
+          subscribed: !!subscription, // true solo si hay suscripción activa
+        }));
+      } catch (error) {
+        // Service Worker no disponible o error
+        setState((s) => ({
+          ...s,
+          supported: true,
+          permission,
+          subscribed: false,
+          error: 'Service Worker no disponible. Recarga la página.',
+        }));
+      }
+    };
 
-    // Check if already subscribed
-    navigator.serviceWorker.ready.then((reg) => {
-      reg.pushManager.getSubscription().then((sub) => {
-        if (sub) setState((s) => ({ ...s, subscribed: true }));
-      });
-    });
+    checkPushStatus();
+
+    // Re-verificar cuando la página vuelve a estar visible (cambio de tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkPushStatus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   const subscribe = React.useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      // Get VAPID public key from server
+      // 1. Verificar si ya hay una suscripción activa
+      const reg = await navigator.serviceWorker.ready;
+      let subscription = await reg.pushManager.getSubscription();
+
+      // Si ya existe una suscripción, primero desuscribirse
+      if (subscription) {
+        await subscription.unsubscribe();
+      }
+
+      // 2. Obtener clave VAPID del servidor
       const { publicKey } = await request<{ publicKey: string }>('/push/vapid-key');
       if (!publicKey) throw new Error('Push no está configurado en el servidor');
 
+      // 3. Solicitar permiso al usuario
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         setState((s) => ({ ...s, loading: false, permission: permission as PermissionState }));
         return;
       }
 
-      const reg = await navigator.serviceWorker.ready;
-      const subscription = await reg.pushManager.subscribe({
+      // 4. Crear nueva suscripción
+      subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
 
+      // 5. Guardar suscripción en el backend
       await request('/push/subscribe', {
         method: 'POST',
         body: JSON.stringify(subscription.toJSON()),
       });
 
+      // 6. Actualizar estado local
       setState((s) => ({ ...s, loading: false, subscribed: true, permission: 'granted' }));
     } catch (e: any) {
-      setState((s) => ({ ...s, loading: false, error: e?.message ?? 'Error al activar notificaciones' }));
+      console.error('Error al suscribir notificaciones push:', e);
+      setState((s) => ({ 
+        ...s, 
+        loading: false, 
+        subscribed: false,
+        error: e?.message ?? 'Error al activar notificaciones' 
+      }));
     }
   }, []);
 
