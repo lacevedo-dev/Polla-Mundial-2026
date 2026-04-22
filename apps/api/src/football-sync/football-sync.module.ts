@@ -16,6 +16,7 @@ import { TournamentImportService } from './services/tournament-import.service';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { SyncEventsService } from './services/sync-events.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PredictionsModule,
     PredictionReportModule,
     PushNotificationsModule,
+    NotificationsModule,
   ],
   controllers: [FootballSyncController, AdminMonitoringController],
   providers: [

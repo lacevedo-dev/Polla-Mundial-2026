@@ -906,6 +906,7 @@ enum NotificationType {
   INVITE_RECEIVED
   PAYMENT_CONFIRMED
   LEAGUE_UPDATE
+  GOAL_SCORED
 }
 
 enum NotifChannel {

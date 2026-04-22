@@ -13,6 +13,7 @@ import { MonitoringService } from './monitoring.service';
 import { SyncEventsService } from './sync-events.service';
 import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import {
   MatchStatus,
   Phase,
@@ -51,6 +52,7 @@ export class MatchSyncService {
     private readonly syncEvents: SyncEventsService,
     private readonly footballConfigService: FootballConfigService,
     private readonly push: PushNotificationsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -782,12 +784,22 @@ export class MatchSyncService {
         if (notifiedUsers.has(prediction.userId)) continue;
         notifiedUsers.add(prediction.userId);
 
+        // Send push notification
         await this.push.sendToUser(prediction.userId, {
           title,
           body,
           tag: `goal-${matchId}-${Date.now()}`,
           requireInteraction: false,
           data: { matchId, type: 'goal', homeScore, awayScore },
+        });
+
+        // Create in-app notification (campana)
+        await this.notifications.createInAppNotification({
+          userId: prediction.userId,
+          type: 'GOAL_SCORED',
+          title,
+          body,
+          data: { matchId, homeScore, awayScore, elapsed },
         });
       }
     } catch (error) {

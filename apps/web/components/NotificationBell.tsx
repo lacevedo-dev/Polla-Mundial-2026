@@ -32,6 +32,7 @@ const TYPE_ICONS: Record<string, string> = {
   RESULT_PUBLISHED:  '✅',
   LEAGUE_INVITE:     '🏆',
   PAYMENT_CONFIRMED: '💳',
+  GOAL_SCORED:       '⚽',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ const TYPE_LABELS: Record<string, string> = {
   RESULT_PUBLISHED:  'Resultado',
   LEAGUE_INVITE:     'Invitación',
   PAYMENT_CONFIRMED: 'Pago',
+  GOAL_SCORED:       'Gol',
 };
 
 const TYPE_LABELS_FULL: Record<string, string> = {
@@ -48,6 +50,7 @@ const TYPE_LABELS_FULL: Record<string, string> = {
   RESULT_PUBLISHED:  'Resultado publicado',
   LEAGUE_INVITE:     'Invitación a liga',
   PAYMENT_CONFIRMED: 'Pago confirmado',
+  GOAL_SCORED:       '¡Gol marcado!',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -64,7 +67,7 @@ function fmtRelative(iso: string): string {
 
 /** true si la notificación tiene destino navegable */
 function isNavigable(type: string): boolean {
-  return ['MATCH_REMINDER', 'PREDICTION_CLOSED', 'RESULT_PUBLISHED', 'LEAGUE_INVITE', 'PAYMENT_CONFIRMED'].includes(type);
+  return ['MATCH_REMINDER', 'PREDICTION_CLOSED', 'RESULT_PUBLISHED', 'LEAGUE_INVITE', 'PAYMENT_CONFIRMED', 'GOAL_SCORED'].includes(type);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -153,6 +156,7 @@ export default function NotificationBell() {
       case 'MATCH_REMINDER':
       case 'PREDICTION_CLOSED':
       case 'RESULT_PUBLISHED':
+      case 'GOAL_SCORED':
         // Seleccionar la liga en el store y navegar a predicciones
         if (n.leagueId) setActiveLeague(n.leagueId);
         navigate('/predictions');
