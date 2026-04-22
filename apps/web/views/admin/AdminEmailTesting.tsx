@@ -745,7 +745,7 @@ export default function AdminEmailTesting() {
                     <h3 className="font-semibold">Trabajos Recientes</h3>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                       {queueStatus.recentJobs.map((job) => (
-                        <div key={job.id} className="border rounded-lg p-3 space-y-2">
+                        <div key={job.id} className={`border rounded-lg p-3 space-y-2 ${job.status === 'PENDING' ? 'bg-yellow-50 border-yellow-200' : job.status === 'DEFERRED' ? 'bg-orange-50 border-orange-200' : ''}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               {getStatusBadge(job.status)}
@@ -762,6 +762,21 @@ export default function AdminEmailTesting() {
                           <div className="text-sm text-muted-foreground">
                             <strong>Asunto:</strong> {job.subject}
                           </div>
+                          {(job.status === 'PENDING' || job.status === 'DEFERRED') && (
+                            <div className="text-xs bg-blue-50 border border-blue-200 rounded p-2">
+                              <div className="flex items-center gap-1 text-blue-700 font-medium">
+                                <Clock className="w-3 h-3" />
+                                {job.status === 'PENDING' 
+                                  ? '⏳ Pendiente de procesamiento automático (cada 2 minutos)'
+                                  : '🔄 Reintentando envío automáticamente'}
+                              </div>
+                              {job.attemptCount > 0 && (
+                                <div className="text-blue-600 mt-1">
+                                  Intentos: {job.attemptCount} | Próximo intento en el siguiente ciclo
+                                </div>
+                              )}
+                            </div>
+                          )}
                           <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <span><Clock className="w-3 h-3 inline mr-1" />Creado: {formatDate(job.createdAt)}</span>
                             {job.sentAt && <span><CheckCircle2 className="w-3 h-3 inline mr-1" />Enviado: {formatDate(job.sentAt)}</span>}
