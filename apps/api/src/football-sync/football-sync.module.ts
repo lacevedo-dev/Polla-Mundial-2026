@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HttpModule } from '@nestjs/axios';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -29,7 +29,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PredictionsModule,
     PredictionReportModule,
     PushNotificationsModule,
-    NotificationsModule,
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [FootballSyncController, AdminMonitoringController],
   providers: [

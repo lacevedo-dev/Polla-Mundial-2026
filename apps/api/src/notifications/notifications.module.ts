@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
@@ -18,7 +18,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PushNotificationsModule,
     PredictionReportModule,
     AutomationObservabilityModule,
-    FootballSyncModule,
+    forwardRef(() => FootballSyncModule),
   ],
   controllers: [NotificationsController],
   providers: [
