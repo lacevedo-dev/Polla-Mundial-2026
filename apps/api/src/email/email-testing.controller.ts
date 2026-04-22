@@ -171,90 +171,73 @@ export class EmailTestingController {
 
   @Get('providers-debug')
   async getProvidersDebug() {
-    // Obtener TODOS los proveedores de la BD
-    const allProviders = await this.prisma.emailProviderAccount.findMany({
-      where: {
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        key: true,
-        name: true,
-        fromEmail: true,
-        smtpHost: true,
-        smtpPort: true,
-        active: true,
-        dailyLimit: true,
-        smtpPassEncrypted: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    try {
+      // Obtener TODOS los proveedores de la BD
+      const allProviders = await this.prisma.emailProviderAccount.findMany({
+        where: {
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          key: true,
+          name: true,
+          fromEmail: true,
+          smtpHost: true,
+          smtpPort: true,
+          active: true,
+          dailyLimit: true,
+          smtpPassEncrypted: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
 
-    // Intentar desencriptar cada proveedor manualmente para ver errores
-    const cryptoService = this.emailTestingService['providerAccountsService']['cryptoService'];
-    const decryptionResults = allProviders.map(p => {
-      try {
-        const decrypted = cryptoService.decrypt(p.smtpPassEncrypted);
-        return {
+      // Intentar obtener proveedores a través del servicio (con desencriptación)
+      const loadedProviders = await this.emailTestingService['providerConfigService'].getProviders();
+
+      // Verificar cuáles proveedores fallaron al cargar
+      const loadedKeys = new Set(loadedProviders.map(p => p.key));
+      const failedProviders = allProviders.filter(p => p.active && !loadedKeys.has(p.key));
+
+      return {
+        inDatabase: {
+          total: allProviders.length,
+          active: allProviders.filter(p => p.active).length,
+          inactive: allProviders.filter(p => !p.active).length,
+        },
+        loaded: {
+          total: loadedProviders.length,
+          providers: loadedProviders.map(p => ({
+            key: p.key,
+            fromEmail: p.fromEmail,
+            host: p.host,
+            port: p.port,
+            dailyLimit: p.dailyLimit,
+          })),
+        },
+        failed: {
+          total: failedProviders.length,
+          providers: failedProviders.map(p => ({
+            key: p.key,
+            fromEmail: p.fromEmail,
+            hasEncryptedPassword: !!p.smtpPassEncrypted,
+          })),
+        },
+        allProvidersInDB: allProviders.map(p => ({
           key: p.key,
-          success: true,
-          passwordLength: decrypted?.length || 0,
-        };
-      } catch (error) {
-        return {
-          key: p.key,
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    });
-
-    // Intentar obtener proveedores a través del servicio (con desencriptación)
-    const loadedProviders = await this.emailTestingService['providerConfigService'].getProviders();
-
-    // Verificar cuáles proveedores fallaron al cargar
-    const loadedKeys = new Set(loadedProviders.map(p => p.key));
-    const failedProviders = allProviders.filter(p => p.active && !loadedKeys.has(p.key));
-
-    return {
-      inDatabase: {
-        total: allProviders.length,
-        active: allProviders.filter(p => p.active).length,
-        inactive: allProviders.filter(p => !p.active).length,
-      },
-      loaded: {
-        total: loadedProviders.length,
-        providers: loadedProviders.map(p => ({
-          key: p.key,
+          name: p.name,
           fromEmail: p.fromEmail,
-          host: p.host,
-          port: p.port,
-          dailyLimit: p.dailyLimit,
-        })),
-      },
-      failed: {
-        total: failedProviders.length,
-        providers: failedProviders.map(p => ({
-          key: p.key,
-          fromEmail: p.fromEmail,
+          active: p.active,
           hasEncryptedPassword: !!p.smtpPassEncrypted,
+          encryptedValue: p.smtpPassEncrypted?.substring(0, 30) + '...',
         })),
-      },
-      decryptionTest: {
-        successful: decryptionResults.filter(r => r.success).length,
-        failed: decryptionResults.filter(r => !r.success).length,
-        details: decryptionResults,
-      },
-      allProvidersInDB: allProviders.map(p => ({
-        key: p.key,
-        name: p.name,
-        fromEmail: p.fromEmail,
-        active: p.active,
-        hasEncryptedPassword: !!p.smtpPassEncrypted,
-        encryptedValue: p.smtpPassEncrypted?.substring(0, 30) + '...',
-      })),
-    };
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      };
+    }
   }
 
   @Post('test-send-debug')
