@@ -7,6 +7,7 @@ import { DispatchEmailJobDto, TestEmailDto, TestEmailQueueDto } from './dto/test
 import { EmailQueueService } from './email-queue.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailBlacklistService } from './email-blacklist.service';
+import { EmailProviderCryptoService } from './email-provider-crypto.service';
 
 @Controller('email-testing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -17,6 +18,7 @@ export class EmailTestingController {
     private readonly emailQueueService: EmailQueueService,
     private readonly prisma: PrismaService,
     private readonly blacklistService: EmailBlacklistService,
+    private readonly cryptoService: EmailProviderCryptoService,
   ) {}
 
   @Post('send-test')
@@ -281,8 +283,7 @@ export class EmailTestingController {
       }
 
       // Encriptar la contraseña con la clave actual
-      const cryptoService = this.emailTestingService['providerAccountsService']['cryptoService'];
-      const newEncryptedPassword = cryptoService.encrypt(password);
+      const newEncryptedPassword = this.cryptoService.encrypt(password);
 
       // Actualizar TODOS los proveedores con la nueva contraseña encriptada
       const result = await this.prisma.emailProviderAccount.updateMany({
