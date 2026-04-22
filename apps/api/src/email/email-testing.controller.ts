@@ -192,12 +192,8 @@ export class EmailTestingController {
         orderBy: { createdAt: 'asc' },
       });
 
-      // Intentar obtener proveedores a través del servicio (con desencriptación)
-      const loadedProviders = await this.emailTestingService['providerConfigService'].getProviders();
-
-      // Verificar cuáles proveedores fallaron al cargar
-      const loadedKeys = new Set(loadedProviders.map(p => p.key));
-      const failedProviders = allProviders.filter(p => p.active && !loadedKeys.has(p.key));
+      // Usar el método público del servicio de testing
+      const providerStatus = await this.emailTestingService.getProviderStatus();
 
       return {
         inDatabase: {
@@ -206,22 +202,17 @@ export class EmailTestingController {
           inactive: allProviders.filter(p => !p.active).length,
         },
         loaded: {
-          total: loadedProviders.length,
-          providers: loadedProviders.map(p => ({
+          total: providerStatus.activeProviders,
+          providers: providerStatus.providers.filter(p => !p.isBlocked).map(p => ({
             key: p.key,
             fromEmail: p.fromEmail,
-            host: p.host,
-            port: p.port,
             dailyLimit: p.dailyLimit,
+            usedToday: p.usedToday,
           })),
         },
         failed: {
-          total: failedProviders.length,
-          providers: failedProviders.map(p => ({
-            key: p.key,
-            fromEmail: p.fromEmail,
-            hasEncryptedPassword: !!p.smtpPassEncrypted,
-          })),
+          total: allProviders.filter(p => p.active).length - providerStatus.activeProviders,
+          reason: 'Probablemente error de desencriptación de contraseña',
         },
         allProvidersInDB: allProviders.map(p => ({
           key: p.key,
