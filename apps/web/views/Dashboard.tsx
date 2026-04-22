@@ -1940,7 +1940,7 @@ const Dashboard: React.FC = () => {
                                         onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-2xl border transition-all
                                             flex flex-col items-center px-2 py-2
-                                            xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3 xl:gap-3 xl:min-h-[84px] xl:rounded-3xl
+                                            xl:flex-row xl:items-center xl:justify-between xl:px-3 xl:py-2 xl:gap-2 xl:min-h-[60px] xl:rounded-2xl
                                             ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
@@ -1979,13 +1979,13 @@ const Dashboard: React.FC = () => {
 
                                         {/* ── ESCRITORIO: tarjeta horizontal completa ── */}
                                         {/* Equipo local */}
-                                        <div className="hidden xl:flex items-center gap-2 min-w-0 flex-1">
-                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-6 w-9 rounded object-cover border border-white/10 shrink-0" />}
-                                            <span className="text-sm font-bold text-white truncate">{match.homeTeam}</span>
+                                        <div className="hidden xl:flex items-center gap-1.5 min-w-0 flex-1">
+                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10 shrink-0" />}
+                                            <span className="text-xs font-bold text-white truncate">{match.homeTeam}</span>
                                         </div>
                                         {/* Centro: marcador + tiempo */}
                                         <div className="hidden xl:flex flex-col items-center shrink-0 gap-0.5">
-                                            <span className={`text-xl font-black tabular-nums leading-none ${scoreColor}`}>
+                                            <span className={`text-lg font-black tabular-nums leading-none ${scoreColor}`}>
                                                 {match.result ? `${rH} – ${rA}` : '– –'}
                                             </span>
                                             <LiveMatchTimerInline
@@ -1996,9 +1996,9 @@ const Dashboard: React.FC = () => {
                                             />
                                         </div>
                                         {/* Equipo visitante */}
-                                        <div className="hidden xl:flex items-center justify-end gap-2 min-w-0 flex-1">
-                                            <span className="text-sm font-bold text-white truncate text-right">{match.awayTeam}</span>
-                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-6 w-9 rounded object-cover border border-white/10 shrink-0" />}
+                                        <div className="hidden xl:flex items-center justify-end gap-1.5 min-w-0 flex-1">
+                                            <span className="text-xs font-bold text-white truncate text-right">{match.awayTeam}</span>
+                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10 shrink-0" />}
                                         </div>
                                     </button>
                                 );
