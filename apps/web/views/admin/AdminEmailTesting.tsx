@@ -199,6 +199,47 @@ export default function AdminEmailTesting() {
     }
   };
 
+  const unblockAllProviders = async () => {
+    setLoadingProviders(true);
+    try {
+      const response: any = await request('/email-testing/unblock-all-providers', {
+        method: 'POST',
+      });
+      
+      alert(`✅ ${response.message}\n\n` +
+            `Cuentas desbloqueadas: ${response.accountsUnblocked}\n` +
+            `Registros de uso limpiados: ${response.usageRecordsCleared}`);
+      
+      // Recargar estado de proveedores
+      await loadProviderStatus();
+    } catch (error) {
+      console.error('Error desbloqueando proveedores:', error);
+      alert('❌ Error al desbloquear proveedores. Revisa la consola para más detalles.');
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  const refreshProviders = async () => {
+    setLoadingProviders(true);
+    try {
+      // Invalidar caché y recargar
+      await request('/email-testing/unblock-all-providers', {
+        method: 'POST',
+      });
+      
+      // Recargar estado
+      await loadProviderStatus();
+      
+      alert('✅ Proveedores actualizados correctamente');
+    } catch (error) {
+      console.error('Error actualizando proveedores:', error);
+      alert('❌ Error al actualizar proveedores');
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
   const handleSendTest = async () => {
     if (!recipientEmail) {
       alert('Por favor selecciona un usuario o ingresa un correo electrónico');
@@ -408,9 +449,32 @@ export default function AdminEmailTesting() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>⚠️ No hay proveedores disponibles</strong>
-                    <br />
-                    Todos los proveedores están bloqueados o han alcanzado su cuota diaria.
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <strong>⚠️ No hay proveedores disponibles</strong>
+                        <br />
+                        Todos los proveedores están bloqueados o han alcanzado su cuota diaria.
+                      </div>
+                      <Button
+                        onClick={unblockAllProviders}
+                        disabled={loadingProviders}
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                      >
+                        {loadingProviders ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            Desbloqueando...
+                          </>
+                        ) : (
+                          <>
+                            <ShieldAlert className="w-4 h-4 mr-2" />
+                            Desbloquear Todos
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}

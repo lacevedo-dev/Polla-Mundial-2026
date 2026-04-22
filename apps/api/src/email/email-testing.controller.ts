@@ -232,4 +232,26 @@ export class EmailTestingController {
       })),
     };
   }
+
+  @Post('test-send-debug')
+  async testSendDebug(@Body() dto: TestEmailDto) {
+    const result = await this.emailTestingService.sendTestEmail(dto.recipientEmail, dto.type, {
+      userName: dto.userName,
+      matchId: dto.matchId,
+      subject: dto.subject,
+      htmlContent: dto.htmlContent,
+      textContent: dto.textContent,
+    });
+
+    // Retornar la respuesta completa con información de debug
+    return {
+      ...result,
+      debug: {
+        hasAttempts: !!result.attempts,
+        attemptsLength: result.attempts?.length || 0,
+        totalProviders: result.totalProviders,
+        attemptsData: result.attempts,
+      },
+    };
+  }
 }
