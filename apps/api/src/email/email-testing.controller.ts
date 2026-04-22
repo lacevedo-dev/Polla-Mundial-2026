@@ -265,55 +265,49 @@ export class EmailTestingController {
     }
 
     try {
-      // Obtener el servicio de crypto
-      const cryptoService = this.emailTestingService['providerAccountsService']['cryptoService'];
+      // Obtener el proveedor "default" que SÍ funciona
+      const defaultProvider = await this.prisma.emailProviderAccount.findFirst({
+        where: {
+          key: 'default',
+          deletedAt: null,
+        },
+      });
+
+      if (!defaultProvider) {
+        return {
+          success: false,
+          error: 'No se encontró el proveedor default',
+        };
+      }
+
+      // Usar la contraseña encriptada del proveedor default (que SÍ funciona)
+      const workingEncryptedPassword = defaultProvider.smtpPassEncrypted;
       
-      // Obtener todos los proveedores
-      const providers = await this.prisma.emailProviderAccount.findMany({
+      // Actualizar TODOS los proveedores activos con esta contraseña
+      const result = await this.prisma.emailProviderAccount.updateMany({
         where: {
           deletedAt: null,
           active: true,
         },
+        data: {
+          smtpPassEncrypted: workingEncryptedPassword,
+        },
       });
 
-      let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
-
-      for (const provider of providers) {
-        try {
-          // Re-encriptar con la contraseña proporcionada
-          const newEncrypted = cryptoService.encrypt(password);
-
-          await this.prisma.emailProviderAccount.update({
-            where: { id: provider.id },
-            data: {
-              smtpPassEncrypted: newEncrypted,
-            },
-          });
-
-          successCount++;
-        } catch (error) {
-          errorCount++;
-          errors.push(`${provider.key}: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-
-      // Invalidar caché
-      this.emailTestingService['providerConfigService'].invalidateCache();
+      // Invalidar caché para que se recarguen los proveedores
+      await this.emailTestingService.invalidateProviderCache();
 
       return {
-        success: errorCount === 0,
-        totalProviders: providers.length,
-        successCount,
-        errorCount,
-        errors: errorCount > 0 ? errors : undefined,
-        message: `Re-encriptadas ${successCount} de ${providers.length} contraseñas`,
+        success: true,
+        totalProviders: result.count,
+        message: `Actualizadas ${result.count} contraseñas con la encriptación que funciona`,
+        note: 'Todos los proveedores ahora usan la misma contraseña encriptada del proveedor default',
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       };
     }
   }
