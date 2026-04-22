@@ -33,6 +33,14 @@ export interface EmailQueueTestResult {
   jobId?: string;
   error?: string;
   timestamp: Date;
+  queueInfo?: {
+    status: string;
+    pendingJobs: number;
+    availableProviders: number;
+    nextProvider: string;
+    schedulerInterval: string;
+    message: string;
+  };
 }
 
 @Injectable()
