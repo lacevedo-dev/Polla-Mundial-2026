@@ -2016,10 +2016,10 @@ const Dashboard: React.FC = () => {
                                     transition={{ duration: 0.22, ease: 'easeOut' as const }}
                                     className="overflow-hidden"
                                 >
-                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-4 xl:rounded-3xl xl:border-rose-400/35 xl:p-5">
+                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-3 xl:rounded-2xl xl:border-rose-400/35">
                                         {/* Timer + estado predicción + pts */}
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-1.5">
                                                 <LiveMatchTimer
                                                     matchDate={expandedMatch.date}
                                                     elapsed={expandedMatch.elapsed ?? null}
@@ -2027,21 +2027,21 @@ const Dashboard: React.FC = () => {
                                                     statusShort={expandedMatch.statusShort}
                                                 />
                                                 {liveStandings?.myProvisionalPosition != null && (
-                                                    <span className={`text-[10px] font-black ${liveStandings.myPositionChange > 0 ? 'text-lime-400' : liveStandings.myPositionChange < 0 ? 'text-rose-400' : 'text-white/40'}`}>
-                                                        #{liveStandings.myProvisionalPosition} provisional
+                                                    <span className={`text-[9px] font-black ${liveStandings.myPositionChange > 0 ? 'text-lime-400' : liveStandings.myPositionChange < 0 ? 'text-rose-400' : 'text-white/40'}`}>
+                                                        #{liveStandings.myProvisionalPosition}
                                                         {liveStandings.myPositionChange > 0 && ` ↑${liveStandings.myPositionChange}`}
                                                         {liveStandings.myPositionChange < 0 && ` ↓${Math.abs(liveStandings.myPositionChange)}`}
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1.5">
                                                 {expandedPts > 0 && (
-                                                    <span className="rounded-full bg-lime-400/20 px-2 py-0.5 font-mono text-[10px] font-black text-lime-300">
+                                                    <span className="rounded-full bg-lime-400/20 px-1.5 py-0.5 font-mono text-[9px] font-black text-lime-300">
                                                         +{expandedPts}pts
                                                     </span>
                                                 )}
                                                 {expandedStatus && (
-                                                    <span className={`text-[10px] font-black ${expandedStatusColor}`}>
+                                                    <span className={`text-[9px] font-black ${expandedStatusColor}`}>
                                                         {expandedStatus === 'exact' ? '⚽ Exacto' : expandedStatus === 'winning' ? '✓ Ganando' : '✗ Perdiendo'}
                                                     </span>
                                                 )}
@@ -2058,26 +2058,26 @@ const Dashboard: React.FC = () => {
                                         />
 
                                         {/* Marcador */}
-                                        <div className="flex items-center justify-between mt-3">
-                                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                {expandedMatch.homeFlag && <img src={expandedMatch.homeFlag} alt="" className="h-7 w-10 rounded object-cover border border-white/10" />}
-                                                <span className="text-sm font-bold text-white truncate">{expandedMatch.homeTeam}</span>
+                                        <div className="flex items-center justify-between mt-2">
+                                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                                {expandedMatch.homeFlag && <img src={expandedMatch.homeFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10" />}
+                                                <span className="text-xs font-bold text-white truncate">{expandedMatch.homeTeam}</span>
                                             </div>
-                                            <div className="mx-4 shrink-0 text-center">
-                                                <div className="rounded-xl bg-white/10 px-4 py-1.5 tabular-nums border border-white/10">
-                                                    <span className="text-xl font-black text-white">{expandedRealHome}</span>
-                                                    <span className="mx-1.5 text-white/30">—</span>
-                                                    <span className="text-xl font-black text-white">{expandedRealAway}</span>
+                                            <div className="mx-2 shrink-0 text-center">
+                                                <div className="rounded-lg bg-white/10 px-3 py-1 tabular-nums border border-white/10">
+                                                    <span className="text-lg font-black text-white">{expandedRealHome}</span>
+                                                    <span className="mx-1 text-white/30">—</span>
+                                                    <span className="text-lg font-black text-white">{expandedRealAway}</span>
                                                 </div>
                                                 {expandedHasPred && (
-                                                    <p className={`mt-1 font-mono text-[9px] font-bold ${expandedStatusColor}`}>
+                                                    <p className={`mt-0.5 font-mono text-[8px] font-bold ${expandedStatusColor}`}>
                                                         pred {expandedPredHome}–{expandedPredAway}
                                                     </p>
                                                 )}
                                             </div>
-                                            <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-                                                <span className="text-sm font-bold text-white truncate">{expandedMatch.awayTeam}</span>
-                                                {expandedMatch.awayFlag && <img src={expandedMatch.awayFlag} alt="" className="h-7 w-10 rounded object-cover border border-white/10" />}
+                                            <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                                                <span className="text-xs font-bold text-white truncate">{expandedMatch.awayTeam}</span>
+                                                {expandedMatch.awayFlag && <img src={expandedMatch.awayFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10" />}
                                             </div>
                                         </div>
 
@@ -2085,13 +2085,13 @@ const Dashboard: React.FC = () => {
                                         {expandLevel === 2 && (
                                             <>
                                                 {expandedEvents.length > 0 && (
-                                                    <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-x-4 gap-y-0.5">
+                                                    <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-x-3 gap-y-0.5">
                                                         {expandedEvents.map((e, i) => {
                                                             const isOG = e.detail?.toLowerCase().includes('own goal');
                                                             const icon = e.type === 'GOAL' ? (isOG ? '⚽ OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
                                                             const min  = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
                                                             return (
-                                                                <span key={i} className="text-[10px] text-white/40">
+                                                                <span key={i} className="text-[9px] text-white/40">
                                                                     {icon} {!isOG && e.playerName ? e.playerName : ''} {min}
                                                                 </span>
                                                             );
@@ -2100,7 +2100,7 @@ const Dashboard: React.FC = () => {
                                                 )}
 
                                                 {expandedMatch.phase && (
-                                                    <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-white/20">{expandedMatch.phase}</p>
+                                                    <p className="mt-1.5 text-[8px] font-black uppercase tracking-widest text-white/20">{expandedMatch.phase}</p>
                                                 )}
                                             </>
                                         )}
