@@ -263,6 +263,8 @@ export default function AdminEmailTesting() {
         timestamp: response.timestamp,
         recipientEmail,
         subject: 'Encolado en sistema de correos',
+        provider: response.queueInfo?.nextProvider || 'No especificado',
+        queueInfo: response.queueInfo?.message || 'Encolado exitosamente',
       });
       await loadQueueStatus();
     } catch (error: any) {
@@ -577,6 +579,11 @@ export default function AdminEmailTesting() {
                           <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
                           <p className="text-sm"><strong>Proveedor usado:</strong> {testResult.provider || 'No especificado'}</p>
                           {testResult.messageId && <p className="text-sm"><strong>ID del trabajo:</strong> {testResult.messageId}</p>}
+                          {testResult.queueInfo && (
+                            <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
+                              <p>📋 {testResult.queueInfo}</p>
+                            </div>
+                          )}
                           <p className="text-xs text-muted-foreground mt-2">
                             ℹ️ Verifica tu bandeja de entrada. Si no llega, revisa la cola de correos para ver el estado.
                           </p>

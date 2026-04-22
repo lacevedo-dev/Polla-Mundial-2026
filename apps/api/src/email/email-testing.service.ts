@@ -368,10 +368,29 @@ export class EmailTestingService {
         orderBy: { createdAt: 'desc' },
       });
 
+      // Obtener información del proveedor que se usará
+      const providers = await this.providerConfigService.getProviders();
+      const activeProviders = providers.filter(p => !p.blockedUntil || p.blockedUntil < new Date());
+      
+      // Contar trabajos pendientes en la cola
+      const pendingCount = await this.prisma.emailJob.count({
+        where: { status: 'PENDING' },
+      });
+
       return {
         success: true,
         jobId: job?.id,
         timestamp,
+        queueInfo: {
+          status: job?.status || 'PENDING',
+          pendingJobs: pendingCount,
+          availableProviders: activeProviders.length,
+          nextProvider: activeProviders.length > 0 ? activeProviders[0].key : 'ninguno',
+          schedulerInterval: '2 minutos',
+          message: activeProviders.length > 0 
+            ? `Encolado exitosamente. Se procesará automáticamente en los próximos 2 minutos usando el proveedor "${activeProviders[0].key}".`
+            : 'Encolado, pero no hay proveedores disponibles actualmente.',
+        },
       };
     } catch (error) {
       this.logger.error(`Error probando cola de correos: ${error instanceof Error ? error.message : String(error)}`);
