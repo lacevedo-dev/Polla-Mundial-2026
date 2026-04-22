@@ -29,6 +29,14 @@ interface User {
   username: string;
 }
 
+interface ProviderAttempt {
+  providerKey: string;
+  providerEmail: string;
+  status: 'pending' | 'trying' | 'success' | 'failed';
+  error?: string;
+  timestamp?: string;
+}
+
 interface TestResult {
   success: boolean;
   messageId?: string;
@@ -37,6 +45,8 @@ interface TestResult {
   timestamp: Date;
   recipientEmail: string;
   subject: string;
+  attempts?: ProviderAttempt[];
+  totalProviders?: number;
 }
 
 interface QueueJob {
@@ -529,41 +539,121 @@ export default function AdminEmailTesting() {
               </div>
 
               {testResult && (
-                <Alert variant={testResult.success ? 'default' : 'destructive'}>
-                  {testResult.success ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <XCircle className="h-4 w-4" />
-                  )}
-                  <AlertDescription>
+                <div className="space-y-3">
+                  <Alert variant={testResult.success ? 'default' : 'destructive'}>
                     {testResult.success ? (
-                      <div className="space-y-1">
-                        <p className="font-semibold">✅ Correo enviado exitosamente</p>
-                        <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
-                        <p className="text-sm"><strong>Proveedor usado:</strong> {testResult.provider || 'No especificado'}</p>
-                        {testResult.messageId && <p className="text-sm"><strong>ID del trabajo:</strong> {testResult.messageId}</p>}
-                        <p className="text-xs text-muted-foreground mt-2">
-                          ℹ️ Verifica tu bandeja de entrada. Si no llega, revisa la cola de correos para ver el estado.
-                        </p>
-                      </div>
+                      <CheckCircle2 className="h-4 w-4" />
                     ) : (
-                      <div className="space-y-1">
-                        <p className="font-semibold">❌ Error al enviar correo</p>
-                        <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
-                        {testResult.provider && testResult.provider !== 'ninguno' && (
-                          <p className="text-sm"><strong>Proveedor intentado:</strong> {testResult.provider}</p>
-                        )}
-                        <div className="mt-2 p-2 bg-red-50 rounded text-xs">
-                          <strong>Detalles del error:</strong>
-                          <pre className="mt-1 whitespace-pre-wrap">{testResult.error}</pre>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          💡 El sistema intentará automáticamente con otros proveedores si el correo está en cola.
-                        </p>
-                      </div>
+                      <XCircle className="h-4 w-4" />
                     )}
-                  </AlertDescription>
-                </Alert>
+                    <AlertDescription>
+                      {testResult.success ? (
+                        <div className="space-y-1">
+                          <p className="font-semibold">✅ Correo enviado exitosamente</p>
+                          <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
+                          <p className="text-sm"><strong>Proveedor usado:</strong> {testResult.provider || 'No especificado'}</p>
+                          {testResult.messageId && <p className="text-sm"><strong>ID del trabajo:</strong> {testResult.messageId}</p>}
+                          <p className="text-xs text-muted-foreground mt-2">
+                            ℹ️ Verifica tu bandeja de entrada. Si no llega, revisa la cola de correos para ver el estado.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="font-semibold">❌ Error al enviar correo</p>
+                          <p className="text-sm"><strong>Destinatario:</strong> {testResult.recipientEmail}</p>
+                          {testResult.provider && testResult.provider !== 'ninguno' && (
+                            <p className="text-sm"><strong>Proveedor intentado:</strong> {testResult.provider}</p>
+                          )}
+                          <div className="mt-2 p-2 bg-red-50 rounded text-xs">
+                            <strong>Detalles del error:</strong>
+                            <pre className="mt-1 whitespace-pre-wrap">{testResult.error}</pre>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            💡 El sistema intentará automáticamente con otros proveedores si el correo está en cola.
+                          </p>
+                        </div>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* Mostrar intentos de proveedores si están disponibles */}
+                  {testResult.attempts && testResult.attempts.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">
+                          Proceso de Envío ({testResult.totalProviders} proveedor{testResult.totalProviders !== 1 ? 'es' : ''})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {testResult.attempts.map((attempt, index) => (
+                            <div
+                              key={attempt.providerKey}
+                              className={`flex items-start gap-3 p-3 rounded-lg border ${
+                                attempt.status === 'success'
+                                  ? 'bg-green-50 border-green-200'
+                                  : attempt.status === 'failed'
+                                  ? 'bg-red-50 border-red-200'
+                                  : attempt.status === 'trying'
+                                  ? 'bg-blue-50 border-blue-200'
+                                  : 'bg-gray-50 border-gray-200'
+                              }`}
+                            >
+                              <div className="flex-shrink-0 mt-0.5">
+                                {attempt.status === 'success' && (
+                                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                                )}
+                                {attempt.status === 'failed' && (
+                                  <XCircle className="w-5 h-5 text-red-600" />
+                                )}
+                                {attempt.status === 'trying' && (
+                                  <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+                                )}
+                                {attempt.status === 'pending' && (
+                                  <Clock className="w-5 h-5 text-gray-400" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">
+                                    Intento {index + 1}
+                                  </span>
+                                  <Badge
+                                    variant={
+                                      attempt.status === 'success'
+                                        ? 'default'
+                                        : attempt.status === 'failed'
+                                        ? 'destructive'
+                                        : 'secondary'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {attempt.status === 'success' && '✓ Exitoso'}
+                                    {attempt.status === 'failed' && '✗ Fallido'}
+                                    {attempt.status === 'trying' && '⟳ Enviando...'}
+                                    {attempt.status === 'pending' && '⋯ Pendiente'}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  <strong>Proveedor:</strong> {attempt.providerKey}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  <strong>Email:</strong> {attempt.providerEmail}
+                                </p>
+                                {attempt.error && (
+                                  <div className="mt-2 p-2 bg-white/50 rounded text-xs">
+                                    <strong className="text-red-700">Error:</strong>
+                                    <p className="mt-1 text-red-600">{attempt.error}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -8,6 +8,14 @@ import { MatchEmailTemplateService } from './match-email-template.service';
 import { EmailProviderConfigService } from './email-provider-config.service';
 import { EmailTestType } from './dto/test-email.dto';
 
+export interface ProviderAttempt {
+  providerKey: string;
+  providerEmail: string;
+  status: 'pending' | 'trying' | 'success' | 'failed';
+  error?: string;
+  timestamp?: Date;
+}
+
 export interface EmailTestResult {
   success: boolean;
   messageId?: string;
@@ -16,6 +24,8 @@ export interface EmailTestResult {
   timestamp: Date;
   recipientEmail: string;
   subject: string;
+  attempts?: ProviderAttempt[];
+  totalProviders?: number;
 }
 
 export interface EmailQueueTestResult {
@@ -145,89 +155,138 @@ export class EmailTestingService {
     text: string,
   ): Promise<EmailTestResult> {
     const timestamp = new Date();
-    const maxAttempts = 3; // Intentar con hasta 3 proveedores diferentes
     const errors: string[] = [];
 
     try {
-      // Usar el sistema de cola para obtener el proveedor óptimo con rotación
-      // Esto asegura que se use el mismo algoritmo de selección que el resto de la plataforma
-      const queued = await this.emailQueue.enqueueEmail({
-        type: EmailJobType.MATCH_REMINDER,
-        priority: EmailJobPriority.HIGH,
-        required: false,
-        recipientEmail,
-        subject: '🧪 [TEST] ' + subject,
-        html,
-        text,
-        dedupeKey: `test-direct-${Date.now()}-${Math.random()}`,
-      });
-
-      if (!queued) {
-        throw new Error('No se pudo encolar el correo (posible email en lista negra o sin proveedores disponibles)');
+      // Obtener todos los proveedores disponibles
+      const allProviders = await this.providerConfigService.getProviders();
+      
+      if (allProviders.length === 0) {
+        throw new Error('No hay proveedores SMTP configurados en el sistema');
       }
 
-      // Obtener el trabajo recién creado
-      const job = await this.prisma.emailJob.findFirst({
-        where: {
-          recipientEmail: recipientEmail.trim().toLowerCase(),
-          subject: '🧪 [TEST] ' + subject,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      this.logger.log(`📧 Iniciando envío de prueba a ${recipientEmail} con ${allProviders.length} proveedor(es) disponible(s)`);
 
-      if (!job) {
-        throw new Error('No se pudo encontrar el trabajo encolado');
-      }
+      // Inicializar tracking de intentos
+      const attempts: ProviderAttempt[] = allProviders.map(p => ({
+        providerKey: p.key,
+        providerEmail: p.fromEmail,
+        status: 'pending' as const,
+      }));
 
-      // Intentar enviar con reintentos automáticos usando diferentes proveedores
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        this.logger.log(`Intento ${attempt}/${maxAttempts} de envío a ${recipientEmail}`);
+      // Intentar con cada proveedor hasta que uno funcione
+      for (let attempt = 0; attempt < allProviders.length; attempt++) {
+        const provider = allProviders[attempt];
         
-        const result = await this.emailQueue.dispatchJobById(job.id);
+        // Actualizar estado a "trying"
+        attempts[attempt].status = 'trying';
+        attempts[attempt].timestamp = new Date();
+        
+        this.logger.log(`🔄 Intento ${attempt + 1}/${allProviders.length} usando proveedor: ${provider.key} (${provider.fromEmail})`);
 
-        // Obtener el trabajo actualizado con todos los detalles
-        const updatedJob = await this.prisma.emailJob.findUnique({
-          where: { id: job.id },
-        });
-
-        const providerUsed = updatedJob?.providerKey || result.job.providerKey || 'ninguno';
-
-        if (result.sent) {
-          this.logger.log(`✅ Correo de prueba enviado a ${recipientEmail} via ${providerUsed} (intento ${attempt}/${maxAttempts})`);
-          
-          return {
-            success: true,
-            messageId: updatedJob?.id || job.id,
-            provider: providerUsed,
-            timestamp,
+        try {
+          // Encolar el correo
+          const queued = await this.emailQueue.enqueueEmail({
+            type: EmailJobType.MATCH_REMINDER,
+            priority: EmailJobPriority.HIGH,
+            required: false,
             recipientEmail,
-            subject,
-          };
+            subject: '🧪 [TEST] ' + subject,
+            html,
+            text,
+            dedupeKey: `test-direct-${Date.now()}-${Math.random()}`,
+          });
+
+          if (!queued) {
+            throw new Error('No se pudo encolar el correo (posible email en lista negra)');
+          }
+
+          // Obtener el trabajo recién creado
+          const job = await this.prisma.emailJob.findFirst({
+            where: {
+              recipientEmail: recipientEmail.trim().toLowerCase(),
+              subject: '🧪 [TEST] ' + subject,
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (!job) {
+            throw new Error('No se pudo encontrar el trabajo encolado');
+          }
+
+          // Intentar enviar con este proveedor específico
+          const result = await this.emailQueue.dispatchJobById(job.id, {
+            providerKey: provider.key,
+          });
+
+          // Obtener el trabajo actualizado
+          const updatedJob = await this.prisma.emailJob.findUnique({
+            where: { id: job.id },
+          });
+
+          if (result.sent) {
+            this.logger.log(`✅ Correo enviado exitosamente via ${provider.key} (${provider.fromEmail})`);
+            
+            // Marcar como exitoso
+            attempts[attempt].status = 'success';
+            
+            return {
+              success: true,
+              messageId: updatedJob?.id || job.id,
+              provider: `${provider.key} (${provider.fromEmail})`,
+              timestamp,
+              recipientEmail,
+              subject,
+              attempts,
+              totalProviders: allProviders.length,
+            };
+          }
+
+          // Si falló, registrar el error
+          const errorMsg = updatedJob?.lastError || result.job.lastError || 'Error desconocido';
+          errors.push(`${provider.key}: ${errorMsg}`);
+          
+          // Marcar como fallido
+          attempts[attempt].status = 'failed';
+          attempts[attempt].error = errorMsg;
+          
+          this.logger.warn(`❌ Fallo con ${provider.key}: ${errorMsg}`);
+
+          // Limpiar el trabajo fallido antes de intentar con el siguiente proveedor
+          await this.prisma.emailJob.delete({
+            where: { id: job.id },
+          });
+
+        } catch (providerError) {
+          const errorMsg = providerError instanceof Error ? providerError.message : String(providerError);
+          errors.push(`${provider.key}: ${errorMsg}`);
+          
+          // Marcar como fallido
+          attempts[attempt].status = 'failed';
+          attempts[attempt].error = errorMsg;
+          
+          this.logger.warn(`❌ Error con ${provider.key}: ${errorMsg}`);
         }
 
-        // Si falló, registrar el error y continuar con el siguiente intento
-        const errorMsg = updatedJob?.lastError || result.job.lastError || 'Error desconocido';
-        errors.push(`Intento ${attempt} (${providerUsed}): ${errorMsg}`);
-        
-        this.logger.warn(`❌ Intento ${attempt}/${maxAttempts} falló via ${providerUsed}: ${errorMsg}`);
-
-        // Si no es el último intento, esperar un poco antes de reintentar
-        if (attempt < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos
+        // Esperar un poco antes del siguiente intento (excepto en el último)
+        if (attempt < allProviders.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
 
-      // Si llegamos aquí, todos los intentos fallaron
-      const allErrors = errors.join('\n');
-      this.logger.error(`❌ Todos los intentos fallaron para ${recipientEmail}:\n${allErrors}`);
+      // Si llegamos aquí, todos los proveedores fallaron
+      const allErrors = errors.join('\n• ');
+      this.logger.error(`❌ Todos los proveedores fallaron para ${recipientEmail}`);
       
       return {
         success: false,
-        error: `Agotados ${maxAttempts} intentos con diferentes proveedores:\n${allErrors}`,
-        provider: 'múltiples',
+        error: `Probados ${allProviders.length} proveedor(es), todos fallaron:\n• ${allErrors}`,
+        provider: 'ninguno (todos fallaron)',
         timestamp,
         recipientEmail,
         subject,
+        attempts,
+        totalProviders: allProviders.length,
       };
     } catch (error) {
       this.logger.error(`Error enviando correo directo: ${error instanceof Error ? error.message : String(error)}`);
