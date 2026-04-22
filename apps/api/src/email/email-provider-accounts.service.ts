@@ -216,6 +216,7 @@ export class EmailProviderAccountsService {
 
     return accounts.flatMap((account) => {
       try {
+        const decryptedPass = this.cryptoService.decrypt(account.smtpPassEncrypted);
         return [{
           key: account.key,
           fromEmail: account.fromEmail,
@@ -224,7 +225,7 @@ export class EmailProviderAccountsService {
           port: account.smtpPort,
           secure: account.secure,
           user: account.smtpUser ?? undefined,
-          pass: this.cryptoService.decrypt(account.smtpPassEncrypted),
+          pass: decryptedPass,
           dailyLimit: account.dailyLimit,
           reservedHighPriority: account.reservedHighPriority,
           active: account.active,
@@ -234,7 +235,10 @@ export class EmailProviderAccountsService {
           blockedUntil: account.blockedUntil ?? undefined,
           cacheKey: `${account.key}:${account.updatedAt.getTime()}`,
         }];
-      } catch {
+      } catch (error) {
+        this.logger.error(
+          `Failed to decrypt password for provider ${account.key} (${account.fromEmail}): ${error instanceof Error ? error.message : String(error)}`
+        );
         return [];
       }
     });

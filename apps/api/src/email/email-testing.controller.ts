@@ -254,4 +254,69 @@ export class EmailTestingController {
       },
     };
   }
+
+  @Post('re-encrypt-passwords')
+  async reEncryptPasswords(@Body() body: { password: string }) {
+    const { password } = body;
+    
+    if (!password) {
+      return {
+        success: false,
+        error: 'Password is required',
+      };
+    }
+
+    try {
+      // Obtener el servicio de crypto
+      const cryptoService = this.emailTestingService['providerAccountsService']['cryptoService'];
+      
+      // Obtener todos los proveedores
+      const providers = await this.prisma.emailProviderAccount.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+        },
+      });
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      for (const provider of providers) {
+        try {
+          // Re-encriptar con la contraseña proporcionada
+          const newEncrypted = cryptoService.encrypt(password);
+
+          await this.prisma.emailProviderAccount.update({
+            where: { id: provider.id },
+            data: {
+              smtpPassEncrypted: newEncrypted,
+            },
+          });
+
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          errors.push(`${provider.key}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Invalidar caché
+      this.emailTestingService['providerConfigService'].invalidateCache();
+
+      return {
+        success: errorCount === 0,
+        totalProviders: providers.length,
+        successCount,
+        errorCount,
+        errors: errorCount > 0 ? errors : undefined,
+        message: `Re-encriptadas ${successCount} de ${providers.length} contraseñas`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
 }
