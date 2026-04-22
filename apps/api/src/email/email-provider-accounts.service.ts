@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, type EmailProviderAccount } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailProviderCryptoService } from './email-provider-crypto.service';
@@ -41,6 +41,8 @@ type AccountWithUsage = EmailProviderAccount & {
 
 @Injectable()
 export class EmailProviderAccountsService {
+  private readonly logger = new Logger(EmailProviderAccountsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cryptoService: EmailProviderCryptoService,
