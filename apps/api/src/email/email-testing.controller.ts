@@ -207,7 +207,7 @@ export class EmailTestingController {
             key: p.key,
             fromEmail: p.fromEmail,
             dailyLimit: p.dailyLimit,
-            usedToday: p.usedToday,
+            sentToday: p.sentToday,
           })),
         },
         failed: {
