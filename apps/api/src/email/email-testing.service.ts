@@ -67,21 +67,57 @@ export class EmailTestingService {
 
       switch (type) {
         case EmailTestType.VERIFICATION:
-          subject = '🧪 [TEST] Verificación de correo - Polla 2026';
           const token = 'TEST-TOKEN-' + Math.random().toString(36).substring(7).toUpperCase();
           const userName = options?.userName || 'Usuario de Prueba';
-          await this.emailService.sendVerificationEmail(
-            recipientEmail,
-            token,
-            userName,
-          );
-          return {
-            success: true,
-            timestamp,
-            recipientEmail,
-            subject,
-            messageId: 'sent-via-email-service',
-          };
+          const verificationUrl = `${process.env.WEB_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
+          
+          subject = '🧪 [TEST] Verificación de correo - Polla 2026';
+          html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">🧪 TEST - Polla Mundial 2026</h1>
+              </div>
+              <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                <h2 style="color: #667eea;">¡Hola ${userName}!</h2>
+                <p>Este es un <strong>correo de prueba</strong> del sistema de verificación de email.</p>
+                <p>Para verificar tu correo electrónico, haz clic en el siguiente botón:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${verificationUrl}" style="background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                    Verificar Email
+                  </a>
+                </div>
+                <p style="color: #666; font-size: 14px;">O copia y pega este enlace en tu navegador:</p>
+                <p style="background: white; padding: 10px; border-radius: 5px; word-break: break-all; font-size: 12px;">${verificationUrl}</p>
+                <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                  <strong>Token de prueba:</strong> ${token}
+                </p>
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                <p style="color: #999; font-size: 12px; text-align: center;">
+                  Este es un correo de prueba del sistema. En producción, este enlace sería válido por 24 horas.
+                </p>
+              </div>
+            </body>
+            </html>
+          `;
+          text = `
+            ¡Hola ${userName}!
+            
+            Este es un correo de prueba del sistema de verificación de email.
+            
+            Para verificar tu correo electrónico, visita este enlace:
+            ${verificationUrl}
+            
+            Token de prueba: ${token}
+            
+            Este es un correo de prueba del sistema.
+          `;
+          break;
 
         case EmailTestType.MATCH_REMINDER:
           const reminderContent = this.matchEmailTemplates.buildReminderEmail({
