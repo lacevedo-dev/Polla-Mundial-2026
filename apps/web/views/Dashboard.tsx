@@ -1915,9 +1915,9 @@ const Dashboard: React.FC = () => {
                     <motion.div {...fade(0.04)} className="space-y-2 xl:space-y-3">
                         {/*
                           Móvil: chips compactos, auto-fill minmax(88px) → N por fila según ancho
-                          Escritorio (xl): 3 columnas igual que el main grid → tarjetas completas
+                          Escritorio (xl): 1 tarjeta completa (grid-cols-1)
                         */}
-                        <div className="grid gap-2 xl:gap-3 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))] xl:grid-cols-2 2xl:grid-cols-3">
+                        <div className="grid gap-2 xl:gap-3 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))] xl:grid-cols-1">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
