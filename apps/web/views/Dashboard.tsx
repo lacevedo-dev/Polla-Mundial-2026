@@ -1940,7 +1940,7 @@ const Dashboard: React.FC = () => {
                                         onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-xl border transition-all
                                             flex flex-col items-center px-2 py-2
-                                            xl:flex xl:flex-col xl:items-center xl:justify-center xl:px-2 xl:py-2 xl:gap-0.5 xl:min-h-[60px] xl:rounded-lg
+                                            xl:flex xl:flex-row xl:items-center xl:justify-center xl:px-3 xl:py-1.5 xl:gap-2 xl:min-h-[44px] xl:rounded-lg
                                             ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
@@ -1977,33 +1977,20 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {/* ── ESCRITORIO: tarjeta compacta vertical ── */}
+                                        {/* ── ESCRITORIO: compacto horizontal como Google ── */}
                                         {/* Equipo local */}
-                                        <div className="hidden xl:flex flex-col items-center gap-0.5 shrink-0">
-                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10" />}
-                                            <span className="text-[10px] font-bold text-white/80 uppercase leading-none truncate w-full text-center">
-                                                {match.homeTeamCode || match.homeTeam.slice(0, 3)}
-                                            </span>
+                                        <div className="hidden xl:flex items-center gap-1.5 shrink-0">
+                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-5 rounded object-cover" />}
+                                            <span className="text-[10px] font-bold text-white truncate max-w-[50px]">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
                                         </div>
-                                        {/* Centro: marcador + tiempo */}
-                                        <div className="hidden xl:flex flex-col items-center shrink-0 gap-0.5">
-                                            <span className={`text-base font-black tabular-nums leading-none ${scoreColor}`}>
-                                                {match.result ? `${rH}–${rA}` : '–'}
-                                            </span>
-                                            <LiveMatchTimerInline
-                                                matchDate={match.date}
-                                                elapsed={match.elapsed ?? null}
-                                                lastSyncAt={liveSync.lastSyncAt}
-                                                statusShort={match.statusShort}
-                                                className="text-[8px]"
-                                            />
-                                        </div>
+                                        {/* Marcador */}
+                                        <span className={`text-sm font-black tabular-nums leading-none ${scoreColor}`}>
+                                            {match.result ? `${rH}–${rA}` : '–'}
+                                        </span>
                                         {/* Equipo visitante */}
-                                        <div className="hidden xl:flex flex-col items-center gap-0.5 shrink-0">
-                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10" />}
-                                            <span className="text-[10px] font-bold text-white/80 uppercase leading-none truncate w-full text-center">
-                                                {match.awayTeamCode || match.awayTeam.slice(0, 3)}
-                                            </span>
+                                        <div className="hidden xl:flex items-center gap-1.5 shrink-0">
+                                            <span className="text-[10px] font-bold text-white truncate max-w-[50px]">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
+                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-5 rounded object-cover" />}
                                         </div>
                                     </button>
                                 );
