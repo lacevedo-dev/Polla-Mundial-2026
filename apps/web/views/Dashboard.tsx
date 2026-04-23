@@ -2015,7 +2015,7 @@ const Dashboard: React.FC = () => {
                                     transition={{ duration: 0.22, ease: 'easeOut' as const }}
                                     className="overflow-hidden"
                                 >
-                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-3 xl:rounded-2xl xl:border-rose-400/35 max-w-md mx-auto">
+                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-3 xl:rounded-2xl xl:border-rose-400/35 max-w-sm mx-auto">
                                         {/* Timer + estado predicción + pts */}
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-1.5">
@@ -2226,7 +2226,7 @@ const Dashboard: React.FC = () => {
                                             transition={{ duration: 0.2 }}
                                             className="mt-2 overflow-hidden"
                                         >
-                                            <div className="rounded-lg bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 p-2.5 max-w-md mx-auto">
+                                            <div className="rounded-lg bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 p-2.5 max-w-sm mx-auto">
                                                 {/* Info compacta */}
                                                 <div className="flex items-center justify-between mb-2">
                                                     <LiveMatchTimer
