@@ -467,12 +467,12 @@ const InviteModal: React.FC<{
                                                 </p>
 
                                                 {/* CÓDIGO GRANDE Y VISIBLE */}
-                                                <div className="flex items-center justify-between gap-4">
-                                                    <div className="min-w-0 flex-1">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="min-w-0 flex-1 overflow-hidden">
                                                         <p className="text-[12px] font-black uppercase tracking-tight text-lime-400 mb-1">
                                                             {leagueName || '——'}
                                                         </p>
-                                                        <p className="text-[32px] font-black font-mono tracking-[0.3em] text-white leading-none">
+                                                        <p className="text-[22px] sm:text-[26px] font-black font-mono tracking-[0.12em] text-white leading-none break-all">
                                                             {code || 'ABC123'}
                                                         </p>
                                                     </div>
