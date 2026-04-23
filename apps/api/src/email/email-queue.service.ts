@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EmailJob, EmailJobPriority, EmailJobStatus, Prisma } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,7 +24,7 @@ export interface QueueEmailInput {
 export class EmailQueueService {
   private static readonly DEFAULT_DISPATCH_BATCH = 30;
   private static readonly MAX_REQUIRED_ATTEMPTS = 6;
-  private static readonly MAX_OPTIONAL_ATTEMPTS = 3;
+  private static readonly MAX_OPTIONAL_ATTEMPTS = 1; // Fail-fast: no reintentar errores de destinatario
   private static readonly CONNECTION_BACKOFF_MS = 15 * 60_000;
   private readonly logger = new Logger(EmailQueueService.name);
   private readonly transporterCache = new Map<string, nodemailer.Transporter>();
@@ -63,14 +63,30 @@ export class EmailQueueService {
       return { queued: 0, skipped: 0 };
     }
 
+    const filteredInputs: QueueEmailInput[] = [];
+    let skippedBlacklist = 0;
+
+    for (const input of inputs) {
+      const blacklistCheck = await this.emailBlacklistService.isBlacklisted(input.recipientEmail);
+      if (blacklistCheck.isBlacklisted) {
+        skippedBlacklist++;
+        continue;
+      }
+      filteredInputs.push(input);
+    }
+
+    if (filteredInputs.length === 0) {
+      return { queued: 0, skipped: inputs.length };
+    }
+
     const result = await this.prisma.emailJob.createMany({
-      data: inputs.map((input) => this.toEmailJobCreateInput(input)),
+      data: filteredInputs.map((input) => this.toEmailJobCreateInput(input)),
       skipDuplicates: true,
     });
 
     return {
       queued: result.count,
-      skipped: inputs.length - result.count,
+      skipped: skippedBlacklist + (filteredInputs.length - result.count),
     };
   }
 
@@ -332,8 +348,13 @@ export class EmailQueueService {
     const maxAttempts = required
       ? EmailQueueService.MAX_REQUIRED_ATTEMPTS
       : EmailQueueService.MAX_OPTIONAL_ATTEMPTS;
-    const shouldRetry = attempts < maxAttempts && !isRecipientError; // No reintentar si es error del destinatario
-    const exhaustedStatus = required ? EmailJobStatus.FAILED : EmailJobStatus.DROPPED;
+    // Errores de destinatario: no reintentar, marcar directo como fallido
+    const shouldRetry = attempts < maxAttempts && !isRecipientError;
+    const exhaustedStatus = isRecipientError
+      ? EmailJobStatus.DROPPED
+      : required
+        ? EmailJobStatus.FAILED
+        : EmailJobStatus.DROPPED;
 
     await this.prisma.emailJob.update({
       where: { id: jobId },

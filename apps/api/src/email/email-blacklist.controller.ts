@@ -26,7 +26,16 @@ export class EmailBlacklistController {
     const entries = await this.blacklistService.listBlacklist(filters);
     return {
       count: entries.length,
-      entries,
+      entries: entries.map(e => ({
+        email: e.email,
+        reason: e.reason,
+        blockedAt: e.blockedAt,
+        blockedBy: e.blockedBy,
+        lastError: e.lastError,
+        notes: e.notes,
+        autoBlocked: e.autoBlocked,
+        failureCount: e.failureCount,
+      })),
     };
   }
 

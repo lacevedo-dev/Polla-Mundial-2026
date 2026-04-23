@@ -43,7 +43,7 @@ export class PredictionReportService {
    * Busca matches cuya ventana de predicciones acaba de cerrarse (por liga)
    * y envÃ­a el reporte a todos los miembros activos de cada liga.
    */
-  async sendPendingReports(
+async sendPendingReports(
     context?: MatchAutomationSweepContext,
   ): Promise<void> {
     const now = context?.now ?? new Date();
@@ -64,6 +64,17 @@ export class PredictionReportService {
             closePredictionMinutes: true,
           },
         });
+
+    const matchesData = new Map<string, {
+      match: any;
+      leaguesData: Array<{
+        leagueId: string;
+        leagueName: string;
+        leagueCode: string;
+        predictors: any[];
+        standings: Map<string, { points: number; position: number }>;
+      }>;
+    }>();
 
     for (const league of leagues) {
       const matches = context
@@ -122,6 +133,7 @@ export class PredictionReportService {
           return {
             userId: prediction.userId,
             name: this.resolvePredictorName(prediction.user, prediction.userId),
+            email: prediction.user.email ?? undefined,
             isAdmin: member?.role === 'ADMIN',
             homeScore: prediction.homeScore,
             awayScore: prediction.awayScore,
@@ -131,77 +143,67 @@ export class PredictionReportService {
 
         const standings = await this.getStandings(league.id);
 
-        this.logger.log(
-          `Enviando reporte de predicciones: ${match.homeTeam.name} vs ${match.awayTeam.name} ` +
-            `| Liga: ${league.code} | ${recipients.length} destinatarios`,
-        );
-        const scheduledAt = this.observability.getScheduledAt(
-          AutomationStep.PREDICTION_REPORT,
-          {
-            matchDate: match.matchDate,
-            closeMinutes: league.closePredictionMinutes,
-            matchStatus: match.status,
-          },
-        );
-        const runId = await this.observability.startRun({
-          step: AutomationStep.PREDICTION_REPORT,
-          matchId: match.id,
-          leagueId: league.id,
-          scheduledAt,
-          audienceCount: recipients.length,
-          summary: `Preparando reporte de predicciones para ${league.code}`,
-        });
-
-        try {
-          await this.emailService.sendPredictionsReport({
-            recipients,
-            leagueName: league.name,
-            leagueCode: league.code,
-            leagueId: league.id,
-            matchId: match.id,
+        if (!matchesData.has(match.id)) {
+          matchesData.set(match.id, {
             match: {
+              id: match.id,
               homeTeam: match.homeTeam.name,
               awayTeam: match.awayTeam.name,
               matchDate: match.matchDate,
               venue: match.venue ?? undefined,
               round: match.round ?? undefined,
             },
-            predictors,
-            standings,
-            sentAt: now,
+            leaguesData: [],
           });
-
-          await this.prisma.match.update({
-            where: { id: match.id },
-            data: { predictionReportSentAt: now },
-          });
-
-          await this.observability.finishRun(runId, {
-            status: 'SUCCESS',
-            summary: `Reporte de predicciones enviado a ${recipients.length} destinatario(s)`,
-            deliveredCount: recipients.length,
-            details: {
-              matchId: match.id,
-              leagueId: league.id,
-              predictorCount: predictors.length,
-              recipients,
-            },
-          });
-
-          this.logger.log(`Reporte enviado para match ${match.id}`);
-        } catch (error) {
-          await this.observability.failRun(
-            runId,
-            error,
-            {
-              matchId: match.id,
-              leagueId: league.id,
-              predictorCount: predictors.length,
-            },
-            'Falló el envío del reporte de predicciones.',
-          );
-          throw error;
         }
+
+        matchesData.get(match.id)!.leaguesData.push({
+          leagueId: league.id,
+          leagueName: league.name,
+          leagueCode: league.code,
+          predictors,
+          standings,
+        });
+      }
+    }
+
+    for (const [matchId, data] of matchesData) {
+      this.logger.log(
+        `Enviando reporte agrupado: ${data.match.homeTeam} vs ${data.match.awayTeam} ` +
+          `| ${data.leaguesData.length} pollas`,
+      );
+
+      const scheduledAt = this.observability.getScheduledAt(
+        AutomationStep.PREDICTION_REPORT,
+        {
+          matchDate: data.match.matchDate,
+          closeMinutes: 30,
+          matchStatus: MatchStatus.SCHEDULED,
+        },
+      );
+
+      try {
+        await this.emailService.sendMultiLeaguePredictionsReport({
+          matchId,
+          match: {
+            homeTeam: data.match.homeTeam,
+            awayTeam: data.match.awayTeam,
+            matchDate: data.match.matchDate,
+            venue: data.match.venue,
+            round: data.match.round,
+          },
+          leaguesData: data.leaguesData,
+          sentAt: now,
+        });
+
+        await this.prisma.match.update({
+          where: { id: matchId },
+          data: { predictionReportSentAt: now },
+        });
+
+        this.logger.log(`Reporte agrupado enviado para match ${matchId}`);
+} catch (error) {
+        this.logger.error(`Error enviando reporte agrupado para match ${matchId}: ${error}`);
       }
     }
   }

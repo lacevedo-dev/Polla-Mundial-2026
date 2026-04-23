@@ -1,10 +1,11 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EmailJobPriority, EmailJobType } from '@prisma/client';
 import { EmailQueueService } from '../email/email-queue.service';
 
 export interface PredictorEntry {
   userId: string;
   name: string;
+  email?: string;
   isAdmin: boolean;
   homeScore: number;
   awayScore: number;
@@ -56,6 +57,77 @@ export class PredictionReportEmailService {
   private readonly logger = new Logger(PredictionReportEmailService.name);
 
   constructor(private readonly emailQueue: EmailQueueService) {}
+
+  async sendMultiLeaguePredictionsReport(params: {
+    matchId: string;
+    match: ReportMatchInfo;
+    leaguesData: Array<{
+      leagueId: string;
+      leagueName: string;
+      leagueCode: string;
+      predictors: PredictorEntry[];
+      standings: Map<string, { points: number; position: number }>;
+    }>;
+    sentAt: Date;
+  }): Promise<void> {
+    if (!this.emailQueue) {
+      this.logger.warn('Prediction report email queue is not available; skipping queued delivery.');
+      return;
+    }
+
+    const userLeaguesMap = new Map<string, Array<{
+      leagueId: string;
+      leagueName: string;
+      leagueCode: string;
+      predictor?: PredictorEntry;
+      standing?: { points: number; position: number };
+    }>>();
+
+    for (const leagueData of params.leaguesData) {
+      for (const predictor of leagueData.predictors) {
+        const email = predictor.email?.toLowerCase();
+        if (!email) continue;
+
+        if (!userLeaguesMap.has(email)) {
+          userLeaguesMap.set(email, []);
+        }
+        userLeaguesMap.get(email)!.push({
+          leagueId: leagueData.leagueId,
+          leagueName: leagueData.leagueName,
+          leagueCode: leagueData.leagueCode,
+          predictor,
+          standing: leagueData.standings.get(predictor.userId),
+        });
+      }
+    }
+
+    const uniqueRecipients = [...userLeaguesMap.keys()];
+    const html = this.buildMultiLeaguePredictionsHtml(params.match, params.leaguesData, params.sentAt);
+    const text = this.buildMultiLeaguePredictionsText(params.match, params.leaguesData, params.sentAt);
+    const subject = `🔒 Predicciones cerradas: ${params.match.homeTeam} vs ${params.match.awayTeam}`;
+
+    const queued = await this.emailQueue.enqueueEmails(
+      uniqueRecipients.map((recipient) => ({
+        type: EmailJobType.PREDICTIONS_REPORT,
+        priority: EmailJobPriority.MEDIUM,
+        required: false,
+        recipientEmail: recipient,
+        subject,
+        html,
+        text,
+        matchId: params.matchId,
+        dedupeKey: [
+          'predictions-report-multi',
+          params.matchId,
+          recipient,
+        ].join(':'),
+      })),
+    );
+
+    this.logger.log(
+      `Queued multi-league predictions report emails: ${queued.queued}/${uniqueRecipients.length} recipients`,
+    );
+  }
 
   async sendPredictionsReport(params: SendReportParams): Promise<void> {
     if (!this.emailQueue) {
@@ -120,6 +192,138 @@ export class PredictionReportEmailService {
     this.logger.log(
       `Queued results report emails: ${queued.queued}/${params.recipients.length} recipients`,
     );
+  }
+
+  private buildMultiLeaguePredictionsHtml(
+    match: ReportMatchInfo,
+    leaguesData: Array<{
+      leagueId: string;
+      leagueName: string;
+      leagueCode: string;
+      predictors: PredictorEntry[];
+      standings: Map<string, { points: number; position: number }>;
+    }>,
+    sentAt: Date,
+  ): string {
+    const matchDateStr = formatDateTime(match.matchDate);
+    const closedAtStr = formatShortDateTime(sentAt);
+    const totalPredictors = leaguesData.reduce((sum, l) => sum + l.predictors.length, 0);
+
+    let leagueTables = '';
+    for (const leagueData of leaguesData) {
+      const sorted = [...leagueData.predictors].sort((a, b) => {
+        if (a.isAdmin && !b.isAdmin) return -1;
+        if (!a.isAdmin && b.isAdmin) return 1;
+        return a.submittedAt.getTime() - b.submittedAt.getTime();
+      });
+
+      const rows = sorted.map((p, idx) => {
+        const standing = leagueData.standings.get(p.userId);
+        const posLabel = standing ? `#${standing.position}` : '—';
+        const ptsLabel = standing ? `${standing.points} pts` : '—';
+        const adminBadge = p.isAdmin
+          ? `<span style="display:inline-block;background:#f59e0b;color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:20px;letter-spacing:.05em;margin-left:6px;vertical-align:middle;text-transform:uppercase">Admin</span>`
+          : '';
+        const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+        return `
+          <tr style="background:${rowBg}">
+            <td style="padding:12px 16px;font-size:13px;color:#64748b;font-weight:700;text-align:center;white-space:nowrap">${posLabel}</td>
+            <td style="padding:12px 16px;font-size:14px;color:#0f172a;font-weight:600">${escHtml(p.name)}${adminBadge}</td>
+            <td style="padding:12px 16px;text-align:center">
+              <span style="display:inline-flex;align-items:center;gap:8px;background:#0f172a;color:#a3e635;font-size:22px;font-weight:900;padding:6px 18px;border-radius:12px;letter-spacing:.05em;font-family:monospace">
+                ${p.homeScore} <span style="color:#475569;font-size:14px">–</span> ${p.awayScore}
+              </span>
+            </td>
+            <td style="padding:12px 16px;font-size:12px;color:#94a3b8;text-align:center;white-space:nowrap">${ptsLabel}</td>
+            <td style="padding:12px 16px;font-size:11px;color:#94a3b8;text-align:right">${formatShortDateTime(p.submittedAt)}</td>
+          </tr>`;
+      }).join('');
+
+      leagueTables += `
+        <div style="margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #e2e8f0">
+          <div style="padding:20px 24px;background:#f1f5f9;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <h2 style="margin:0;font-size:18px;font-weight:800;color:#0f172a">${escHtml(leagueData.leagueName)}</h2>
+              <p style="margin:4px 0 0;font-size:12px;color:#64748b;letter-spacing:.08em;text-transform:uppercase">${escHtml(leagueData.leagueCode)}</p>
+            </div>
+            <span style="background:#0f172a;color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px">${leagueData.predictors.length} pronósticos</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="background:#f8fafc">
+                <th style="padding:12px 16px;font-size:11px;font-weight:700;color:#94a3b8;text-align:center;letter-spacing:.08em;text-transform:uppercase">Pos.</th>
+                <th style="padding:12px 16px;font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:.08em;text-transform:uppercase">Participante</th>
+                <th style="padding:12px 16px;font-size:11px;font-weight:700;color:#94a3b8;text-align:center;letter-spacing:.08em;text-transform:uppercase">Pronóstico</th>
+                <th style="padding:12px 16px;font-size:11px;font-weight:700;color:#94a3b8;text-align:center;letter-spacing:.08em;text-transform:uppercase">Pts.</th>
+                <th style="padding:12px 16px;font-size:11px;font-weight:700;color:#94a3b8;text-align:right;letter-spacing:.08em;text-transform:uppercase">Hora</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Predicciones cerradas</title>
+</head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:700px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 18px 40px rgba(15,23,42,.12)">
+    <div style="padding:28px 32px;background:#1e293b;color:#ffffff;">
+      <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.9;margin-bottom:12px">🔒 Predicciones cerradas</div>
+      <h1 style="margin:0;font-size:28px;line-height:1.2">${escHtml(match.homeTeam)} vs ${escHtml(match.awayTeam)}</h1>
+      <p style="margin:14px 0 0;font-size:15px;line-height:1.6;opacity:.95">📅 ${matchDateStr}${match.venue ? ` · 🏟 ${escHtml(match.venue)}` : ''}</p>
+    </div>
+    <div style="padding:24px 32px;">
+      <div style="margin-bottom:20px;padding:16px;background:#eff6ff;border-radius:12px">
+        <p style="margin:0;font-size:14px;color:#1e3a8a">📊 <strong>${totalPredictors}</strong> pronósticos en <strong>${leaguesData.length}</strong> polla${leaguesData.length > 1 ? 's' : ''}</p>
+      </div>
+      ${leagueTables}
+    </div>
+    <div style="padding:20px 28px;background:#f8fafc;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;font-size:11px;color:#94a3b8">Reporte generado · ${closedAtStr} (hora Colombia)</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  private buildMultiLeaguePredictionsText(
+    match: ReportMatchInfo,
+    leaguesData: Array<{
+      leagueName: string;
+      leagueCode: string;
+      predictors: PredictorEntry[];
+      standings: Map<string, { points: number; position: number }>;
+    }>,
+    sentAt: Date,
+  ): string {
+    const lines = [
+      `🔒 Predicciones cerradas: ${match.homeTeam} vs ${match.awayTeam}`,
+      formatDateTime(match.matchDate),
+      '',
+    ];
+
+    for (const leagueData of leaguesData) {
+      lines.push(`=== ${leagueData.leagueName} (${leagueData.leagueCode}) ===`);
+      const sorted = [...leagueData.predictors].sort((a, b) => {
+        const aPos = leagueData.standings.get(a.userId)?.position ?? 99;
+        const bPos = leagueData.standings.get(b.userId)?.position ?? 99;
+        return aPos - bPos;
+      });
+
+      for (const p of sorted) {
+        const standing = leagueData.standings.get(p.userId);
+        lines.push(`#${standing?.position ?? '—'} ${p.name}${p.isAdmin ? ' [Admin]' : ''}: ${p.homeScore}-${p.awayScore} (${standing?.points ?? 0} pts)`);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
   }
 
   buildHtml(params: Omit<SendReportParams, 'recipients'>): string {
