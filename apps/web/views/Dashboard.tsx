@@ -1914,9 +1914,10 @@ const Dashboard: React.FC = () => {
                 const panelContent = (
                     <motion.div {...fade(0.04)} className="space-y-2 xl:space-y-3">
                         {/*
-                          Móvil y Escritorio: 1 tarjeta por fila (card completo)
+                          Móvil: 1 tarjeta por fila
+                          Escritorio: chips comprimidos auto-fill
                         */}
-                        <div className="grid gap-2 xl:gap-3 grid-cols-1">
+                        <div className="grid gap-2 xl:gap-2 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))] xl:grid-cols-2 2xl:grid-cols-3">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
@@ -1937,9 +1938,9 @@ const Dashboard: React.FC = () => {
                                     <button
                                         key={match.id}
                                         onClick={() => handleChipClick(match.id)}
-                                        className={`w-full rounded-2xl border transition-all
+                                        className={`w-full rounded-xl border transition-all
                                             flex flex-col items-center px-2 py-2
-                                            xl:flex-row xl:items-center xl:justify-between xl:px-5 xl:py-4 xl:gap-4 xl:min-h-[80px] xl:rounded-2xl
+                                            xl:flex-row xl:items-center xl:justify-between xl:px-2 xl:py-1.5 xl:gap-1 xl:min-h-[44px] xl:rounded-lg
                                             ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
@@ -2317,7 +2318,7 @@ const Dashboard: React.FC = () => {
                                 <span className="text-[9px] font-bold text-slate-600 hidden lg:inline">Flotante</span>
                             </button>
                         </div>
-                        <div className="md:rounded-2xl md:border md:border-slate-200 md:bg-white/90 md:p-3 md:shadow-sm max-w-sm mx-auto">
+                        <div className="md:rounded-2xl md:border md:border-slate-200 md:bg-white/90 md:p-2 md:shadow-sm max-w-sm mx-auto">
                             {panelContent}
                         </div>
                     </div>
