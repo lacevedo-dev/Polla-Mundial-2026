@@ -4,6 +4,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { parseSystemConfigValue, serializeSystemConfigValue } from '../system-config/system-config.util';
 import { USER_STATUS, UserStatusValue } from './user-status.constants';
 
+const TEST_EMAIL_DOMAINS = [
+    'testpolla.local',
+    'test.com',
+    'prueba.com',
+    'seed.local',
+    'polla-test.com',
+    'example.com',
+];
+
 type FindUserOptions = {
     includeInactive?: boolean;
 };
@@ -14,6 +23,20 @@ export class UsersService {
 
     private buildStatusWhere(includeInactive = false): Prisma.UserWhereInput {
         return includeInactive ? {} : { status: USER_STATUS.ACTIVE };
+    }
+
+    async create(data: Prisma.UserCreateInput) {
+        const email = data.email?.toLowerCase?.() ?? data.email;
+        const isTestDomain = TEST_EMAIL_DOMAINS.some(
+            (domain) => email?.endsWith(`@${domain}`) || email?.includes(`.${domain}`),
+        );
+        if (isTestDomain) {
+            throw new Error(`Email ${email} es de un dominio de prueba y no está permitido`);
+        }
+
+        return this.prisma.user.create({
+            data,
+        });
     }
 
     async findByEmail(email: string, options: FindUserOptions = {}) {
