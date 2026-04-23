@@ -6,6 +6,7 @@ interface Props {
     lastSyncAt: number | null; // timestamp ms of last sync
     statusShort?: string | null; // '1H', 'HT', '2H', 'ET', 'FT', etc.
     finished?: boolean;
+    className?: string;
 }
 
 interface ComputedTime {
@@ -106,7 +107,7 @@ export function LiveMatchTimer({ matchDate, elapsed, lastSyncAt, statusShort, fi
 }
 
 /** Compact inline version for table rows */
-export function LiveMatchTimerInline({ matchDate, elapsed, lastSyncAt, statusShort, finished }: Props) {
+export function LiveMatchTimerInline({ matchDate, elapsed, lastSyncAt, statusShort, finished, className }: Props) {
     const [, setTick] = React.useState(0);
 
     React.useEffect(() => {
@@ -115,15 +116,20 @@ export function LiveMatchTimerInline({ matchDate, elapsed, lastSyncAt, statusSho
         return () => clearInterval(interval);
     }, [finished]);
 
-    if (statusShort === 'HT')  return <span className="font-mono text-[9px] font-black text-amber-600">ET</span>;
-    if (statusShort === 'FT' || statusShort === 'AET') return <span className="font-mono text-[9px] font-black text-slate-500">FT</span>;
-    if (statusShort === 'PEN') return <span className="font-mono text-[9px] font-black text-purple-600">Pen.</span>;
+    if (statusShort === 'HT')  return <span className={`font-mono text-[9px] font-black text-amber-600 ${className || ''}`}>HT</span>;
+    if (statusShort === 'FT' || statusShort === 'AET') return <span className={`font-mono text-[9px] font-black text-slate-500 ${className || ''}`}>FT</span>;
+    if (statusShort === 'PEN') return <span className={`font-mono text-[9px] font-black text-purple-600 ${className || ''}`}>PEN</span>;
 
     const { base, stoppage, isStoppage } = computeMinute(matchDate, elapsed, lastSyncAt, statusShort);
 
     return (
-        <span className="font-mono text-[9px] font-black text-rose-600">
-            {isStoppage ? `${base}+${stoppage}'` : `${base}'`}
+        <span className={`inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 font-mono text-[10px] font-black text-rose-700 ${className || ''}`}>
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
+            {isStoppage ? (
+                <>{base}<span className="text-rose-400">+{stoppage}</span><span className="text-[8px]">'</span></>
+            ) : (
+                <>{base}<span className="text-[8px]">'</span></>
+            )}
         </span>
     );
 }
