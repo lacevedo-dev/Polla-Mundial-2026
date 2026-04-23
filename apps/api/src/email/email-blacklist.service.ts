@@ -25,6 +25,16 @@ export class EmailBlacklistService {
     /554.*5\.7\.1/i, // Relay access denied
   ];
 
+  private static readonly TEST_DOMAINS = [
+    'testpolla.local',
+    'test.com',
+    'prueba.com',
+    'seed.local',
+    'polla-test.com',
+    'example.com',
+    'testuser',
+  ];
+
   private static readonly SPAM_PATTERNS = [
     /spam.*complaint/i,
     /abuse.*complaint/i,
@@ -44,6 +54,18 @@ export class EmailBlacklistService {
   async isBlacklisted(email: string): Promise<BlacklistCheckResult> {
     const normalized = this.normalizeEmail(email);
     const now = Date.now();
+
+    // Check test domains proactively
+    const isTestDomain = EmailBlacklistService.TEST_DOMAINS.some(
+      (domain) => normalized.endsWith(`@${domain}`) || normalized.includes(`.${domain}`),
+    );
+    if (isTestDomain) {
+      return {
+        isBlacklisted: true,
+        reason: EmailBlacklistReason.INVALID_ADDRESS,
+        notes: 'Test domain detected',
+      };
+    }
 
     // Check cache
     if (now - this.cacheExpiry < EmailBlacklistService.CACHE_TTL_MS) {
