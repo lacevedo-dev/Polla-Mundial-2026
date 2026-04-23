@@ -2317,7 +2317,7 @@ const Dashboard: React.FC = () => {
                                 <span className="text-[9px] font-bold text-slate-600 hidden lg:inline">Flotante</span>
                             </button>
                         </div>
-                        <div className="md:rounded-2xl md:border md:border-slate-200 md:bg-white/90 md:p-3 md:shadow-sm">
+                        <div className="md:rounded-2xl md:border md:border-slate-200 md:bg-white/90 md:p-3 md:shadow-sm max-w-sm mx-auto">
                             {panelContent}
                         </div>
                     </div>
