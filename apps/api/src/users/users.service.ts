@@ -66,12 +66,6 @@ export class UsersService {
         });
     }
 
-    async create(data: Prisma.UserCreateInput) {
-        return this.prisma.user.create({
-            data,
-        });
-    }
-
     async findAllPaginated(params: {
         page: number;
         limit: number;
