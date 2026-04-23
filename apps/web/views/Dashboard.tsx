@@ -1915,9 +1915,9 @@ const Dashboard: React.FC = () => {
                     <motion.div {...fade(0.04)} className="space-y-2 xl:space-y-3">
                         {/*
                           Móvil: 1 tarjeta por fila
-                          Escritorio: 2 chips por fila (media tarjeta cada uno)
+                          Escritorio: 1 chip ancho por fila (compact pero 1 tarjeta)
                         */}
-                        <div className="grid gap-2 xl:gap-3 grid-cols-1 md:grid-cols-2">
+                        <div className="grid gap-2 xl:gap-2 grid-cols-1">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
@@ -2308,17 +2308,17 @@ const Dashboard: React.FC = () => {
                                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
                                 <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
                             </div>
-                            {/* Solo mostrar botón flotante en desktop */}
+                            {/* Botón flotante siempre visible */}
                             <button
                                 onClick={() => setIsFloating(true)}
-                                className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
                                 title="Hacer flotante"
                             >
                                 <Maximize2 size={12} className="text-slate-600" />
                                 <span className="text-[9px] font-bold text-slate-600 hidden lg:inline">Flotante</span>
                             </button>
                         </div>
-                        <div className="md:rounded-xl md:border md:border-slate-200 md:bg-white/90 md:p-2 md:shadow-sm">
+                        <div className="max-w-sm mx-auto md:max-w-md">
                             {panelContent}
                         </div>
                     </div>
