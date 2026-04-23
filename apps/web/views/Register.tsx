@@ -346,10 +346,20 @@ const Register: React.FC = () => {
         countryCode: selectedCountry.code,
         ...(formData.foto ? { avatarFile: formData.foto } : {})
       });
+
       // Store email in sessionStorage for EmailVerification view
       sessionStorage.setItem('registrationEmail', formData.email);
-      // Show verification step instead of navigating directly
-      setStep('verification');
+
+      // ✅ NUEVO: Verificar si hay código pendiente de invitación
+      const pendingCode = localStorage.getItem('pending_league_code');
+
+      if (pendingCode) {
+        // Usuario fue invitado a una liga → ir a confirmar invitación
+        navigate(`/confirm-invitation?code=${pendingCode}`, { replace: true });
+      } else {
+        // Flujo normal → mostrar paso de verificación
+        setStep('verification');
+      }
     } catch (err: any) {
       setError(err.message || 'Error al completar el registro.');
     }

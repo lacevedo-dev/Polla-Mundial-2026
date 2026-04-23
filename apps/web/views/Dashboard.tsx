@@ -48,6 +48,7 @@ import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { LiveMatchTimer, LiveMatchTimerInline, MatchProgressBar } from '../components/live/LiveMatchTimer';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
+import { getInviteLink, getWhatsAppLink, shareNative } from '../utils/url';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
@@ -243,7 +244,7 @@ const InviteModal: React.FC<{
     const [aiLoading, setAiLoading] = useState(false);
     const [sent, setSent] = useState(false);
 
-    const link = `https://polla.agildesarrollo.com.co/join/${code ?? ''}`;
+    const link = getInviteLink(code ?? '');
     const activeChannels = [...new Set(friends.flatMap((f) => f.channels))] as InviteChannel[];
 
     // Sync template when channel/tone changes in customize screen
@@ -267,18 +268,21 @@ const InviteModal: React.FC<{
         });
     };
 
+    const handleCopyLink = () => {
+        if (!code) return;
+        void navigator.clipboard.writeText(link).then(() => {
+            setCodeCopied(true);
+            setTimeout(() => setCodeCopied(false), 2000);
+        });
+    };
+
     const handleWhatsAppShare = () => {
-        const text = encodeURIComponent(`¡Únete a mi polla "${leagueName}"! 🏆\nCódigo: *${code}*\n${link}`);
-        window.open(`https://wa.me/?text=${text}`, '_blank');
+        const whatsappLink = getWhatsAppLink(code ?? '', leagueName ?? '');
+        window.open(whatsappLink, '_blank');
     };
 
     const handleNativeShare = () => {
-        const text = `¡Únete a la polla "${leagueName}"! Código: ${code}`;
-        if (navigator.share) {
-            void navigator.share({ title: leagueName, text, url: link });
-        } else {
-            void navigator.clipboard.writeText(`${text}\n${link}`);
-        }
+        void shareNative(code ?? '', leagueName ?? '');
     };
 
     const handleAddOne = () => {
@@ -455,23 +459,56 @@ const InviteModal: React.FC<{
                                         </div>
 
                                         <div className="px-5 pb-5 space-y-4 overflow-y-auto">
-                                            {/* Access card */}
-                                            <div className="rounded-2xl bg-slate-900 px-4 py-3.5 flex items-center justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-lime-500 mb-1">Acceso rápido</p>
-                                                    <p className="text-[17px] font-black text-white tracking-widest leading-tight truncate">
-                                                        {leagueName?.toUpperCase() || '——'}
-                                                    </p>
+                                            {/* Invitation Code Card - REDESIGNED */}
+                                            <div className="rounded-2xl bg-slate-900 px-6 py-5 space-y-3">
+                                                {/* Título */}
+                                                <p className="text-[9px] font-black uppercase tracking-[0.22em] text-lime-500">
+                                                    Código de Invitación
+                                                </p>
+
+                                                {/* CÓDIGO GRANDE Y VISIBLE */}
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-[12px] font-black uppercase tracking-tight text-lime-400 mb-1">
+                                                            {leagueName || '——'}
+                                                        </p>
+                                                        <p className="text-[32px] font-black font-mono tracking-[0.3em] text-white leading-none">
+                                                            {code || 'ABC123'}
+                                                        </p>
+                                                    </div>
+                                                    {/* Botones */}
+                                                    <div className="flex flex-col gap-2 shrink-0">
+                                                        <button
+                                                            onClick={handleCopyCode}
+                                                            className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors"
+                                                            title="Copiar código"
+                                                        >
+                                                            {codeCopied ? <CheckCircle2 size={16} className="text-lime-400" /> : <Copy size={16} />}
+                                                        </button>
+                                                        <button
+                                                            onClick={handleWhatsAppShare}
+                                                            className="w-10 h-10 flex items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90 transition-opacity"
+                                                            title="WhatsApp"
+                                                        >
+                                                            <MessageCircle size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={handleNativeShare}
+                                                            className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors"
+                                                            title="Compartir"
+                                                        >
+                                                            <Share2 size={16} />
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 shrink-0">
-                                                    <button onClick={handleCopyCode} className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors" title="Copiar código">
-                                                        {codeCopied ? <CheckCircle2 size={15} className="text-lime-400" /> : <Copy size={15} />}
-                                                    </button>
-                                                    <button onClick={handleWhatsAppShare} className="w-9 h-9 flex items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90 transition-opacity" title="WhatsApp">
-                                                        <MessageCircle size={15} />
-                                                    </button>
-                                                    <button onClick={handleNativeShare} className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors" title="Compartir">
-                                                        <Share2 size={15} />
+
+                                                {/* Link completo (copiable) */}
+                                                <div className="flex items-center gap-2 p-2.5 bg-slate-800 rounded-xl group cursor-pointer" onClick={handleCopyLink} title="Copiar link">
+                                                    <span className="text-[10px] font-mono text-slate-400 truncate flex-1">
+                                                        {link}
+                                                    </span>
+                                                    <button className="shrink-0 text-slate-500 group-hover:text-slate-300 transition-colors">
+                                                        <Copy size={12} />
                                                     </button>
                                                 </div>
                                             </div>

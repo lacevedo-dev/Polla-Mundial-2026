@@ -27,3 +27,4 @@ dist-ssr
 apps/api/.env
 bash.exe.stackdump
 .claude/worktrees/
+docs/error.txt

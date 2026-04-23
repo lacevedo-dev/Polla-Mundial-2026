@@ -40,6 +40,7 @@ import Register from './views/Register';
 // Vistas públicas - lazy loaded
 const EmailVerification = React.lazy(() => import('./views/EmailVerification'));
 const JoinLeague = React.lazy(() => import('./views/JoinLeague'));
+const ConfirmInvitation = React.lazy(() => import('./views/ConfirmInvitation'));
 const Checkout = React.lazy(() => import('./views/Checkout'));
 
 // Vistas protegidas - lazy loaded
@@ -68,6 +69,7 @@ const publicRoutes: RouteObject[] = [
     { path: '/verify-email', element: <Suspense fallback={<LoadingFallback />}><EmailVerification /></Suspense> },
     { path: '/join/:code', element: <Suspense fallback={<LoadingFallback />}><JoinLeague /></Suspense> },
     { path: '/join', element: <Suspense fallback={<LoadingFallback />}><JoinLeague /></Suspense> },
+    { path: '/confirm-invitation', element: <Suspense fallback={<LoadingFallback />}><ConfirmInvitation /></Suspense> },
     { path: '/checkout', element: <Suspense fallback={<LoadingFallback />}><Checkout /></Suspense> },
 ];
 
