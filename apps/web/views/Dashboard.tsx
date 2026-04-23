@@ -235,6 +235,7 @@ const InviteModal: React.FC<{
     const [email, setEmail] = useState('');
     const [bulkText, setBulkText] = useState('');
     const [codeCopied, setCodeCopied] = useState(false);
+    const [linkCopied, setLinkCopied] = useState(false);
 
     // ── Screen 2 state ──
     const [msgChannel, setMsgChannel] = useState<InviteChannel>('whatsapp');
@@ -271,8 +272,8 @@ const InviteModal: React.FC<{
     const handleCopyLink = () => {
         if (!code) return;
         void navigator.clipboard.writeText(link).then(() => {
-            setCodeCopied(true);
-            setTimeout(() => setCodeCopied(false), 2000);
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
         });
     };
 
@@ -508,7 +509,7 @@ const InviteModal: React.FC<{
                                                         {link}
                                                     </span>
                                                     <button className="shrink-0 text-slate-500 group-hover:text-slate-300 transition-colors">
-                                                        <Copy size={12} />
+                                                        {linkCopied ? <CheckCircle2 size={12} className="text-lime-400" /> : <Copy size={12} />}
                                                     </button>
                                                 </div>
                                             </div>

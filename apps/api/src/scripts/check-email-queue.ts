@@ -121,7 +121,7 @@ async function main() {
     where: { deletedAt: null },
     select: {
       key: true,
-      host: true,
+      smtpHost: true,
       blockedUntil: true,
       lastError: true,
       lastUsedAt: true,
@@ -135,7 +135,7 @@ async function main() {
       const isBlocked = provider.blockedUntil && provider.blockedUntil > now;
       const status = isBlocked ? `🚫 BLOQUEADO hasta ${provider.blockedUntil?.toLocaleString('es-CO')}` : '✅ ACTIVO';
 
-      console.log(`  ${provider.key} (${provider.host})`);
+      console.log(`  ${provider.key} (${provider.smtpHost})`);
       console.log(`    → Estado: ${status}`);
       if (provider.lastError) {
         console.log(`    → Último error: ${provider.lastError.substring(0, 100)}...`);
@@ -150,12 +150,11 @@ async function main() {
   // Lista negra de emails
   console.log('\n🚫 Lista Negra de Emails:\n');
   const blacklist = await prisma.emailBlacklist.findMany({
-    where: { blockedUntil: { gt: now } },
     select: {
       email: true,
       reason: true,
       failureCount: true,
-      blockedUntil: true,
+      blockedAt: true,
     },
     orderBy: { createdAt: 'desc' },
     take: 10,
@@ -168,7 +167,7 @@ async function main() {
       console.log(`  ${entry.email}`);
       console.log(`    → Razón: ${entry.reason}`);
       console.log(`    → Fallos: ${entry.failureCount}`);
-      console.log(`    → Bloqueado hasta: ${entry.blockedUntil?.toLocaleString('es-CO')}`);
+      console.log(`    → Bloqueado en: ${entry.blockedAt.toLocaleString('es-CO')}`);
       console.log('');
     });
   }
