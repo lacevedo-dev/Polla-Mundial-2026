@@ -1914,10 +1914,9 @@ const Dashboard: React.FC = () => {
                 const panelContent = (
                     <motion.div {...fade(0.04)} className="space-y-2 xl:space-y-3">
                         {/*
-                          Móvil: chips compactos, auto-fill minmax(88px) → N por fila según ancho
-                          Escritorio (xl): 1 tarjeta completa (grid-cols-1)
+                          Móvil y Escritorio: 1 tarjeta por fila (card completo)
                         */}
-                        <div className="grid gap-2 xl:gap-3 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))] xl:grid-cols-1">
+                        <div className="grid gap-2 xl:gap-3 grid-cols-1">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
@@ -1940,7 +1939,7 @@ const Dashboard: React.FC = () => {
                                         onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-2xl border transition-all
                                             flex flex-col items-center px-2 py-2
-                                            xl:flex-row xl:items-center xl:justify-between xl:px-3 xl:py-2 xl:gap-2 xl:min-h-[60px] xl:rounded-2xl
+                                            xl:flex-row xl:items-center xl:justify-between xl:px-5 xl:py-4 xl:gap-4 xl:min-h-[80px] xl:rounded-2xl
                                             ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
