@@ -1939,8 +1939,8 @@ const Dashboard: React.FC = () => {
                                         key={match.id}
                                         onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-xl border transition-all
-                                            flex flex-col items-center px-2 py-2
-                                            xl:flex xl:flex-row xl:items-center xl:justify-start xl:px-2 xl:py-1.5 xl:gap-2 xl:min-h-[44px] xl:rounded-lg
+                                            flex flex-col items-center px-1 py-1.5
+                                            xl:flex xl:flex-col xl:items-center xl:justify-center xl:px-1 xl:py-1.5 xl:gap-0.5 xl:min-h-[44px] xl:rounded-lg
                                             ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
@@ -1977,17 +1977,9 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {/* ── ESCRITORIO: compacto horizontal como Google ── */}
-                                        {/* Equipo local */}
-                                        <div className="hidden xl:flex flex-col items-center gap-0.5 shrink-0">
-                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-5 rounded object-cover" />}
-                                            <span className="text-[9px] font-bold text-white/80 truncate">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
-                                        </div>
-                                        {/* Marcador + tiempo */}
-                                        <div className="hidden xl:flex flex-col items-center shrink-0">
-                                            <span className={`text-sm font-black tabular-nums leading-none ${scoreColor}`}>
-                                                {match.result ? `${rH}–${rA}` : '–'}
-                                            </span>
+                                        {/* ── ESCRITORIO: centrado vertical con timer arriba ── */}
+                                        {/* Timer */}
+                                        <div className="hidden xl:w-full xl:flex xl:justify-center xl:mb-0.5">
                                             <LiveMatchTimerInline
                                                 matchDate={match.date}
                                                 elapsed={match.elapsed ?? null}
@@ -1996,10 +1988,19 @@ const Dashboard: React.FC = () => {
                                                 className="text-[7px]"
                                             />
                                         </div>
-                                        {/* Equipo visitante */}
-                                        <div className="hidden xl:flex flex-col items-center gap-0.5 shrink-0">
-                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-5 rounded object-cover" />}
-                                            <span className="text-[9px] font-bold text-white/80 truncate">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
+                                        {/* Equipos + Marcador centrado */}
+                                        <div className="hidden xl:flex xl:items-center xl:justify-center xl:gap-1.5 xl:w-full">
+                                            <div className="flex flex-col items-center gap-0.5 shrink-0">
+                                                {match.homeFlag && <img src={match.homeFlag} alt="" className="h-3.5 w-4.5 rounded object-cover" />}
+                                                <span className="text-[8px] font-bold text-white/80 truncate">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
+                                            </div>
+                                            <span className={`text-base font-black tabular-nums leading-none ${scoreColor} mx-1`}>
+                                                {match.result ? `${rH}–${rA}` : '–'}
+                                            </span>
+                                            <div className="flex flex-col items-center gap-0.5 shrink-0">
+                                                {match.awayFlag && <img src={match.awayFlag} alt="" className="h-3.5 w-4.5 rounded object-cover" />}
+                                                <span className="text-[8px] font-bold text-white/80 truncate">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
+                                            </div>
                                         </div>
                                     </button>
                                 );
@@ -2017,7 +2018,7 @@ const Dashboard: React.FC = () => {
                                     transition={{ duration: 0.22, ease: 'easeOut' as const }}
                                     className="overflow-hidden"
                                 >
-                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-3 xl:rounded-2xl xl:border-rose-400/35 max-w-sm mx-auto">
+                                    <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-3 xl:rounded-2xl xl:border-rose-400/35 max-w-sm">
                                         {/* Timer + estado predicción + pts */}
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-1.5">
