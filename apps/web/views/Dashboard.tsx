@@ -1915,9 +1915,9 @@ const Dashboard: React.FC = () => {
                     <motion.div {...fade(0.04)} className="space-y-2 xl:space-y-3">
                         {/*
                           Móvil: 1 tarjeta por fila
-                          Escritorio: chips comprimidos auto-fill
+                          Escritorio: 2 chips por fila (media tarjeta cada uno)
                         */}
-                        <div className="grid gap-2 xl:gap-2 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))] xl:grid-cols-2 2xl:grid-cols-3">
+                        <div className="grid gap-2 xl:gap-3 grid-cols-1 md:grid-cols-2">
                             {liveMatches.map(match => {
                                 const isActive = match.id === expandedMatchId;
                                 const pH = parseInt(match.prediction.home, 10);
@@ -2302,8 +2302,8 @@ const Dashboard: React.FC = () => {
 
                 // Modo sticky: panel anclado arriba del dashboard
                 return (
-                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50/95 shadow-sm pb-2 pt-2 md:pb-3 md:pt-3 backdrop-blur supports-[backdrop-filter]:bg-slate-50/85">
-                        <div className="flex items-center justify-between mb-2">
+                    <div className="sticky top-0 z-20 -mx-4 md:-mx-8 px-4 md:px-8 bg-slate-50/95 shadow-sm pb-2 pt-2 md:pb-2 md:pt-2 backdrop-blur supports-[backdrop-filter]:bg-slate-50/85">
+                        <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-1">
                                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
                                 <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">En vivo</span>
@@ -2318,7 +2318,7 @@ const Dashboard: React.FC = () => {
                                 <span className="text-[9px] font-bold text-slate-600 hidden lg:inline">Flotante</span>
                             </button>
                         </div>
-                        <div className="md:rounded-2xl md:border md:border-slate-200 md:bg-white/90 md:p-2 md:shadow-sm max-w-sm mx-auto">
+                        <div className="md:rounded-xl md:border md:border-slate-200 md:bg-white/90 md:p-2 md:shadow-sm">
                             {panelContent}
                         </div>
                     </div>
