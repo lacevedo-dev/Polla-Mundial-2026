@@ -1979,9 +1979,9 @@ const Dashboard: React.FC = () => {
 
                                         {/* ── ESCRITORIO: compacto horizontal como Google ── */}
                                         {/* Equipo local */}
-                                        <div className="hidden xl:flex items-center gap-1.5 shrink-0">
+                                        <div className="hidden xl:flex flex-col items-center gap-0.5 shrink-0">
                                             {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-5 rounded object-cover" />}
-                                            <span className="text-[10px] font-bold text-white truncate max-w-[50px]">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
+                                            <span className="text-[9px] font-bold text-white/80 truncate">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
                                         </div>
                                         {/* Marcador + tiempo */}
                                         <div className="hidden xl:flex flex-col items-center shrink-0">
@@ -1997,9 +1997,9 @@ const Dashboard: React.FC = () => {
                                             />
                                         </div>
                                         {/* Equipo visitante */}
-                                        <div className="hidden xl:flex items-center gap-1.5 shrink-0">
-                                            <span className="text-[10px] font-bold text-white truncate max-w-[50px]">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
+                                        <div className="hidden xl:flex flex-col items-center gap-0.5 shrink-0">
                                             {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-5 rounded object-cover" />}
+                                            <span className="text-[9px] font-bold text-white/80 truncate">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
                                         </div>
                                     </button>
                                 );
