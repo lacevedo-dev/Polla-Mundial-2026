@@ -1940,7 +1940,7 @@ const Dashboard: React.FC = () => {
                                         onClick={() => handleChipClick(match.id)}
                                         className={`w-full rounded-xl border transition-all
                                             flex flex-col items-center px-2 py-2
-                                            xl:flex xl:flex-row xl:items-center xl:justify-start xl:px-3 xl:py-2 xl:gap-3 xl:min-h-[54px] xl:rounded-lg
+                                            xl:flex xl:flex-row xl:items-center xl:justify-start xl:px-2 xl:py-1.5 xl:gap-2 xl:min-h-[44px] xl:rounded-lg
                                             ${isActive
                                                 ? `bg-slate-900 ${borderColor} shadow-md xl:shadow-lg xl:shadow-slate-950/40`
                                                 : `bg-slate-900/60 ${borderColor} hover:bg-slate-900 xl:hover:shadow-md xl:hover:shadow-slate-950/30`
@@ -1979,13 +1979,13 @@ const Dashboard: React.FC = () => {
 
                                         {/* ── ESCRITORIO: compacto horizontal como Google ── */}
                                         {/* Equipo local */}
-                                        <div className="hidden xl:flex items-center gap-2 shrink-0">
-                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-5 w-6 rounded object-cover" />}
-                                            <span className="text-[11px] font-bold text-white truncate max-w-[60px]">{match.homeTeamCode || match.homeTeam.slice(0, 4)}</span>
+                                        <div className="hidden xl:flex items-center gap-1.5 shrink-0">
+                                            {match.homeFlag && <img src={match.homeFlag} alt="" className="h-4 w-5 rounded object-cover" />}
+                                            <span className="text-[10px] font-bold text-white truncate max-w-[50px]">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
                                         </div>
                                         {/* Marcador + tiempo */}
                                         <div className="hidden xl:flex flex-col items-center shrink-0">
-                                            <span className={`text-base font-black tabular-nums leading-none ${scoreColor}`}>
+                                            <span className={`text-sm font-black tabular-nums leading-none ${scoreColor}`}>
                                                 {match.result ? `${rH}–${rA}` : '–'}
                                             </span>
                                             <LiveMatchTimerInline
@@ -1993,13 +1993,13 @@ const Dashboard: React.FC = () => {
                                                 elapsed={match.elapsed ?? null}
                                                 lastSyncAt={liveSync.lastSyncAt}
                                                 statusShort={match.statusShort}
-                                                className="text-[8px]"
+                                                className="text-[7px]"
                                             />
                                         </div>
                                         {/* Equipo visitante */}
-                                        <div className="hidden xl:flex items-center gap-2 shrink-0">
-                                            <span className="text-[11px] font-bold text-white truncate max-w-[60px]">{match.awayTeamCode || match.awayTeam.slice(0, 4)}</span>
-                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-5 w-6 rounded object-cover" />}
+                                        <div className="hidden xl:flex items-center gap-1.5 shrink-0">
+                                            <span className="text-[10px] font-bold text-white truncate max-w-[50px]">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
+                                            {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-5 rounded object-cover" />}
                                         </div>
                                     </button>
                                 );
