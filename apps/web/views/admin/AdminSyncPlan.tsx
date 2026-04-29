@@ -12,6 +12,12 @@ import {
   Wifi,
   WifiOff,
   Zap,
+  XCircle,
+  MinusCircle,
+  TrendingUp,
+  BarChart2,
+  Settings2,
+  Info,
 } from 'lucide-react';
 import { BASE_URL, request } from '../../api';
 
@@ -206,26 +212,171 @@ function patchTimelineFromEvent(
   return previous;
 }
 
-function MiniChart({ buckets }: { buckets: HourBucket[] }) {
-  const max = Math.max(...buckets.map((bucket) => bucket.requests), 1);
+// === HEATMAP HORARIO ESTILO GITHUB ===
+
+const HEATMAP_COLORS = [
+  'bg-slate-100',           // 0 requests
+  'bg-sky-100',             // 1
+  'bg-sky-200',             // 2
+  'bg-sky-300',             // 3
+  'bg-sky-400',             // 4
+  'bg-sky-500',             // 5
+  'bg-sky-600',             // 6+
+];
+
+const HEATMAP_BORDER = [
+  'border-slate-200',
+  'border-sky-200',
+  'border-sky-200',
+  'border-sky-300',
+  'border-sky-400',
+  'border-sky-500',
+  'border-sky-600',
+];
+
+function getHeatLevel(requests: number, max: number): number {
+  if (requests === 0 || max === 0) return 0;
+  const pct = requests / max;
+  if (pct <= 0.1) return 1;
+  if (pct <= 0.25) return 2;
+  if (pct <= 0.45) return 3;
+  if (pct <= 0.65) return 4;
+  if (pct <= 0.85) return 5;
+  return 6;
+}
+
+interface TooltipState { hour: number; requests: number; slots: string[]; x: number; y: number }
+
+function HeatmapChart({ buckets, plannedRequests }: { buckets: HourBucket[]; plannedRequests: PlannedRequest[] }) {
+  const [tooltip, setTooltip] = React.useState<TooltipState | null>(null);
+  const max = Math.max(...buckets.map((b) => b.requests), 1);
+
+  // Mapa hora → requests por tipo
+  const byHourType = React.useMemo(() => {
+    const map: Record<number, Record<string, number>> = {};
+    for (let h = 0; h < 24; h++) map[h] = {};
+    for (const pr of plannedRequests) {
+      if (pr.executionState === 'disabled_by_config') continue;
+      const h = new Date(pr.scheduledAt).getHours();
+      map[h][pr.type] = (map[h][pr.type] ?? 0) + 1;
+    }
+    return map;
+  }, [plannedRequests]);
+
+  const disabledCount = plannedRequests.filter((p) => p.executionState === 'disabled_by_config').length;
+  const enabledCount = plannedRequests.filter((p) => p.executionState !== 'disabled_by_config').length;
+  const totalCost = plannedRequests.reduce((acc, p) => acc + p.requestCost, 0);
+
+  const activeHours = buckets.filter((b) => b.requests > 0).length;
+  const peakBucket = buckets.reduce((a, b) => (b.requests > a.requests ? b : a), buckets[0]);
+
   return (
-    <div className="space-y-2">
-      <div className="flex h-20 items-end gap-1">
-        {buckets.map((bucket) => {
-          const height = bucket.requests === 0 ? 4 : Math.max(8, (bucket.requests / max) * 80);
-          return (
-            <div key={bucket.hour} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <div
-                className={`w-full rounded-sm ${bucket.requests > 0 ? 'bg-sky-400' : 'bg-slate-200'}`}
-                style={{ height }}
-                title={`${bucket.hour}:00 - ${bucket.requests} requests`}
-              />
-              <span className="text-[9px] text-slate-400">{String(bucket.hour).padStart(2, '0')}</span>
+    <div className="space-y-4">
+      {/* Métricas rápidas */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Activos', value: enabledCount, icon: <CheckCircle2 size={11} className="text-emerald-500" />, color: 'text-emerald-700 bg-emerald-50' },
+          { label: 'Desactivados', value: disabledCount, icon: <XCircle size={11} className="text-rose-400" />, color: 'text-rose-600 bg-rose-50' },
+          { label: 'Costo total', value: totalCost, icon: <TrendingUp size={11} className="text-sky-500" />, color: 'text-sky-700 bg-sky-50' },
+        ].map((m) => (
+          <div key={m.label} className={`rounded-xl px-2.5 py-2 ${m.color} flex items-center gap-1.5`}>
+            {m.icon}
+            <div>
+              <div className="text-[10px] opacity-70">{m.label}</div>
+              <div className="text-sm font-black">{m.value}</div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
-      <p className="text-[11px] text-slate-500">Distribucion horaria de requests planificados.</p>
+
+      {/* Heatmap 24h */}
+      <div className="relative">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Distribución horaria</span>
+          {peakBucket?.requests > 0 && (
+            <span className="text-[10px] text-slate-400">
+              Pico: <strong className="text-slate-600">{String(peakBucket.hour).padStart(2,'0')}:00</strong> ({peakBucket.requests} req)
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-0.5" onMouseLeave={() => setTooltip(null)}>
+          {buckets.map((bucket) => {
+            const level = getHeatLevel(bucket.requests, max);
+            const types = byHourType[bucket.hour] ?? {};
+            const typeList = Object.entries(types).map(([t, c]) => `${t}: ${c}`).join(', ');
+            return (
+              <div
+                key={bucket.hour}
+                className="flex flex-1 flex-col items-center gap-0.5"
+                onMouseEnter={(e) => {
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setTooltip({ hour: bucket.hour, requests: bucket.requests, slots: bucket.slots, x: rect.left, y: rect.top });
+                }}
+              >
+                <div
+                  className={`w-full cursor-default rounded-[3px] border transition-transform hover:scale-110 hover:shadow-md ${
+                    HEATMAP_COLORS[level]
+                  } ${HEATMAP_BORDER[level]}`}
+                  style={{ height: 28 }}
+                  title={`${String(bucket.hour).padStart(2,'0')}:00 — ${bucket.requests} req${typeList ? ' | ' + typeList : ''}`}
+                />
+                {bucket.hour % 3 === 0 && (
+                  <span className="text-[8px] font-bold text-slate-400">{String(bucket.hour).padStart(2,'0')}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Leyenda */}
+        <div className="mt-2 flex items-center justify-end gap-1">
+          <span className="text-[9px] text-slate-400">Menos</span>
+          {HEATMAP_COLORS.map((c, i) => (
+            <div key={i} className={`h-2.5 w-2.5 rounded-[2px] border ${c} ${HEATMAP_BORDER[i]}`} />
+          ))}
+          <span className="text-[9px] text-slate-400">Más</span>
+        </div>
+      </div>
+
+      {/* Barras por tipo */}
+      {Object.values(byHourType).some(t => Object.keys(t).length > 0) && (
+        <div className="space-y-1.5">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Por tipo de consulta</span>
+          {(['STATUS_BATCH','STATUS_BATCH_WITH_CARRY_OVER','LINK_AND_STATUS','EVENTS_HALFTIME','EVENTS_FINAL'] as PlannedRequest['type'][]).map((type) => {
+            const count = plannedRequests.filter((p) => p.type === type && p.executionState !== 'disabled_by_config').length;
+            const disabledForType = plannedRequests.filter((p) => p.type === type && p.executionState === 'disabled_by_config').length;
+            if (count + disabledForType === 0) return null;
+            const pct = Math.round((count / Math.max(enabledCount, 1)) * 100);
+            const labels: Record<string, string> = {
+              STATUS_BATCH: 'Estados del día',
+              STATUS_BATCH_WITH_CARRY_OVER: 'Estados + arrastres',
+              LINK_AND_STATUS: 'Sin vínculo + estado',
+              EVENTS_HALFTIME: 'Eventos entretiempo',
+              EVENTS_FINAL: 'Eventos final',
+            };
+            return (
+              <div key={type} className="flex items-center gap-2">
+                <span className={`w-28 shrink-0 truncate text-[10px] font-bold ${REQUEST_STYLES[type].split(' ')[2]}`}>{labels[type]}</span>
+                <div className="flex-1 overflow-hidden rounded-full bg-slate-100" style={{ height: 7 }}>
+                  <div
+                    className={`h-full rounded-full transition-all ${REQUEST_STYLES[type].split(' ')[0].replace('border-','bg-')}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right text-[10px] font-bold text-slate-600">{count}</span>
+                {disabledForType > 0 && (
+                  <span className="text-[10px] text-rose-400" title="Desactivados por configuración">−{disabledForType}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-[10px] text-slate-400">
+        {activeHours} hora{activeHours !== 1 ? 's' : ''} con actividad · {enabledCount} requests activos · {disabledCount > 0 ? `${disabledCount} desactivados por config` : 'todos activos'}
+      </p>
     </div>
   );
 }
@@ -463,21 +614,33 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                       </span>
                     )}
                     <span className={`hidden rounded-full px-2 py-0.5 text-[10px] font-black uppercase sm:inline-flex ${STATUS_STYLES[match.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {match.status === 'LIVE' && <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />}
                       {match.status}
                     </span>
                     <span className="text-xs text-slate-500">{fmtDateTime(match.matchDate)}</span>
                     {!match.externalId && (
-                      <span className="hidden items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700 sm:inline-flex">
-                        <AlertTriangle size={9} /> Sin vinculo
+                      <span className="hidden items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700 sm:inline-flex" title="Este partido no tiene ID externo vinculado — no se puede sincronizar con la API">
+                        <AlertTriangle size={9} /> Sin vínculo
                       </span>
                     )}
                     <div className="hidden flex-col items-end sm:flex">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-600">
-                        {activeRequests} req activo{activeRequests === 1 ? '' : 's'}
-                      </span>
-                      {totalRequests !== activeRequests && (
-                        <span className="mt-1 text-[10px] font-bold text-slate-400">
-                          {totalRequests} planeados
+                      <div className="flex items-center gap-1">
+                        <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                          ✓ {activeRequests} activo{activeRequests === 1 ? '' : 's'}
+                        </span>
+                        {totalRequests !== activeRequests && (
+                          <span className="rounded-full bg-rose-50 border border-rose-200 px-2 py-0.5 text-[10px] font-black text-rose-600" title="Requests desactivados por configuración">
+                            −{totalRequests - activeRequests}
+                          </span>
+                        )}
+                      </div>
+                      {match.lastSyncStatus && (
+                        <span className={`mt-0.5 text-[9px] font-bold ${
+                          match.lastSyncStatus === 'SUCCESS' ? 'text-emerald-600' :
+                          match.lastSyncStatus === 'FAILED' ? 'text-rose-600' : 'text-slate-400'
+                        }`}>
+                          {match.lastSyncStatus === 'SUCCESS' ? '● Último sync OK' :
+                           match.lastSyncStatus === 'FAILED' ? '● Último sync falló' : `● ${match.lastSyncStatus}`}
                         </span>
                       )}
                     </div>
@@ -487,49 +650,77 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
 
                 {expanded && (
                   <div className="space-y-4 border-t border-slate-100 p-4">
+                    {/* Estado del último sync */}
+                    {(match.lastSyncAt || match.lastSyncStatus) && (
+                      <div className={`flex items-center gap-3 rounded-xl px-3 py-2 text-xs border ${
+                        match.lastSyncStatus === 'SUCCESS' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                        match.lastSyncStatus === 'FAILED' ? 'bg-rose-50 border-rose-200 text-rose-700' :
+                        'bg-slate-50 border-slate-200 text-slate-600'
+                      }`}>
+                        {match.lastSyncStatus === 'SUCCESS' ? <CheckCircle2 size={13} /> :
+                         match.lastSyncStatus === 'FAILED' ? <XCircle size={13} /> :
+                         <MinusCircle size={13} />}
+                        <span className="font-bold">
+                          {match.lastSyncStatus === 'SUCCESS' ? 'Último sync exitoso' :
+                           match.lastSyncStatus === 'FAILED' ? 'Último sync falló' :
+                           match.lastSyncStatus ?? 'Sin estado'}
+                        </span>
+                        {match.lastSyncAt && (
+                          <span className="ml-auto opacity-70">{fmtDateTime(match.lastSyncAt)}</span>
+                        )}
+                        {match.externalId && (
+                          <span className="opacity-60">Fixture #{match.externalId}</span>
+                        )}
+                      </div>
+                    )}
+
                     <div>
                       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Consultas planeadas</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {match.plannedRequests.map((planned) => (
-                          <span
-                            key={planned.id}
-                            title={planned.notes}
-                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold ${REQUEST_STYLES[planned.type]}`}
-                          >
-                            <Clock size={9} />
-                            {planned.label} · {fmtDateTime(planned.scheduledAt)}
-                            {planned.optional && (
-                              <span className="ml-1 rounded-full border border-dashed border-current px-1.5 py-0.5 text-[9px] font-black uppercase">
-                                Opcional
-                              </span>
-                            )}
-                            {planned.executionState === 'disabled_by_config' && (
-                              <span className={`ml-1 rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase ${EXECUTION_STATE_STYLES[planned.executionState]}`}>
-                                Desactivado por configuración
-                              </span>
-                            )}
-                          </span>
-                        ))}
+                        {match.plannedRequests.map((planned) => {
+                          const disabled = planned.executionState === 'disabled_by_config';
+                          return (
+                            <span
+                              key={planned.id}
+                              title={disabled ? `Desactivado: ${planned.disabledReason ?? 'por configuración'}${planned.notes ? ' · ' + planned.notes : ''}` : planned.notes ?? ''}
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-opacity ${
+                                disabled ? 'opacity-45 grayscale ' + REQUEST_STYLES[planned.type] : REQUEST_STYLES[planned.type]
+                              }`}
+                            >
+                              {disabled ? <XCircle size={9} /> : <Clock size={9} />}
+                              {planned.label} · {fmtTime(planned.scheduledAt)}
+                              <span className="ml-0.5 font-normal opacity-60">({planned.requestCost} req)</span>
+                              {planned.optional && (
+                                <span className="ml-1 rounded-full border border-dashed border-current px-1.5 py-0.5 text-[9px] font-black uppercase">
+                                  Opcional
+                                </span>
+                              )}
+                              {disabled && (
+                                <span className="ml-1 rounded-full border border-rose-300 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-600">
+                                  OFF
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
 
                     <div>
-                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Notificaciones</p>
-                      <div className="space-y-2">
-                        {match.notificationSchedule.map((notification) => (
-                          <div key={`${match.matchId}-${notification.type}-${notification.scheduledAt}`} className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                            <span>{NOTIF_ICON[notification.type]}</span>
-                            <span className="flex-1 text-xs font-medium text-slate-700">{notification.label}</span>
-                            <span className="text-[11px] font-bold text-slate-500">{fmtDateTime(notification.scheduledAt)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
-                      {match.externalId && <span>Fixture: <strong className="text-slate-700">{match.externalId}</strong></span>}
-                      {match.lastSyncAt && <span>Ultimo sync: <strong className="text-slate-700">{fmtDateTime(match.lastSyncAt)}</strong></span>}
-                      {match.lastSyncStatus && <span>Estado sync: <strong className="text-slate-700">{match.lastSyncStatus}</strong></span>}
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Notificaciones programadas</p>
+                      {match.notificationSchedule.length === 0 ? (
+                        <p className="text-[11px] text-slate-400">Sin notificaciones pendientes</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {match.notificationSchedule.map((notification) => (
+                            <div key={`${match.matchId}-${notification.type}-${notification.scheduledAt}`} className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                              <span>{NOTIF_ICON[notification.type]}</span>
+                              <span className="flex-1 text-xs font-medium text-slate-700">{notification.label}</span>
+                              <span className="text-[11px] font-bold text-slate-500">{fmtDateTime(notification.scheduledAt)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -541,11 +732,17 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
         <div className="space-y-5">
           {timeline && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <Zap size={14} className="text-amber-500" />
-                <p className="text-sm font-black text-slate-900">Distribucion horaria</p>
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart2 size={14} className="text-sky-500" />
+                <p className="text-sm font-black text-slate-900">Mapa de calor horario</p>
+                <span
+                  title="Cada celda representa una hora del día. El color indica la intensidad de requests planificados. Pasa el cursor para ver detalles."
+                  className="ml-auto cursor-help"
+                >
+                  <Info size={13} className="text-slate-300 hover:text-slate-500" />
+                </span>
               </div>
-              <MiniChart buckets={timeline.requestLog} />
+              <HeatmapChart buckets={timeline.requestLog} plannedRequests={timeline.plannedRequests} />
             </div>
           )}
 
@@ -553,18 +750,31 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
             <div className="mb-3 flex items-center gap-2">
               <Activity size={14} className="text-lime-500" />
               <p className="text-sm font-black text-slate-900">Eventos en vivo</p>
-              {sseConnected && <span className="ml-auto h-2 w-2 rounded-full bg-lime-400" />}
+              <span className={`ml-auto flex items-center gap-1.5 text-[10px] font-bold ${ sseConnected ? 'text-lime-600' : 'text-slate-400' }`}>
+                <span className={`h-2 w-2 rounded-full ${ sseConnected ? 'bg-lime-400 animate-pulse' : 'bg-slate-300' }`} />
+                {sseConnected ? 'Conectado' : 'Sin conexión'}
+              </span>
             </div>
             {liveEvents.length === 0 ? (
               <p className="text-xs text-slate-400">{sseConnected ? 'Esperando eventos del servidor...' : 'Conectando al stream...'}</p>
             ) : (
-              <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                {liveEvents.map((event, index) => (
-                  <div key={`${event.ts}-${index}`} className="flex gap-2">
-                    <span className="shrink-0 text-[10px] font-bold text-slate-400">{event.ts}</span>
-                    <span className="text-[11px] text-slate-700">{event.summary}</span>
-                  </div>
-                ))}
+              <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+                {liveEvents.map((event, index) => {
+                  const isError = event.type === 'sync_failed';
+                  const isOk = event.type === 'sync_completed';
+                  const isWarn = event.type === 'rate_limit_warning';
+                  return (
+                    <div key={`${event.ts}-${index}`} className={`flex items-start gap-2 rounded-lg px-2 py-1 text-[11px] ${
+                      isError ? 'bg-rose-50 text-rose-700' :
+                      isOk ? 'bg-emerald-50 text-emerald-700' :
+                      isWarn ? 'bg-amber-50 text-amber-700' :
+                      'bg-slate-50 text-slate-700'
+                    }`}>
+                      <span className="shrink-0 font-bold opacity-60">{event.ts}</span>
+                      <span>{event.summary}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
