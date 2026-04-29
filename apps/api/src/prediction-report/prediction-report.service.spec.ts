@@ -14,6 +14,10 @@ describe('PredictionReportService', () => {
     },
   } as any;
 
+  const observability = {
+    recordStep: jest.fn(),
+  } as any;
+
   const emailService = {
     sendPredictionsReport: jest.fn(),
     sendResultsReport: jest.fn(),
@@ -23,7 +27,7 @@ describe('PredictionReportService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PredictionReportService(prisma, emailService);
+    service = new PredictionReportService(prisma, observability, emailService);
     prisma.prediction.findMany.mockResolvedValue([
       { userId: 'user-1', points: 7 },
       { userId: 'user-2', points: 3 },

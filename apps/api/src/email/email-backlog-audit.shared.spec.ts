@@ -27,6 +27,7 @@ describe('runEmailBacklogAudit', () => {
       attemptCount: 1,
       sentAt: null,
       lastError: 'Greeting never received',
+      attachmentsJson: null,
       createdAt: new Date('2026-03-28T00:00:00.000Z'),
       updatedAt: new Date('2026-03-28T00:00:00.000Z'),
     };

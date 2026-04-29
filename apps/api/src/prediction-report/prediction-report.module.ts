@@ -7,6 +7,7 @@ import { PredictionReportService } from './prediction-report.service';
 import { PredictionReportEmailService } from './prediction-report-email.service';
 import { PredictionReportScheduler } from './prediction-report.scheduler';
 import { PredictionReportController } from './prediction-report.controller';
+import { PdfReportService } from './pdf-report.service';
 
 @Module({
   imports: [ScheduleModule, PrismaModule, AutomationObservabilityModule, EmailModule],
@@ -15,6 +16,7 @@ import { PredictionReportController } from './prediction-report.controller';
     PredictionReportService,
     PredictionReportEmailService,
     PredictionReportScheduler,
+    PdfReportService,
   ],
   exports: [PredictionReportService, PredictionReportScheduler],
 })

@@ -641,9 +641,10 @@ model EmailJob {
   lastAttemptAt  DateTime?
   attemptCount   Int              @default(0)
   sentAt         DateTime?
-  lastError      String?          @db.Text
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  lastError        String?          @db.Text
+  attachmentsJson  String?          @db.LongText
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([status, availableAt])
   @@index([priority, scheduledAt])

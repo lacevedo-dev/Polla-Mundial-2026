@@ -6,6 +6,12 @@ import { EmailProviderConfig, EmailProviderConfigService } from './email-provide
 import { EmailBlacklistService } from './email-blacklist.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
+export interface EmailAttachment {
+  filename: string;
+  contentBase64: string;
+  contentType: string;
+}
+
 export interface QueueEmailInput {
   type: Prisma.EmailJobCreateInput['type'];
   priority: Prisma.EmailJobCreateInput['priority'];
@@ -18,6 +24,7 @@ export interface QueueEmailInput {
   matchId?: string;
   leagueId?: string;
   scheduledAt?: Date;
+  attachments?: EmailAttachment[];
 }
 
 @Injectable()
@@ -153,6 +160,7 @@ export class EmailQueueService {
       leagueId: input.leagueId,
       scheduledAt,
       availableAt: scheduledAt,
+      attachmentsJson: input.attachments?.length ? JSON.stringify(input.attachments) : null,
     };
   }
 
@@ -207,12 +215,20 @@ export class EmailQueueService {
 
     try {
       const transporter = this.getTransporter(provider);
+      const attachments = job.attachmentsJson
+        ? (JSON.parse(job.attachmentsJson) as EmailAttachment[]).map((a) => ({
+            filename: a.filename,
+            content: Buffer.from(a.contentBase64, 'base64'),
+            contentType: a.contentType,
+          }))
+        : [];
       await transporter.sendMail({
         from: formatFrom(provider),
         to: job.recipientEmail,
         subject: job.subject,
         html: job.html,
         text: job.text,
+        attachments,
       });
 
       await this.recordProviderSuccess(provider.key, now);

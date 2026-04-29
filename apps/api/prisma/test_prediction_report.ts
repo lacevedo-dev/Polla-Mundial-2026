@@ -64,7 +64,7 @@ async function main() {
     enqueueEmail: async () => ({ success: true }),
   } as any;
   
-  const emailSvc = new PredictionReportEmailService(mockEmailQueue);
+  const emailSvc = new PredictionReportEmailService(mockEmailQueue, null as any);
 
   console.log(`\n📧 Enviando reporte de prueba a: ${testEmail}`);
   console.log(`   Partido: ${match.homeTeam.name} vs ${match.awayTeam.name}`);
