@@ -4,7 +4,7 @@ import {
     BarChart3, Users, Trophy, Swords, CreditCard, Layers,
     Settings, LogOut, Shield, X, Target, ArrowLeft, RefreshCw,
     Sparkles, Coins, ChevronLeft, ChevronRight, MoreHorizontal,
-    PanelLeftClose, PanelLeftOpen, Bell, Mail, TestTube,
+    PanelLeftClose, PanelLeftOpen, Bell, Mail, TestTube, Sliders,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { useFootballSyncStore } from '../stores/football-sync.store';
@@ -26,6 +26,7 @@ const secondaryNavItems = [
     { to: '/admin/ai-usage', label: 'Consultas IA', icon: Sparkles },
     { to: '/admin/football-sync', label: 'Football Sync', icon: RefreshCw },
     { to: '/admin/football-sync/plan', label: 'Plan de Sync', icon: BarChart3 },
+    { to: '/admin/football-sync/settings', label: 'Sync Auto-Adaptable', icon: Sliders },
     { to: '/admin/automation', label: 'Automatización', icon: Bell },
     { to: '/admin/email-providers', label: 'SMTP / Correo', icon: Mail },
     { to: '/admin/email-logs', label: 'Logs de Email', icon: Mail },

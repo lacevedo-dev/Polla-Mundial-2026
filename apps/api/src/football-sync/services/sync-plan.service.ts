@@ -446,8 +446,20 @@ export class SyncPlanService {
   /**
    * Build a detailed per-match sync timeline for today including
    * exact sync slots and notification schedule.
+   * 
+   * Reutiliza el plan persistido si existe y no ha cambiado significativamente.
+   * Solo regenera cuando:
+   * - No existe plan persistido
+   * - Cambió el número de partidos
+   * - Cambió la estrategia
+   * - El intervalo cambió más del 20%
    */
   async getDetailedTimeline(): Promise<DetailedSyncTimeline> {
+    const today = this.getToday();
+    const existingPlan = await this.prisma.dailySyncPlan.findUnique({
+      where: { date: today },
+    });
+
     const plan = await this.calculateDailyPlan();
     const eventSyncEnabled = await this.footballConfigService.isEventSyncEnabled();
     const [used, limit] = await Promise.all([
@@ -455,6 +467,24 @@ export class SyncPlanService {
       this.rateLimiter.getDailyLimit(),
     ]);
     const available = limit - used;
+
+    // Verificar si podemos reutilizar el plan persistido
+    if (existingPlan?.plannedTimeline && this.canReusePlan(existingPlan, plan)) {
+      this.logger.debug('Reutilizando plan persistido - sin cambios significativos');
+      const cached = existingPlan.plannedTimeline as any;
+      
+      // Actualizar solo los valores dinámicos
+      return {
+        ...cached,
+        requestsUsed: used,
+        requestsBudget: available,
+        requestsLimit: limit,
+        strategy: plan.strategy,
+        intervalMinutes: plan.intervalMinutes,
+      };
+    }
+
+    this.logger.log('Regenerando plan completo - cambios detectados o plan nuevo');
 
     const todayStart = this.getTodayStart();
     const todayEnd = this.getTodayEnd(todayStart);
@@ -796,7 +826,7 @@ export class SyncPlanService {
       .sort()
       .find((s) => s > now.toISOString()) ?? null;
 
-    return {
+    const timeline: DetailedSyncTimeline = {
       date: plan.date,
       strategy: plan.strategy,
       intervalMinutes: plan.intervalMinutes,
@@ -810,6 +840,57 @@ export class SyncPlanService {
       totalSlotsPlanned,
       totalPlannedRequests: activeRequests.length,
     };
+
+    // Persistir el plan para reutilizarlo en futuras cargas
+    await this.prisma.dailySyncPlan.update({
+      where: { date: today },
+      data: {
+        plannedTimeline: timeline as any,
+        timelineVersion: (existingPlan?.timelineVersion ?? 0) + 1,
+      },
+    }).catch((err) => {
+      this.logger.warn(`No se pudo persistir el plan: ${err.message}`);
+    });
+
+    return timeline;
+  }
+
+  /**
+   * Determina si el plan persistido puede reutilizarse o debe regenerarse.
+   * Solo regenera cuando hay cambios significativos.
+   */
+  private canReusePlan(
+    existingPlan: { totalMatches: number; strategy: SyncStrategy; intervalMinutes: number },
+    currentPlan: { totalMatches: number; strategy: SyncStrategy; intervalMinutes: number },
+  ): boolean {
+    // Cambió el número de partidos
+    if (existingPlan.totalMatches !== currentPlan.totalMatches) {
+      this.logger.debug(
+        `Partidos cambiaron: ${existingPlan.totalMatches} → ${currentPlan.totalMatches}`,
+      );
+      return false;
+    }
+
+    // Cambió la estrategia
+    if (existingPlan.strategy !== currentPlan.strategy) {
+      this.logger.debug(
+        `Estrategia cambió: ${existingPlan.strategy} → ${currentPlan.strategy}`,
+      );
+      return false;
+    }
+
+    // El intervalo cambió más del 20%
+    const intervalChange = Math.abs(
+      (currentPlan.intervalMinutes - existingPlan.intervalMinutes) / existingPlan.intervalMinutes,
+    );
+    if (intervalChange > 0.2) {
+      this.logger.debug(
+        `Intervalo cambió ${(intervalChange * 100).toFixed(1)}%: ${existingPlan.intervalMinutes} → ${currentPlan.intervalMinutes} min`,
+      );
+      return false;
+    }
+
+    return true;
   }
 
   /**

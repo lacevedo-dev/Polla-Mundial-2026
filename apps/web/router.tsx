@@ -27,6 +27,7 @@ const FootballSyncAlerts = React.lazy(() => import('./views/admin/FootballSyncAl
 const FootballSyncStats = React.lazy(() => import('./views/admin/FootballSyncStats'));
 const FootballSyncApiLogs = React.lazy(() => import('./views/admin/FootballSyncApiLogs'));
 const AdminSyncPlan = React.lazy(() => import('./views/admin/AdminSyncPlan'));
+const AdminSyncSettings = React.lazy(() => import('./views/admin/AdminSyncSettings'));
 const AdminAutomation = React.lazy(() => import('./views/admin/AdminAutomation'));
 const AdminEmailProviders = React.lazy(() => import('./views/admin/AdminEmailProviders'));
 const AdminEmailLogs = React.lazy(() => import('./views/admin/AdminEmailLogs'));
@@ -109,6 +110,7 @@ const adminRoutes: RouteObject[] = [
     { path: '/admin/football-sync/stats', element: <Suspense fallback={<LoadingFallback />}><FootballSyncStats /></Suspense> },
     { path: '/admin/football-sync/api-logs', element: <Suspense fallback={<LoadingFallback />}><FootballSyncApiLogs /></Suspense> },
     { path: '/admin/football-sync/plan', element: <Suspense fallback={<LoadingFallback />}><AdminSyncPlan /></Suspense> },
+    { path: '/admin/football-sync/settings', element: <Suspense fallback={<LoadingFallback />}><AdminSyncSettings /></Suspense> },
     { path: '/admin/automation', element: <Suspense fallback={<LoadingFallback />}><AdminAutomation /></Suspense> },
     { path: '/admin/email-providers', element: <Suspense fallback={<LoadingFallback />}><AdminEmailProviders /></Suspense> },
     { path: '/admin/email-logs', element: <Suspense fallback={<LoadingFallback />}><AdminEmailLogs /></Suspense> },

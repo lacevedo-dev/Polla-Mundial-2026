@@ -15,6 +15,7 @@ import { AdminMonitoringController } from './controllers/admin-monitoring.contro
 import { TournamentImportService } from './services/tournament-import.service';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { SyncEventsService } from './services/sync-events.service';
+import { SyncOptimizationService } from './services/sync-optimization.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -42,7 +43,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AdaptiveSyncScheduler,
     TournamentImportService,
     SyncEventsService,
+    SyncOptimizationService,
   ],
-  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService, SyncEventsService, SyncPlanService],
+  exports: [MatchSyncService, MonitoringService, FootballConfigService, TournamentImportService, SyncEventsService, SyncPlanService, SyncOptimizationService],
 })
 export class FootballSyncModule {}

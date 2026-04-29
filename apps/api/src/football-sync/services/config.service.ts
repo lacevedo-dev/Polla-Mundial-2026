@@ -74,6 +74,35 @@ export class ConfigService {
       throw new Error('alertThreshold debe estar entre 1 y 100');
     }
 
+    // Validaciones del sistema auto-adaptable
+    if (
+      data.freshnessEfficiencyBalance !== undefined &&
+      (data.freshnessEfficiencyBalance < 0 || data.freshnessEfficiencyBalance > 100)
+    ) {
+      throw new Error('freshnessEfficiencyBalance debe estar entre 0 y 100');
+    }
+
+    if (
+      data.groupingWindowMinutes !== undefined &&
+      data.groupingWindowMinutes < 1
+    ) {
+      throw new Error('groupingWindowMinutes debe ser al menos 1');
+    }
+
+    if (
+      data.minMinutesBetweenSyncs !== undefined &&
+      data.minMinutesBetweenSyncs < 1
+    ) {
+      throw new Error('minMinutesBetweenSyncs debe ser al menos 1');
+    }
+
+    if (
+      data.syncMode !== undefined &&
+      !['MANUAL', 'SEMI_AUTO', 'AUTO'].includes(data.syncMode)
+    ) {
+      throw new Error('syncMode debe ser MANUAL, SEMI_AUTO o AUTO');
+    }
+
     // Detectar cambios críticos para generar alertas
     const criticalChanges: string[] = [];
 
@@ -170,6 +199,24 @@ export class ConfigService {
         emergencyModeThreshold: 10,
         notifyOnError: true,
         notifyOnLimit: true,
+        // Sistema auto-adaptable
+        syncMode: 'SEMI_AUTO',
+        enableSmartGrouping: true,
+        groupingWindowMinutes: 15,
+        maxMatchesPerGroup: 10,
+        enableResponseCache: true,
+        cacheExpirationMinutes: 5,
+        maxCacheSize: 100,
+        enableDeduplication: true,
+        minMinutesBetweenSyncs: 3,
+        skipUnchangedMatches: true,
+        enableAutoAdjustment: false,
+        autoAdjustSensitivity: 'MEDIUM',
+        maxAutoIntervalChange: 10,
+        autoAdjustCooldown: 30,
+        freshnessEfficiencyBalance: 50,
+        notifyOnAdjustment: true,
+        notifyOnAnomaly: true,
         updatedBy,
       },
     });
@@ -288,8 +335,58 @@ export class ConfigService {
         emergencyModeThreshold: 10,
         notifyOnError: true,
         notifyOnLimit: true,
+        // Sistema auto-adaptable
+        syncMode: 'SEMI_AUTO',
+        enableSmartGrouping: true,
+        groupingWindowMinutes: 15,
+        maxMatchesPerGroup: 10,
+        enableResponseCache: true,
+        cacheExpirationMinutes: 5,
+        maxCacheSize: 100,
+        enableDeduplication: true,
+        minMinutesBetweenSyncs: 3,
+        skipUnchangedMatches: true,
+        enableAutoAdjustment: false,
+        autoAdjustSensitivity: 'MEDIUM',
+        maxAutoIntervalChange: 10,
+        autoAdjustCooldown: 30,
+        freshnessEfficiencyBalance: 50,
+        notifyOnAdjustment: true,
+        notifyOnAnomaly: true,
       },
     });
+  }
+
+  /**
+   * Obtener configuración del sistema auto-adaptable
+   */
+  async getAdaptiveConfig(): Promise<{
+    syncMode: 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
+    enableSmartGrouping: boolean;
+    groupingWindowMinutes: number;
+    enableResponseCache: boolean;
+    cacheExpirationMinutes: number;
+    enableDeduplication: boolean;
+    minMinutesBetweenSyncs: number;
+    skipUnchangedMatches: boolean;
+    enableAutoAdjustment: boolean;
+    autoAdjustSensitivity: 'LOW' | 'MEDIUM' | 'HIGH';
+    freshnessEfficiencyBalance: number;
+  }> {
+    const config = await this.getConfig();
+    return {
+      syncMode: config.syncMode,
+      enableSmartGrouping: config.enableSmartGrouping,
+      groupingWindowMinutes: config.groupingWindowMinutes,
+      enableResponseCache: config.enableResponseCache,
+      cacheExpirationMinutes: config.cacheExpirationMinutes,
+      enableDeduplication: config.enableDeduplication,
+      minMinutesBetweenSyncs: config.minMinutesBetweenSyncs,
+      skipUnchangedMatches: config.skipUnchangedMatches,
+      enableAutoAdjustment: config.enableAutoAdjustment,
+      autoAdjustSensitivity: config.autoAdjustSensitivity,
+      freshnessEfficiencyBalance: config.freshnessEfficiencyBalance,
+    };
   }
 
   private mapToDto(config: any): FootballSyncConfigDto {
@@ -309,6 +406,26 @@ export class ConfigService {
       updatedBy: config.updatedBy,
       updatedAt: config.updatedAt.toISOString(),
       createdAt: config.createdAt.toISOString(),
+
+      // Sistema auto-adaptable
+      syncMode: config.syncMode || 'SEMI_AUTO',
+      enableSmartGrouping: config.enableSmartGrouping ?? true,
+      groupingWindowMinutes: config.groupingWindowMinutes ?? 15,
+      maxMatchesPerGroup: config.maxMatchesPerGroup ?? 10,
+      enableResponseCache: config.enableResponseCache ?? true,
+      cacheExpirationMinutes: config.cacheExpirationMinutes ?? 5,
+      maxCacheSize: config.maxCacheSize ?? 100,
+      enableDeduplication: config.enableDeduplication ?? true,
+      minMinutesBetweenSyncs: config.minMinutesBetweenSyncs ?? 3,
+      skipUnchangedMatches: config.skipUnchangedMatches ?? true,
+      enableAutoAdjustment: config.enableAutoAdjustment ?? false,
+      autoAdjustSensitivity: config.autoAdjustSensitivity || 'MEDIUM',
+      maxAutoIntervalChange: config.maxAutoIntervalChange ?? 10,
+      autoAdjustCooldown: config.autoAdjustCooldown ?? 30,
+      freshnessEfficiencyBalance: config.freshnessEfficiencyBalance ?? 50,
+      notifyOnAdjustment: config.notifyOnAdjustment ?? true,
+      notifyOnAnomaly: config.notifyOnAnomaly ?? true,
+      adjustmentNotificationEmail: config.adjustmentNotificationEmail,
     };
   }
 }

@@ -320,6 +320,12 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
             {sseConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
             {sseConnected ? 'En vivo' : 'Desconectado'}
           </div>
+          {timeline && (
+            <div className="flex items-center gap-1.5 rounded-xl bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700" title="Plan estable - se mantiene entre recargas">
+              <CheckCircle2 size={12} />
+              Plan estable
+            </div>
+          )}
           <button
             onClick={() => void loadTimeline()}
             disabled={loading}

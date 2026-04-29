@@ -461,16 +461,18 @@ model ApiFootballRequest {
 }
 
 model DailySyncPlan {
-  id              String       @id @default(cuid())
-  date            String       @unique
-  totalMatches    Int
-  intervalMinutes Int
-  requestsUsed    Int          @default(0)
-  requestsBudget  Int
-  strategy        SyncStrategy
-  lastSyncAt      DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id               String       @id @default(cuid())
+  date             String       @unique
+  totalMatches     Int
+  intervalMinutes  Int
+  requestsUsed     Int          @default(0)
+  requestsBudget   Int
+  strategy         SyncStrategy
+  lastSyncAt       DateTime?
+  plannedTimeline  Json?
+  timelineVersion  Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@index([date])
 }
@@ -497,21 +499,55 @@ model FootballSyncLog {
 }
 
 model FootballSyncConfig {
-  id                     String   @id @default(cuid())
-  enabled                Boolean  @default(true)
-  minSyncInterval        Int      @default(5)
-  maxSyncInterval        Int      @default(30)
-  dailyRequestLimit      Int      @default(100)
-  alertThreshold         Int      @default(90)
-  autoSyncEnabled        Boolean  @default(true)
-  peakHoursSyncEnabled   Boolean  @default(true)
-  emergencyModeThreshold Int      @default(10)
-  notifyOnError          Boolean  @default(true)
-  notifyOnLimit          Boolean  @default(true)
-  updatedBy              String?
-  updatedAt              DateTime @updatedAt
-  createdAt              DateTime @default(now())
-  eventSyncEnabled       Boolean  @default(false)
+  id                      String   @id @default(cuid())
+  enabled                 Boolean  @default(true)
+  minSyncInterval         Int      @default(5)
+  maxSyncInterval         Int      @default(30)
+  dailyRequestLimit       Int      @default(100)
+  alertThreshold          Int      @default(90)
+  autoSyncEnabled         Boolean  @default(true)
+  peakHoursSyncEnabled    Boolean  @default(true)
+  emergencyModeThreshold  Int      @default(10)
+  notifyOnError           Boolean  @default(true)
+  notifyOnLimit           Boolean  @default(true)
+  updatedBy               String?
+  updatedAt               DateTime @updatedAt
+  createdAt               DateTime @default(now())
+  eventSyncEnabled        Boolean  @default(false)
+
+  // === SISTEMA AUTO-ADAPTABLE ===
+  // Modo de operación: MANUAL, SEMI_AUTO, AUTO
+  syncMode                String   @default("SEMI_AUTO")
+
+  // -- Agrupación Inteligente --
+  enableSmartGrouping     Boolean  @default(true)
+  groupingWindowMinutes   Int      @default(15)
+  maxMatchesPerGroup      Int      @default(10)
+
+  // -- Caché de Respuestas --
+  enableResponseCache     Boolean  @default(true)
+  cacheExpirationMinutes  Int      @default(5)
+  maxCacheSize            Int      @default(100)
+
+  // -- Deduplicación --
+  enableDeduplication         Boolean  @default(true)
+  minMinutesBetweenSyncs      Int      @default(3)
+  skipUnchangedMatches        Boolean  @default(true)
+
+  // -- Auto-Ajuste --
+  enableAutoAdjustment    Boolean  @default(false)
+  autoAdjustSensitivity   String   @default("MEDIUM")
+  maxAutoIntervalChange   Int      @default(10)
+  autoAdjustCooldown      Int      @default(30)
+
+  // -- Balance (FRESHNESS vs EFFICIENCY) --
+  // 0-100: 0 = máxima eficiencia, 100 = máxima frescura
+  freshnessEfficiencyBalance Int @default(50)
+
+  // -- Notificaciones --
+  notifyOnAdjustment      Boolean  @default(true)
+  notifyOnAnomaly         Boolean  @default(true)
+  adjustmentNotificationEmail String?
 
   @@index([updatedAt])
 }
@@ -529,6 +565,64 @@ model FootballSyncAlert {
 
   @@index([resolved, severity])
   @@index([createdAt])
+}
+
+// === LOGS DE AUTO-AJUSTE ===
+model AutoAdjustmentLog {
+  id              String   @id @default(cuid())
+  date            String
+  triggerCondition String  @db.Text
+  actionTaken     String   @db.Text
+  reason          String?  @db.Text
+  beforeState     Json     // Estado antes del ajuste
+  afterState      Json     // Estado después del ajuste
+  impact          Json?    // Métricas de impacto
+  approvedBy      String?  // Null = auto-aprobado
+  approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([date])
+  @@index([createdAt])
+}
+
+// === MÉTRICAS DE OPTIMIZACIÓN ===
+model SyncOptimizationMetrics {
+  id                    String   @id @default(cuid())
+  date                  String   @unique
+  requestsSaved         Int      @default(0)
+  avgSyncDurationMs     Int      @default(0)
+  duplicateSyncsAvoided Int      @default(0)
+  cacheHitRate          Float    @default(0)
+  autoAdjustmentsCount  Int      @default(0)
+  quotaUtilization      Float    @default(0)
+  missedMatches         Int      @default(0)
+  staleDataIncidents    Int      @default(0)
+  errorRate             Float    @default(0)
+  groupingSavings       Int      @default(0)
+  dedupSavings          Int      @default(0)
+  cacheSavings          Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([date])
+  @@index([createdAt])
+}
+
+// === CACHÉ DE RESPUESTAS API ===
+model ApiResponseCache {
+  id          String   @id @default(cuid())
+  endpoint    String   @db.VarChar(255)
+  paramsHash  String   @db.VarChar(64)
+  response    String   @db.LongText
+  matchIds    String?  @db.Text // JSON array de matchIds afectados
+  hitCount    Int      @default(0)
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([endpoint, paramsHash])
+  @@index([expiresAt])
+  @@index([fetchedAt])
 }
 
 model AutomationRun {

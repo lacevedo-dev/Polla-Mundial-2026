@@ -17,6 +17,7 @@ import { SystemRole } from '@prisma/client';
 import { MonitoringService } from '../services/monitoring.service';
 import { ConfigService } from '../services/config.service';
 import { AdaptiveSyncScheduler } from '../schedulers/adaptive-sync.scheduler';
+import { SyncOptimizationService } from '../services/sync-optimization.service';
 import {
   SyncHistoryFilterDto,
   AlertsFilterDto,
@@ -29,8 +30,10 @@ import type {
   FootballSyncConfigDto,
   UpdateConfigDto,
   ResolveAlertDto,
+  OptimizationSummaryDto,
 } from '../dto/api-football.dto';
 import { CurrentUser } from '../../auth/current-user.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @ApiTags('Admin - Football Sync Monitoring')
 @ApiBearerAuth()
@@ -42,6 +45,8 @@ export class AdminMonitoringController {
     private readonly monitoring: MonitoringService,
     private readonly config: ConfigService,
     private readonly scheduler: AdaptiveSyncScheduler,
+    private readonly optimization: SyncOptimizationService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // === DASHBOARD Y MÉTRICAS ===
@@ -259,6 +264,78 @@ export class AdminMonitoringController {
     return {
       message: `${count} alertas resueltas exitosamente`,
       count,
+    };
+  }
+
+  // === SISTEMA AUTO-ADAPTABLE ===
+
+  @Get('optimization/summary')
+  @ApiOperation({
+    summary: 'Resumen de optimizaciones activas',
+    description:
+      'Obtiene métricas de ahorro de requests, hits de caché, syncs deduplicados y recomendaciones.',
+  })
+  async getOptimizationSummary(): Promise<OptimizationSummaryDto> {
+    return this.optimization.getOptimizationSummary();
+  }
+
+  @Get('optimization/metrics')
+  @ApiOperation({
+    summary: 'Métricas de optimización por fecha',
+    description: 'Métricas detalladas de ahorro de requests y eficiencia del sistema.',
+  })
+  @ApiQuery({ name: 'date', required: false, type: String })
+  async getOptimizationMetrics(@Query('date') date?: string) {
+    return this.optimization.getMetrics(date);
+  }
+
+  @Get('optimization/adjustment-logs')
+  @ApiOperation({
+    summary: 'Historial de ajustes automáticos',
+    description: 'Lista de todos los ajustes automáticos realizados por el sistema.',
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getAdjustmentLogs(
+    @Query('limit') limit: number = 20,
+  ) {
+    return this.prisma.autoAdjustmentLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: Number(limit),
+    });
+  }
+
+  @Post('optimization/clear-cache')
+  @ApiOperation({
+    summary: 'Limpiar caché de respuestas API',
+    description: 'Limpia el caché en memoria de respuestas de la API de fútbol.',
+  })
+  async clearOptimizationCache(): Promise<{ message: string }> {
+    this.optimization.clearStates();
+    return { message: 'Caché y estados de optimización limpiados' };
+  }
+
+  @Post('optimization/mode')
+  @ApiOperation({
+    summary: 'Cambiar modo de operación del sistema',
+    description:
+      'Cambia el modo entre MANUAL (control total), SEMI_AUTO (sistema calcula, admin puede sobrescribir) y AUTO (sistema gestiona todo).',
+  })
+  async setSyncMode(
+    @Body() body: { mode: 'MANUAL' | 'SEMI_AUTO' | 'AUTO' },
+    @CurrentUser() user: any,
+  ): Promise<{ message: string; mode: string }> {
+    if (!['MANUAL', 'SEMI_AUTO', 'AUTO'].includes(body.mode)) {
+      throw new BadRequestException('Modo inválido. Usar: MANUAL, SEMI_AUTO o AUTO');
+    }
+    await this.config.updateConfig({ syncMode: body.mode }, user.id);
+    const descriptions = {
+      MANUAL: 'Control total del administrador. El sistema calcula pero no ejecuta ajustes automáticos.',
+      SEMI_AUTO: 'El sistema calcula y ajusta según parámetros, el admin puede sobrescribir en cualquier momento.',
+      AUTO: 'El sistema gestiona todo automáticamente. Notifica todos los ajustes realizados.',
+    };
+    return {
+      message: `Modo cambiado a ${body.mode}: ${descriptions[body.mode]}`,
+      mode: body.mode,
     };
   }
 

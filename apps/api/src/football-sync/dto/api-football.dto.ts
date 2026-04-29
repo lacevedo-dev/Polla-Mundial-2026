@@ -179,6 +179,38 @@ export interface FootballSyncConfigDto {
   updatedBy?: string;
   updatedAt: string;
   createdAt: string;
+
+  // === SISTEMA AUTO-ADAPTABLE ===
+  syncMode: 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
+
+  // -- Agrupación Inteligente --
+  enableSmartGrouping: boolean;
+  groupingWindowMinutes: number;
+  maxMatchesPerGroup: number;
+
+  // -- Caché de Respuestas --
+  enableResponseCache: boolean;
+  cacheExpirationMinutes: number;
+  maxCacheSize: number;
+
+  // -- Deduplicación --
+  enableDeduplication: boolean;
+  minMinutesBetweenSyncs: number;
+  skipUnchangedMatches: boolean;
+
+  // -- Auto-Ajuste --
+  enableAutoAdjustment: boolean;
+  autoAdjustSensitivity: 'LOW' | 'MEDIUM' | 'HIGH';
+  maxAutoIntervalChange: number;
+  autoAdjustCooldown: number;
+
+  // -- Balance --
+  freshnessEfficiencyBalance: number;
+
+  // -- Notificaciones --
+  notifyOnAdjustment: boolean;
+  notifyOnAnomaly: boolean;
+  adjustmentNotificationEmail?: string;
 }
 
 export interface FootballSyncAlertDto {
@@ -355,6 +387,38 @@ export interface UpdateConfigDto {
   emergencyModeThreshold?: number;
   notifyOnError?: boolean;
   notifyOnLimit?: boolean;
+
+  // === SISTEMA AUTO-ADAPTABLE ===
+  syncMode?: 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
+
+  // -- Agrupación Inteligente --
+  enableSmartGrouping?: boolean;
+  groupingWindowMinutes?: number;
+  maxMatchesPerGroup?: number;
+
+  // -- Caché de Respuestas --
+  enableResponseCache?: boolean;
+  cacheExpirationMinutes?: number;
+  maxCacheSize?: number;
+
+  // -- Deduplicación --
+  enableDeduplication?: boolean;
+  minMinutesBetweenSyncs?: number;
+  skipUnchangedMatches?: boolean;
+
+  // -- Auto-Ajuste --
+  enableAutoAdjustment?: boolean;
+  autoAdjustSensitivity?: 'LOW' | 'MEDIUM' | 'HIGH';
+  maxAutoIntervalChange?: number;
+  autoAdjustCooldown?: number;
+
+  // -- Balance --
+  freshnessEfficiencyBalance?: number;
+
+  // -- Notificaciones --
+  notifyOnAdjustment?: boolean;
+  notifyOnAnomaly?: boolean;
+  adjustmentNotificationEmail?: string;
 }
 
 export interface ResolveAlertDto {
@@ -396,4 +460,55 @@ export class ImportFixturesWithDataDto {
 
   // Full fixture data from API-Football (already fetched)
   fixtures: ApiFootballFixture[];
+}
+
+// === DTOs DEL SISTEMA AUTO-ADAPTABLE ===
+
+export interface SyncOptimizationMetricsDto {
+  date: string;
+  requestsSaved: number;
+  avgSyncDurationMs: number;
+  duplicateSyncsAvoided: number;
+  cacheHitRate: number;
+  autoAdjustmentsCount: number;
+  quotaUtilization: number;
+  missedMatches: number;
+  staleDataIncidents: number;
+  errorRate: number;
+  groupingSavings: number;
+  dedupSavings: number;
+  cacheSavings: number;
+}
+
+export interface AutoAdjustmentLogDto {
+  id: string;
+  date: string;
+  triggerCondition: string;
+  actionTaken: string;
+  reason?: string;
+  beforeState: Record<string, unknown>;
+  afterState: Record<string, unknown>;
+  impact?: Record<string, unknown>;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+}
+
+export interface SyncModeInfoDto {
+  mode: 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
+  description: string;
+  features: string[];
+  canOverride: boolean;
+}
+
+export interface OptimizationSummaryDto {
+  today: SyncOptimizationMetricsDto | null;
+  week: {
+    totalRequestsSaved: number;
+    avgCacheHitRate: number;
+    totalAutoAdjustments: number;
+  };
+  enabledFeatures: string[];
+  currentMode: 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
+  recommendations: string[];
 }

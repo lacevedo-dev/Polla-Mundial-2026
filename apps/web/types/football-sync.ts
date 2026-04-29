@@ -22,6 +22,9 @@ export interface FootballSyncLog {
   };
 }
 
+export type SyncMode = 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
+export type AdjustSensitivity = 'LOW' | 'MEDIUM' | 'HIGH';
+
 export interface FootballSyncConfig {
   id: string;
   enabled: boolean;
@@ -38,6 +41,26 @@ export interface FootballSyncConfig {
   updatedBy?: string;
   updatedAt: string;
   createdAt: string;
+
+  // Sistema auto-adaptable
+  syncMode: SyncMode;
+  enableSmartGrouping: boolean;
+  groupingWindowMinutes: number;
+  maxMatchesPerGroup: number;
+  enableResponseCache: boolean;
+  cacheExpirationMinutes: number;
+  maxCacheSize: number;
+  enableDeduplication: boolean;
+  minMinutesBetweenSyncs: number;
+  skipUnchangedMatches: boolean;
+  enableAutoAdjustment: boolean;
+  autoAdjustSensitivity: AdjustSensitivity;
+  maxAutoIntervalChange: number;
+  autoAdjustCooldown: number;
+  freshnessEfficiencyBalance: number;
+  notifyOnAdjustment: boolean;
+  notifyOnAnomaly: boolean;
+  adjustmentNotificationEmail?: string;
 }
 
 export interface FootballSyncAlert {
@@ -171,6 +194,64 @@ export interface UpdateConfig {
   emergencyModeThreshold?: number;
   notifyOnError?: boolean;
   notifyOnLimit?: boolean;
+
+  // Sistema auto-adaptable
+  syncMode?: SyncMode;
+  enableSmartGrouping?: boolean;
+  groupingWindowMinutes?: number;
+  maxMatchesPerGroup?: number;
+  enableResponseCache?: boolean;
+  cacheExpirationMinutes?: number;
+  maxCacheSize?: number;
+  enableDeduplication?: boolean;
+  minMinutesBetweenSyncs?: number;
+  skipUnchangedMatches?: boolean;
+  enableAutoAdjustment?: boolean;
+  autoAdjustSensitivity?: AdjustSensitivity;
+  maxAutoIntervalChange?: number;
+  autoAdjustCooldown?: number;
+  freshnessEfficiencyBalance?: number;
+  notifyOnAdjustment?: boolean;
+  notifyOnAnomaly?: boolean;
+  adjustmentNotificationEmail?: string;
+}
+
+export interface SyncOptimizationMetrics {
+  date: string;
+  requestsSaved: number;
+  avgSyncDurationMs: number;
+  duplicateSyncsAvoided: number;
+  cacheHitRate: number;
+  autoAdjustmentsCount: number;
+  quotaUtilization: number;
+  groupingSavings: number;
+  dedupSavings: number;
+  cacheSavings: number;
+}
+
+export interface AutoAdjustmentLog {
+  id: string;
+  date: string;
+  triggerCondition: string;
+  actionTaken: string;
+  reason?: string;
+  beforeState: Record<string, unknown>;
+  afterState: Record<string, unknown>;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+}
+
+export interface OptimizationSummary {
+  today: SyncOptimizationMetrics | null;
+  week: {
+    totalRequestsSaved: number;
+    avgCacheHitRate: number;
+    totalAutoAdjustments: number;
+  };
+  enabledFeatures: string[];
+  currentMode: SyncMode;
+  recommendations: string[];
 }
 
 export interface SyncStats {
