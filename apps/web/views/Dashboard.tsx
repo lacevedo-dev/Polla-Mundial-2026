@@ -2121,23 +2121,101 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {/* Goleadores, tarjetas y fase — solo en nivel 2 */}
+                                        {/* Resumen goles — visible en nivel 1 y 2 */}
+                                        {(() => {
+                                            const goals = expandedEvents.filter(e => e.type === 'GOAL');
+                                            if (goals.length === 0) return null;
+                                            return (
+                                                <div className="mt-2 pt-2 border-t border-white/5">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        {/* Goles local */}
+                                                        <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
+                                                            {goals.filter((_, idx) => idx % 2 === 0).map((e, i) => {
+                                                                const isOG = e.detail?.toLowerCase().includes('own goal');
+                                                                const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                                return (
+                                                                    <span key={i} className="flex items-center gap-1 text-[9px] font-bold text-white/70">
+                                                                        <span className="text-[10px]">⚽</span>
+                                                                        <span className="truncate">{isOG ? 'OG' : (e.playerName?.split(' ').pop() ?? '—')}</span>
+                                                                        <span className="text-white/30 shrink-0">{min}</span>
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        {/* Línea central */}
+                                                        <div className="w-px bg-white/10 self-stretch mx-1" />
+                                                        {/* Goles visitante */}
+                                                        <div className="flex flex-col items-end gap-0.5 min-w-0 flex-1">
+                                                            {goals.filter((_, idx) => idx % 2 !== 0).map((e, i) => {
+                                                                const isOG = e.detail?.toLowerCase().includes('own goal');
+                                                                const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                                return (
+                                                                    <span key={i} className="flex items-center gap-1 text-[9px] font-bold text-white/70">
+                                                                        <span className="text-white/30 shrink-0">{min}</span>
+                                                                        <span className="truncate">{isOG ? 'OG' : (e.playerName?.split(' ').pop() ?? '—')}</span>
+                                                                        <span className="text-[10px]">⚽</span>
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* Timeline completa — solo nivel 2 */}
                                         {expandLevel === 2 && (
                                             <>
                                                 {expandedEvents.length > 0 && (
-                                                    <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-x-3 gap-y-0.5">
+                                                    <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
+                                                        <p className="text-[8px] font-black uppercase tracking-widest text-white/25 mb-1.5">Eventos del partido</p>
                                                         {expandedEvents.map((e, i) => {
-                                                            const isOG = e.detail?.toLowerCase().includes('own goal');
-                                                            const icon = e.type === 'GOAL' ? (isOG ? '⚽ OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
-                                                            const min  = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                            const isOG  = e.detail?.toLowerCase().includes('own goal');
+                                                            const isPen = e.detail?.toLowerCase().includes('penalty');
+                                                            const isGoal = e.type === 'GOAL';
+                                                            const isYellow = e.type === 'CARD' && e.detail?.toLowerCase().includes('yellow');
+                                                            const isRed = e.type === 'CARD' && (e.detail?.toLowerCase().includes('red') || e.detail?.toLowerCase().includes('second yellow'));
+                                                            const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
+                                                            const icon = isGoal
+                                                                ? (isOG ? '⚽ OG' : isPen ? '⚽ P' : '⚽')
+                                                                : isYellow ? '🟨' : '🟥';
+                                                            const iconBg = isGoal
+                                                                ? 'bg-white/10 text-white'
+                                                                : isYellow ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-600/20 text-rose-300';
                                                             return (
-                                                                <span key={i} className="text-[9px] text-white/40">
-                                                                    {icon} {!isOG && e.playerName ? e.playerName : ''} {min}
-                                                                </span>
+                                                                <div key={i} className="flex items-center gap-2">
+                                                                    <span className="w-8 shrink-0 text-right text-[9px] font-black text-white/30 tabular-nums">{min}</span>
+                                                                    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black ${iconBg}`}>{icon}</span>
+                                                                    <span className="min-w-0 flex-1 truncate text-[9px] font-bold text-white/60">
+                                                                        {e.playerName ?? '—'}
+                                                                        {e.assistName && <span className="ml-1 text-white/30">(asist. {e.assistName.split(' ').pop()})</span>}
+                                                                    </span>
+                                                                </div>
                                                             );
                                                         })}
                                                     </div>
                                                 )}
+
+                                                {/* Estadísticas rápidas: tarjetas */}
+                                                {(() => {
+                                                    const yellows = expandedEvents.filter(e => e.type === 'CARD' && e.detail?.toLowerCase().includes('yellow')).length;
+                                                    const reds    = expandedEvents.filter(e => e.type === 'CARD' && (e.detail?.toLowerCase().includes('red') || e.detail?.toLowerCase().includes('second yellow'))).length;
+                                                    if (yellows + reds === 0) return null;
+                                                    return (
+                                                        <div className="mt-2 flex items-center gap-2 border-t border-white/5 pt-2">
+                                                            {yellows > 0 && (
+                                                                <span className="flex items-center gap-1 text-[9px] font-bold text-amber-300/80">
+                                                                    🟨 <span>{yellows}</span>
+                                                                </span>
+                                                            )}
+                                                            {reds > 0 && (
+                                                                <span className="flex items-center gap-1 text-[9px] font-bold text-rose-300/80">
+                                                                    🟥 <span>{reds}</span>
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 {expandedMatch.phase && (
                                                     <p className="mt-1.5 text-[8px] font-black uppercase tracking-widest text-white/20">{expandedMatch.phase}</p>

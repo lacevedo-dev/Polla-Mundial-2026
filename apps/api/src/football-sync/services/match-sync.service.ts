@@ -499,28 +499,99 @@ export class MatchSyncService {
         match.homeScore !== fixture.goals.home ||
         match.awayScore !== fixture.goals.away;
 
-      // Detect goals (score increased from previous value)
-      const homeGoalsScored = fixture.goals.home !== null &&
-        match.homeScore !== null &&
-        fixture.goals.home > match.homeScore;
-      const awayGoalsScored = fixture.goals.away !== null &&
-        match.awayScore !== null &&
-        fixture.goals.away > match.awayScore;
+      // Detect goals (score increased from previous value) — count how many per team
+      const prevHome = match.homeScore ?? 0;
+      const prevAway = match.awayScore ?? 0;
+      const newHome = fixture.goals.home ?? prevHome;
+      const newAway = fixture.goals.away ?? prevAway;
+      const homeGoalsDelta = Math.max(0, newHome - prevHome);
+      const awayGoalsDelta = Math.max(0, newAway - prevAway);
+      const totalGoalsDelta = homeGoalsDelta + awayGoalsDelta;
 
-      // Send push notification for goals during live match
-      if (scoreChanged && status === MatchStatus.LIVE) {
+      // Send push notification for goals during live match — one notification per goal
+      if (scoreChanged && status === MatchStatus.LIVE && totalGoalsDelta > 0) {
         const elapsed = fixture.fixture.status.elapsed ?? null;
-        if (homeGoalsScored || awayGoalsScored) {
-          await this.sendGoalPushNotification(
-            match.id,
-            fixture.teams.home.name,
-            fixture.teams.away.name,
-            fixture.goals.home,
-            fixture.goals.away,
-            homeGoalsScored ? fixture.teams.home.name : null,
-            awayGoalsScored ? fixture.teams.away.name : null,
-            elapsed,
-          );
+
+        // When multiple goals are detected in one sync gap and there is budget available,
+        // fetch the real event timeline so we can notify with accurate order and minutes.
+        let goalEvents: Array<{ isHomeGoal: boolean; minute: number; playerName: string | null }> = [];
+        if (totalGoalsDelta > 1 && fixture.fixture.id && options.eventSyncEnabled !== false) {
+          const canSpendExtra = await this.rateLimiter.canMakeRequest();
+          if (canSpendExtra) {
+            try {
+              const eventsResponse = await this.apiClient.getFixtureEvents(fixture.fixture.id);
+              await this.rateLimiter.logRequest(
+                '/fixtures/events',
+                { fixture: fixture.fixture.id, source: 'multi-goal-gap' },
+                200,
+                undefined,
+              );
+              await this.syncPlan.incrementRequestsUsed(1);
+
+              const rawEvents: any[] = eventsResponse?.response ?? [];
+              const homeTeamId = fixture.teams.home.id;
+              goalEvents = rawEvents
+                .filter((ev) => ev.type === 'Goal' && ev.detail !== 'Missed Penalty')
+                .sort((a, b) => (a.time?.elapsed ?? 0) - (b.time?.elapsed ?? 0))
+                // Only new goals (minutes after last known sync scope)
+                .slice(-totalGoalsDelta)
+                .map((ev) => ({
+                  isHomeGoal: ev.team?.id === homeTeamId,
+                  minute: ev.time?.elapsed ?? 0,
+                  playerName: ev.player?.name ?? null,
+                }));
+
+              this.logger.log(
+                `Multi-goal gap sync for match ${match.id}: fetched ${goalEvents.length} goal event(s) (${totalGoalsDelta} gap)`,
+              );
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              this.logger.warn(`Multi-goal event fetch failed for match ${match.id}: ${msg}`);
+            }
+          } else {
+            this.logger.warn(
+              `Multi-goal gap (${totalGoalsDelta}) for match ${match.id}: skipping extra event fetch — no budget`,
+            );
+          }
+        }
+
+        // Reconstruct progressive scoreline for each goal event
+        let runHome = prevHome;
+        let runAway = prevAway;
+
+        if (goalEvents.length === totalGoalsDelta) {
+          // Use real event order from API
+          for (const goal of goalEvents) {
+            if (goal.isHomeGoal) runHome++;
+            else runAway++;
+            await this.sendGoalPushNotification(
+              match.id,
+              fixture.teams.home.name,
+              fixture.teams.away.name,
+              runHome,
+              runAway,
+              goal.isHomeGoal ? fixture.teams.home.name : null,
+              goal.isHomeGoal ? null : fixture.teams.away.name,
+              goal.minute,
+            );
+          }
+        } else {
+          // Fallback: home goals first (arbitrary order), no event data
+          for (let g = 0; g < totalGoalsDelta; g++) {
+            const isHomeGoal = g < homeGoalsDelta;
+            if (isHomeGoal) runHome++;
+            else runAway++;
+            await this.sendGoalPushNotification(
+              match.id,
+              fixture.teams.home.name,
+              fixture.teams.away.name,
+              runHome,
+              runAway,
+              isHomeGoal ? fixture.teams.home.name : null,
+              isHomeGoal ? null : fixture.teams.away.name,
+              elapsed,
+            );
+          }
         }
       }
 
