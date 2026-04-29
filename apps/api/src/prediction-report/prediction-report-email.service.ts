@@ -38,6 +38,7 @@ export type ResultOutcome = 'EXACT_UNIQUE' | 'EXACT' | 'WINNER_GOAL' | 'WINNER' 
 export interface ResultEntry extends PredictorEntry {
   outcome: ResultOutcome;
   pointsEarned: number;
+  totalPoints: number;
   newPosition: number;
   prevPosition: number;
 }

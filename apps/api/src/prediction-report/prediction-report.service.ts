@@ -420,6 +420,7 @@ async sendPendingReports(
           submittedAt:  p.submittedAt,
           outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
           pointsEarned: p.points ?? 0,
+          totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
           prevPosition: prevStandings.get(p.userId)?.position ?? 99,
           newPosition:  afterStandings.get(p.userId)?.position ?? 99,
         };
@@ -563,6 +564,7 @@ async sendPendingReports(
         submittedAt:  p.submittedAt,
         outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
         pointsEarned: p.points ?? 0,
+        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
         prevPosition: prevStandings.get(p.userId)?.position ?? 99,
         newPosition:  afterStandings.get(p.userId)?.position ?? 99,
       };
@@ -636,6 +638,7 @@ async sendPendingReports(
         submittedAt:  p.submittedAt,
         outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
         pointsEarned: p.points ?? 0,
+        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
         prevPosition: prevStandings.get(p.userId)?.position ?? 99,
         newPosition:  afterStandings.get(p.userId)?.position ?? 99,
       };
@@ -840,6 +843,7 @@ async sendPendingReports(
         submittedAt:  p.submittedAt,
         outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
         pointsEarned: p.points ?? 0,
+        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
         prevPosition: prevStandings.get(p.userId)?.position ?? 99,
         newPosition:  afterStandings.get(p.userId)?.position ?? 99,
       };

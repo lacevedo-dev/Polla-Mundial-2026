@@ -84,6 +84,69 @@ function rect(doc: Doc, x: number, y: number, w: number, h: number, color: strin
   doc.rect(x, y, w, h).fill(color);
 }
 
+function dot(doc: Doc, cx: number, cy: number, r: number, color: string) {
+  doc.circle(cx, cy, r).fill(color);
+}
+
+function triangle(doc: Doc, cx: number, cy: number, size: number, color: string) {
+  const h = size * 0.87;
+  doc
+    .moveTo(cx, cy - h / 2)
+    .lineTo(cx + size / 2, cy + h / 2)
+    .lineTo(cx - size / 2, cy + h / 2)
+    .closePath()
+    .fill(color);
+}
+
+function star(doc: Doc, cx: number, cy: number, r: number, color: string) {
+  const pts = 5;
+  const inner = r * 0.42;
+  doc.save();
+  for (let i = 0; i < pts * 2; i++) {
+    const ang = (Math.PI / pts) * i - Math.PI / 2;
+    const rad = i % 2 === 0 ? r : inner;
+    const px  = cx + Math.cos(ang) * rad;
+    const py  = cy + Math.sin(ang) * rad;
+    if (i === 0) doc.moveTo(px, py);
+    else doc.lineTo(px, py);
+  }
+  doc.closePath().fill(color);
+  doc.restore();
+}
+
+function cross(doc: Doc, cx: number, cy: number, size: number, color: string, lineWidth = 1.5) {
+  doc.save().strokeColor(color).lineWidth(lineWidth)
+    .moveTo(cx - size / 2, cy - size / 2).lineTo(cx + size / 2, cy + size / 2).stroke()
+    .moveTo(cx + size / 2, cy - size / 2).lineTo(cx - size / 2, cy + size / 2).stroke();
+  doc.restore();
+}
+
+function check(doc: Doc, cx: number, cy: number, size: number, color: string, lineWidth = 1.8) {
+  doc.save().strokeColor(color).lineWidth(lineWidth)
+    .moveTo(cx - size / 2, cy)
+    .lineTo(cx - size * 0.1, cy + size * 0.4)
+    .lineTo(cx + size / 2, cy - size * 0.4)
+    .stroke();
+  doc.restore();
+}
+
+function outcomeShape(
+  doc: Doc,
+  outcome: ResultOutcome,
+  cx: number,
+  cy: number,
+  color: string,
+) {
+  switch (outcome) {
+    case 'EXACT_UNIQUE': star(doc, cx, cy, 5.5, color); break;
+    case 'EXACT':        dot(doc, cx, cy, 4.5, color);  break;
+    case 'WINNER_GOAL':  check(doc, cx, cy, 7, color);  break;
+    case 'WINNER':       triangle(doc, cx, cy, 8, color); break;
+    case 'GOAL':         dot(doc, cx, cy, 4.5, color);  break;
+    case 'WRONG':        cross(doc, cx, cy, 6, color);  break;
+  }
+}
+
 function cell(
   doc: Doc,
   text: string,
@@ -187,7 +250,7 @@ export class PdfReportService {
     y = this.drawLeagueHeader(doc, params.leagueName, params.leagueCode, params.results.length, y);
     y = this.drawResultCols(doc, y);
 
-    const sorted = [...params.results].sort((a, b) => b.pointsEarned - a.pointsEarned || a.prevPosition - b.prevPosition);
+    const sorted = [...params.results].sort((a, b) => a.newPosition - b.newPosition);
 
     for (let i = 0; i < sorted.length; i++) {
       if (y + ROW_H > PH - FOOTER_H - M) {
@@ -229,7 +292,7 @@ export class PdfReportService {
       y = this.drawLeagueHeader(doc, league.leagueName, league.leagueCode, league.results.length, y);
       y = this.drawResultCols(doc, y);
 
-      const sorted = [...league.results].sort((a, b) => b.pointsEarned - a.pointsEarned || a.prevPosition - b.prevPosition);
+      const sorted = [...league.results].sort((a, b) => a.newPosition - b.newPosition);
 
       for (let i = 0; i < sorted.length; i++) {
         if (y + ROW_H > PH - FOOTER_H - M) {
@@ -383,24 +446,27 @@ export class PdfReportService {
     const goal       = results.filter(r => r.outcome === 'GOAL').length;
     const wrong      = results.filter(r => r.outcome === 'WRONG').length;
 
-    const stats = [
-      { label: 'EXACTO',      value: String(exact),      color: C.green  },
-      { label: 'GANAD.+GOL',  value: String(winnerGoal), color: C.blue   },
-      { label: 'GANADOR',     value: String(winner),     color: C.amber  },
-      { label: 'GOL',         value: String(goal),       color: C.purple },
-      { label: 'INCORRECTO',  value: String(wrong),      color: C.muted  },
+    const stats: Array<{ label: string; value: string; color: string; outcome: ResultOutcome }> = [
+      { label: 'EXACTO',      value: String(exact),      color: C.green,  outcome: 'EXACT'       },
+      { label: 'GANAD.+GOL',  value: String(winnerGoal), color: C.blue,   outcome: 'WINNER_GOAL' },
+      { label: 'GANADOR',     value: String(winner),     color: C.amber,  outcome: 'WINNER'      },
+      { label: 'GOL',         value: String(goal),       color: C.purple, outcome: 'GOAL'        },
+      { label: 'INCORRECTO',  value: String(wrong),      color: C.muted,  outcome: 'WRONG'       },
     ];
 
     const colW = CW / 5;
     stats.forEach((s, i) => {
-      const x = M + i * colW;
+      const x  = M + i * colW;
+      const cx = x + colW / 2;
+      // Shape icon above label
+      outcomeShape(doc, s.outcome, cx, y + 10, s.color);
       doc.font('Helvetica-Bold').fontSize(7).fillColor(C.subtle)
-         .text(s.label, x, y + 8, { width: colW, align: 'center', lineBreak: false });
+         .text(s.label, x, y + 18, { width: colW, align: 'center', lineBreak: false });
       doc.font('Helvetica-Bold').fontSize(15).fillColor(s.color)
-         .text(s.value, x, y + 20, { width: colW, align: 'center', lineBreak: false });
+         .text(s.value, x, y + 29, { width: colW, align: 'center', lineBreak: false });
     });
 
-    return y + STATS_H;
+    return y + STATS_H + 6;
   }
 
   private drawLeagueHeader(
@@ -497,11 +563,11 @@ export class PdfReportService {
 
   // Table column definitions for results
   private readonly RESULT_COLS = [
-    { label: 'POS.',        w: 55,  align: 'center' as const },
-    { label: 'PARTICIPANTE',w: 160, align: 'left'   as const },
-    { label: 'PRONOSTICO',  w: 80,  align: 'center' as const },
-    { label: 'RESULTADO',   w: 130, align: 'center' as const },
-    { label: 'PTS.',        w: 106, align: 'center' as const },
+    { label: 'POS.',           w: 60,  align: 'center' as const },
+    { label: 'PARTICIPANTE',   w: 155, align: 'left'   as const },
+    { label: 'PRONOSTICO',     w: 75,  align: 'center' as const },
+    { label: 'RESULTADO',      w: 125, align: 'center' as const },
+    { label: 'PTS. PARTIDO',   w: 116, align: 'center' as const },
   ];
 
   private drawResultCols(doc: Doc, y: number): number {
@@ -520,12 +586,9 @@ export class PdfReportService {
     rect(doc, M, y, CW, ROW_H, idx % 2 === 0 ? C.bgWhite : C.bgLight);
 
     const cfg = OUTCOME_CFG[r.outcome];
+    const cy  = y + ROW_H / 2;
 
-    const movArrow =
-      r.newPosition < r.prevPosition ? `#${r.newPosition} +${r.prevPosition - r.newPosition}`
-      : r.newPosition > r.prevPosition ? `#${r.newPosition} -${r.newPosition - r.prevPosition}`
-      : `#${r.newPosition}`;
-
+    const posLabel = `#${r.newPosition}  +${r.totalPoints}`;
     const movColor =
       r.newPosition < r.prevPosition ? '#4ade80'
       : r.newPosition > r.prevPosition ? '#f87171'
@@ -534,25 +597,28 @@ export class PdfReportService {
     const [w0, w1, w2, w3, w4] = this.RESULT_COLS.map(c => c.w);
     let x = M;
 
-    cell(doc, movArrow, x, y, w0, ROW_H, { color: movColor, bold: true, align: 'center', size: 8 });
+    // POS column: shape indicator on left edge + text
+    outcomeShape(doc, r.outcome, x + 8, cy, movColor);
+    cell(doc, posLabel, x + 12, y, w0 - 12, ROW_H, { color: movColor, bold: true, align: 'center', size: 8 });
     x += w0;
 
     const nameText = r.isAdmin ? `${r.name} [A]` : r.name;
     cell(doc, nameText, x, y, w1, ROW_H, { bold: true });
     x += w1;
 
-    // Prediction chip
-    const chipW = 60; const chipH = ROW_H - 8; const chipX = x + (w2 - chipW) / 2; const chipY = y + 4;
+    // Prediction chip (dark bg)
+    const chipW = 58; const chipH = ROW_H - 8; const chipX = x + (w2 - chipW) / 2; const chipY = y + 4;
     rect(doc, chipX, chipY, chipW, chipH, C.bgMid);
     cell(doc, `${r.homeScore}-${r.awayScore}`, chipX, chipY, chipW, chipH, {
-      size: 9, bold: true, color: C.muted, align: 'center', pad: 2,
+      size: 9, bold: true, color: C.lime, align: 'center', pad: 2,
     });
     x += w2;
 
-    // Outcome badge
-    const bdgW = 120; const bdgH = ROW_H - 8; const bdgX = x + (w3 - bdgW) / 2; const bdgY = y + 4;
+    // Outcome badge: colored bg + small shape icon + label
+    const bdgW = 118; const bdgH = ROW_H - 8; const bdgX = x + (w3 - bdgW) / 2; const bdgY = y + 4;
     rect(doc, bdgX, bdgY, bdgW, bdgH, cfg.bg);
-    cell(doc, cfg.label, bdgX, bdgY, bdgW, bdgH, {
+    outcomeShape(doc, r.outcome, bdgX + 10, bdgY + bdgH / 2, cfg.color);
+    cell(doc, cfg.label, bdgX + 14, bdgY, bdgW - 14, bdgH, {
       size: 8, bold: true, color: cfg.color, align: 'center', pad: 2,
     });
     x += w3;
