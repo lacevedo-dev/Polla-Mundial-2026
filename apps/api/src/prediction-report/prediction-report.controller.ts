@@ -110,6 +110,32 @@ export class PredictionReportController {
     res.send(html);
   }
 
+  @Get('pdf-start/:matchId/:leagueId')
+  async downloadPdfStart(
+    @Param('matchId') matchId: string,
+    @Param('leagueId') leagueId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.reportService.getPredictionsPdfBuffer(matchId, leagueId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="pronosticos_${matchId}.pdf"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
+  @Get('pdf-results/:matchId/:leagueId')
+  async downloadPdfResults(
+    @Param('matchId') matchId: string,
+    @Param('leagueId') leagueId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.reportService.getResultsPdfBuffer(matchId, leagueId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="resultados_${matchId}.pdf"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
   @Post('resend-start/:matchId')
   async resendStart(
     @Param('matchId') matchId: string,

@@ -23,11 +23,16 @@ describe('PredictionReportService', () => {
     sendResultsReport: jest.fn(),
   } as any;
 
+  const pdfReport = {
+    buildPredictionsReportPdf: jest.fn(),
+    buildResultsReportPdf: jest.fn(),
+  } as any;
+
   let service: PredictionReportService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PredictionReportService(prisma, observability, emailService);
+    service = new PredictionReportService(prisma, observability, emailService, pdfReport);
     prisma.prediction.findMany.mockResolvedValue([
       { userId: 'user-1', points: 7 },
       { userId: 'user-2', points: 3 },

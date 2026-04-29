@@ -548,7 +548,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 };
 
 const AdminMatches: React.FC = () => {
-  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, autoLinkAndSync, bulkAutoLink, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml } = useAdminMatchesStore();
+  const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, autoLinkAndSync, bulkAutoLink, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml, downloadReportPdf } = useAdminMatchesStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -651,9 +651,20 @@ const AdminMatches: React.FC = () => {
     void loadPreviewForLeague(previewMatch.match.id, previewMatch.type, leagueId);
   }, [previewMatch, loadPreviewForLeague]);
 
-  const handleExportPdf = React.useCallback(() => {
-    iframeRef.current?.contentWindow?.print();
-  }, []);
+  const [downloadingPdf, setDownloadingPdf] = React.useState(false);
+
+  const handleDownloadPdf = React.useCallback(async () => {
+    if (!previewMatch || !previewLeagueId) return;
+    const { match, type } = previewMatch;
+    const teamSlug = `${match.homeTeam.name}_vs_${match.awayTeam.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+    const filename = `${type === 'start' ? 'pronosticos' : 'resultados'}_${teamSlug}.pdf`;
+    setDownloadingPdf(true);
+    try {
+      await downloadReportPdf(match.id, type, previewLeagueId, filename);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [previewMatch, previewLeagueId, downloadReportPdf]);
 
   const handleExportImage = React.useCallback(async () => {
     const iframeDoc = iframeRef.current?.contentDocument;
@@ -1270,12 +1281,12 @@ const AdminMatches: React.FC = () => {
             <div className="border-t border-slate-100 px-6 py-4 space-y-3">
               <div className="flex gap-2">
                 <button
-                  onClick={handleExportPdf}
-                  disabled={!previewHtml || previewLoading}
-                  title="Guardar como PDF"
+                  onClick={() => void handleDownloadPdf()}
+                  disabled={!previewHtml || previewLoading || downloadingPdf}
+                  title="Descargar PDF adjunto del correo"
                   className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:opacity-40"
                 >
-                  <Download size={14} /> PDF
+                  {downloadingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PDF adjunto
                 </button>
                 <button
                   onClick={() => void handleExportImage()}

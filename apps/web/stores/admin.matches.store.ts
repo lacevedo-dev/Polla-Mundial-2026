@@ -133,6 +133,7 @@ interface AdminMatchesState {
     getMatchPreviewLeagues: (id: string) => Promise<{ id: string; name: string; code: string }[]>;
     getMatchLeagueRecipients: (matchId: string, leagueId: string) => Promise<{ emails: string[]; count: number }>;
     getEmailPreviewHtml: (id: string, type: 'start' | 'results', leagueId: string) => Promise<string>;
+    downloadReportPdf: (matchId: string, type: 'start' | 'results', leagueId: string, filename: string) => Promise<void>;
     syncMatch: (id: string) => Promise<void>;
     fetchLinkCandidates: (id: string) => Promise<FootballMatchLinkCandidate[]>;
     fetchMatchHistory: (id: string) => Promise<{ syncLogs: AdminMatchSyncLog[]; linkAudit: AdminMatchLinkAudit[] }>;
@@ -297,6 +298,24 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
         });
         if (!response.ok) throw new Error('Error al cargar preview del correo');
         return response.text();
+    },
+
+    downloadReportPdf: async (matchId, type, leagueId, filename) => {
+        const token = localStorage.getItem('token');
+        const path = type === 'start'
+            ? `/admin/prediction-report/pdf-start/${matchId}/${leagueId}`
+            : `/admin/prediction-report/pdf-results/${matchId}/${leagueId}`;
+        const response = await fetch(`${BASE_URL}${path}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) throw new Error('Error al descargar el PDF');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
     },
 
     syncMatch: async (id) => {
