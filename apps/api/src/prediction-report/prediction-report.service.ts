@@ -362,22 +362,32 @@ async sendPendingReports(
     });
     if (!match || match.homeScore === null || match.awayScore === null) return;
 
-    // Encontrar todas las ligas que tienen predicciones en este partido
-    const leagueIds = await this.prisma.prediction.findMany({
+    const realHome = match.homeScore;
+    const realAway = match.awayScore;
+
+    // Recopilar todas las ligas con predicciones para este partido
+    const leagueRows = await this.prisma.prediction.findMany({
       where: { matchId },
       select: { leagueId: true },
       distinct: ['leagueId'],
     });
 
-    for (const { leagueId } of leagueIds) {
+    // Construir datos por liga
+    const leaguesData: Array<{
+      leagueId: string;
+      leagueName: string;
+      leagueCode: string;
+      results: import('./prediction-report-email.service').ResultEntry[];
+    }> = [];
+
+    for (const { leagueId } of leagueRows) {
       const league = await this.prisma.league.findUnique({
         where: { id: leagueId },
         select: { name: true, code: true },
       });
       if (!league) continue;
 
-      const { members, recipients } = await this.getLeagueReportAudience(leagueId);
-      if (recipients.length === 0) continue;
+      const { members } = await this.getLeagueReportAudience(leagueId);
 
       const predictions = await this.prisma.prediction.findMany({
         where: { matchId, leagueId, points: { not: null } },
@@ -386,7 +396,6 @@ async sendPendingReports(
       });
       if (predictions.length === 0) continue;
 
-      // Standings ANTES de este partido
       const prevPreds = await this.prisma.prediction.findMany({
         where: { leagueId, points: { not: null }, matchId: { not: matchId } },
         select: { userId: true, points: true },
@@ -394,21 +403,14 @@ async sendPendingReports(
       const prevTotals = new Map<string, number>();
       for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
 
-      // Standings DESPUÃƒâ€°S (incluyendo este partido)
       const afterTotals = new Map<string, number>(prevTotals);
       for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
 
-      const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
-      const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
-      const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
-      const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
-
-      const realHome = match.homeScore!;
-      const realAway = match.awayScore!;
+      const prevStandings  = new Map([...prevTotals.entries()].sort((a, b) => b[1] - a[1]).map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
+      const afterStandings = new Map([...afterTotals.entries()].sort((a, b) => b[1] - a[1]).map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
 
       const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
         const member  = members.find(m => m.userId === p.userId);
-        const outcome = this.parseOutcomeFromDetail(p.pointDetail, p.points);
         return {
           userId:       p.userId,
           name:         this.resolvePredictorName(p.user, p.userId),
@@ -416,77 +418,65 @@ async sendPendingReports(
           homeScore:    p.homeScore,
           awayScore:    p.awayScore,
           submittedAt:  p.submittedAt,
-          outcome,
+          outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
           pointsEarned: p.points ?? 0,
           prevPosition: prevStandings.get(p.userId)?.position ?? 99,
           newPosition:  afterStandings.get(p.userId)?.position ?? 99,
         };
       });
 
-      this.logger.log(
-        `Enviando correo de resultados: ${match.homeTeam.name} ${realHome}-${realAway} ${match.awayTeam.name} | ${league.code} | ${recipients.length} destinatarios`,
-      );
-      const scheduledAt = this.observability.getScheduledAt(
-        AutomationStep.RESULT_REPORT,
-        {
-          matchDate: match.matchDate,
-          closeMinutes: null,
-          matchStatus: MatchStatus.FINISHED,
-        },
-      );
-      const runId = await this.observability.startRun({
-        step: AutomationStep.RESULT_REPORT,
+      leaguesData.push({ leagueId, leagueName: league.name, leagueCode: league.code, results });
+    }
+
+    if (leaguesData.length === 0) return;
+
+    this.logger.log(
+      `Enviando correo de resultados: ${match.homeTeam.name} ${realHome}-${realAway} ${match.awayTeam.name} | ${leaguesData.length} polla(s)`,
+    );
+
+    const scheduledAt = this.observability.getScheduledAt(
+      AutomationStep.RESULT_REPORT,
+      { matchDate: match.matchDate, closeMinutes: null, matchStatus: MatchStatus.FINISHED },
+    );
+    const runId = await this.observability.startRun({
+      step: AutomationStep.RESULT_REPORT,
+      matchId,
+      leagueId: leaguesData.map(l => l.leagueId).join(','),
+      scheduledAt,
+      audienceCount: leaguesData.reduce((s, l) => s + l.results.length, 0),
+      summary: `Preparando reporte multi-liga de resultados (${leaguesData.length} polla(s))`,
+    });
+
+    try {
+      await this.emailService.sendMultiLeagueResultsReport({
         matchId,
-        leagueId,
-        scheduledAt,
-        audienceCount: recipients.length,
-        summary: `Preparando reporte de resultados para ${league.code}`,
+        match: {
+          homeTeam:  match.homeTeam.name,
+          awayTeam:  match.awayTeam.name,
+          matchDate: match.matchDate,
+          homeScore: realHome,
+          awayScore: realAway,
+          venue:     match.venue ?? undefined,
+          round:     match.round ?? undefined,
+        },
+        leaguesData,
+        sentAt: new Date(),
       });
 
-      try {
-        await this.emailService.sendResultsReport({
-          recipients,
-          leagueName: league.name,
-          leagueCode: league.code,
-          leagueId,
-          matchId,
-          match: {
-            homeTeam:  match.homeTeam.name,
-            awayTeam:  match.awayTeam.name,
-            matchDate: match.matchDate,
-            homeScore: realHome,
-            awayScore: realAway,
-            venue:     match.venue ?? undefined,
-            round:     match.round ?? undefined,
-          },
-          results,
-          sentAt: new Date(),
-        });
-
-        await this.observability.finishRun(runId, {
-          status: 'SUCCESS',
-          summary: `Reporte de resultados enviado a ${recipients.length} destinatario(s)`,
-          deliveredCount: recipients.length,
-          details: {
-            matchId,
-            leagueId,
-            resultCount: results.length,
-            recipients,
-          },
-        });
-      } catch (error) {
-        await this.observability.failRun(
-          runId,
-          error,
-          {
-            matchId,
-            leagueId,
-            resultCount: results.length,
-          },
-          'Falló el envío del reporte de resultados.',
-        );
-        throw error;
-      }
+      const totalRecipients = leaguesData.reduce((s, l) => s + l.results.length, 0);
+      await this.observability.finishRun(runId, {
+        status: 'SUCCESS',
+        summary: `Reporte de resultados enviado (${leaguesData.length} polla(s), ~${totalRecipients} participantes)`,
+        deliveredCount: totalRecipients,
+        details: { matchId, leagues: leaguesData.map(l => l.leagueCode) },
+      });
+    } catch (error) {
+      await this.observability.failRun(
+        runId, error,
+        { matchId, leagues: leaguesData.map(l => l.leagueCode) },
+        'Falló el envío del reporte multi-liga de resultados.',
+      );
+      throw error;
     }
   }
 

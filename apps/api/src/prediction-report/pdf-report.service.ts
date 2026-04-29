@@ -23,13 +23,13 @@ const C = {
   border:   '#e2e8f0',
 };
 
-const OUTCOME_CFG: Record<ResultOutcome, { label: string; bg: string; color: string }> = {
-  EXACT_UNIQUE: { label: 'Exacto unico',    bg: '#78350f', color: '#fcd34d' },
-  EXACT:        { label: 'Exacto',           bg: '#14532d', color: '#4ade80' },
-  WINNER_GOAL:  { label: 'Ganador + Gol',    bg: '#1e3a5f', color: '#60a5fa' },
-  WINNER:       { label: 'Ganador',          bg: '#3b2f00', color: '#fbbf24' },
-  GOAL:         { label: 'Gol acertado',     bg: '#2e1065', color: '#a78bfa' },
-  WRONG:        { label: 'Incorrecto',       bg: '#1e1e1e', color: '#6b7280' },
+const OUTCOME_CFG: Record<ResultOutcome, { label: string; icon: string; bg: string; color: string }> = {
+  EXACT_UNIQUE: { label: 'Exacto unico',  icon: 'EXACTO UNICO',   bg: '#78350f', color: '#fcd34d' },
+  EXACT:        { label: 'Exacto',        icon: 'Exacto',         bg: '#14532d', color: '#4ade80' },
+  WINNER_GOAL:  { label: 'Ganador + Gol', icon: 'Ganador + Gol',  bg: '#1e3a5f', color: '#60a5fa' },
+  WINNER:       { label: 'Ganador',       icon: 'Ganador',        bg: '#3b2f00', color: '#fbbf24' },
+  GOAL:         { label: 'Gol acertado',  icon: 'Gol acertado',   bg: '#2e1065', color: '#a78bfa' },
+  WRONG:        { label: 'Incorrecto',    icon: 'Incorrecto',     bg: '#1e1e2e', color: '#6b7280' },
 };
 
 // A4 dimensions in points
@@ -289,34 +289,59 @@ export class PdfReportService {
     match: ReportMatchInfo & { homeScore: number; awayScore: number },
     y: number,
   ): number {
-    rect(doc, 0, y, PW, HEADER_H, C.bg);
-
-    // Badge
-    const badgeText = 'PARTIDO FINALIZADO';
-    const bW = 160; const bH = 17; const bX = (PW - bW) / 2;
-    rect(doc, bX, y + 12, bW, bH, C.green);
-    cell(doc, badgeText, bX, y + 12, bW, bH, { size: 7, bold: true, color: '#052e16', align: 'center', pad: 0 });
-
-    // Score
-    const score = `${match.homeScore}  -  ${match.awayScore}`;
-    doc.font('Helvetica-Bold').fontSize(32).fillColor(C.lime)
-       .text(score, M, y + 35, { width: CW, align: 'center', lineBreak: false });
-
-    // Teams below score
-    const teamsLine = `${match.homeTeam}   vs   ${match.awayTeam}`;
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(C.text)
-       .text(teamsLine, M, y + 72, { width: CW, align: 'center', lineBreak: false });
-
-    // Date
-    doc.font('Helvetica').fontSize(9).fillColor(C.muted)
-       .text(formatDateTime(match.matchDate), M, y + 90, { width: CW, align: 'center', lineBreak: false });
-
-    // Separator
     const homeWon = match.homeScore > match.awayScore;
     const isDraw  = match.homeScore === match.awayScore;
-    rect(doc, 0, y + HEADER_H - 2, PW, 2, isDraw ? C.blue : homeWon ? C.green : C.orange);
+    const awayWon = match.awayScore > match.homeScore;
 
-    return y + HEADER_H;
+    const FULL_H = HEADER_H + 22; // extra strip for result banner
+    rect(doc, 0, y, PW, FULL_H, C.bg);
+
+    // "PARTIDO FINALIZADO" badge
+    const bW = 160; const bH = 17; const bX = (PW - bW) / 2;
+    rect(doc, bX, y + 10, bW, bH, C.green);
+    cell(doc, 'PARTIDO FINALIZADO', bX, y + 10, bW, bH, { size: 7, bold: true, color: '#052e16', align: 'center', pad: 0 });
+
+    // Teams layout: Home | Score | Away
+    const colW = CW / 3;
+    // Home team
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(homeWon ? C.green : C.text)
+       .text(match.homeTeam, M, y + 35, { width: colW, align: 'center', lineBreak: false, ellipsis: true });
+    doc.font('Helvetica').fontSize(7).fillColor(C.subtle)
+       .text('LOCAL', M, y + 51, { width: colW, align: 'center', lineBreak: false });
+
+    // Score (center column)
+    const score = `${match.homeScore}  –  ${match.awayScore}`;
+    doc.font('Helvetica-Bold').fontSize(28).fillColor(C.lime)
+       .text(score, M + colW, y + 32, { width: colW, align: 'center', lineBreak: false });
+    const finalBadgeW = 50; const finalBadgeH = 13; const finalBadgeX = M + colW + (colW - finalBadgeW) / 2;
+    rect(doc, finalBadgeX, y + 62, finalBadgeW, finalBadgeH, C.bgMid);
+    cell(doc, 'FINAL', finalBadgeX, y + 62, finalBadgeW, finalBadgeH, { size: 7, bold: true, color: C.muted, align: 'center', pad: 0 });
+
+    // Away team
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(awayWon ? C.orange : C.text)
+       .text(match.awayTeam, M + colW * 2, y + 35, { width: colW, align: 'center', lineBreak: false, ellipsis: true });
+    doc.font('Helvetica').fontSize(7).fillColor(C.subtle)
+       .text('VISITANTE', M + colW * 2, y + 51, { width: colW, align: 'center', lineBreak: false });
+
+    // Date
+    doc.font('Helvetica').fontSize(8).fillColor(C.muted)
+       .text(formatDateTime(match.matchDate), M, y + 84, { width: CW, align: 'center', lineBreak: false });
+
+    // Result banner strip
+    const bannerY = y + HEADER_H;
+    const bannerColor = isDraw ? '#1e3a5f' : homeWon ? '#14532d' : '#3b1f00';
+    const bannerTextColor = isDraw ? C.blue : homeWon ? C.green : C.orange;
+    const resultLabel = isDraw ? 'Empate'
+      : homeWon ? `Gano ${match.homeTeam}`
+      : `Gano ${match.awayTeam}`;
+    rect(doc, 0, bannerY, PW, 22, bannerColor);
+    cell(doc, resultLabel, 0, bannerY, PW, 22, { size: 9, bold: true, color: bannerTextColor, align: 'center', pad: 0 });
+
+    // Bottom separator line
+    const sepColor = isDraw ? C.blue : homeWon ? C.green : C.orange;
+    rect(doc, 0, y + FULL_H - 2, PW, 2, sepColor);
+
+    return y + FULL_H;
   }
 
   private drawPredictionsStats(doc: Doc, predictors: PredictorEntry[], y: number): number {
