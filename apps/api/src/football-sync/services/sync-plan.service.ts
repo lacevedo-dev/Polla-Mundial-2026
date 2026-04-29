@@ -543,10 +543,15 @@ export class SyncPlanService {
         return [now.toISOString()];
       }
 
-      let cursor = new Date(Math.max(now.getTime(), matchStart.getTime() - 5 * 60 * 1000));
+      // Fixed origin: always start from matchStart - 5 min so the schedule is
+      // stable across reloads. Past slots are skipped, not dropped entirely.
+      const origin = new Date(matchStart.getTime() - 5 * 60 * 1000);
+      let cursor = origin;
 
       while (cursor <= matchEnd && cursor < todayEnd) {
-        slots.push(cursor.toISOString());
+        if (cursor >= now) {
+          slots.push(cursor.toISOString());
+        }
         cursor = new Date(cursor.getTime() + intervalMs);
       }
 
