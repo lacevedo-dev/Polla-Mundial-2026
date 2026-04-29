@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useFootballSyncStore } from '../../stores/football-sync.store';
 import type { SyncMode, AdjustSensitivity, UpdateConfig, OptimizationSummary } from '../../types/football-sync';
-import { BASE_URL } from '../../config';
+import { BASE_URL } from '../../api';
 
 // === HELPERS ===
 
