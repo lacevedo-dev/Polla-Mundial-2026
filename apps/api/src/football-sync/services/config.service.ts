@@ -364,8 +364,10 @@ export class ConfigService {
     syncMode: 'MANUAL' | 'SEMI_AUTO' | 'AUTO';
     enableSmartGrouping: boolean;
     groupingWindowMinutes: number;
+    maxMatchesPerGroup: number;
     enableResponseCache: boolean;
     cacheExpirationMinutes: number;
+    maxCacheSize: number;
     enableDeduplication: boolean;
     minMinutesBetweenSyncs: number;
     skipUnchangedMatches: boolean;
@@ -378,8 +380,10 @@ export class ConfigService {
       syncMode: config.syncMode,
       enableSmartGrouping: config.enableSmartGrouping,
       groupingWindowMinutes: config.groupingWindowMinutes,
+      maxMatchesPerGroup: config.maxMatchesPerGroup,
       enableResponseCache: config.enableResponseCache,
       cacheExpirationMinutes: config.cacheExpirationMinutes,
+      maxCacheSize: config.maxCacheSize,
       enableDeduplication: config.enableDeduplication,
       minMinutesBetweenSyncs: config.minMinutesBetweenSyncs,
       skipUnchangedMatches: config.skipUnchangedMatches,
