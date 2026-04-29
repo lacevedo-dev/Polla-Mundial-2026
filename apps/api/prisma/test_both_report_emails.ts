@@ -110,6 +110,7 @@ async function main() {
       ...p,
       outcome,
       pointsEarned: points,
+      totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
       prevPosition: prevStandings.get(p.userId)?.position ?? 99,
       newPosition:  afterStandings.get(p.userId)?.position ?? 99,
     };
