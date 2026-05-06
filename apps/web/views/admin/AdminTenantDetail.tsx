@@ -104,8 +104,14 @@ export default function AdminTenantDetail() {
             ]);
             setTenant(t);
             setInfoDraft({ name: t.name, legalName: t.legalName, contactEmail: t.contactEmail, planTier: t.planTier, maxUsers: t.maxUsers, maxLeagues: t.maxLeagues, customDomain: t.customDomain });
-            if (t.branding) setBrandingDraft(t.branding);
-            if (t.config) setConfigDraft(t.config);
+            if (t.branding) {
+                const { primaryColor, secondaryColor, accentColor, fontFamily, companyDisplayName, logoUrl, faviconUrl, customCss, emailHeaderHtml, emailFooterHtml, emailInviteTemplate } = t.branding as any;
+                setBrandingDraft({ primaryColor, secondaryColor, accentColor, fontFamily, companyDisplayName: companyDisplayName ?? null, logoUrl: logoUrl ?? null, faviconUrl: faviconUrl ?? null, customCss: customCss ?? null });
+            }
+            if (t.config) {
+                const { enablePayments, enableAiInsights, enablePublicLeagues, enableUserSelfRegister, requireInvitation, enableEmailNotif, enablePushNotif, enableStageFees } = t.config as any;
+                setConfigDraft({ enablePayments, enableAiInsights, enablePublicLeagues, enableUserSelfRegister, requireInvitation, enableEmailNotif, enablePushNotif, enableStageFees });
+            }
             setMembers(m);
             setInvitations(inv);
         } finally {
@@ -120,7 +126,10 @@ export default function AdminTenantDetail() {
     const saveInfo = async () => {
         setSaving(true);
         try {
-            await request(`/admin/tenants/${id}`, { method: 'PATCH', body: JSON.stringify(infoDraft) });
+            const body = Object.fromEntries(
+                Object.entries(infoDraft).filter(([, v]) => v !== null && v !== undefined && v !== '')
+            );
+            await request(`/admin/tenants/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
             flash('✓ Datos guardados');
             await load();
         } catch (e: any) { flash(`Error: ${e?.message}`); } finally { setSaving(false); }
@@ -129,7 +138,10 @@ export default function AdminTenantDetail() {
     const saveBranding = async () => {
         setSaving(true);
         try {
-            await request(`/admin/tenants/${id}/branding`, { method: 'PATCH', body: JSON.stringify(brandingDraft) });
+            const body = Object.fromEntries(
+                Object.entries(brandingDraft).filter(([, v]) => v !== null && v !== undefined)
+            );
+            await request(`/admin/tenants/${id}/branding`, { method: 'PATCH', body: JSON.stringify(body) });
             flash('✓ Branding guardado');
         } catch (e: any) { flash(`Error: ${e?.message}`); } finally { setSaving(false); }
     };
@@ -137,7 +149,7 @@ export default function AdminTenantDetail() {
     const saveConfig = async () => {
         setSaving(true);
         try {
-            await request(`/admin/tenants/${id}/config`, { method: 'PATCH', body: JSON.stringify(configDraft) });
+            await request(`/admin/tenants/${id}/config`, { method: 'PATCH', body: JSON.stringify(configDraft) }); // booleans nunca son null, no necesita filtrado
             flash('✓ Configuración guardada');
         } catch (e: any) { flash(`Error: ${e?.message}`); } finally { setSaving(false); }
     };
