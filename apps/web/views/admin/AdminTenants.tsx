@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Building2, Plus, Users, Trophy, CheckCircle2, Clock,
-    XCircle, PauseCircle, ChevronRight, RefreshCw, Zap,
+    XCircle, PauseCircle, ChevronRight, RefreshCw, Zap, Info,
 } from 'lucide-react';
 import { request } from '../../api';
+
+type PlanTier = 'STARTER' | 'BUSINESS' | 'ENTERPRISE';
 
 interface TenantRow {
     id: string;
@@ -11,7 +14,7 @@ interface TenantRow {
     name: string;
     contactEmail: string;
     status: 'PENDING_SETUP' | 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
-    planTier: 'STARTER' | 'BUSINESS' | 'ENTERPRISE';
+    planTier: PlanTier;
     maxUsers: number;
     maxLeagues: number;
     createdAt: string;
@@ -22,22 +25,29 @@ interface TenantRow {
 interface CreateTenantForm {
     slug: string;
     name: string;
+    legalName: string;
     contactEmail: string;
-    planTier: 'STARTER' | 'BUSINESS' | 'ENTERPRISE';
+    planTier: PlanTier;
     maxUsers: number;
     maxLeagues: number;
 }
 
-const STATUS_CONFIG = {
-    PENDING_SETUP: { label: 'Configurando', color: 'bg-amber-100 text-amber-700', icon: Clock },
-    ACTIVE: { label: 'Activo', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
-    SUSPENDED: { label: 'Suspendido', color: 'bg-rose-100 text-rose-700', icon: PauseCircle },
-    CANCELLED: { label: 'Cancelado', color: 'bg-slate-100 text-slate-500', icon: XCircle },
+const PLAN_DEFAULTS: Record<PlanTier, { maxUsers: number; maxLeagues: number; label: string; price: string; features: string[] }> = {
+    STARTER:    { maxUsers: 50,   maxLeagues: 3,  label: 'Starter',    price: '250k COP/mes',  features: ['Hasta 50 usuarios', 'Hasta 3 pollas', 'Branding básico', 'Soporte email'] },
+    BUSINESS:   { maxUsers: 300,  maxLeagues: 10, label: 'Business',   price: '600k COP/mes',  features: ['Hasta 300 usuarios', 'Hasta 10 pollas', 'Branding completo', 'Dominio propio', 'Soporte prioritario'] },
+    ENTERPRISE: { maxUsers: 5000, maxLeagues: 50, label: 'Enterprise', price: 'Precio a medida', features: ['Usuarios ilimitados', 'Pollas ilimitadas', 'SSO', 'SLA garantizado', 'Gerente de cuenta'] },
 };
 
-const PLAN_COLORS = {
-    STARTER: 'bg-slate-100 text-slate-600',
-    BUSINESS: 'bg-lime-100 text-lime-700',
+const STATUS_CONFIG = {
+    PENDING_SETUP: { label: 'Configurando', color: 'bg-amber-100 text-amber-700', icon: Clock },
+    ACTIVE:        { label: 'Activo',       color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
+    SUSPENDED:     { label: 'Suspendido',   color: 'bg-rose-100 text-rose-700',    icon: PauseCircle },
+    CANCELLED:     { label: 'Cancelado',    color: 'bg-slate-100 text-slate-500',  icon: XCircle },
+};
+
+const PLAN_COLORS: Record<PlanTier, string> = {
+    STARTER:    'bg-slate-100 text-slate-600',
+    BUSINESS:   'bg-lime-100 text-lime-700',
     ENTERPRISE: 'bg-cyan-100 text-cyan-700',
 };
 
@@ -49,6 +59,7 @@ function formatPrice(amount: number, currency: string) {
 }
 
 export default function AdminTenants() {
+    const navigate = useNavigate();
     const [tenants, setTenants] = useState<TenantRow[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
@@ -56,12 +67,18 @@ export default function AdminTenants() {
     const [form, setForm] = useState<CreateTenantForm>({
         slug: '',
         name: '',
+        legalName: '',
         contactEmail: '',
         planTier: 'STARTER',
-        maxUsers: 50,
-        maxLeagues: 3,
+        maxUsers: PLAN_DEFAULTS.STARTER.maxUsers,
+        maxLeagues: PLAN_DEFAULTS.STARTER.maxLeagues,
     });
     const [createError, setCreateError] = useState<string | null>(null);
+
+    const handlePlanChange = (plan: PlanTier) => {
+        const defaults = PLAN_DEFAULTS[plan];
+        setForm(f => ({ ...f, planTier: plan, maxUsers: defaults.maxUsers, maxLeagues: defaults.maxLeagues }));
+    };
 
     const load = async () => {
         setIsLoading(true);
@@ -85,7 +102,7 @@ export default function AdminTenants() {
                 body: JSON.stringify(form),
             });
             setShowCreate(false);
-            setForm({ slug: '', name: '', contactEmail: '', planTier: 'STARTER', maxUsers: 50, maxLeagues: 3 });
+            setForm({ slug: '', name: '', legalName: '', contactEmail: '', planTier: 'STARTER', maxUsers: PLAN_DEFAULTS.STARTER.maxUsers, maxLeagues: PLAN_DEFAULTS.STARTER.maxLeagues });
             await load();
         } catch (err: any) {
             setCreateError(err?.message ?? 'Error al crear tenant');
@@ -160,6 +177,7 @@ export default function AdminTenants() {
                         className="bg-white rounded-3xl p-6 w-full max-w-md space-y-4 shadow-2xl"
                     >
                         <h2 className="text-lg font-black text-slate-900">Nuevo Tenant Corporativo</h2>
+                        <p className="text-xs text-slate-400 -mt-2">Completa los datos para crear una organización B2B</p>
 
                         {createError && (
                             <div className="text-sm text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{createError}</div>
@@ -177,15 +195,26 @@ export default function AdminTenants() {
                                 />
                                 <p className="text-[10px] text-slate-400 mt-1">→ bavaria.zonapronosticos.com</p>
                             </div>
-                            <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Nombre</label>
-                                <input
-                                    required
-                                    value={form.name}
-                                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                                    placeholder="Bavaria S.A."
-                                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                />
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Nombre comercial</label>
+                                    <input
+                                        required
+                                        value={form.name}
+                                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                                        placeholder="Bavaria"
+                                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Razón social</label>
+                                    <input
+                                        value={form.legalName}
+                                        onChange={e => setForm(f => ({ ...f, legalName: e.target.value }))}
+                                        placeholder="Bavaria S.A."
+                                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    />
+                                </div>
                             </div>
                             <div>
                                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Email de Contacto</label>
@@ -198,21 +227,37 @@ export default function AdminTenants() {
                                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                                 />
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Plan</label>
-                                    <select
-                                        value={form.planTier}
-                                        onChange={e => setForm(f => ({ ...f, planTier: e.target.value as any }))}
-                                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                    >
-                                        <option value="STARTER">Starter</option>
-                                        <option value="BUSINESS">Business</option>
-                                        <option value="ENTERPRISE">Enterprise</option>
-                                    </select>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Plan</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(['STARTER', 'BUSINESS', 'ENTERPRISE'] as PlanTier[]).map(plan => {
+                                        const p = PLAN_DEFAULTS[plan];
+                                        const active = form.planTier === plan;
+                                        return (
+                                            <button
+                                                key={plan}
+                                                type="button"
+                                                onClick={() => handlePlanChange(plan)}
+                                                className={`text-left p-3 rounded-xl border-2 transition-all ${
+                                                    active ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <p className={`text-[10px] font-black uppercase tracking-wide ${ active ? 'text-amber-700' : 'text-slate-500'}`}>{p.label}</p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">{p.price}</p>
+                                                <p className="text-[10px] text-slate-500 mt-1">{p.maxUsers} usuarios · {p.maxLeagues} pollas</p>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                                <div className="bg-slate-50 rounded-xl p-3 mt-2 space-y-1">
+                                    {PLAN_DEFAULTS[form.planTier].features.map(f => (
+                                        <p key={f} className="text-[11px] text-slate-500">✓ {f}</p>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Max Users</label>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Límite usuarios <span className="text-slate-300">(personalizar)</span></label>
                                     <input
                                         type="number"
                                         min={1}
@@ -222,7 +267,7 @@ export default function AdminTenants() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Max Pollas</label>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Límite pollas <span className="text-slate-300">(personalizar)</span></label>
                                     <input
                                         type="number"
                                         min={1}
@@ -269,30 +314,26 @@ export default function AdminTenants() {
                         return (
                             <div
                                 key={tenant.id}
-                                className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all"
+                                className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                                onClick={() => navigate(`/admin/tenants/${tenant.id}`)}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
                                         <Building2 size={18} className="text-slate-500" />
                                     </div>
-
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-black text-slate-900 text-sm">{tenant.name}</span>
                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${PLAN_COLORS[tenant.planTier]}`}>
-                                                {tenant.planTier}
+                                                {PLAN_DEFAULTS[tenant.planTier].label}
                                             </span>
                                             <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${statusCfg.color}`}>
                                                 <StatusIcon size={10} />
                                                 {statusCfg.label}
                                             </span>
                                         </div>
-
-                                        <p className="text-xs text-slate-400 font-mono mt-0.5">
-                                            {tenant.slug}.zonapronosticos.com
-                                        </p>
+                                        <p className="text-xs text-slate-400 font-mono mt-0.5">{tenant.slug}.zonapronosticos.com</p>
                                         <p className="text-xs text-slate-400 mt-0.5">{tenant.contactEmail}</p>
-
                                         <div className="flex items-center gap-4 mt-2">
                                             <span className="flex items-center gap-1 text-xs text-slate-500">
                                                 <Users size={11} />
@@ -310,8 +351,7 @@ export default function AdminTenants() {
                                             )}
                                         </div>
                                     </div>
-
-                                    <div className="flex items-center gap-2 shrink-0">
+                                    <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
                                         {tenant.status === 'ACTIVE' && (
                                             <button
                                                 onClick={() => handleStatusChange(tenant.id, 'suspend')}
