@@ -80,6 +80,14 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
         headers.set('Authorization', `Bearer ${token}`);
     }
 
+    try {
+        const { useTenantStore } = await import('./stores/tenant.store');
+        const slug = useTenantStore.getState().activeTenant?.slug;
+        if (slug) headers.set('X-Tenant-Slug', slug);
+    } catch {
+        // store no disponible aún — ok, continuar sin header
+    }
+
     if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
         headers.set('Content-Type', 'application/json');
     }

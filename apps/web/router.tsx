@@ -32,6 +32,8 @@ const AdminAutomation = React.lazy(() => import('./views/admin/AdminAutomation')
 const AdminEmailProviders = React.lazy(() => import('./views/admin/AdminEmailProviders'));
 const AdminEmailLogs = React.lazy(() => import('./views/admin/AdminEmailLogs'));
 const AdminEmailTesting = React.lazy(() => import('./views/admin/AdminEmailTesting'));
+const AdminTenants = React.lazy(() => import('./views/admin/AdminTenants'));
+const AcceptTenantInvitation = React.lazy(() => import('./views/AcceptTenantInvitation'));
 
 // Vistas públicas - static imports (critical path)
 import Landing from './views/Landing';
@@ -71,6 +73,7 @@ const publicRoutes: RouteObject[] = [
     { path: '/join/:code', element: <Suspense fallback={<LoadingFallback />}><JoinLeague /></Suspense> },
     { path: '/join', element: <Suspense fallback={<LoadingFallback />}><JoinLeague /></Suspense> },
     { path: '/confirm-invitation', element: <Suspense fallback={<LoadingFallback />}><ConfirmInvitation /></Suspense> },
+    { path: '/join-org', element: <Suspense fallback={<LoadingFallback />}><AcceptTenantInvitation /></Suspense> },
     { path: '/checkout', element: <Suspense fallback={<LoadingFallback />}><Checkout /></Suspense> },
 ];
 
@@ -115,6 +118,7 @@ const adminRoutes: RouteObject[] = [
     { path: '/admin/email-providers', element: <Suspense fallback={<LoadingFallback />}><AdminEmailProviders /></Suspense> },
     { path: '/admin/email-logs', element: <Suspense fallback={<LoadingFallback />}><AdminEmailLogs /></Suspense> },
     { path: '/admin/email-testing', element: <Suspense fallback={<LoadingFallback />}><AdminEmailTesting /></Suspense> },
+    { path: '/admin/tenants', element: <Suspense fallback={<LoadingFallback />}><AdminTenants /></Suspense> },
 ];
 
 export { resolveDevelopmentSurfaceFlags } from './runtime-flags';

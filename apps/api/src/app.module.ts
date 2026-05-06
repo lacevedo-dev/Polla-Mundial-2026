@@ -26,6 +26,7 @@ import { AiCreditsModule } from './ai-credits/ai-credits.module';
 import { ParticipationModule } from './participation/participation.module';
 import { PredictionReportModule } from './prediction-report/prediction-report.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { CorporateTenantModule } from './corporate-tenant/corporate-tenant.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
     ParticipationModule,
     PredictionReportModule,
     PushNotificationsModule,
+    CorporateTenantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

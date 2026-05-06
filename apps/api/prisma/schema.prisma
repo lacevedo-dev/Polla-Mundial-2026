@@ -34,6 +34,7 @@ model User {
   predictions              Prediction[]
   pushSubscriptions        PushSubscription[]
   verificationTokens       VerificationToken[]
+  tenantMemberships        TenantMember[]
 
   @@index([email])
   @@index([status])
@@ -87,9 +88,13 @@ model League {
   scoringRules             ScoringRule[]
   stageFees                StageFee[]
 
+  tenantId                 String?
+  tenant                   CorporateTenant?          @relation(fields: [tenantId], references: [id])
+
   @@index([code])
   @@index([status])
   @@index([primaryTournamentId])
+  @@index([tenantId])
 }
 
 model LeagueMember {
@@ -428,6 +433,7 @@ model Order {
 model AuditLog {
   id        String   @id @default(cuid())
   leagueId  String?
+  tenantId  String?
   userId    String
   action    String
   detail    String?  @db.LongText
@@ -436,6 +442,7 @@ model AuditLog {
   user      User     @relation(fields: [userId], references: [id])
 
   @@index([leagueId, createdAt])
+  @@index([tenantId, createdAt])
   @@index([userId], map: "AuditLog_userId_fkey")
 }
 
@@ -1121,4 +1128,157 @@ enum EmailBacklogAuditStatus {
   COMPLETED
   FAILED
   SKIPPED
+}
+
+// ─── Corporate Tenant (Multi-tenant B2B) ────────────────────────────────────
+
+model CorporateTenant {
+  id             String               @id @default(cuid())
+  slug           String               @unique
+  name           String
+  legalName      String?
+  contactEmail   String
+  status         TenantStatus         @default(PENDING_SETUP)
+  planTier       TenantPlanTier       @default(STARTER)
+  allowedDomains String?              @db.Text
+  customDomain   String?              @unique
+  ssoEnabled     Boolean              @default(false)
+  ssoProvider    String?
+  ssoConfig      String?              @db.LongText
+  maxUsers       Int                  @default(50)
+  maxLeagues     Int                  @default(3)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  branding       TenantBranding?
+  config         TenantConfig?
+  members        TenantMember[]
+  leagues        League[]
+  subscription   TenantSubscription?
+  invitations    TenantInvitation[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([customDomain])
+}
+
+model TenantBranding {
+  id                  String          @id @default(cuid())
+  tenantId            String          @unique
+  logoUrl             String?
+  faviconUrl          String?
+  primaryColor        String          @default("#16a34a")
+  secondaryColor      String          @default("#15803d")
+  accentColor         String          @default("#bbf7d0")
+  fontFamily          String          @default("Inter")
+  heroImageUrl        String?
+  companyDisplayName  String?
+  customCss           String?         @db.LongText
+  emailHeaderHtml     String?         @db.Text
+  emailFooterHtml     String?         @db.Text
+  emailInviteTemplate String?         @db.Text
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  tenant              CorporateTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantConfig {
+  id                     String          @id @default(cuid())
+  tenantId               String          @unique
+  enablePayments         Boolean         @default(true)
+  enableAiInsights       Boolean         @default(false)
+  enablePublicLeagues    Boolean         @default(false)
+  enableUserSelfRegister Boolean         @default(false)
+  requireInvitation      Boolean         @default(true)
+  enableEmailNotif       Boolean         @default(true)
+  enablePushNotif        Boolean         @default(true)
+  enableStageFees        Boolean         @default(true)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  tenant                 CorporateTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantMember {
+  id         String            @id @default(cuid())
+  tenantId   String
+  userId     String
+  role       TenantRole        @default(PLAYER)
+  status     TenantMemberStatus @default(ACTIVE)
+  invitedAt  DateTime          @default(now())
+  joinedAt   DateTime?
+  tenant     CorporateTenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+}
+
+model TenantSubscription {
+  id              String             @id @default(cuid())
+  tenantId        String             @unique
+  billingModel    TenantBillingModel @default(FLAT_MONTHLY)
+  priceMonthly    Int                @default(0)
+  priceSetup      Int                @default(0)
+  currency        Currency           @default(COP)
+  stripeSubId     String?
+  status          String             @default("ACTIVE")
+  currentPeriodEnd DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  tenant          CorporateTenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model TenantInvitation {
+  id          String          @id @default(cuid())
+  tenantId    String
+  email       String
+  role        TenantRole      @default(PLAYER)
+  token       String          @unique
+  status      InviteStatus    @default(SENT)
+  bulkBatchId String?
+  sentAt      DateTime?
+  resendCount Int             @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime        @default(now())
+  tenant      CorporateTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([token])
+  @@index([status])
+}
+
+enum TenantStatus {
+  PENDING_SETUP
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum TenantPlanTier {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+enum TenantBillingModel {
+  FLAT_MONTHLY
+  PER_USER
+  ANNUAL
+  CUSTOM
+}
+
+enum TenantRole {
+  OWNER
+  ADMIN
+  PLAYER
+}
+
+enum TenantMemberStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
 }
