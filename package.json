@@ -10,6 +10,8 @@
     "web:dev": "npm run dev --workspace=@polla-2026/web",
     "web:test": "npm run test --workspace=@polla-2026/web",
     "web:build": "npm run build --workspace=@polla-2026/web",
+    "corp:dev": "npm run dev --workspace=@polla-2026/web-corp",
+    "corp:build": "npm run build --workspace=@polla-2026/web-corp",
     "api:dev": "npm run start:dev --workspace=@polla-2026/api",
     "api:test": "npm run test --workspace=@polla-2026/api -- --runInBand",
     "api:e2e": "npm run test:e2e --workspace=@polla-2026/api -- --runInBand",

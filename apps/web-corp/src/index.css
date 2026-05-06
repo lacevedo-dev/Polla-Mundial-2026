@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8fafc;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+:root {
+    --color-primary: #f59e0b;
+    --color-secondary: #d97706;
+    --color-accent: #fef3c7;
+    --font-family: 'Inter', sans-serif;
+}
