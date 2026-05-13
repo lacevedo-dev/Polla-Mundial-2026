@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { generateHelpPDF } from '../utils/generateHelpPDF';
 import { Card, Button, Badge } from '../components/UI';
 import {
   Trophy,
@@ -47,7 +48,7 @@ const Help: React.FC = () => {
             <Button variant="secondary" size="lg" className="gap-2 group rounded-2xl h-14 font-black uppercase tracking-widest text-xs">
               CREAR MI LIGA <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
             </Button>
-            <Button variant="ghost" className="text-white border border-white/10 rounded-2xl h-14 font-black uppercase tracking-widest text-[10px]">Descargar Guía PDF</Button>
+            <Button variant="ghost" onClick={generateHelpPDF} className="text-white border border-white/10 rounded-2xl h-14 font-black uppercase tracking-widest text-[10px]">Descargar Guía PDF</Button>
           </div>
         </div>
         <div className="absolute top-1/2 -right-20 transform -translate-y-1/2 opacity-20 hidden lg:block">
