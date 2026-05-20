@@ -7,11 +7,10 @@
     --font-brand: 'Montserrat', sans-serif;
 }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+/* Importante: NO usar `* { margin: 0; padding: 0 }` aquí.
+   Tailwind v4 envuelve sus utilidades en @layer utilities, y un reset
+   universal fuera de layers sobreescribe cualquier px-*, py-*, mx-*, my-*.
+   El preflight de Tailwind ya hace los resets necesarios. */
 
 body {
     font-family: 'Inter', sans-serif;
