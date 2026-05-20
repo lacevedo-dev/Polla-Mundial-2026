@@ -15,7 +15,7 @@ COPY packages/shared/ ./packages/shared/
 COPY apps/web-corp/   ./apps/web-corp/
 
 # VITE_API_URL se inyecta en build-time (Vite la embebe en el bundle)
-ARG VITE_API_URL
+ARG VITE_API_URL=https://api-polla.agildesarrollo.com.co
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run corp:build
