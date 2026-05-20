@@ -221,61 +221,71 @@ export default function LandingB2B() {
             {/* ── Hero ───────────────────────────────────────── */}
             <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
                 <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} />
-                <div className="relative max-w-6xl mx-auto px-4 py-24 md:py-32">
-                    <div className="max-w-3xl">
-                        <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-full mb-6">
-                            <Sparkles size={12} />
-                            Mundial 2026 — Activa tu polla corporativa hoy
+                <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 lg:py-28">
+                    <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+
+                        {/* — Texto principal — */}
+                        <div>
+                            <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-full mb-5">
+                                <Sparkles size={12} />
+                                Mundial 2026 — Activa tu polla corporativa hoy
+                            </div>
+                            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-tight mb-5">
+                                La polla del Mundial<br />
+                                <span className="text-amber-400">con el logo de tu empresa</span>
+                            </h1>
+                            <p className="text-slate-300 text-base sm:text-lg leading-relaxed mb-7">
+                                Activa el engagement de tus empleados y clientes con una plataforma de pronósticos completamente personalizada.
+                                Sin código. Lista en 15 minutos.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button onClick={() => scrollTo('contact')}
+                                    className="flex items-center justify-center gap-2 bg-amber-400 text-slate-900 font-black px-6 py-3.5 rounded-2xl hover:bg-amber-300 transition-all text-base shadow-lg shadow-amber-400/20">
+                                    Solicitar demo gratuita <ArrowRight size={18} />
+                                </button>
+                                <button onClick={() => scrollTo('pricing')}
+                                    className="flex items-center justify-center gap-2 bg-white/10 text-white font-bold px-6 py-3.5 rounded-2xl hover:bg-white/20 transition-all text-base border border-white/20">
+                                    Ver planes y precios
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-6 text-sm text-slate-400">
+                                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-400" /> Sin tarjeta de crédito</span>
+                                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-400" /> 14 días gratis</span>
+                                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-400" /> Cancela cuando quieras</span>
+                            </div>
                         </div>
-                        <h1 className="text-4xl md:text-6xl font-black leading-tight mb-6">
-                            La polla del Mundial<br />
-                            <span className="text-amber-400">con el logo de tu empresa</span>
-                        </h1>
-                        <p className="text-slate-300 text-lg md:text-xl leading-relaxed mb-8 max-w-2xl">
-                            Activa el engagement de tus empleados y clientes con una plataforma de pronósticos completamente personalizada. 
-                            Sin código. Lista en 15 minutos.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <button onClick={() => scrollTo('contact')}
-                                className="flex items-center justify-center gap-2 bg-amber-400 text-slate-900 font-black px-6 py-3.5 rounded-2xl hover:bg-amber-300 transition-all text-base">
-                                Solicitar demo gratuita <ArrowRight size={18} />
-                            </button>
-                            <button onClick={() => scrollTo('pricing')}
-                                className="flex items-center justify-center gap-2 bg-white/10 text-white font-bold px-6 py-3.5 rounded-2xl hover:bg-white/20 transition-all text-base border border-white/20">
-                                Ver planes y precios
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-6 mt-8 text-sm text-slate-400">
-                            <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-400" /> Sin tarjeta de crédito</span>
-                            <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-400" /> 14 días gratis</span>
-                            <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-400" /> Cancela cuando quieras</span>
+
+                        {/* — Tarjetas empresa (flujo normal, no absolute) — */}
+                        <div className="hidden lg:flex flex-col gap-3">
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Empresas activas ahora</p>
+                            {[
+                                { name: 'Bavaria S.A.', members: 284, active: 261, color: '#f59e0b' },
+                                { name: 'Grupo Éxito', members: 156, active: 143, color: '#10b981' },
+                                { name: 'Bancolombia', members: 412, active: 389, color: '#3b82f6' },
+                            ].map(t => (
+                                <div key={t.name} className="bg-white/8 backdrop-blur border border-white/15 rounded-2xl px-4 py-3.5 flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-slate-900 text-lg shrink-0" style={{ background: t.color }}>
+                                        {t.name[0]}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-black text-white truncate">{t.name}</p>
+                                        <p className="text-xs text-slate-400">{t.members} empleados · <span className="text-emerald-400">{t.active} activos</span></p>
+                                    </div>
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                                </div>
+                            ))}
+                            <div className="mt-2 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-3">
+                                <Trophy size={16} className="text-amber-400 shrink-0" />
+                                <p className="text-xs text-slate-300"><span className="font-bold text-white">+500 empresas</span> ya juegan el Mundial con su marca</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                {/* Floating cards decoration */}
-                <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2 space-y-3 opacity-80">
-                    {[
-                        { name: 'Bavaria', members: 284, color: '#f59e0b' },
-                        { name: 'Grupo Éxito', members: 156, color: '#10b981' },
-                        { name: 'Bancolombia', members: 412, color: '#3b82f6' },
-                    ].map(t => (
-                        <div key={t.name} className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl px-4 py-3 flex items-center gap-3 w-52">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-slate-900" style={{ background: t.color }}>
-                                {t.name[0]}
-                            </div>
-                            <div>
-                                <p className="text-xs font-black text-white">{t.name}</p>
-                                <p className="text-[10px] text-slate-400">{t.members} empleados activos</p>
-                            </div>
-                        </div>
-                    ))}
                 </div>
             </section>
 
             {/* ── Stats bar ──────────────────────────────────── */}
             <section className="bg-amber-400">
-                <div className="max-w-6xl mx-auto px-4 py-6 grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
                     {[
                         { value: '+500', label: 'Empresas activas' },
                         { value: '+80K', label: 'Empleados participando' },
@@ -292,13 +302,13 @@ export default function LandingB2B() {
 
             {/* ── Features ───────────────────────────────────── */}
             <section id="features" className="py-20 bg-white">
-                <div className="max-w-6xl mx-auto px-4">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6">
                     <div className="text-center mb-14">
                         <p className="text-xs font-black uppercase tracking-widest text-amber-500 mb-2">Características</p>
                         <h2 className="text-3xl md:text-4xl font-black text-slate-900">Todo lo que necesitas,<br />nada de lo que no</h2>
                         <p className="text-slate-500 mt-3 max-w-xl mx-auto">Una plataforma completa para que RRHH y marketing activen el engagement sin depender de IT.</p>
                     </div>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         {FEATURES.map(({ icon: Icon, title, desc }) => (
                             <div key={title} className="p-6 rounded-2xl border border-slate-100 hover:border-amber-200 hover:shadow-md transition-all group">
                                 <div className="w-11 h-11 rounded-xl bg-amber-50 group-hover:bg-amber-100 flex items-center justify-center mb-4 transition-colors">
@@ -314,24 +324,29 @@ export default function LandingB2B() {
 
             {/* ── How it works ───────────────────────────────── */}
             <section className="py-20 bg-slate-50">
-                <div className="max-w-4xl mx-auto px-4">
-                    <div className="text-center mb-14">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6">
+                    <div className="text-center mb-12">
                         <p className="text-xs font-black uppercase tracking-widest text-amber-500 mb-2">¿Cómo funciona?</p>
-                        <h2 className="text-3xl font-black text-slate-900">De cero a activo en 3 pasos</h2>
+                        <h2 className="text-3xl md:text-4xl font-black text-slate-900">De cero a activo en 3 pasos</h2>
                     </div>
-                    <div className="grid md:grid-cols-3 gap-8">
+                    <div className="grid sm:grid-cols-3 gap-5">
                         {[
                             { step: '01', title: 'Crea tu organización', desc: 'Elige un nombre, subdominio y plan. Sin tarjeta de crédito para empezar.', icon: Building2 },
                             { step: '02', title: 'Personaliza el branding', desc: 'Sube tu logo, configura tus colores. Tu equipo verá tu marca, no la nuestra.', icon: Palette },
-                            { step: '03', title: 'Invita a tu equipo', desc: 'Carga un CSV con emails o invita individualmente. Los empleados reciben un enlace directo.', icon: Users },
-                        ].map(({ step, title, desc, icon: Icon }) => (
-                            <div key={step} className="text-center">
-                                <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center mx-auto mb-4">
-                                    <Icon size={22} className="text-amber-400" />
+                            { step: '03', title: 'Invita a tu equipo', desc: 'Carga un CSV con emails o invita uno a uno. Reciben un enlace directo.', icon: Users },
+                        ].map(({ step, title, desc, icon: Icon }, idx) => (
+                            <div key={step} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 relative overflow-hidden">
+                                <div className="absolute top-4 right-4 text-6xl font-black text-slate-100 leading-none select-none">{step}</div>
+                                <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center mb-4 relative">
+                                    <Icon size={20} className="text-amber-400" />
                                 </div>
-                                <div className="text-[10px] font-black text-slate-400 mb-1">PASO {step}</div>
-                                <h3 className="font-black text-slate-900 mb-2">{title}</h3>
-                                <p className="text-sm text-slate-500">{desc}</p>
+                                <h3 className="font-black text-slate-900 mb-2 text-base">{title}</h3>
+                                <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
+                                {idx < 2 && (
+                                    <div className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 z-10">
+                                        <ArrowRight size={20} className="text-amber-400" />
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -340,13 +355,13 @@ export default function LandingB2B() {
 
             {/* ── Pricing ────────────────────────────────────── */}
             <section id="pricing" className="py-20 bg-white">
-                <div className="max-w-6xl mx-auto px-4">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6">
                     <div className="text-center mb-14">
                         <p className="text-xs font-black uppercase tracking-widest text-amber-500 mb-2">Planes</p>
                         <h2 className="text-3xl md:text-4xl font-black text-slate-900">Precios transparentes</h2>
                         <p className="text-slate-500 mt-3">Sin letra pequeña. Sin costos ocultos por usuario.</p>
                     </div>
-                    <div className="grid md:grid-cols-3 gap-6">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         {PLANS.map((plan) => (
                             <div key={plan.tier} className={`relative rounded-3xl border-2 p-7 flex flex-col ${plan.color} ${plan.badge ? 'shadow-xl shadow-amber-100' : ''}`}>
                                 {plan.badge && (
@@ -383,12 +398,12 @@ export default function LandingB2B() {
 
             {/* ── Testimonials ───────────────────────────────── */}
             <section id="testimonials" className="py-20 bg-slate-900">
-                <div className="max-w-5xl mx-auto px-4">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6">
                     <div className="text-center mb-14">
                         <p className="text-xs font-black uppercase tracking-widest text-amber-400 mb-2">Testimonios</p>
                         <h2 className="text-3xl font-black text-white">Empresas que ya confían en nosotros</h2>
                     </div>
-                    <div className="grid md:grid-cols-3 gap-6">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         {TESTIMONIALS.map(({ quote, name, role, avatar, color }) => (
                             <div key={name} className="bg-white/5 border border-white/10 rounded-2xl p-6">
                                 <div className="flex mb-4">
@@ -410,7 +425,7 @@ export default function LandingB2B() {
 
             {/* ── FAQ ────────────────────────────────────────── */}
             <section id="faq" className="py-20 bg-white">
-                <div className="max-w-3xl mx-auto px-4">
+                <div className="max-w-3xl mx-auto px-4 sm:px-6">
                     <div className="text-center mb-14">
                         <p className="text-xs font-black uppercase tracking-widest text-amber-500 mb-2">FAQ</p>
                         <h2 className="text-3xl font-black text-slate-900">Preguntas frecuentes</h2>
@@ -434,7 +449,7 @@ export default function LandingB2B() {
 
             {/* ── Contact / CTA ──────────────────────────────── */}
             <section id="contact" className="py-20 bg-gradient-to-br from-slate-900 to-slate-800">
-                <div className="max-w-5xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-start">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-10 lg:gap-16 items-start">
                     <div className="text-white">
                         <p className="text-xs font-black uppercase tracking-widest text-amber-400 mb-3">Contacto</p>
                         <h2 className="text-3xl md:text-4xl font-black mb-4 leading-tight">¿Listo para activar el Mundial en tu empresa?</h2>
@@ -517,7 +532,7 @@ export default function LandingB2B() {
 
             {/* ── Footer ─────────────────────────────────────── */}
             <footer className="bg-slate-950 text-slate-400 py-10">
-                <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                         <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center">
                             <Trophy size={13} className="text-slate-900" />
