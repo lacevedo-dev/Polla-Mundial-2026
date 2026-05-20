@@ -22,6 +22,25 @@ function getBaseUrl(): string {
 
 export const BASE_URL = getBaseUrl();
 
+/**
+ * Detecta el slug del tenant desde el hostname actual.
+ * Se usa para inyectar X-Tenant-Slug en cada request a la API,
+ * ya que en producción el Host header apunta a api.zonapronosticos.com
+ * y el backend no puede saber el tenant de origen sin este header.
+ */
+function resolveTenantSlug(): string | null {
+    const hostname = window.location.hostname;
+    const subdomainMatch = hostname.match(/^([^.]+)\.zonapronosticos\.com$/);
+    if (subdomainMatch && subdomainMatch[1] !== 'www') return subdomainMatch[1];
+    const isCustomDomain =
+        !hostname.includes('zonapronosticos.com') &&
+        !hostname.includes('tupollamundial.com') &&
+        !hostname.includes('localhost') &&
+        !hostname.includes('127.0.0.1');
+    if (isCustomDomain) return hostname;
+    return (import.meta.env.VITE_TENANT_SLUG as string) || null;
+}
+
 function getHeaders(extra?: HeadersInit): Headers {
     const headers = new Headers(extra);
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -29,8 +48,8 @@ function getHeaders(extra?: HeadersInit): Headers {
     const token = localStorage.getItem('corp_token');
     if (token) headers.set('Authorization', `Bearer ${token}`);
 
-    const devSlug = import.meta.env.VITE_TENANT_SLUG as string | undefined;
-    if (devSlug) headers.set('X-Tenant-Slug', devSlug);
+    const slug = resolveTenantSlug();
+    if (slug) headers.set('X-Tenant-Slug', slug);
 
     return headers;
 }
