@@ -7,8 +7,8 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/web-corp/package.json    ./apps/web-corp/
 
-# Instalar TODAS las deps del monorepo (necesario para resolver @polla-2026/shared)
-RUN npm ci --ignore-scripts
+# Instalar deps del monorepo
+RUN npm install --ignore-scripts
 
 # Copiar código fuente de lo que necesitamos
 COPY packages/shared/ ./packages/shared/
