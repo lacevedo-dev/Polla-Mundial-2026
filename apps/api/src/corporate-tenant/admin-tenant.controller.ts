@@ -21,6 +21,7 @@ import {
     UpdateTenantBrandingDto,
     UpdateTenantConfigDto,
     ProvisionTenantOwnerDto,
+    ResendCredentialsDto,
 } from './dto/tenant.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -100,5 +101,11 @@ export class AdminTenantController {
     @HttpCode(HttpStatus.OK)
     provisionOwner(@Param('id') id: string, @Body() dto: ProvisionTenantOwnerDto) {
         return this.provisioningService.provisionOwner(id, dto);
+    }
+
+    @Post(':id/resend-credentials')
+    @HttpCode(HttpStatus.OK)
+    resendCredentials(@Param('id') id: string, @Body() dto: ResendCredentialsDto) {
+        return this.provisioningService.resendCredentials(id, dto);
     }
 }

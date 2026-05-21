@@ -111,6 +111,15 @@ export default function AdminTenantDetail() {
     const [provError, setProvError] = useState('');
     const [copied, setCopied] = useState(false);
 
+    /* ── Reenvío de credenciales ── */
+    const [resendTarget, setResendTarget] = useState<{ memberId: string; email: string; name: string } | null>(null);
+    const [resending, setResending] = useState(false);
+    const [resendResult, setResendResult] = useState<{
+        tempPassword: string;
+        email: { sent: boolean; pendingDispatch: boolean; error?: string };
+    } | null>(null);
+    const [resendCopied, setResendCopied] = useState(false);
+
     const load = async () => {
         if (!id) return;
         setIsLoading(true);
@@ -234,6 +243,32 @@ export default function AdminTenantDetail() {
         } catch (e: any) {
             setProvError(e?.message ?? 'Error al provisionar');
         } finally { setProvisioning(false); }
+    };
+
+    const handleResendCredentials = async () => {
+        if (!resendTarget) return;
+        setResending(true);
+        setResendResult(null);
+        try {
+            const res = await request<{
+                ok: boolean;
+                tempPassword: string;
+                email: { queued: boolean; sent: boolean; pendingDispatch: boolean; error?: string };
+            }>(`/admin/tenants/${id}/resend-credentials`, {
+                method: 'POST',
+                body: JSON.stringify({ email: resendTarget.email }),
+            });
+            setResendResult({ tempPassword: res.tempPassword, email: res.email });
+        } catch (e: any) {
+            setResendResult(null);
+            alert(e?.message ?? 'Error al reenviar credenciales');
+            setResendTarget(null);
+        } finally { setResending(false); }
+    };
+
+    const copyResendPassword = async () => {
+        if (!resendResult?.tempPassword) return;
+        try { await navigator.clipboard.writeText(resendResult.tempPassword); setResendCopied(true); setTimeout(() => setResendCopied(false), 2000); } catch {}
     };
 
     const copyProvPassword = async () => {
@@ -539,9 +574,100 @@ export default function AdminTenantDetail() {
                                 </div>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ROLE_COLORS[m.role]}`}>{m.role}</span>
                                 {m.joinedAt && <p className="text-[10px] text-slate-400 hidden sm:block">{new Date(m.joinedAt).toLocaleDateString('es-CO')}</p>}
+                                <button
+                                    title="Reenviar credenciales"
+                                    onClick={() => { setResendTarget({ memberId: m.id, email: m.user.email, name: m.user.name }); setResendResult(null); }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all shrink-0"
+                                >
+                                    <Send size={13} />
+                                </button>
                             </div>
                         ))
                     }
+                </div>
+            )}
+
+            {/* ── Modal: Confirmar reenvío de credenciales ── */}
+            {resendTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
+                        {!resendResult ? (
+                            <>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                                        <Send size={18} className="text-amber-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-900">Reenviar credenciales</h3>
+                                        <p className="text-xs text-slate-500 mt-0.5">Se generará una nueva contraseña temporal para <strong>{resendTarget.name}</strong></p>
+                                    </div>
+                                </div>
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                                    <strong>⚠ La contraseña actual quedará invalidada.</strong> El usuario deberá usar la nueva contraseña al próximo inicio de sesión.
+                                </div>
+                                <p className="text-xs text-slate-500">Email destino: <strong>{resendTarget.email}</strong></p>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setResendTarget(null)}
+                                        className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-all"
+                                    >Cancelar</button>
+                                    <button
+                                        onClick={handleResendCredentials}
+                                        disabled={resending}
+                                        className="flex-1 py-2.5 rounded-xl bg-amber-400 text-slate-950 text-sm font-black hover:bg-amber-500 disabled:opacity-60 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Send size={13} /> {resending ? 'Enviando...' : 'Confirmar'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                                        <CheckCircle2 size={18} className="text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-900">Credenciales actualizadas</h3>
+                                        <p className="text-xs text-slate-500">{resendTarget.name}</p>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nueva contraseña temporal</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <code className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono text-slate-900">{resendResult.tempPassword}</code>
+                                            <button onClick={copyResendPassword} className="p-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all">
+                                                {resendCopied ? <Check size={12} /> : <Copy size={12} />}
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-rose-600 mt-1">⚠ Guárdala ahora, no se mostrará de nuevo</p>
+                                    </div>
+                                    {resendResult.email.sent && (
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2 text-[11px] text-emerald-800 flex items-start gap-2">
+                                            <CheckCircle2 size={11} className="shrink-0 mt-0.5" />
+                                            <span>Email enviado a <strong>{resendTarget.email}</strong></span>
+                                        </div>
+                                    )}
+                                    {resendResult.email.pendingDispatch && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[11px] text-amber-800 flex items-start gap-2">
+                                            <Clock size={11} className="shrink-0 mt-0.5" />
+                                            <span>Email encolado — llegará en los próximos minutos a <strong>{resendTarget.email}</strong></span>
+                                        </div>
+                                    )}
+                                    {resendResult.email.error && (
+                                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-[11px] text-rose-800 flex items-start gap-2">
+                                            <XCircle size={11} className="shrink-0 mt-0.5" />
+                                            <span>Error al enviar email. Compartir contraseña manualmente.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => { setResendTarget(null); setResendResult(null); }}
+                                    className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 text-sm font-black hover:bg-amber-500 transition-all"
+                                >Cerrar</button>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 

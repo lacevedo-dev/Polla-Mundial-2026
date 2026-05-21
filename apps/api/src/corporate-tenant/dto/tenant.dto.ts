@@ -196,6 +196,15 @@ export class ProvisionTenantOwnerDto {
     sendEmail?: boolean; // default true
 }
 
+export class ResendCredentialsDto {
+    @IsEmail()
+    email: string;
+
+    @IsOptional()
+    @IsString()
+    tempPassword?: string;
+}
+
 export class BulkInviteTenantDto {
     @IsArray()
     @IsEmail({}, { each: true })
