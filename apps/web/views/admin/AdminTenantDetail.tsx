@@ -577,9 +577,10 @@ export default function AdminTenantDetail() {
                                 <button
                                     title="Reenviar credenciales"
                                     onClick={() => { setResendTarget({ memberId: m.id, email: m.user.email, name: m.user.name }); setResendResult(null); }}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all shrink-0"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 transition-all shrink-0"
                                 >
-                                    <Send size={13} />
+                                    <Send size={11} />
+                                    Credenciales
                                 </button>
                             </div>
                         ))
