@@ -1,0 +1,243 @@
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import { TenantRole } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { EmailQueueService } from '../email/email-queue.service';
+import { TenantLimitsService } from './tenant-limits.service';
+import { ProvisionTenantOwnerDto } from './dto/tenant.dto';
+
+@Injectable()
+export class TenantProvisioningService {
+    private readonly logger = new Logger(TenantProvisioningService.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly emailQueue: EmailQueueService,
+        private readonly limitsService: TenantLimitsService,
+    ) {}
+
+    /**
+     * Crea (o reutiliza) un usuario y lo asigna como OWNER/ADMIN del tenant.
+     * Si el usuario es nuevo: setea passwordHash con la contraseña temporal y mustChangePassword=true.
+     * Si ya existe: solo crea/actualiza el TenantMember y NO toca la contraseña.
+     */
+    async provisionOwner(tenantId: string, dto: ProvisionTenantOwnerDto) {
+        const tenant = await this.prisma.corporateTenant.findUnique({
+            where: { id: tenantId },
+            include: { branding: { select: { primaryColor: true, companyDisplayName: true } } },
+        });
+        if (!tenant) throw new NotFoundException('Tenant no encontrado');
+
+        const email = dto.email.toLowerCase().trim();
+        const role = (dto.role ?? 'OWNER') as TenantRole;
+        const sendEmail = dto.sendEmail !== false;
+
+        // Buscar usuario existente
+        const existingUser = await this.prisma.user.findUnique({
+            where: { email },
+            select: { id: true, name: true, email: true },
+        });
+
+        let userId: string;
+        let isNewUser = false;
+        let tempPassword: string | undefined;
+
+        if (existingUser) {
+            userId = existingUser.id;
+            await this.limitsService.checkUserLimit(tenantId);
+        } else {
+            // Validar límite ANTES de crear el user
+            await this.limitsService.checkUserLimit(tenantId);
+
+            tempPassword = dto.tempPassword?.trim() || this.generateTempPassword();
+            const passwordHash = await bcrypt.hash(tempPassword, 10);
+            const username = await this.resolveUniqueUsername(dto.username || email.split('@')[0]);
+
+            const created = await this.prisma.user.create({
+                data: {
+                    name: dto.name.trim(),
+                    email,
+                    username,
+                    phone: dto.phone,
+                    passwordHash,
+                    mustChangePassword: true,
+                    emailVerified: true, // provisión por superadmin: email ya validado externamente
+                    systemRole: 'USER',
+                },
+                select: { id: true },
+            });
+            userId = created.id;
+            isNewUser = true;
+        }
+
+        // Crear o actualizar membership
+        const member = await this.prisma.tenantMember.upsert({
+            where: { tenantId_userId: { tenantId, userId } },
+            create: {
+                tenantId,
+                userId,
+                role,
+                status: 'ACTIVE',
+                joinedAt: new Date(),
+            },
+            update: {
+                role,
+                status: 'ACTIVE',
+                joinedAt: new Date(),
+            },
+        });
+
+        // Marcar invitación previa como ACEPTADA si existe
+        await this.prisma.tenantInvitation.updateMany({
+            where: { tenantId, email, status: { in: ['SENT', 'CLICKED'] } },
+            data: { status: 'ACCEPTED' },
+        });
+
+        // Enviar email con credenciales (solo si es usuario nuevo y sendEmail=true)
+        if (sendEmail && isNewUser && tempPassword) {
+            const portalUrl = `https://${tenant.slug}.zonapronosticos.com`;
+            const { html, text } = this.buildCredentialsEmail({
+                userName: dto.name.split(' ')[0],
+                tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
+                portalUrl,
+                email,
+                tempPassword,
+                primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
+            });
+
+            try {
+                await this.emailQueue.enqueueEmail({
+                    type: 'VERIFICATION',
+                    priority: 'HIGH',
+                    required: true,
+                    recipientEmail: email,
+                    subject: `Tu acceso al portal corporativo de ${tenant.branding?.companyDisplayName ?? tenant.name}`,
+                    html,
+                    text,
+                    dedupeKey: `tenant-provision:${tenantId}:${userId}:${Date.now()}`,
+                });
+            } catch (err: any) {
+                this.logger.error(`No se pudo encolar email de provisión para ${email}: ${err?.message}`);
+            }
+        }
+
+        return {
+            ok: true,
+            userId,
+            memberId: member.id,
+            isNewUser,
+            role,
+            // Devolvemos la temp password solo si el caller decidió no enviar email,
+            // para que pueda compartirla manualmente. Si se envió email, no la exponemos.
+            tempPassword: isNewUser && !sendEmail ? tempPassword : undefined,
+            portalUrl: `https://${tenant.slug}.zonapronosticos.com`,
+        };
+    }
+
+    /* ─────────────────────────────────────────────────────── */
+
+    /**
+     * Genera una contraseña temporal legible: 12 caracteres,
+     * sin caracteres ambiguos (0/O/1/l/I).
+     */
+    private generateTempPassword(): string {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+        let out = '';
+        for (let i = 0; i < 12; i++) {
+            out += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return out;
+    }
+
+    /**
+     * Convierte un texto en username válido y verifica unicidad.
+     * Si choca, agrega sufijo numérico hasta encontrar disponible.
+     */
+    private async resolveUniqueUsername(base: string): Promise<string> {
+        const sanitized = base
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '')
+            .slice(0, 20) || 'user';
+
+        let candidate = sanitized;
+        let i = 1;
+        while (await this.prisma.user.findUnique({ where: { username: candidate }, select: { id: true } })) {
+            candidate = `${sanitized}${i}`;
+            i++;
+            if (i > 999) throw new BadRequestException('No se pudo generar un username único');
+        }
+        return candidate;
+    }
+
+    private buildCredentialsEmail(params: {
+        userName: string;
+        tenantName: string;
+        portalUrl: string;
+        email: string;
+        tempPassword: string;
+        primaryColor: string;
+    }): { html: string; text: string } {
+        const { userName, tenantName, portalUrl, email, tempPassword, primaryColor } = params;
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; padding: 40px 20px; margin: 0;">
+  <div style="max-width: 520px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
+    <div style="text-align: center; margin-bottom: 28px;">
+      <div style="display: inline-flex; width: 56px; height: 56px; background: ${primaryColor}20; border-radius: 14px; align-items: center; justify-content: center; margin-bottom: 16px;">
+        <span style="font-size: 28px;">🔑</span>
+      </div>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #0f172a;">Bienvenido a ${tenantName}</h1>
+      <p style="margin: 8px 0 0; color: #64748b; font-size: 14px;">Tu acceso al portal corporativo está listo</p>
+    </div>
+
+    <p style="color: #334155; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
+      Hola <strong>${userName}</strong>, hemos creado tu cuenta como administrador del portal corporativo
+      de <strong>${tenantName}</strong> en ZonaPronósticos.
+    </p>
+
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin: 0 0 24px;">
+      <p style="margin: 0 0 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Tus credenciales de acceso</p>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px; width: 100px;">Usuario:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-size: 14px; font-weight: 600;">${email}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Contraseña:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-size: 14px; font-weight: 600; font-family: 'Courier New', monospace; background: white; padding-left: 10px; border-radius: 6px;">${tempPassword}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Portal:</td>
+          <td style="padding: 6px 0;"><a href="${portalUrl}" style="color: ${primaryColor}; font-size: 14px; font-weight: 600; text-decoration: none;">${portalUrl}</a></td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align: center; margin: 0 0 24px;">
+      <a href="${portalUrl}/login" style="display: inline-block; background: ${primaryColor}; color: #0f172a; font-size: 15px; font-weight: 700; padding: 14px 36px; border-radius: 12px; text-decoration: none;">
+        Ingresar al portal
+      </a>
+    </div>
+
+    <div style="background: #fef3c7; border-left: 3px solid #f59e0b; border-radius: 8px; padding: 14px 16px; margin: 0 0 16px;">
+      <p style="margin: 0; color: #78350f; font-size: 13px; line-height: 1.5;">
+        <strong>Por seguridad</strong>, deberás cambiar tu contraseña al iniciar sesión por primera vez.
+      </p>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+    <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
+      Si no esperabas este correo, ignóralo o contáctanos en
+      <a href="mailto:soporte@zonapronosticos.com" style="color: ${primaryColor};">soporte@zonapronosticos.com</a>.
+    </p>
+  </div>
+</body>
+</html>`.trim();
+
+        const text = `Bienvenido a ${tenantName}\n\nHola ${userName},\n\nTus credenciales de acceso al portal corporativo:\n\nUsuario: ${email}\nContraseña: ${tempPassword}\nPortal: ${portalUrl}\n\nPor seguridad, deberás cambiar tu contraseña al iniciar sesión por primera vez.\n\nIngresa aquí: ${portalUrl}/login`;
+
+        return { html, text };
+    }
+}

@@ -6,6 +6,7 @@ import type { AvatarUploadFile } from './avatar-storage.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -76,5 +77,17 @@ export class AuthController {
         const creditResetsRecord = await this.prisma.systemConfig.findUnique({ where: { key: 'user_credit_resets' } });
         const creditResetAt = parseSystemConfigValue<Record<string, string> | null>(creditResetsRecord?.value)?.[user.id] ?? null;
         return { ...result, creditResetAt };
+    }
+
+    /**
+     * Cambia la contraseña del usuario autenticado.
+     * Se usa también en el flujo "primer login" para tenants corporativos
+     * provisionados con contraseña temporal.
+     */
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(JwtAuthGuard)
+    @Post('change-password')
+    async changePassword(@Body() dto: ChangePasswordDto, @Request() req) {
+        return this.authService.changePassword(req.user.userId, dto.currentPassword, dto.newPassword);
     }
 }

@@ -3,6 +3,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { TenantService } from './tenant.service';
 import { TenantLimitsService } from './tenant-limits.service';
 import { TenantInvitationService } from './tenant-invitation.service';
+import { TenantProvisioningService } from './tenant-provisioning.service';
 import { TenantController } from './tenant.controller';
 import { AdminTenantController } from './admin-tenant.controller';
 import { TenantInvitationController, TenantInvitationAdminController } from './tenant-invitation.controller';
@@ -22,10 +23,11 @@ import { TenantAdminGuard } from './guards/tenant-admin.guard';
         TenantService,
         TenantLimitsService,
         TenantInvitationService,
+        TenantProvisioningService,
         TenantMemberGuard,
         TenantAdminGuard,
     ],
-    exports: [TenantService, TenantLimitsService, TenantInvitationService, TenantMemberGuard, TenantAdminGuard],
+    exports: [TenantService, TenantLimitsService, TenantInvitationService, TenantProvisioningService, TenantMemberGuard, TenantAdminGuard],
 })
 export class CorporateTenantModule implements NestModule {
     configure(consumer: MiddlewareConsumer) {

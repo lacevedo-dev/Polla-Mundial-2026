@@ -1,4 +1,4 @@
-﻿import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+﻿import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
@@ -54,6 +54,7 @@ export class AuthService {
                 plan: user.plan,
                 systemRole: user.systemRole,
                 emailVerified: user.emailVerified,
+                mustChangePassword: (user as any).mustChangePassword ?? false,
             },
         };
     }
@@ -248,6 +249,33 @@ export class AuthService {
             message: 'Nuevo código de verificación enviado a tu email',
             emailVerified: false,
         };
+    }
+
+    /**
+     * Cambia la contraseña del usuario autenticado.
+     * También borra el flag `mustChangePassword` si estaba activo (provisión corporativa).
+     */
+    async changePassword(userId: string, currentPassword: string, newPassword: string) {
+        if (newPassword.length < 8) {
+            throw new BadRequestException('La nueva contraseña debe tener al menos 8 caracteres');
+        }
+        if (currentPassword === newPassword) {
+            throw new BadRequestException('La nueva contraseña debe ser diferente a la actual');
+        }
+
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) throw new UnauthorizedException('Usuario no encontrado');
+
+        const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isValid) throw new UnauthorizedException('La contraseña actual es incorrecta');
+
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash: newHash, mustChangePassword: false },
+        });
+
+        return { ok: true, message: 'Contraseña actualizada exitosamente' };
     }
 
     private async wrapRegisterDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {

@@ -16,6 +16,7 @@ model User {
   avatar                   String?
   birthDate                DateTime?
   passwordHash             String
+  mustChangePassword       Boolean                   @default(false)
   plan                     Plan                      @default(FREE)
   emailVerified            Boolean                   @default(false)
   createdAt                DateTime                  @default(now())

@@ -14,11 +14,13 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { TenantService } from './tenant.service';
 import { TenantLimitsService } from './tenant-limits.service';
+import { TenantProvisioningService } from './tenant-provisioning.service';
 import {
     CreateTenantDto,
     UpdateTenantDto,
     UpdateTenantBrandingDto,
     UpdateTenantConfigDto,
+    ProvisionTenantOwnerDto,
 } from './dto/tenant.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,6 +30,7 @@ export class AdminTenantController {
     constructor(
         private readonly tenantService: TenantService,
         private readonly limitsService: TenantLimitsService,
+        private readonly provisioningService: TenantProvisioningService,
     ) {}
 
     @Get()
@@ -86,5 +89,16 @@ export class AdminTenantController {
     @HttpCode(HttpStatus.OK)
     activate(@Param('id') id: string) {
         return this.tenantService.update(id, { status: 'ACTIVE' });
+    }
+
+    /**
+     * Provisiona el OWNER (o ADMIN) inicial de la empresa con contraseña temporal.
+     * Si el email ya existe como User, lo reutiliza y solo crea el TenantMember.
+     * Si es nuevo: crea User con `mustChangePassword=true` y envía email con credenciales.
+     */
+    @Post(':id/provision-owner')
+    @HttpCode(HttpStatus.OK)
+    provisionOwner(@Param('id') id: string, @Body() dto: ProvisionTenantOwnerDto) {
+        return this.provisioningService.provisionOwner(id, dto);
     }
 }

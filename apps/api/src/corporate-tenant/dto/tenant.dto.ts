@@ -168,6 +168,34 @@ export class ChangeTenantMemberRoleDto {
     role: TenantRole;
 }
 
+export class ProvisionTenantOwnerDto {
+    @IsString()
+    name: string;
+
+    @IsEmail()
+    email: string;
+
+    @IsOptional()
+    @IsString()
+    username?: string;
+
+    @IsOptional()
+    @IsString()
+    phone?: string;
+
+    @IsOptional()
+    @IsString()
+    tempPassword?: string;
+
+    @IsOptional()
+    @IsEnum(TenantRole)
+    role?: TenantRole; // OWNER por defecto; permite ADMIN si se quiere
+
+    @IsOptional()
+    @IsBoolean()
+    sendEmail?: boolean; // default true
+}
+
 export class BulkInviteTenantDto {
     @IsArray()
     @IsEmail({}, { each: true })
