@@ -101,7 +101,13 @@ export default function AdminTenantDetail() {
     const [provRole, setProvRole] = useState<TenantRole>('ADMIN');
     const [provSendEmail, setProvSendEmail] = useState(true);
     const [provisioning, setProvisioning] = useState(false);
-    const [provResult, setProvResult] = useState<{ email: string; tempPassword?: string; isNewUser: boolean; portalUrl: string } | null>(null);
+    const [provResult, setProvResult] = useState<{
+        email: string;
+        tempPassword?: string;
+        isNewUser: boolean;
+        portalUrl: string;
+        emailStatus?: { queued: boolean; sent: boolean; pendingDispatch: boolean; error?: string };
+    } | null>(null);
     const [provError, setProvError] = useState('');
     const [copied, setCopied] = useState(false);
 
@@ -205,6 +211,7 @@ export default function AdminTenantDetail() {
                 isNewUser: boolean;
                 tempPassword?: string;
                 portalUrl: string;
+                email: { queued: boolean; sent: boolean; pendingDispatch: boolean; error?: string };
             }>(`/admin/tenants/${id}/provision-owner`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -220,6 +227,7 @@ export default function AdminTenantDetail() {
                 tempPassword: res.tempPassword,
                 isNewUser: res.isNewUser,
                 portalUrl: res.portalUrl,
+                emailStatus: res.email,
             });
             setProvName(''); setProvEmail(''); setProvPassword('');
             await load();
@@ -610,9 +618,19 @@ export default function AdminTenantDetail() {
                                 <div className="flex items-center gap-2 text-emerald-600">
                                     <CheckCircle2 size={14} />
                                     <span className="text-xs font-bold">
-                                        {provResult.isNewUser ? 'Usuario creado' : 'Usuario existente promovido'} — {provResult.email}
+                                        {provResult.isNewUser ? 'Usuario creado' : 'Rol asignado'} — {provResult.email}
                                     </span>
                                 </div>
+                                {!provResult.isNewUser && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-[11px] text-blue-800 leading-relaxed">
+                                        <p className="font-bold mb-0.5">Usuario ya existente</p>
+                                        <p>
+                                            Este usuario ya tenía cuenta. Solo se le asignó el rol <strong>{provRole}</strong> en este tenant.
+                                            <br />No se modificó su contraseña ni se envió email de credenciales.
+                                            <br />Puede iniciar sesión con su contraseña actual en el portal.
+                                        </p>
+                                    </div>
+                                )}
                                 {provResult.tempPassword && (
                                     <div>
                                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contraseña temporal</p>
@@ -629,6 +647,28 @@ export default function AdminTenantDetail() {
                                         </div>
                                         <p className="text-[10px] text-rose-600 mt-1">⚠ No la podremos mostrar de nuevo</p>
                                     </div>
+                                )}
+                                {provResult.isNewUser && provSendEmail && provResult.emailStatus && (
+                                    <>
+                                        {provResult.emailStatus.sent && (
+                                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2 text-[11px] text-emerald-800 flex items-start gap-2">
+                                                <CheckCircle2 size={11} className="shrink-0 mt-0.5" />
+                                                <span>Email enviado exitosamente a <strong>{provResult.email}</strong></span>
+                                            </div>
+                                        )}
+                                        {provResult.emailStatus.pendingDispatch && (
+                                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[11px] text-amber-800 flex items-start gap-2">
+                                                <Clock size={11} className="shrink-0 mt-0.5" />
+                                                <span>Email encolado — se enviará en los próximos minutos a <strong>{provResult.email}</strong>. Si no llega en 5 min, revisar la cola de emails.</span>
+                                            </div>
+                                        )}
+                                        {provResult.emailStatus.error && (
+                                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-[11px] text-rose-800 flex items-start gap-2">
+                                                <XCircle size={11} className="shrink-0 mt-0.5" />
+                                                <span>Error al enviar email: {provResult.emailStatus.error}. La cuenta fue creada correctamente. Compartir credenciales manualmente.</span>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                                 <a
                                     href={provResult.portalUrl}

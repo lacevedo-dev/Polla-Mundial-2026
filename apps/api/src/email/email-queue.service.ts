@@ -27,6 +27,7 @@ export interface QueueEmailInput {
   attachments?: EmailAttachment[];
 }
 
+
 @Injectable()
 export class EmailQueueService {
   private static readonly DEFAULT_DISPATCH_BATCH = 30;
@@ -61,6 +62,28 @@ export class EmailQueueService {
       if (this.isUniqueConstraintError(error)) {
         return false;
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Igual que enqueueEmail pero devuelve el ID del job creado (o null si fue rechazado/duplicado).
+   * Útil cuando se quiere hacer dispatch inmediato después de encolar.
+   */
+  async enqueueEmailGetId(input: QueueEmailInput): Promise<string | null> {
+    const blacklistCheck = await this.emailBlacklistService.isBlacklisted(input.recipientEmail);
+    if (blacklistCheck.isBlacklisted) {
+      this.logger.debug(`Skipping blacklisted email: ${input.recipientEmail}`);
+      return null;
+    }
+    try {
+      const job = await this.prisma.emailJob.create({
+        data: this.toEmailJobCreateInput(input),
+        select: { id: true },
+      });
+      return job.id;
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) return null;
       throw error;
     }
   }

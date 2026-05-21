@@ -42,8 +42,8 @@ interface ProvisionResult {
     tenantName: string;
     portalUrl: string;
     ownerEmail: string;
-    tempPassword?: string; // solo viene si sendEmail=false
-    emailSent: boolean;
+    tempPassword?: string;
+    emailStatus?: { queued: boolean; sent: boolean; pendingDispatch: boolean; error?: string };
 }
 
 const PLAN_DEFAULTS: Record<PlanTier, { maxUsers: number; maxLeagues: number; label: string; price: string; features: string[] }> = {
@@ -138,6 +138,7 @@ export default function AdminTenants() {
                     isNewUser: boolean;
                     tempPassword?: string;
                     portalUrl: string;
+                    email: { queued: boolean; sent: boolean; pendingDispatch: boolean; error?: string };
                 }>(`/admin/tenants/${tenant.id}/provision-owner`, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -153,7 +154,7 @@ export default function AdminTenants() {
                     portalUrl: res.portalUrl,
                     ownerEmail: form.ownerEmail.trim().toLowerCase(),
                     tempPassword: res.tempPassword,
-                    emailSent: form.ownerSendEmail,
+                    emailStatus: res.email,
                 });
             } else {
                 setShowCreate(false);
@@ -487,11 +488,27 @@ export default function AdminTenants() {
                                     </p>
                                 </div>
                             )}
-                            {provisionResult.emailSent && (
-                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-800 flex items-start gap-2">
-                                    <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
-                                    <span>Email con credenciales enviado a <strong>{provisionResult.ownerEmail}</strong></span>
-                                </div>
+                            {provisionResult.emailStatus && (
+                                <>
+                                    {provisionResult.emailStatus.sent && (
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-800 flex items-start gap-2">
+                                            <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
+                                            <span>Email enviado exitosamente a <strong>{provisionResult.ownerEmail}</strong></span>
+                                        </div>
+                                    )}
+                                    {provisionResult.emailStatus.pendingDispatch && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-800 flex items-start gap-2">
+                                            <Clock size={12} className="shrink-0 mt-0.5" />
+                                            <span>Email encolado — se enviará en los próximos minutos a <strong>{provisionResult.ownerEmail}</strong>.</span>
+                                        </div>
+                                    )}
+                                    {provisionResult.emailStatus.error && (
+                                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 text-[11px] text-rose-800 flex items-start gap-2">
+                                            <XCircle size={12} className="shrink-0 mt-0.5" />
+                                            <span>Error al enviar email: {provisionResult.emailStatus.error}. Compartir credenciales manualmente.</span>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
 

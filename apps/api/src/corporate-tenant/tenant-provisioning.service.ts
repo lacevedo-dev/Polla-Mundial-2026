@@ -93,9 +93,13 @@ export class TenantProvisioningService {
             data: { status: 'ACCEPTED' },
         });
 
+        const portalUrl = `https://${tenant.slug}.zonapronosticos.com`;
+        let emailSent = false;
+        let emailQueued = false;
+        let emailError: string | undefined;
+
         // Enviar email con credenciales (solo si es usuario nuevo y sendEmail=true)
         if (sendEmail && isNewUser && tempPassword) {
-            const portalUrl = `https://${tenant.slug}.zonapronosticos.com`;
             const { html, text } = this.buildCredentialsEmail({
                 userName: dto.name.split(' ')[0],
                 tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
@@ -106,7 +110,7 @@ export class TenantProvisioningService {
             });
 
             try {
-                await this.emailQueue.enqueueEmail({
+                const jobId = await this.emailQueue.enqueueEmailGetId({
                     type: 'VERIFICATION',
                     priority: 'HIGH',
                     required: true,
@@ -116,7 +120,26 @@ export class TenantProvisioningService {
                     text,
                     dedupeKey: `tenant-provision:${tenantId}:${userId}:${Date.now()}`,
                 });
+
+                if (jobId) {
+                    emailQueued = true;
+                    // Despachar inmediatamente sin esperar al scheduler
+                    try {
+                        const result = await this.emailQueue.dispatchJobById(jobId);
+                        emailSent = result.sent;
+                        if (!result.sent) {
+                            this.logger.warn(`Email de provisión encolado pero no despachado inmediatamente para ${email} (jobId: ${jobId})`);
+                        }
+                    } catch (dispatchErr: any) {
+                        this.logger.warn(`Dispatch inmediato falló para ${email}, el scheduler lo reintentará: ${dispatchErr?.message}`);
+                        emailSent = false; // quedó en PENDING para el scheduler
+                    }
+                } else {
+                    emailError = 'El email estaba en lista negra o fue rechazado';
+                    this.logger.warn(`Email de provisión rechazado para ${email}`);
+                }
             } catch (err: any) {
+                emailError = err?.message;
                 this.logger.error(`No se pudo encolar email de provisión para ${email}: ${err?.message}`);
             }
         }
@@ -127,10 +150,14 @@ export class TenantProvisioningService {
             memberId: member.id,
             isNewUser,
             role,
-            // Devolvemos la temp password solo si el caller decidió no enviar email,
-            // para que pueda compartirla manualmente. Si se envió email, no la exponemos.
             tempPassword: isNewUser && !sendEmail ? tempPassword : undefined,
-            portalUrl: `https://${tenant.slug}.zonapronosticos.com`,
+            portalUrl,
+            email: {
+                queued: emailQueued,
+                sent: emailSent,
+                pendingDispatch: emailQueued && !emailSent,
+                error: emailError,
+            },
         };
     }
 
