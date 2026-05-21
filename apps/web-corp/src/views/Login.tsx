@@ -19,8 +19,12 @@ export default function Login() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await login(email, password);
-            navigate(params.get('next') ?? '/');
+            const user = await login(email, password);
+            if (user.mustChangePassword) {
+                navigate('/change-password', { replace: true });
+            } else {
+                navigate(params.get('next') ?? '/', { replace: true });
+            }
         } catch { /* error ya está en el store */ }
     };
 

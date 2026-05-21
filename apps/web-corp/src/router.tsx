@@ -10,6 +10,7 @@ const Pollas = React.lazy(() => import('./views/Pollas'));
 const Ranking = React.lazy(() => import('./views/Ranking'));
 const JoinOrg = React.lazy(() => import('./views/JoinOrg'));
 const Onboarding = React.lazy(() => import('./views/Onboarding'));
+const ChangePassword = React.lazy(() => import('./views/ChangePassword'));
 
 const Loader = () => (
     <div className="flex items-center justify-center min-h-screen">
@@ -18,6 +19,16 @@ const Loader = () => (
 );
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
+    const user = useAuthStore((s) => s.user);
+    if (!user) return <Navigate to="/login" replace />;
+    // Si el admin corporativo aún no ha cambiado la contraseña temporal,
+    // forzamos la pantalla de cambio antes de permitir el acceso al portal.
+    if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
+    return <>{children}</>;
+}
+
+/** Igual a RequireAuth pero NO bloquea por mustChangePassword (usado por /change-password). */
+function RequireSession({ children }: { children: React.ReactNode }) {
     const user = useAuthStore((s) => s.user);
     if (!user) return <Navigate to="/login" replace />;
     return <>{children}</>;
@@ -42,6 +53,14 @@ export function AppRouter() {
                     <Route path="/login" element={<Login />} />
                     <Route path="/join-org" element={<JoinOrg />} />
                     <Route path="/onboarding" element={<Onboarding />} />
+                    <Route
+                        path="/change-password"
+                        element={
+                            <RequireSession>
+                                <ChangePassword />
+                            </RequireSession>
+                        }
+                    />
                     <Route
                         path="/"
                         element={
