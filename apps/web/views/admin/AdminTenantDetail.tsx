@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Building2, Users, Trophy, CheckCircle2, Clock, XCircle, PauseCircle,
     Palette, Settings, Mail, UserPlus, RefreshCw, Save, Send, RotateCcw, Zap,
+    KeyRound, Copy, Check,
 } from 'lucide-react';
 import { request } from '../../api';
 
@@ -93,6 +94,17 @@ export default function AdminTenantDetail() {
     const [inviting, setInviting] = useState(false);
     const [inviteMsg, setInviteMsg] = useState('');
 
+    /* ── Provisión directa con credenciales ── */
+    const [provName, setProvName] = useState('');
+    const [provEmail, setProvEmail] = useState('');
+    const [provPassword, setProvPassword] = useState('');
+    const [provRole, setProvRole] = useState<TenantRole>('ADMIN');
+    const [provSendEmail, setProvSendEmail] = useState(true);
+    const [provisioning, setProvisioning] = useState(false);
+    const [provResult, setProvResult] = useState<{ email: string; tempPassword?: string; isNewUser: boolean; portalUrl: string } | null>(null);
+    const [provError, setProvError] = useState('');
+    const [copied, setCopied] = useState(false);
+
     const load = async () => {
         if (!id) return;
         setIsLoading(true);
@@ -182,6 +194,47 @@ export default function AdminTenantDetail() {
             setInviteMsg(`✓ ${res.queued} enviadas · ${res.skipped} duplicadas · ${res.failed} fallidas`);
             await load();
         } catch (e: any) { setInviteMsg(`Error: ${e?.message}`); } finally { setInviting(false); }
+    };
+
+    const handleProvision = async () => {
+        if (!provName.trim() || !provEmail.trim()) return;
+        setProvisioning(true); setProvError(''); setProvResult(null);
+        try {
+            const res = await request<{
+                ok: boolean;
+                isNewUser: boolean;
+                tempPassword?: string;
+                portalUrl: string;
+            }>(`/admin/tenants/${id}/provision-owner`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: provName.trim(),
+                    email: provEmail.trim().toLowerCase(),
+                    tempPassword: provPassword.trim() || undefined,
+                    role: provRole,
+                    sendEmail: provSendEmail,
+                }),
+            });
+            setProvResult({
+                email: provEmail.trim().toLowerCase(),
+                tempPassword: res.tempPassword,
+                isNewUser: res.isNewUser,
+                portalUrl: res.portalUrl,
+            });
+            setProvName(''); setProvEmail(''); setProvPassword('');
+            await load();
+        } catch (e: any) {
+            setProvError(e?.message ?? 'Error al provisionar');
+        } finally { setProvisioning(false); }
+    };
+
+    const copyProvPassword = async () => {
+        if (!provResult?.tempPassword) return;
+        try {
+            await navigator.clipboard.writeText(provResult.tempPassword);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch { /* ignore */ }
     };
 
     const handleResend = async (invId: string) => {
@@ -487,9 +540,111 @@ export default function AdminTenantDetail() {
             {/* Tab: Invitaciones */}
             {tab === 'Invitaciones' && (
                 <div className="space-y-4">
+                    {/* ─── Provisión directa con credenciales (nuevo) ─── */}
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-200 space-y-3">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center shrink-0">
+                                <KeyRound size={18} className="text-slate-900" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-sm font-black text-slate-900">Provisionar con credenciales</p>
+                                <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
+                                    Crea el usuario inmediatamente con una contraseña temporal. Ideal para admins corporativos
+                                    que necesitan acceso instantáneo sin esperar el flujo de invitación por email.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <input
+                                value={provName}
+                                onChange={e => setProvName(e.target.value)}
+                                placeholder="Nombre completo"
+                                className="border border-amber-200 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                            <input
+                                type="email"
+                                value={provEmail}
+                                onChange={e => setProvEmail(e.target.value)}
+                                placeholder="correo@empresa.com"
+                                className="border border-amber-200 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                        </div>
+                        <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <input
+                                value={provPassword}
+                                onChange={e => setProvPassword(e.target.value)}
+                                placeholder="Contraseña temporal (vacío → se genera)"
+                                className="border border-amber-200 bg-white rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                            <select
+                                value={provRole}
+                                onChange={e => setProvRole(e.target.value as TenantRole)}
+                                className="border border-amber-200 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            >
+                                <option value="OWNER">Owner</option>
+                                <option value="ADMIN">Admin</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={provSendEmail}
+                                    onChange={e => setProvSendEmail(e.target.checked)}
+                                    className="w-4 h-4 rounded border-amber-300 text-amber-500 focus:ring-amber-400"
+                                />
+                                <span className="text-xs text-slate-700">Enviar email con credenciales</span>
+                            </label>
+                            <button
+                                onClick={handleProvision}
+                                disabled={provisioning || !provName.trim() || !provEmail.trim()}
+                                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-sm font-bold hover:bg-amber-500 disabled:opacity-60 transition-all"
+                            >
+                                <KeyRound size={14} /> {provisioning ? 'Creando...' : 'Provisionar'}
+                            </button>
+                        </div>
+                        {provError && <p className="text-xs text-rose-600 font-semibold">{provError}</p>}
+                        {provResult && (
+                            <div className="mt-2 bg-white rounded-xl p-3 border border-emerald-200 space-y-2">
+                                <div className="flex items-center gap-2 text-emerald-600">
+                                    <CheckCircle2 size={14} />
+                                    <span className="text-xs font-bold">
+                                        {provResult.isNewUser ? 'Usuario creado' : 'Usuario existente promovido'} — {provResult.email}
+                                    </span>
+                                </div>
+                                {provResult.tempPassword && (
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contraseña temporal</p>
+                                        <div className="flex items-center gap-2">
+                                            <code className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono text-slate-900">
+                                                {provResult.tempPassword}
+                                            </code>
+                                            <button
+                                                onClick={copyProvPassword}
+                                                className="p-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all"
+                                            >
+                                                {copied ? <Check size={12} /> : <Copy size={12} />}
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-rose-600 mt-1">⚠ No la podremos mostrar de nuevo</p>
+                                    </div>
+                                )}
+                                <a
+                                    href={provResult.portalUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] text-amber-600 font-bold hover:underline"
+                                >
+                                    Abrir portal: {provResult.portalUrl}
+                                </a>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Invite form */}
                     <div className="bg-white rounded-2xl p-5 border border-slate-100 space-y-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Invitar individualmente</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Invitar individualmente <span className="text-slate-300 normal-case">(flujo por email — el usuario configura su contraseña)</span></p>
                         <div className="flex gap-2">
                             <input
                                 type="email" value={inviteEmail}
