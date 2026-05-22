@@ -38,15 +38,15 @@ export class NotificationsController {
     // Si viene tenantSlug, restringimos a las ligas de ese tenant
     let tenantLeagueIds: string[] | undefined;
     if (tenantSlug) {
-      const tenant = await this.prisma.tenant.findUnique({
+      const corporateTenant = await this.prisma.corporateTenant.findUnique({
         where: { slug: tenantSlug },
         select: { id: true },
       });
-      if (tenant) {
+      if (corporateTenant) {
         const memberships = await this.prisma.leagueMember.findMany({
           where: {
             userId: user.id,
-            league: { tenantId: tenant.id },
+            league: { tenantId: corporateTenant.id },
           },
           select: { leagueId: true },
         });
