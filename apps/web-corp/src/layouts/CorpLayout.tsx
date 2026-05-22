@@ -7,12 +7,12 @@ import {
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import HelpDrawerContent from '../views/Help';
 
 const NAV_ITEMS = [
     { path: '/', label: 'Inicio', icon: Home },
     { path: '/pollas', label: 'Mis Pollas', icon: Trophy },
     { path: '/ranking', label: 'Ranking', icon: BarChart2 },
-    { path: '/help', label: 'Ayuda', icon: HelpCircle },
 ];
 
 const ADMIN_NAV_ITEMS = [
@@ -26,6 +26,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
     const tenant = useTenantStore((s) => s.tenant);
     const { user, logout } = useAuthStore();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
     const { supported, permission, subscribed, loading, subscribe, unsubscribe } = usePushNotifications();
     const pushAvailable = supported && permission !== 'denied';
 
@@ -91,6 +92,13 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         {NAV_ITEMS.map((item) => (
                             <SidebarLink key={item.path} {...item} />
                         ))}
+                        <button
+                            onClick={() => setHelpOpen(true)}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold text-slate-400 hover:text-white hover:bg-slate-900"
+                        >
+                            <HelpCircle size={20} />
+                            <span>Ayuda</span>
+                        </button>
                     </nav>
 
                     {/* Admin nav */}
@@ -239,6 +247,13 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         {NAV_ITEMS.map((item) => (
                             <SidebarLink key={item.path} {...item} />
                         ))}
+                        <button
+                            onClick={() => { setHelpOpen(true); setMobileOpen(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold text-slate-400 hover:text-white hover:bg-slate-900"
+                        >
+                            <HelpCircle size={20} />
+                            <span>Ayuda</span>
+                        </button>
                         {isAdmin && (
                             <>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4 pt-4 pb-1">
@@ -298,9 +313,47 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                 </div>
             </main>
 
+            {/* ── Help Drawer ── */}
+            {helpOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex justify-end"
+                    onClick={(e) => { if (e.target === e.currentTarget) setHelpOpen(false); }}
+                    style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }}
+                >
+                    <div
+                        className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col overflow-hidden"
+                        style={{ animation: 'slideInRight 0.25s ease-out' }}
+                    >
+                        {/* Drawer header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 bg-white sticky top-0 z-10">
+                            <div className="flex items-center gap-2.5">
+                                <HelpCircle size={18} style={{ color: 'var(--color-primary, #f59e0b)' }} />
+                                <h2 className="font-black text-slate-900 text-base">Ayuda</h2>
+                            </div>
+                            <button
+                                onClick={() => setHelpOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        {/* Drawer body */}
+                        <div className="flex-1 overflow-y-auto px-6 py-6">
+                            <HelpDrawerContent />
+                        </div>
+                    </div>
+                </div>
+            )}
+            <style>{`
+                @keyframes slideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to   { transform: translateX(0);    opacity: 1; }
+                }
+            `}</style>
+
             {/* ── Mobile Bottom Nav ── */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">
-                {NAV_ITEMS.slice(0, 3).map(({ path, label, icon: Icon }) => {
+                {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
                     const active = isActive(path);
                     return (
                         <Link
@@ -314,6 +367,14 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         </Link>
                     );
                 })}
+                <button
+                    onClick={() => setHelpOpen(true)}
+                    className="flex flex-col items-center gap-1 transition-colors"
+                    style={{ color: '#94a3b8' }}
+                >
+                    <HelpCircle size={20} />
+                    <span className="text-[10px] font-medium">Ayuda</span>
+                </button>
                 {isAdmin && (
                     <Link
                         to="/admin"

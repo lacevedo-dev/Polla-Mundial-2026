@@ -23,7 +23,7 @@ const Help: React.FC = () => {
     ];
 
     return (
-        <div className="space-y-8 pb-24">
+        <div className="space-y-8 pb-4">
 
             {/* Hero */}
             <section
