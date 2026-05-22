@@ -31,8 +31,28 @@ export class NotificationsController {
   async getMyNotifications(
     @CurrentUser() user: { id: string },
     @Query('limit') limitParam?: string,
+    @Query('tenantSlug') tenantSlug?: string,
   ) {
     const limit = Math.min(50, Math.max(1, parseInt(limitParam ?? '20', 10)));
+
+    // Si viene tenantSlug, restringimos a las ligas de ese tenant
+    let tenantLeagueIds: string[] | undefined;
+    if (tenantSlug) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { slug: tenantSlug },
+        select: { id: true },
+      });
+      if (tenant) {
+        const memberships = await this.prisma.leagueMember.findMany({
+          where: {
+            userId: user.id,
+            league: { tenantId: tenant.id },
+          },
+          select: { leagueId: true },
+        });
+        tenantLeagueIds = memberships.map(m => m.leagueId);
+      }
+    }
 
     // Traemos más de los necesarios para poder deduplicar correctamente
     const raw = await this.prisma.notification.findMany({
@@ -53,11 +73,19 @@ export class NotificationsController {
 
     // Deduplicar: una sola notificación por (type + matchId).
     // Si no hay matchId (otros tipos), deduplicar por type solo en ventana de 1h.
+    // Si hay tenantLeagueIds, excluir notificaciones de ligas ajenas al tenant.
     const seen = new Set<string>();
     const deduplicated: typeof raw = [];
 
     for (const n of raw) {
-      const { matchId } = parseData(n.data);
+      const { matchId, leagueId } = parseData(n.data);
+
+      // Filtrar por tenant: si se pasa tenantSlug y la notificación tiene leagueId,
+      // solo incluir si esa liga pertenece al tenant
+      if (tenantLeagueIds !== undefined && leagueId && !tenantLeagueIds.includes(leagueId)) {
+        continue;
+      }
+
       const key = matchId ? `${n.type}:${matchId}` : `${n.type}:${n.sentAt.toISOString().slice(0, 13)}`;
       if (seen.has(key)) continue;
       seen.add(key);

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bell, CheckCheck, X, EyeOff, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api';
+import { useTenantStore } from '../stores/tenant.store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ export default function NotificationBell() {
     const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
     const containerRef              = useRef<HTMLDivElement>(null);
     const navigate                  = useNavigate();
+    const tenant                    = useTenantStore(s => s.tenant);
 
     useEffect(() => {
         const mq = window.matchMedia('(min-width: 768px)');
@@ -90,7 +92,9 @@ export default function NotificationBell() {
     const load = async () => {
         setLoading(true);
         try {
-            const res = await request<NotifResponse>('/notifications?limit=50');
+            const slug = tenant?.slug ?? '';
+            const qs = slug ? `?limit=30&tenantSlug=${encodeURIComponent(slug)}` : '?limit=30';
+            const res = await request<NotifResponse>(`/notifications${qs}`);
             setData(res);
         } catch {
             // silent
@@ -103,7 +107,8 @@ export default function NotificationBell() {
         void load();
         const timer = setInterval(() => { void load(); }, 60_000);
         return () => clearInterval(timer);
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tenant?.slug]);
 
     useEffect(() => {
         if (!open) return;
@@ -183,12 +188,12 @@ export default function NotificationBell() {
     const unread = data?.unreadCount ?? 0;
 
     return (
-        <div ref={containerRef} className="fixed top-3 right-14 md:right-4 z-[100]">
+        <div ref={containerRef} className="fixed top-3 right-4 z-[100]">
             {/* Botón campana */}
             <button
                 onClick={handleOpen}
                 aria-label="Notificaciones"
-                className={`relative flex items-center justify-center w-11 h-11 rounded-full shadow-lg border transition-all ${
+                className={`relative flex items-center justify-center w-10 h-10 rounded-full shadow-lg border transition-all ${
                     open
                         ? 'bg-slate-800 border-slate-600 text-white'
                         : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white'
@@ -209,8 +214,8 @@ export default function NotificationBell() {
             {/* Panel */}
             {open && (
                 <div
-                    className="fixed inset-x-0 bottom-0 top-[64px] rounded-t-2xl md:absolute md:inset-auto md:top-[calc(100%+8px)] md:right-0 md:bottom-auto md:w-[340px] md:rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden flex flex-col z-[100]"
-                    style={{ maxHeight: 'calc(100vh - 64px)' }}
+                    className="fixed inset-x-0 bottom-16 top-[56px] rounded-t-2xl md:absolute md:inset-auto md:top-[calc(100%+8px)] md:right-0 md:bottom-auto md:w-[360px] md:rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden flex flex-col z-[100]"
+                    style={{ maxHeight: 'min(520px, calc(100vh - 80px))' }}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-800">
