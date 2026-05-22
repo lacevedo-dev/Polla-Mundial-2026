@@ -113,33 +113,35 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                 {pushAvailable && (
                     <div className="px-4 pb-4">
                         {error && (
-                            <p className="mb-2 rounded-lg bg-rose-900/30 px-3 py-2 text-xs font-medium text-rose-400">{error}</p>
+                            <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">{error}</p>
                         )}
                         <button
                             onClick={subscribed ? unsubscribe : subscribe}
                             disabled={loading}
                             aria-pressed={subscribed}
                             className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
-                                subscribed
-                                    ? 'border-green-600 bg-green-900/30 text-green-300'
-                                    : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
-                            } ${loading ? 'opacity-60 pointer-events-none' : ''}`}
+                                loading ? 'opacity-60 pointer-events-none' : ''
+                            }`}
+                            style={subscribed
+                                ? { borderColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 50%, #86efac)', backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 12%, #f0fdf4)', color: '#14532d' }
+                                : { borderColor: '#e2e8f0', backgroundColor: '#ffffff', color: '#334155' }
+                            }
                         >
                             {subscribed
-                                ? <Bell size={18} className="shrink-0 text-green-400" />
+                                ? <Bell size={18} className="shrink-0" style={{ color: 'var(--color-primary, #f59e0b)' }} />
                                 : <BellOff size={18} className="shrink-0 text-slate-400" />
                             }
                             <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold">
                                     {loading ? 'Procesando...' : subscribed ? 'Notificaciones activas' : 'Activar notificaciones'}
                                 </p>
-                                <p className="text-xs text-slate-500">
-                                    {subscribed ? 'Recibirás avisos de partidos' : 'Avisos de partidos y resultados'}
+                                <p className="text-xs" style={{ color: subscribed ? '#166534' : '#94a3b8' }}>
+                                    {subscribed ? 'Recibirás avisos de partidos, cierres y resultados' : 'Avisos de partidos, cierres y resultados'}
                                 </p>
                             </div>
                             <span
                                 className="inline-block h-5 w-9 rounded-full transition-colors shrink-0"
-                                style={{ backgroundColor: subscribed ? 'var(--color-primary, #f59e0b)' : '#334155' }}
+                                style={{ backgroundColor: subscribed ? 'var(--color-primary, #f59e0b)' : '#cbd5e1' }}
                                 aria-hidden="true"
                             />
                         </button>
@@ -266,28 +268,30 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                     {pushAvailable && (
                         <div className="px-4 pb-3">
                             {error && (
-                                <p className="mb-2 rounded-lg bg-rose-900/30 px-3 py-2 text-xs font-medium text-rose-400">{error}</p>
+                                <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">{error}</p>
                             )}
                             <button
                                 onClick={subscribed ? unsubscribe : subscribe}
                                 disabled={loading}
                                 aria-pressed={subscribed}
                                 className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
-                                    subscribed
-                                        ? 'border-green-600 bg-green-900/30 text-green-300'
-                                        : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
-                                } ${loading ? 'opacity-60 pointer-events-none' : ''}`}
+                                    loading ? 'opacity-60 pointer-events-none' : ''
+                                }`}
+                                style={subscribed
+                                    ? { borderColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 50%, #86efac)', backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 12%, #f0fdf4)', color: '#14532d' }
+                                    : { borderColor: '#334155', backgroundColor: '#1e293b', color: '#94a3b8' }
+                                }
                             >
                                 {subscribed
-                                    ? <Bell size={18} className="shrink-0 text-green-400" />
-                                    : <BellOff size={18} className="shrink-0 text-slate-400" />
+                                    ? <Bell size={18} className="shrink-0" style={{ color: 'var(--color-primary, #f59e0b)' }} />
+                                    : <BellOff size={18} className="shrink-0 text-slate-500" />
                                 }
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm font-bold">
                                         {loading ? 'Procesando...' : subscribed ? 'Notificaciones activas' : 'Activar notificaciones'}
                                     </p>
-                                    <p className="text-xs text-slate-500">
-                                        {subscribed ? 'Recibirás avisos de partidos' : 'Avisos de partidos y resultados'}
+                                    <p className="text-xs" style={{ color: subscribed ? '#166534' : '#64748b' }}>
+                                        {subscribed ? 'Recibirás avisos de partidos, cierres y resultados' : 'Avisos de partidos, cierres y resultados'}
                                     </p>
                                 </div>
                                 <span
