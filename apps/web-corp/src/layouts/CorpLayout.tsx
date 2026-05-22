@@ -7,6 +7,7 @@ import {
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import NotificationBell from '../components/NotificationBell';
 
 const NAV_ITEMS = [
     { path: '/', label: 'Inicio', icon: Home },
@@ -317,6 +318,9 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                     {children}
                 </div>
             </main>
+
+            {/* ── Campana de notificaciones flotante ── */}
+            <NotificationBell />
 
             {/* ── Mobile Bottom Nav ── */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">
