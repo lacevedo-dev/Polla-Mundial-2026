@@ -1,11 +1,12 @@
 import React from 'react';
 import {
     Trophy, TrendingUp, CheckCircle2, Calendar, Zap,
-    Bell, BellOff, Shield, Target, HelpCircle,
+    Bell, BellOff, Shield, Target, HelpCircle, Download,
 } from 'lucide-react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useTenantStore } from '../stores/tenant.store';
 import { CorpLayout } from '../layouts/CorpLayout';
+import { generateHelpPDF } from '../utils/generateHelpPDF';
 
 type Tab = 'points' | 'rules' | 'notifications';
 
@@ -16,6 +17,7 @@ const Help: React.FC = () => {
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
     const primaryColor = 'var(--color-primary, #f59e0b)';
+    const primaryHex = tenant?.branding?.primaryColor ?? '#f59e0b';
 
     const tabs: { id: Tab; label: string; icon: React.FC<{ size?: number }> }[] = [
         { id: 'points', label: 'Sistema de Puntos', icon: TrendingUp },
@@ -44,9 +46,17 @@ const Help: React.FC = () => {
                         TODO LO QUE<br />
                         <span style={{ color: primaryColor }}>NECESITAS SABER</span>
                     </h1>
-                    <p className="text-slate-300 text-base leading-relaxed">
+                    <p className="text-slate-300 text-base leading-relaxed mb-6">
                         Aprende cómo funciona el sistema de puntos, las reglas del torneo y activa notificaciones para no perderte nada.
                     </p>
+                    <button
+                        onClick={() => generateHelpPDF(orgName, primaryHex)}
+                        className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all hover:opacity-90 active:scale-95"
+                        style={{ backgroundColor: primaryColor, color: '#000' }}
+                    >
+                        <Download size={15} />
+                        Descargar Guía PDF
+                    </button>
                 </div>
                 <div className="absolute top-1/2 -right-12 -translate-y-1/2 opacity-10 hidden lg:block">
                     <Trophy size={300} strokeWidth={0.5} />
