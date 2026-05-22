@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     Home, Trophy, BarChart2, LogOut, Menu, X,
-    Building2, Shield, Users,
+    Building2, Shield, Users, HelpCircle, Bell, BellOff,
 } from 'lucide-react';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 const NAV_ITEMS = [
     { path: '/', label: 'Inicio', icon: Home },
     { path: '/pollas', label: 'Mis Pollas', icon: Trophy },
     { path: '/ranking', label: 'Ranking', icon: BarChart2 },
+    { path: '/help', label: 'Ayuda', icon: HelpCircle },
 ];
 
 const ADMIN_NAV_ITEMS = [
@@ -24,6 +26,8 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
     const tenant = useTenantStore((s) => s.tenant);
     const { user, logout } = useAuthStore();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const { supported, permission, subscribed, loading, subscribe, unsubscribe } = usePushNotifications();
+    const pushAvailable = supported && permission !== 'denied';
 
     const handleLogout = () => {
         logout();
@@ -103,6 +107,33 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         </div>
                     )}
                 </div>
+
+                {/* Notification toggle */}
+                {pushAvailable && (
+                    <div className="px-6 pb-4">
+                        <button
+                            onClick={subscribed ? unsubscribe : subscribe}
+                            disabled={loading}
+                            className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all text-sm font-bold ${
+                                subscribed
+                                    ? 'border-green-700 bg-green-900/20 text-green-400'
+                                    : 'border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+                            } ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+                        >
+                            {subscribed
+                                ? <Bell size={16} className="shrink-0 text-green-400" />
+                                : <BellOff size={16} className="shrink-0" />
+                            }
+                            <span className="text-xs flex-1">
+                                {loading ? 'Procesando...' : subscribed ? 'Notificaciones activas' : 'Activar notificaciones'}
+                            </span>
+                            <span
+                                className="inline-block h-4 w-8 rounded-full transition-colors shrink-0"
+                                style={{ backgroundColor: subscribed ? 'var(--color-primary, #f59e0b)' : '#334155' }}
+                            />
+                        </button>
+                    </div>
+                )}
 
                 {/* User profile — bottom */}
                 <div className="mt-auto p-6 border-t border-slate-800">
@@ -220,6 +251,33 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         )}
                     </nav>
 
+                    {/* Notification toggle mobile */}
+                    {pushAvailable && (
+                        <div className="px-4 pb-2">
+                            <button
+                                onClick={subscribed ? unsubscribe : subscribe}
+                                disabled={loading}
+                                className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all text-sm font-bold ${
+                                    subscribed
+                                        ? 'border-green-700 bg-green-900/20 text-green-400'
+                                        : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600'
+                                } ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+                            >
+                                {subscribed
+                                    ? <Bell size={16} className="shrink-0 text-green-400" />
+                                    : <BellOff size={16} className="shrink-0" />
+                                }
+                                <span className="text-xs flex-1">
+                                    {loading ? 'Procesando...' : subscribed ? 'Notificaciones activas' : 'Activar notificaciones'}
+                                </span>
+                                <span
+                                    className="inline-block h-4 w-8 rounded-full transition-colors shrink-0"
+                                    style={{ backgroundColor: subscribed ? 'var(--color-primary, #f59e0b)' : '#334155' }}
+                                />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Bottom logout */}
                     <div className="px-4 pb-6 pt-3 border-t border-slate-800 shrink-0">
                         <button
@@ -242,7 +300,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
             {/* ── Mobile Bottom Nav ── */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">
-                {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+                {NAV_ITEMS.slice(0, 3).map(({ path, label, icon: Icon }) => {
                     const active = isActive(path);
                     return (
                         <Link

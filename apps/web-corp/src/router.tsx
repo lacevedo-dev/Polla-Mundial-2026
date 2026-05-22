@@ -14,6 +14,7 @@ const ChangePassword = React.lazy(() => import('./views/ChangePassword'));
 const AdminCorp = React.lazy(() => import('./views/AdminCorp'));
 const AdminCorpMembers = React.lazy(() => import('./views/AdminCorpMembers'));
 const PollaDetail = React.lazy(() => import('./views/PollaDetail'));
+const Help = React.lazy(() => import('./views/Help'));
 
 const Loader = () => (
     <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -94,6 +95,14 @@ export function AppRouter() {
                         element={
                             <RequireAuth>
                                 <PollaDetail />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/help"
+                        element={
+                            <RequireAuth>
+                                <Help />
                             </RequireAuth>
                         }
                     />
