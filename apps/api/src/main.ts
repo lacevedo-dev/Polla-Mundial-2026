@@ -34,7 +34,7 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env): Promise<v
     },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With, Origin',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With, Origin, X-Tenant-Slug',
     preflightContinue: false,
     optionsSuccessStatus: 204,
   });
