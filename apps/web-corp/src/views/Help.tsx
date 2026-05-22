@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useTenantStore } from '../stores/tenant.store';
+import { CorpLayout } from '../layouts/CorpLayout';
 
 type Tab = 'points' | 'rules' | 'notifications';
 
@@ -23,7 +24,8 @@ const Help: React.FC = () => {
     ];
 
     return (
-        <div className="space-y-8 pb-4">
+        <CorpLayout>
+        <div className="space-y-8 pb-24 md:pb-8">
 
             {/* Hero */}
             <section
@@ -359,6 +361,7 @@ const Help: React.FC = () => {
                 </div>
             )}
         </div>
+        </CorpLayout>
     );
 };
 
