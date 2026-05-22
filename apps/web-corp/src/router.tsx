@@ -11,6 +11,8 @@ const Ranking = React.lazy(() => import('./views/Ranking'));
 const JoinOrg = React.lazy(() => import('./views/JoinOrg'));
 const Onboarding = React.lazy(() => import('./views/Onboarding'));
 const ChangePassword = React.lazy(() => import('./views/ChangePassword'));
+const AdminCorp = React.lazy(() => import('./views/AdminCorp'));
+const AdminCorpMembers = React.lazy(() => import('./views/AdminCorpMembers'));
 
 const Loader = () => (
     <div className="flex items-center justify-center min-h-screen">
@@ -82,6 +84,30 @@ export function AppRouter() {
                         element={
                             <RequireAuth>
                                 <Ranking />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/pollas/:id"
+                        element={
+                            <RequireAuth>
+                                <Pollas />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin"
+                        element={
+                            <RequireAuth>
+                                <AdminCorp />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin/members"
+                        element={
+                            <RequireAuth>
+                                <AdminCorpMembers />
                             </RequireAuth>
                         }
                     />

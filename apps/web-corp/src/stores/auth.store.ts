@@ -11,6 +11,7 @@ export interface AuthUser {
     systemRole?: string;
     emailVerified?: boolean;
     mustChangePassword?: boolean;
+    tenantRole?: string;
 }
 
 interface LoginResponse {
@@ -26,6 +27,7 @@ interface AuthStoreState {
     logout: () => void;
     restoreSession: () => Promise<void>;
     setMustChangePassword: (value: boolean) => void;
+    setTenantRole: (role: string) => void;
 }
 
 export const useAuthStore = create<AuthStoreState>((set, get) => ({
@@ -70,5 +72,10 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     setMustChangePassword: (value) => {
         const user = get().user;
         if (user) set({ user: { ...user, mustChangePassword: value } });
+    },
+
+    setTenantRole: (role) => {
+        const user = get().user;
+        if (user) set({ user: { ...user, tenantRole: role } });
     },
 }));

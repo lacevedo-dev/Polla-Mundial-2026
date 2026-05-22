@@ -10,6 +10,7 @@ import { TenantInvitationController, TenantInvitationAdminController } from './t
 import { TenantMiddleware } from './tenant.middleware';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
+import { CorpPortalController } from './corp-portal.controller';
 
 @Module({
     imports: [PrismaModule],
@@ -18,6 +19,7 @@ import { TenantAdminGuard } from './guards/tenant-admin.guard';
         AdminTenantController,
         TenantInvitationController,
         TenantInvitationAdminController,
+        CorpPortalController,
     ],
     providers: [
         TenantService,

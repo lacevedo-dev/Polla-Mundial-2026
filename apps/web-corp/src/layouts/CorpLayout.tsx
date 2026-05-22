@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Trophy, BarChart2, LogOut, Menu, X, Building2 } from 'lucide-react';
+import { LayoutDashboard, Trophy, BarChart2, LogOut, Menu, X, Building2, Shield, Users, ChevronDown } from 'lucide-react';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 
@@ -10,12 +10,18 @@ const NAV_ITEMS = [
     { path: '/ranking', label: 'Ranking', icon: BarChart2 },
 ];
 
+const ADMIN_NAV_ITEMS = [
+    { path: '/admin', label: 'Admin', icon: Shield },
+    { path: '/admin/members', label: 'Miembros', icon: Users },
+];
+
 export function CorpLayout({ children }: { children: React.ReactNode }) {
     const { pathname } = useLocation();
     const navigate = useNavigate();
     const tenant = useTenantStore((s) => s.tenant);
     const { user, logout } = useAuthStore();
     const [menuOpen, setMenuOpen] = useState(false);
+    const [adminOpen, setAdminOpen] = useState(false);
 
     const handleLogout = () => {
         logout();
@@ -23,18 +29,20 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
     };
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'Portal Corporativo';
+    const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
+    const isAdminSection = pathname.startsWith('/admin');
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
             {/* Header */}
             <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
                 <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-4">
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                         {tenant?.branding?.logoUrl ? (
-                            <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 w-auto object-contain" />
+                            <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 w-auto object-contain shrink-0" />
                         ) : (
                             <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                                 style={{ backgroundColor: 'var(--color-primary, #f59e0b)' }}
                             >
                                 <Building2 size={16} className="text-white" />
@@ -50,9 +58,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                 key={path}
                                 to={path}
                                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
-                                    pathname === path
-                                        ? 'text-white'
-                                        : 'text-slate-600 hover:bg-slate-100'
+                                    pathname === path ? 'text-white' : 'text-slate-600 hover:bg-slate-100'
                                 }`}
                                 style={pathname === path ? { backgroundColor: 'var(--color-primary, #f59e0b)' } : {}}
                             >
@@ -60,16 +66,54 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                 {label}
                             </Link>
                         ))}
+
+                        {/* Admin dropdown */}
+                        {isAdmin && (
+                            <div className="relative">
+                                <button
+                                    onClick={() => setAdminOpen(!adminOpen)}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                                        isAdminSection ? 'text-white' : 'text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                    style={isAdminSection ? { backgroundColor: 'var(--color-primary, #f59e0b)' } : {}}
+                                >
+                                    <Shield size={15} />
+                                    Admin
+                                    <ChevronDown size={13} className={`transition-transform ${adminOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {adminOpen && (
+                                    <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[160px] z-50">
+                                        {ADMIN_NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+                                            <Link
+                                                key={path}
+                                                to={path}
+                                                onClick={() => setAdminOpen(false)}
+                                                className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                                            >
+                                                <Icon size={14} />
+                                                {label}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </nav>
 
-                    <div className="hidden md:flex items-center gap-3 ml-4">
-                        <span className="text-sm text-slate-500 font-medium">{user?.name}</span>
+                    <div className="hidden md:flex items-center gap-3 ml-2">
+                        <div className="text-right">
+                            <p className="text-sm font-semibold text-slate-700 leading-none">{user?.name?.split(' ')[0]}</p>
+                            {isAdmin && (
+                                <p className="text-[10px] font-bold mt-0.5" style={{ color: 'var(--color-primary, #f59e0b)' }}>
+                                    Administrador
+                                </p>
+                            )}
+                        </div>
                         <button
                             onClick={handleLogout}
-                            className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-rose-600 transition-colors"
+                            className="flex items-center gap-1.5 text-sm font-semibold text-slate-400 hover:text-rose-600 transition-colors"
                         >
                             <LogOut size={15} />
-                            Salir
                         </button>
                     </div>
 
@@ -96,6 +140,27 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                 {label}
                             </Link>
                         ))}
+                        {isAdmin && (
+                            <>
+                                <div className="px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Administración
+                                </div>
+                                {ADMIN_NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+                                    <Link
+                                        key={path}
+                                        to={path}
+                                        onClick={() => setMenuOpen(false)}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold w-full ${
+                                            pathname === path ? 'text-white' : 'text-slate-700'
+                                        }`}
+                                        style={pathname === path ? { backgroundColor: 'var(--color-primary, #f59e0b)' } : {}}
+                                    >
+                                        <Icon size={16} />
+                                        {label}
+                                    </Link>
+                                ))}
+                            </>
+                        )}
                         <button
                             onClick={handleLogout}
                             className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold text-rose-600 w-full"

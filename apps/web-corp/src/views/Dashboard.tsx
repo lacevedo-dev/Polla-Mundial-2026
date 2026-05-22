@@ -1,30 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Users, BarChart2, TrendingUp, ChevronRight, Calendar } from 'lucide-react';
+import { Trophy, Users, BarChart2, TrendingUp, ChevronRight, Calendar, Shield } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
 
 interface DashboardData {
-    myLeagues: { id: string; name: string; participantsCount: number; myRank: number | null }[];
+    myLeagues: { id: string; name: string; participantsCount: number; myPoints: number }[];
     globalRank: number | null;
     totalMembers: number;
     predictionsPending: number;
+    tenantRole: string;
 }
 
 export default function Dashboard() {
     const tenant = useTenantStore((s) => s.tenant);
-    const user = useAuthStore((s) => s.user);
+    const { user, setTenantRole } = useAuthStore();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
+    const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
 
     useEffect(() => {
         setLoading(true);
         request<DashboardData>('/corp/dashboard')
-            .then(setData)
+            .then((d) => {
+                setData(d);
+                if (d.tenantRole) setTenantRole(d.tenantRole);
+            })
             .catch(() => setData(null))
             .finally(() => setLoading(false));
     }, []);
@@ -50,7 +55,7 @@ export default function Dashboard() {
                     },
                     {
                         label: 'Mi posición',
-                        value: loading ? '—' : (data?.globalRank ? `#${data.globalRank}` : '—'),
+                        value: loading ? '—' : (data?.globalRank != null ? `#${data.globalRank}` : '—'),
                         icon: TrendingUp,
                         color: 'bg-emerald-50 text-emerald-600',
                     },
@@ -100,33 +105,36 @@ export default function Dashboard() {
                 ) : (
                     <div className="divide-y divide-slate-50">
                         {data.myLeagues.slice(0, 5).map((league) => (
-                            <div key={league.id} className="flex items-center gap-3 px-5 py-3.5">
-                                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-                                    <Trophy size={16} className="text-amber-600" />
+                            <Link key={league.id} to={`/pollas/${league.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 15%, white)' }}>
+                                    <Trophy size={16} style={{ color: 'var(--color-primary, #f59e0b)' }} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-bold text-slate-800 text-sm truncate">{league.name}</p>
                                     <p className="text-xs text-slate-400">{league.participantsCount} participantes</p>
                                 </div>
-                                {league.myRank && (
-                                    <span className="text-xs font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
-                                        #{league.myRank}
-                                    </span>
-                                )}
-                            </div>
+                                <div className="text-right shrink-0">
+                                    {league.myPoints > 0 && (
+                                        <span className="text-xs font-black" style={{ color: 'var(--color-primary, #f59e0b)' }}>
+                                            {league.myPoints} pts
+                                        </span>
+                                    )}
+                                    <ChevronRight size={14} className="text-slate-300 ml-1 inline" />
+                                </div>
+                            </Link>
                         ))}
                     </div>
                 )}
             </div>
 
             {/* Quick links */}
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className={`grid gap-3 mt-4 ${isAdmin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'}`}>
                 <Link
                     to="/pollas"
                     className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-all group"
                 >
-                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center group-hover:bg-amber-100 transition-colors">
-                        <Trophy size={18} className="text-amber-600" />
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center group-hover:opacity-80 transition-opacity" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 15%, white)' }}>
+                        <Trophy size={18} style={{ color: 'var(--color-primary, #f59e0b)' }} />
                     </div>
                     <div>
                         <p className="font-black text-slate-800 text-sm">Pollas</p>
@@ -145,6 +153,34 @@ export default function Dashboard() {
                         <p className="text-xs text-slate-400">Tabla general</p>
                     </div>
                 </Link>
+                {isAdmin && (
+                    <>
+                        <Link
+                            to="/admin"
+                            className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-all group"
+                        >
+                            <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center group-hover:bg-violet-100 transition-colors">
+                                <Shield size={18} className="text-violet-600" />
+                            </div>
+                            <div>
+                                <p className="font-black text-slate-800 text-sm">Admin</p>
+                                <p className="text-xs text-slate-400">Panel general</p>
+                            </div>
+                        </Link>
+                        <Link
+                            to="/admin/members"
+                            className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-all group"
+                        >
+                            <div className="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center group-hover:bg-sky-100 transition-colors">
+                                <Users size={18} className="text-sky-600" />
+                            </div>
+                            <div>
+                                <p className="font-black text-slate-800 text-sm">Miembros</p>
+                                <p className="text-xs text-slate-400">Gestionar</p>
+                            </div>
+                        </Link>
+                    </>
+                )}
             </div>
         </CorpLayout>
     );

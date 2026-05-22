@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Trophy, Users, Lock, Globe, ChevronRight, Search } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
@@ -6,10 +7,10 @@ import { request } from '../api';
 interface League {
     id: string;
     name: string;
+    description: string | null;
     participantsCount: number;
     isPublic: boolean;
     isMember: boolean;
-    myRank: number | null;
 }
 
 export default function Pollas() {
@@ -51,7 +52,7 @@ export default function Pollas() {
 
             {loading ? (
                 <div className="flex justify-center py-16">
-                    <div className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-primary, #f59e0b)', borderTopColor: 'transparent' }} />
                 </div>
             ) : filtered.length === 0 ? (
                 <div className="text-center py-16 text-slate-400">
@@ -66,8 +67,8 @@ export default function Pollas() {
                             key={league.id}
                             className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-4 hover:shadow-md transition-all"
                         >
-                            <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
-                                <Trophy size={20} className="text-amber-500" />
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 12%, white)' }}>
+                                <Trophy size={20} style={{ color: 'var(--color-primary, #f59e0b)' }} />
                             </div>
 
                             <div className="flex-1 min-w-0">
@@ -83,23 +84,23 @@ export default function Pollas() {
                                         </span>
                                     )}
                                     {league.isMember && (
-                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 15%, white)', color: 'var(--color-primary, #f59e0b)' }}>
                                             Participando
                                         </span>
                                     )}
                                 </div>
                                 <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-400">
                                     <Users size={11} />
-                                    {league.participantsCount} participantes
-                                    {league.myRank && (
-                                        <span className="ml-2 font-bold text-amber-600">Pos. #{league.myRank}</span>
-                                    )}
+                                    {league.participantsCount} participante{league.participantsCount !== 1 ? 's' : ''}
                                 </div>
+                                {league.description && (
+                                    <p className="text-xs text-slate-400 mt-0.5 truncate">{league.description}</p>
+                                )}
                             </div>
 
-                            <button className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
+                            <Link to={`/pollas/${league.id}`} className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition-colors" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 12%, white)', color: 'var(--color-primary, #f59e0b)' }}>
                                 Ver <ChevronRight size={13} />
-                            </button>
+                            </Link>
                         </div>
                     ))}
                 </div>

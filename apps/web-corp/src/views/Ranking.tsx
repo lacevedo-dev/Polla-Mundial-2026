@@ -1,22 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Medal, Trophy, Search } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
 
 interface RankingEntry {
     rank: number;
     userId: string;
     name: string;
-    points: number;
-    exactPredictions: number;
-    leagues: string[];
+    username: string;
+    avatar: string | null;
+    totalPoints: number;
+    isMe: boolean;
 }
 
 const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
 export default function Ranking() {
-    const currentUser = useAuthStore((s) => s.user);
     const [entries, setEntries] = useState<RankingEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -32,7 +31,7 @@ export default function Ranking() {
         e.name.toLowerCase().includes(search.toLowerCase()),
     );
 
-    const myEntry = entries.find((e) => e.userId === currentUser?.id);
+    const myEntry = entries.find((e) => e.isMe);
 
     return (
         <CorpLayout>
@@ -43,13 +42,13 @@ export default function Ranking() {
 
             {/* My position card */}
             {myEntry && (
-                <div className="bg-gradient-to-r from-amber-400 to-amber-500 rounded-2xl p-4 mb-5 flex items-center gap-4 text-white shadow-lg shadow-amber-200">
+                <div className="rounded-2xl p-4 mb-5 flex items-center gap-4 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, var(--color-primary, #f59e0b), color-mix(in srgb, var(--color-primary, #f59e0b) 70%, black))' }}>
                     <div className="text-3xl font-black">#{myEntry.rank}</div>
                     <div className="flex-1">
                         <p className="font-black text-sm">Tu posición</p>
-                        <p className="text-amber-100 text-xs">{myEntry.points} puntos · {myEntry.exactPredictions} exactos</p>
+                        <p className="text-white/70 text-xs">{myEntry.totalPoints} puntos acumulados</p>
                     </div>
-                    <Trophy size={28} className="text-amber-200" />
+                    <Trophy size={28} className="text-white/40" />
                 </div>
             )}
 
@@ -67,16 +66,15 @@ export default function Ranking() {
 
             {/* Table */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="grid grid-cols-[2rem_1fr_auto_auto] gap-3 px-4 py-2.5 text-xs font-bold text-slate-400 uppercase tracking-wide border-b border-slate-50">
+                <div className="grid grid-cols-[2rem_1fr_auto] gap-3 px-4 py-2.5 text-xs font-bold text-slate-400 uppercase tracking-wide border-b border-slate-50">
                     <span>#</span>
                     <span>Participante</span>
                     <span className="text-right">Puntos</span>
-                    <span className="text-right hidden sm:block">Exactos</span>
                 </div>
 
                 {loading ? (
                     <div className="flex justify-center py-12">
-                        <div className="w-7 h-7 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-7 h-7 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-primary, #f59e0b)', borderTopColor: 'transparent' }} />
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="text-center py-12 text-slate-400 text-sm">
@@ -85,31 +83,36 @@ export default function Ranking() {
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-50">
-                        {filtered.map((entry) => {
-                            const isMe = entry.userId === currentUser?.id;
-                            return (
-                                <div
-                                    key={entry.userId}
-                                    className={`grid grid-cols-[2rem_1fr_auto_auto] gap-3 px-4 py-3 items-center ${isMe ? 'bg-amber-50' : 'hover:bg-slate-50'} transition-colors`}
-                                >
-                                    <div className="text-sm font-black text-slate-500">
-                                        {MEDAL[entry.rank] ?? entry.rank}
+                        {filtered.map((entry) => (
+                            <div
+                                key={entry.userId}
+                                className={`grid grid-cols-[2rem_1fr_auto] gap-3 px-4 py-3 items-center transition-colors ${entry.isMe ? '' : 'hover:bg-slate-50'}`}
+                                style={entry.isMe ? { backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 8%, white)' } : {}}
+                            >
+                                <div className="text-sm font-black text-slate-500">
+                                    {MEDAL[entry.rank] ?? entry.rank}
+                                </div>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                                        {entry.avatar ? (
+                                            <img src={entry.avatar} alt={entry.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-xs font-black text-slate-400">{entry.name.charAt(0)}</span>
+                                        )}
                                     </div>
                                     <div className="min-w-0">
-                                        <p className={`font-bold text-sm truncate ${isMe ? 'text-amber-700' : 'text-slate-800'}`}>
-                                            {entry.name}{isMe && <span className="ml-1 text-[10px] font-black text-amber-500">(tú)</span>}
+                                        <p className="font-bold text-sm truncate" style={entry.isMe ? { color: 'var(--color-primary, #f59e0b)' } : { color: '#1e293b' }}>
+                                            {entry.name}
+                                            {entry.isMe && <span className="ml-1 text-[10px] font-black opacity-70">(tú)</span>}
                                         </p>
-                                        <p className="text-xs text-slate-400">{entry.leagues.length} polla(s)</p>
-                                    </div>
-                                    <div className={`text-sm font-black text-right ${isMe ? 'text-amber-700' : 'text-slate-900'}`}>
-                                        {entry.points}
-                                    </div>
-                                    <div className="text-xs text-slate-500 text-right hidden sm:block">
-                                        {entry.exactPredictions} 🎯
+                                        {entry.username && <p className="text-[10px] text-slate-300 font-mono">@{entry.username}</p>}
                                     </div>
                                 </div>
-                            );
-                        })}
+                                <div className="text-sm font-black text-right" style={entry.isMe ? { color: 'var(--color-primary, #f59e0b)' } : { color: '#0f172a' }}>
+                                    {entry.totalPoints}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
