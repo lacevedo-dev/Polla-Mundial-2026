@@ -6,7 +6,7 @@ import { request } from '../api';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 
-interface Team { id: string; name: string; shortName: string; logo: string | null; }
+interface Team { id: string; name: string; shortCode: string | null; flagUrl: string | null; code: string; }
 interface UpcomingMatch {
     id: string; matchDate: string; status: string;
     homeScore: number | null; awayScore: number | null;
@@ -16,8 +16,8 @@ interface UpcomingMatch {
 interface RecentPrediction {
     matchDate: string; status: string;
     homeScore: number | null; awayScore: number | null;
-    homeTeam: Pick<Team, 'name' | 'shortName' | 'logo'>;
-    awayTeam: Pick<Team, 'name' | 'shortName' | 'logo'>;
+    homeTeam: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>;
+    awayTeam: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>;
     myHome: number; myAway: number; points: number | null;
 }
 interface TopRankEntry {
@@ -29,7 +29,7 @@ interface LeagueDetail {
     id: string; name: string; description: string | null;
     status: string; participantsCount: number; maxParticipants: number;
     closePredictionMinutes: number; myPoints: number; myRank: number;
-    scoringRules: { type: string; points: number; label: string }[];
+    scoringRules: { ruleType: string; points: number; description: string | null; multiplier: number }[];
     upcomingMatches: UpcomingMatch[];
     recentPredictions: RecentPrediction[];
     topRanking: TopRankEntry[];
@@ -47,19 +47,20 @@ function isPredictionClosed(matchDate: string, closeMin = 15) {
     return Date.now() > new Date(matchDate).getTime() - closeMin * 60_000;
 }
 
-function TeamBadge({ team, size = 'md' }: { team: Pick<Team, 'name' | 'shortName' | 'logo'>; size?: 'sm' | 'md' }) {
+function TeamBadge({ team, size = 'md' }: { team: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>; size?: 'sm' | 'md' }) {
     const sz = size === 'sm' ? 'w-7 h-7 text-[9px]' : 'w-10 h-10 text-xs';
+    const abbr = team.shortCode?.slice(0, 3) ?? team.name.slice(0, 3).toUpperCase();
     return (
         <div className="flex flex-col items-center gap-1">
-            {team.logo ? (
-                <img src={team.logo} alt={team.shortName} className={`${sz} object-contain rounded`} />
+            {team.flagUrl ? (
+                <img src={team.flagUrl} alt={abbr} className={`${sz} object-contain rounded`} />
             ) : (
                 <div className={`${sz} rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500`}>
-                    {team.shortName?.slice(0, 2) ?? '?'}
+                    {abbr.slice(0, 2)}
                 </div>
             )}
             <span className={`font-bold text-slate-700 ${size === 'sm' ? 'text-[9px]' : 'text-[11px]'} text-center leading-tight`}>
-                {team.shortName ?? team.name}
+                {team.shortCode ?? team.name}
             </span>
         </div>
     );
@@ -305,8 +306,8 @@ export default function PollaDetail() {
                             ) : (
                                 <div className="px-4 py-2 divide-y divide-slate-50">
                                     {league.scoringRules.map((r) => (
-                                        <div key={r.type} className="flex items-center justify-between py-3">
-                                            <span className="text-sm text-slate-700 font-medium">{r.label}</span>
+                                        <div key={r.ruleType} className="flex items-center justify-between py-3">
+                                            <span className="text-sm text-slate-700 font-medium">{r.description ?? r.ruleType}</span>
                                             <span className="text-sm font-black" style={{ color: 'var(--color-primary, #f59e0b)' }}>{r.points} pts</span>
                                         </div>
                                     ))}

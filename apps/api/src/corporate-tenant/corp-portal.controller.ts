@@ -103,27 +103,22 @@ export class CorpPortalController {
             where: { id: leagueId, tenantId },
             include: {
                 _count: { select: { members: { where: { status: 'ACTIVE' } } } },
-                scoringRules: { select: { type: true, points: true, label: true }, orderBy: { points: 'desc' } },
+                scoringRules: { orderBy: { points: 'desc' } },
             },
         });
 
         if (!league) return null;
 
-        const [upcomingMatches, recentPredictions, memberPoints] = await Promise.all([
+        const teamSelect = { id: true, name: true, flagUrl: true, shortCode: true, code: true };
+
+        const [leagueMatchRows, predictionRows, memberPoints] = await Promise.all([
             this.prisma.leagueMatch.findMany({
                 where: { leagueId },
                 include: {
                     match: {
-                        select: {
-                            id: true,
-                            matchDate: true,
-                            status: true,
-                            homeScore: true,
-                            awayScore: true,
-                            venue: true,
-                            phase: true,
-                            homeTeam: { select: { id: true, name: true, shortName: true, logo: true } },
-                            awayTeam: { select: { id: true, name: true, shortName: true, logo: true } },
+                        include: {
+                            homeTeam: { select: teamSelect },
+                            awayTeam: { select: teamSelect },
                             predictions: {
                                 where: { userId, leagueId },
                                 select: { homeScore: true, awayScore: true, points: true },
@@ -141,13 +136,9 @@ export class CorpPortalController {
                 take: 5,
                 include: {
                     match: {
-                        select: {
-                            matchDate: true,
-                            status: true,
-                            homeScore: true,
-                            awayScore: true,
-                            homeTeam: { select: { name: true, shortName: true, logo: true } },
-                            awayTeam: { select: { name: true, shortName: true, logo: true } },
+                        include: {
+                            homeTeam: { select: teamSelect },
+                            awayTeam: { select: teamSelect },
                         },
                     },
                 },
@@ -181,8 +172,13 @@ export class CorpPortalController {
             closePredictionMinutes: league.closePredictionMinutes,
             myPoints,
             myRank,
-            scoringRules: league.scoringRules,
-            upcomingMatches: upcomingMatches.map((lm) => ({
+            scoringRules: league.scoringRules.map((r) => ({
+                ruleType: r.ruleType,
+                points: r.points,
+                description: r.description,
+                multiplier: r.multiplier,
+            })),
+            upcomingMatches: leagueMatchRows.map((lm) => ({
                 id: lm.match.id,
                 matchDate: lm.match.matchDate,
                 status: lm.match.status,
@@ -194,7 +190,7 @@ export class CorpPortalController {
                 awayTeam: lm.match.awayTeam,
                 myPrediction: lm.match.predictions[0] ?? null,
             })),
-            recentPredictions: recentPredictions.map((p) => ({
+            recentPredictions: predictionRows.map((p) => ({
                 matchDate: p.match.matchDate,
                 status: p.match.status,
                 homeScore: p.match.homeScore,
