@@ -205,7 +205,47 @@ async function main() {
     await prisma.$connect();
 
     try {
-        // ── 1. Borrar en orden de FK ───────────────────────────────────────
+        // ── 1. Borrar torneos sin partidos ────────────────────────────────
+        console.log('\n🗑️  Limpiando torneos sin partidos...');
+
+        const tournamentsWithMatches = await prisma.tournament.findMany({
+            where: { matches: { some: {} } },
+            select: { id: true },
+        });
+        const idsConPartidos = tournamentsWithMatches.map(t => t.id);
+
+        const toursSinPartidos = await prisma.tournament.findMany({
+            where: { id: { notIn: idsConPartidos } },
+            select: { id: true, name: true },
+        });
+
+        if (toursSinPartidos.length > 0) {
+            const idsSinPartidos = toursSinPartidos.map(t => t.id);
+
+            // Nullificar FKs en League y Match antes de borrar
+            await prisma.league.updateMany({
+                where: { primaryTournamentId: { in: idsSinPartidos } },
+                data: { primaryTournamentId: null },
+            });
+            await prisma.match.updateMany({
+                where: { tournamentId: { in: idsSinPartidos } },
+                data: { tournamentId: null },
+            });
+
+            // LeagueTournament se borra con Cascade, pero lo hacemos explícito
+            await prisma.leagueTournament.deleteMany({
+                where: { tournamentId: { in: idsSinPartidos } },
+            });
+
+            const delTours = await prisma.tournament.deleteMany({
+                where: { id: { in: idsSinPartidos } },
+            });
+            console.log(`  ✓ Torneos sin partidos eliminados: ${delTours.count}`);
+        } else {
+            console.log('  ✓ No había torneos sin partidos');
+        }
+
+        // ── 2. Borrar partidos, eventos y equipos existentes ──────────────
         console.log('\n🗑️  Borrando historial existente...');
 
         const delPredictions = await prisma.prediction.deleteMany({});
@@ -232,7 +272,30 @@ async function main() {
         const delTeams = await prisma.team.deleteMany({});
         console.log(`  ✓ Equipos borrados: ${delTeams.count}`);
 
-        // ── 2. Insertar equipos ────────────────────────────────────────────
+        // ── 2. Upsert torneo FIFA World Cup 2026 ──────────────────────────
+        console.log('\n🏆 Creando torneo FIFA World Cup 2026...');
+        const tournament = await prisma.tournament.upsert({
+            where: { apiFootballLeagueId: 1 },
+            create: {
+                name: 'FIFA World Cup',
+                country: 'World',
+                type: 'KNOCKOUT',
+                logoUrl: 'https://media.api-sports.io/football/leagues/1.png',
+                apiFootballLeagueId: 1,
+                season: 2026,
+                active: true,
+            },
+            update: {
+                name: 'FIFA World Cup',
+                country: 'World',
+                season: 2026,
+                active: true,
+                logoUrl: 'https://media.api-sports.io/football/leagues/1.png',
+            },
+        });
+        console.log(`  ✓ Torneo creado/actualizado: ${tournament.id}`);
+
+        // ── 3. Insertar equipos ────────────────────────────────────────────
         console.log(`\n📋 Insertando ${TEAMS.length} equipos...`);
         for (const t of TEAMS) {
             await prisma.team.create({
@@ -242,11 +305,11 @@ async function main() {
         }
         console.log(`  ✓ ${TEAMS.length} equipos OK          `);
 
-        // ── 3. Mapa code → id ──────────────────────────────────────────────
+        // ── 4. Mapa code → id ──────────────────────────────────────────────
         const allTeams = await prisma.team.findMany({ select: { id: true, code: true } });
         const teamMap = new Map(allTeams.map(t => [t.code, t.id]));
 
-        // ── 4. Insertar partidos ───────────────────────────────────────────
+        // ── 5. Insertar partidos ───────────────────────────────────────────
         console.log(`\n⚽ Insertando ${MATCHES.length} partidos...`);
         for (const m of MATCHES) {
             await prisma.match.create({
@@ -259,6 +322,7 @@ async function main() {
                     matchDate:   new Date(m.date),
                     venue:       m.venue,
                     status:      'SCHEDULED',
+                    tournamentId: tournament.id,
                 },
             });
             process.stdout.write(`  Partido ${m.num}/104\r`);
