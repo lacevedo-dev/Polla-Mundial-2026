@@ -306,6 +306,7 @@ export class CorpPortalController {
     @Get('tournaments')
     async getTournaments() {
         return this.prisma.tournament.findMany({
+            where: { matches: { some: {} } },
             orderBy: [{ active: 'desc' }, { season: 'desc' }, { name: 'asc' }],
             select: { id: true, name: true, country: true, season: true, logoUrl: true, active: true },
         });
