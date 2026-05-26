@@ -13,6 +13,7 @@ const Onboarding = React.lazy(() => import('./views/Onboarding'));
 const ChangePassword = React.lazy(() => import('./views/ChangePassword'));
 const AdminCorp = React.lazy(() => import('./views/AdminCorp'));
 const AdminCorpMembers = React.lazy(() => import('./views/AdminCorpMembers'));
+const AdminCorpLeagues = React.lazy(() => import('./views/AdminCorpLeagues'));
 const PollaDetail = React.lazy(() => import('./views/PollaDetail'));
 const Help = React.lazy(() => import('./views/Help'));
 
@@ -119,6 +120,14 @@ export function AppRouter() {
                         element={
                             <RequireAuth>
                                 <AdminCorpMembers />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin/pollas"
+                        element={
+                            <RequireAuth>
+                                <AdminCorpLeagues />
                             </RequireAuth>
                         }
                     />

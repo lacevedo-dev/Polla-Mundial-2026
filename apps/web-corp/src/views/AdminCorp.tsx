@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight } from 'lucide-react';
+import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
@@ -112,12 +112,20 @@ export default function AdminCorp() {
                                 bg: 'bg-sky-50',
                             },
                             {
-                                label: 'Ver pollas',
-                                desc: 'Explorar todas las pollas del tenant',
+                                label: 'Gestionar pollas',
+                                desc: 'Crear, editar y asignar torneos',
                                 icon: Trophy,
-                                link: '/pollas',
+                                link: '/admin/pollas',
                                 color: 'text-amber-600',
                                 bg: '',
+                            },
+                            {
+                                label: 'Ver todas las pollas',
+                                desc: 'Explorar todas las pollas del tenant',
+                                icon: TrendingUp,
+                                link: '/pollas',
+                                color: 'text-violet-600',
+                                bg: 'bg-violet-50',
                             },
                             {
                                 label: 'Ranking general',
@@ -152,9 +160,14 @@ export default function AdminCorp() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 className="font-black text-slate-900">Pollas del tenant</h2>
-                        <Link to="/pollas" className="text-xs font-bold hover:underline flex items-center gap-0.5" style={{ color: 'var(--color-primary, #f59e0b)' }}>
-                            Ver todas <ChevronRight size={12} />
-                        </Link>
+                        <div className="flex items-center gap-2">
+                            <Link to="/admin/pollas" className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg text-black" style={{ backgroundColor: 'var(--color-primary, #f59e0b)' }}>
+                                <Plus size={11} /> Nueva
+                            </Link>
+                            <Link to="/pollas" className="text-xs font-bold hover:underline flex items-center gap-0.5" style={{ color: 'var(--color-primary, #f59e0b)' }}>
+                                Ver todas <ChevronRight size={12} />
+                            </Link>
+                        </div>
                     </div>
                     {loading ? (
                         <div className="p-8 flex justify-center">

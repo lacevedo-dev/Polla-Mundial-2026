@@ -1,7 +1,19 @@
-import { Controller, Get, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
+import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber, Min, Max, IsInt } from 'class-validator';
+import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan } from '@prisma/client';
+import { randomBytes } from 'crypto';
+
+class CreateCorpLeagueDto {
+    @IsNotEmpty() @IsString() name: string;
+    @IsOptional() @IsString() description?: string;
+    @IsOptional() @IsEnum(Privacy) privacy?: Privacy;
+    @IsOptional() @IsInt() @Min(2) @Max(500) maxParticipants?: number;
+    @IsOptional() @IsString() primaryTournamentId?: string;
+}
 
 @Controller('corp')
 @UseGuards(JwtAuthGuard, TenantMemberGuard)
@@ -289,6 +301,138 @@ export class CorpPortalController {
             .map((u, i) => ({ ...u, rank: i + 1 }));
 
         return ranking;
+    }
+
+    @Get('tournaments')
+    async getTournaments() {
+        return this.prisma.tournament.findMany({
+            orderBy: [{ active: 'desc' }, { season: 'desc' }, { name: 'asc' }],
+            select: { id: true, name: true, country: true, season: true, logoUrl: true, active: true },
+        });
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Post('leagues')
+    async createLeague(@Req() req: any, @Body() dto: CreateCorpLeagueDto) {
+        const tenantId: string = req.tenantId;
+        const userId: string = req.user.userId;
+
+        const normalizedName = dto.name.trim().replace(/\s+/g, ' ');
+        const existing = await this.prisma.league.findFirst({ where: { name: normalizedName }, select: { id: true } });
+        if (existing) throw new BadRequestException('Ya existe una polla con ese nombre. Usa un nombre diferente.');
+
+        let code = randomBytes(3).toString('hex').toUpperCase();
+        while (await this.prisma.league.findUnique({ where: { code } })) {
+            code = randomBytes(3).toString('hex').toUpperCase();
+        }
+
+        const DEFAULT_SCORING_RULES = [
+            { ruleType: ScoringType.EXACT_SCORE,       points: 5, description: 'Marcador exacto' },
+            { ruleType: ScoringType.CORRECT_WINNER,    points: 2, description: 'Ganador / empate correcto' },
+            { ruleType: ScoringType.TEAM_GOALS,        points: 1, description: 'Gol acertado (al menos un equipo)' },
+            { ruleType: ScoringType.UNIQUE_PREDICTION, points: 5, description: 'Predicción única en la liga' },
+            { ruleType: ScoringType.PHASE_BONUS_R32,   points: 0, description: 'Bono clasificados Fase 32' },
+            { ruleType: ScoringType.PHASE_BONUS_R16,   points: 8, description: 'Bono clasificados Octavos' },
+            { ruleType: ScoringType.PHASE_BONUS_QF,    points: 4, description: 'Bono clasificados Cuartos' },
+            { ruleType: ScoringType.PHASE_BONUS_SF,    points: 2, description: 'Bono clasificados Semifinal' },
+            { ruleType: ScoringType.PHASE_BONUS_FINAL, points: 5, description: 'Bono Campeón (Final)' },
+        ];
+
+        const { primaryTournamentId, ...scalars } = dto;
+
+        const league = await this.prisma.league.create({
+            data: {
+                ...scalars,
+                name: normalizedName,
+                code,
+                tenantId,
+                status: LeagueStatus.SETUP,
+                plan: Plan.FREE,
+                members: {
+                    create: { userId, role: MemberRole.ADMIN, status: MemberStatus.ACTIVE },
+                },
+                scoringRules: {
+                    createMany: { data: [...DEFAULT_SCORING_RULES] },
+                },
+            },
+            include: { members: true, scoringRules: true },
+        });
+
+        if (primaryTournamentId) {
+            const tournament = await this.prisma.tournament.findUnique({ where: { id: primaryTournamentId } });
+            if (tournament) {
+                await this.prisma.leagueTournament.create({ data: { leagueId: league.id, tournamentId: primaryTournamentId } }).catch(() => {});
+                await this.prisma.league.update({ where: { id: league.id }, data: { primaryTournamentId } }).catch(() => {});
+            }
+        }
+
+        return league;
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Patch('leagues/:leagueId')
+    async updateLeague(
+        @Req() req: any,
+        @Param('leagueId') leagueId: string,
+        @Body() body: { name?: string; description?: string; privacy?: Privacy; maxParticipants?: number; status?: LeagueStatus },
+    ) {
+        const tenantId: string = req.tenantId;
+        const league = await this.prisma.league.findFirst({ where: { id: leagueId, tenantId } });
+        if (!league) throw new NotFoundException('Polla no encontrada');
+
+        const data: any = {};
+        if (body.name !== undefined) data.name = body.name.trim().replace(/\s+/g, ' ');
+        if (body.description !== undefined) data.description = body.description;
+        if (body.privacy !== undefined) data.privacy = body.privacy;
+        if (body.maxParticipants !== undefined) data.maxParticipants = body.maxParticipants;
+        if (body.status !== undefined) data.status = body.status;
+
+        return this.prisma.league.update({ where: { id: leagueId }, data });
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Post('leagues/:leagueId/tournament')
+    async setLeagueTournament(
+        @Req() req: any,
+        @Param('leagueId') leagueId: string,
+        @Body('tournamentId') tournamentId: string | null,
+    ) {
+        const tenantId: string = req.tenantId;
+        const league = await this.prisma.league.findFirst({ where: { id: leagueId, tenantId } });
+        if (!league) throw new NotFoundException('Polla no encontrada');
+
+        if (tournamentId) {
+            const tournament = await this.prisma.tournament.findUnique({ where: { id: tournamentId } });
+            if (!tournament) throw new NotFoundException('Torneo no encontrado');
+            await this.prisma.leagueTournament.upsert({
+                where: { leagueId_tournamentId: { leagueId, tournamentId } },
+                create: { leagueId, tournamentId },
+                update: {},
+            });
+            await this.prisma.league.update({ where: { id: leagueId }, data: { primaryTournamentId: tournamentId } }).catch(() => {});
+        } else {
+            await this.prisma.league.update({ where: { id: leagueId }, data: { primaryTournamentId: null } }).catch(() => {});
+        }
+
+        return { ok: true };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Delete('leagues/:leagueId')
+    async deleteLeague(@Req() req: any, @Param('leagueId') leagueId: string) {
+        const tenantId: string = req.tenantId;
+        const league = await this.prisma.league.findFirst({ where: { id: leagueId, tenantId } });
+        if (!league) throw new NotFoundException('Polla no encontrada');
+
+        const hasPredictions = await this.prisma.prediction.count({ where: { leagueId } });
+        if (hasPredictions > 0) {
+            throw new BadRequestException('No se puede eliminar una polla que ya tiene pronósticos registrados.');
+        }
+
+        await this.prisma.league.delete({ where: { id: leagueId } });
+        return { ok: true };
     }
 
     @Get('members')

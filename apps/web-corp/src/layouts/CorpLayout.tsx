@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     Home, Trophy, BarChart2, LogOut, Menu, X,
-    Building2, Shield, Users, HelpCircle, Bell, BellOff,
+    Building2, Shield, Users, HelpCircle, Bell, BellOff, PlusCircle,
 } from 'lucide-react';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
 const ADMIN_NAV_ITEMS = [
     { path: '/admin', label: 'Panel Admin', icon: Shield },
     { path: '/admin/members', label: 'Miembros', icon: Users },
+    { path: '/admin/pollas', label: 'Gestionar Pollas', icon: PlusCircle },
 ];
 
 export function CorpLayout({ children }: { children: React.ReactNode }) {
