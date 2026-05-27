@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
     Trophy, Users, TrendingUp, ChevronRight, Calendar,
     Clock, CheckCircle2, Circle, Star, Save, Lock, Loader2, AlertTriangle,
+    LayoutGrid, AlignJustify,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { useTenantStore } from '../stores/tenant.store';
@@ -57,29 +58,27 @@ interface DashboardData {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
-function fmtDate(d: string) {
-    return new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d));
-}
 function isPredictionClosed(matchDate: string, closeMin = 15) {
     return Date.now() > new Date(matchDate).getTime() - closeMin * 60_000;
 }
 
 /* ─── Sub-components ─────────────────────────────────────────── */
 
-function TeamBadge({ team }: { team: Pick<Team, 'name' | 'shortCode' | 'flagUrl'> }) {
-    const abbr = team.shortCode?.slice(0, 3) ?? team.name.slice(0, 3).toUpperCase();
-    return (
-        <div className="flex flex-col items-center gap-0.5 min-w-[40px]">
-            {team.flagUrl
-                ? <img src={team.flagUrl} alt={abbr} className="w-7 h-7 object-contain rounded" />
-                : <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500 text-[9px]">{abbr.slice(0, 2)}</div>}
-            <span className="font-bold text-slate-700 text-[9px] text-center leading-tight max-w-[44px] truncate">{abbr}</span>
-        </div>
-    );
+function Flag({ team, size = 'sm' }: { team: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>; size?: 'sm' | 'lg' }) {
+    const abbr = (team.shortCode ?? team.name.slice(0, 3)).toUpperCase();
+    const cls = size === 'lg'
+        ? 'w-11 h-8 rounded-md border border-slate-200 object-cover shadow-sm'
+        : 'w-7 h-5 object-cover rounded border border-slate-200 shrink-0';
+    const fallback = size === 'lg'
+        ? 'w-11 h-8 rounded-md border border-slate-200 bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500'
+        : 'w-7 h-5 rounded border border-slate-200 bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-500 shrink-0';
+    return team.flagUrl
+        ? <img src={team.flagUrl} alt={abbr} className={cls} />
+        : <div className={fallback}>{abbr.slice(0, 2)}</div>;
 }
 
-function PredRow({ match, leagueId, closeMin, onSaved }: {
-    match: UpcomingMatch; leagueId: string; closeMin: number;
+function PredRow({ match, leagueId, closeMin, onSaved, compact = false }: {
+    match: UpcomingMatch; leagueId: string; closeMin: number; compact?: boolean;
     onSaved: (matchId: string, h: number, a: number) => void;
 }) {
     const closed = isPredictionClosed(match.matchDate, closeMin);
@@ -95,6 +94,8 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
     const initHome = match.myPrediction?.homeScore?.toString() ?? '';
     const initAway = match.myPrediction?.awayScore?.toString() ?? '';
     const isDirty = home !== initHome || away !== initAway;
+    const homeCode = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
+    const awayCode = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
 
     async function submit() {
         const h = parseInt(home), a = parseInt(away);
@@ -108,64 +109,160 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
         finally { setSaving(false); }
     }
 
-    return (
-        <div className={`px-4 py-3 ${canPredict ? 'hover:bg-slate-50/60' : ''} transition-colors`}>
-            <div className="flex items-center gap-2">
-                <div className="shrink-0 w-4">
-                    {live ? <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse block" />
-                        : match.myPrediction ? <CheckCircle2 size={13} className="text-emerald-500" />
-                        : (closed || finished) ? <Lock size={12} className="text-slate-300" />
-                        : <Circle size={13} className="text-slate-200" />}
+    const dateFmt = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: '2-digit', month: 'short' }).format(new Date(match.matchDate));
+    const timeFmt = new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(match.matchDate));
+
+    /* ── MODO COMPACTO ── */
+    if (compact) {
+        return (
+            <div className={`px-3 py-2 border-b border-slate-50 last:border-0 transition-colors ${canPredict ? 'hover:bg-slate-50/60' : ''}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                    <div className="shrink-0 w-12 text-right">
+                        <span className="text-[9px] font-bold text-slate-400 block leading-tight">{dateFmt}</span>
+                        <span className="text-[10px] font-black text-slate-600 block">{timeFmt}</span>
+                    </div>
+                    <div className="flex items-center gap-1 w-20 justify-end shrink-0">
+                        <span className="text-[11px] font-black text-slate-800 truncate text-right">{homeCode}</span>
+                        <Flag team={match.homeTeam} size="sm" />
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                        {finished || live ? (
+                            <>
+                                <span className={`text-sm font-black ${live ? 'text-rose-600' : 'text-slate-900'}`}>{match.homeScore ?? 0}</span>
+                                <span className="text-xs font-black text-slate-300">–</span>
+                                <span className={`text-sm font-black ${live ? 'text-rose-600' : 'text-slate-900'}`}>{match.awayScore ?? 0}</span>
+                                {live && <span className="text-[8px] font-black text-rose-500 animate-pulse ml-0.5">LIVE</span>}
+                            </>
+                        ) : canPredict ? (
+                            <>
+                                <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
+                                    onChange={e => setHome(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                    className="w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none transition-colors appearance-none"
+                                    style={{ borderColor: home !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
+                                <span className="text-xs font-black text-slate-300">–</span>
+                                <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
+                                    onChange={e => setAway(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                    className="w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none transition-colors appearance-none"
+                                    style={{ borderColor: away !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
+                            </>
+                        ) : (
+                            <div className="flex items-center gap-1 opacity-50">
+                                <span className="w-9 h-8 flex items-center justify-center font-black text-sm text-slate-400 border-2 border-slate-100 rounded-lg bg-slate-50">{match.myPrediction?.homeScore ?? '–'}</span>
+                                <span className="text-xs font-black text-slate-300">–</span>
+                                <span className="w-9 h-8 flex items-center justify-center font-black text-sm text-slate-400 border-2 border-slate-100 rounded-lg bg-slate-50">{match.myPrediction?.awayScore ?? '–'}</span>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-1 w-20 shrink-0">
+                        <Flag team={match.awayTeam} size="sm" />
+                        <span className="text-[11px] font-black text-slate-800 truncate">{awayCode}</span>
+                    </div>
+                    <div className="ml-auto shrink-0 flex items-center gap-1.5">
+                        {finished && match.myPrediction?.points != null && (
+                            <span className="text-xs font-black" style={{ color: match.myPrediction.points > 0 ? 'var(--color-primary,#f59e0b)' : '#94a3b8' }}>
+                                {match.myPrediction.points > 0 ? `+${match.myPrediction.points}` : '0'}pts
+                            </span>
+                        )}
+                        {canPredict && (
+                            <button onClick={submit} disabled={saving || !isDirty}
+                                className="flex items-center gap-1 text-[11px] font-black px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-30 whitespace-nowrap"
+                                style={saved ? { backgroundColor: '#d1fae5', color: '#059669' } : { backgroundColor: 'var(--color-primary,#f59e0b)', color: '#fff' }}>
+                                {saving ? <Loader2 size={10} className="animate-spin" /> : saved ? <CheckCircle2 size={10} /> : <Save size={10} />}
+                                {saved ? 'OK' : 'Guardar'}
+                            </button>
+                        )}
+                        {!canPredict && !finished && <span className="flex items-center gap-0.5 text-[10px] text-slate-300 font-bold"><Lock size={9} /> Cerrado</span>}
+                        {canPredict && match.myPrediction && !isDirty && <CheckCircle2 size={13} className="text-emerald-400" />}
+                    </div>
                 </div>
-                <TeamBadge team={match.homeTeam} />
-                <div className="flex-1 text-center">
+                {err && <p className="text-[9px] text-rose-500 mt-1 pl-14 flex items-center gap-1"><AlertTriangle size={9} />{err}</p>}
+            </div>
+        );
+    }
+
+    /* ── MODO EXPANDIDO ── */
+    return (
+        <div className="border-b border-slate-100 px-4 py-4 last:border-b-0">
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900">{dateFmt} · {timeFmt}</span>
+                        {live && <span className="text-[9px] font-black text-rose-500 animate-pulse uppercase">En vivo</span>}
+                        {!live && !finished && canPredict && <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: 'var(--color-primary,#f59e0b)' }}>Abierto</span>}
+                        {!live && !finished && !canPredict && <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Cerrado</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {match.myPrediction && !isDirty && <CheckCircle2 size={14} className="text-emerald-500" />}
+                        {isDirty && !saving && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse block" />}
+                        {saving && <Loader2 size={13} className="animate-spin text-slate-400" />}
+                    </div>
+                </div>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                    <div className="flex flex-col items-center gap-1">
+                        <Flag team={match.homeTeam} size="lg" />
+                        <span className="text-xs font-black uppercase text-slate-900">{homeCode}</span>
+                        <span className="text-[9px] text-slate-400 text-center leading-tight max-w-[70px] truncate">{match.homeTeam.name}</span>
+                    </div>
                     {finished || live ? (
-                        <div>
-                            <span className="text-base font-black text-slate-900">{match.homeScore ?? 0}–{match.awayScore ?? 0}</span>
-                            {live && <p className="text-[9px] text-rose-500 font-black animate-pulse">EN VIVO</p>}
-                            {finished && match.myPrediction && <p className="text-[9px] text-slate-400">Pred: {match.myPrediction.homeScore}–{match.myPrediction.awayScore}</p>}
+                        <div className="flex flex-col items-center gap-1">
+                            <div className={`flex items-center gap-1.5 rounded-xl px-4 py-2.5 ${live ? 'bg-rose-600 border border-rose-200' : 'bg-slate-900 border border-slate-800'}`}>
+                                <span className="text-xl font-black text-white">{match.homeScore ?? 0}</span>
+                                <span className={`text-lg font-black ${live ? 'text-rose-300' : 'text-slate-500'}`}>:</span>
+                                <span className="text-xl font-black text-white">{match.awayScore ?? 0}</span>
+                            </div>
+                            {finished && match.myPrediction?.points != null && (
+                                <span className={`text-[11px] font-black tabular-nums ${match.myPrediction.points > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                    {match.myPrediction.points > 0 ? `+${match.myPrediction.points} pts` : '0 pts'}
+                                </span>
+                            )}
+                            {finished && match.myPrediction && (
+                                <span className="text-[9px] text-slate-400">Tu pred: {match.myPrediction.homeScore}–{match.myPrediction.awayScore}</span>
+                            )}
                         </div>
                     ) : canPredict ? (
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center gap-1.5 rounded-xl bg-white px-1.5 py-1 shadow-sm ring-1 ring-slate-200">
                             <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
                                 onChange={e => setHome(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none"
-                                style={{ borderColor: home ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
-                            <span className="text-slate-300 font-black text-xs">–</span>
+                                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 appearance-none"
+                                style={{ borderColor: home !== '' ? 'var(--color-primary,#f59e0b)' : undefined }} />
+                            <span className="text-base font-black text-slate-300">-</span>
                             <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
                                 onChange={e => setAway(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none"
-                                style={{ borderColor: away ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
+                                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 appearance-none"
+                                style={{ borderColor: away !== '' ? 'var(--color-primary,#f59e0b)' : undefined }} />
                         </div>
                     ) : (
-                        <div>
-                            <p className="text-[9px] text-slate-400">{fmtDate(match.matchDate)}</p>
-                            {match.myPrediction
-                                ? <p className="text-[10px] font-bold" style={{ color: 'var(--color-primary,#f59e0b)' }}>Pred: {match.myPrediction.homeScore}–{match.myPrediction.awayScore}</p>
-                                : <p className="text-[9px] text-slate-400">Sin pronóstico</p>}
+                        <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+                            <span className="text-lg font-black text-slate-400">{match.myPrediction?.homeScore ?? '–'}</span>
+                            <span className="text-base font-black text-slate-300">:</span>
+                            <span className="text-lg font-black text-slate-400">{match.myPrediction?.awayScore ?? '–'}</span>
                         </div>
                     )}
+                    <div className="flex flex-col items-center gap-1">
+                        <Flag team={match.awayTeam} size="lg" />
+                        <span className="text-xs font-black uppercase text-slate-900">{awayCode}</span>
+                        <span className="text-[9px] text-slate-400 text-center leading-tight max-w-[70px] truncate">{match.awayTeam.name}</span>
+                    </div>
                 </div>
-                <TeamBadge team={match.awayTeam} />
-                <div className="shrink-0 w-14 flex flex-col items-end gap-1">
-                    {finished && match.myPrediction?.points != null && (
-                        <span className="text-xs font-black" style={{ color: match.myPrediction.points > 0 ? 'var(--color-primary,#f59e0b)' : '#94a3b8' }}>
-                            {match.myPrediction.points > 0 ? `+${match.myPrediction.points}` : '0'} pts
-                        </span>
-                    )}
+                <div className="flex items-center justify-end">
                     {canPredict && (
                         <button onClick={submit} disabled={saving || !isDirty}
-                            className="flex items-center gap-0.5 text-[10px] font-black px-2 py-1 rounded-lg disabled:opacity-30 transition-all"
-                            style={saved ? { background: '#d1fae5', color: '#059669' } : { background: 'var(--color-primary,#f59e0b)', color: '#fff' }}>
-                            {saving ? <Loader2 size={10} className="animate-spin" /> : saved ? <CheckCircle2 size={10} /> : <Save size={10} />}
-                            {saved ? 'OK' : 'Guardar'}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl transition-all disabled:opacity-40"
+                            style={saved
+                                ? { backgroundColor: '#d1fae5', color: '#059669' }
+                                : (isDirty || match.myPrediction)
+                                    ? { backgroundColor: 'var(--color-primary,#f59e0b)', color: '#fff' }
+                                    : { backgroundColor: '#f1f5f9', color: '#94a3b8' }
+                            }>
+                            {saving ? <Loader2 size={15} className="animate-spin" /> : saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
                         </button>
                     )}
-                    {!canPredict && !finished && <span className="text-[9px] text-slate-300">Cerrado</span>}
+                    {!canPredict && !finished && (
+                        <span className="flex items-center gap-1 text-[10px] text-slate-300 font-bold"><Lock size={11} /> Cerrado</span>
+                    )}
                 </div>
+                {err && <p className="text-[10px] text-rose-500 flex items-center gap-1"><AlertTriangle size={10} /> {err}</p>}
             </div>
-            {canPredict && <p className="text-[9px] text-slate-400 mt-1 ml-6">{fmtDate(match.matchDate)}</p>}
-            {err && <p className="text-[9px] text-rose-500 ml-6 mt-0.5 flex items-center gap-1"><AlertTriangle size={9} />{err}</p>}
         </div>
     );
 }
@@ -181,6 +278,7 @@ export default function Dashboard() {
     const [leagueDetail, setLeagueDetail] = useState<LeagueDetail | null>(null);
     const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    const [viewMode, setViewMode] = useState<'expanded' | 'compact'>('expanded');
 
     useEffect(() => {
         request<DashboardData>('/corp/dashboard')
@@ -310,7 +408,16 @@ export default function Dashboard() {
                                 {/* Match list header */}
                                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-50">
                                     <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5"><Clock size={13} className="text-slate-400" />Partidos</h3>
-                                    <span className="text-[10px] font-bold text-slate-400">{matches.length} en la polla</span>
+                                    <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg">
+                                        <button onClick={() => setViewMode('expanded')}
+                                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${viewMode === 'expanded' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+                                            <LayoutGrid size={11} /> Normal
+                                        </button>
+                                        <button onClick={() => setViewMode('compact')}
+                                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${viewMode === 'compact' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+                                            <AlignJustify size={11} /> Compacto
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {matches.length === 0 ? (
@@ -318,9 +425,9 @@ export default function Dashboard() {
                                         No hay partidos asignados a esta polla aún
                                     </div>
                                 ) : (
-                                    <div className="divide-y divide-slate-50">
+                                    <div className={viewMode === 'compact' ? '' : 'divide-y divide-slate-100'}>
                                         {matches.slice(0, 10).map((m) => (
-                                            <PredRow key={m.id} match={m} leagueId={leagueDetail.id} closeMin={leagueDetail.closePredictionMinutes} onSaved={onSaved} />
+                                            <PredRow key={m.id} match={m} leagueId={leagueDetail.id} closeMin={leagueDetail.closePredictionMinutes} onSaved={onSaved} compact={viewMode === 'compact'} />
                                         ))}
                                         {matches.length > 10 && (
                                             <div className="px-4 py-3 text-center">
