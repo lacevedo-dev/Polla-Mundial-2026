@@ -435,6 +435,17 @@ export class CorpPortalController {
                     skipDuplicates: true,
                 });
             }
+        } else if (primaryTournamentId) {
+            const tournamentMatches = await this.prisma.match.findMany({
+                where: { tournamentId: primaryTournamentId },
+                select: { id: true },
+            });
+            if (tournamentMatches.length > 0) {
+                await this.prisma.leagueMatch.createMany({
+                    data: tournamentMatches.map(m => ({ leagueId: league.id, matchId: m.id })),
+                    skipDuplicates: true,
+                });
+            }
         }
 
         return league;
@@ -482,6 +493,16 @@ export class CorpPortalController {
                 update: {},
             });
             await this.prisma.league.update({ where: { id: leagueId }, data: { primaryTournamentId: tournamentId } }).catch(() => {});
+            const tournamentMatches = await this.prisma.match.findMany({
+                where: { tournamentId },
+                select: { id: true },
+            });
+            if (tournamentMatches.length > 0) {
+                await this.prisma.leagueMatch.createMany({
+                    data: tournamentMatches.map(m => ({ leagueId, matchId: m.id })),
+                    skipDuplicates: true,
+                });
+            }
         } else {
             await this.prisma.league.update({ where: { id: leagueId }, data: { primaryTournamentId: null } }).catch(() => {});
         }

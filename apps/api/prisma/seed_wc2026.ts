@@ -221,6 +221,18 @@ const MATCHES = [
     { num: 104, home:'TBDA', away:'TBDB', date:'2026-07-19T19:00:00Z', venue:'MetLife Stadium, East Rutherford',          phase:'FINAL', group:null },
 ] as const;
 
+// ─── TORNEO ──────────────────────────────────────────────────────────────────
+// apiFootballLeagueId 1 = FIFA World Cup (API-Football)
+const WC2026_TOURNAMENT = {
+    name: 'FIFA Mundial 2026',
+    country: 'Internacional',
+    type: 'KNOCKOUT',
+    logoUrl: 'https://media.api-sports.io/football/leagues/1.png',
+    apiFootballLeagueId: 1,
+    season: 2026,
+    active: true,
+};
+
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 async function main() {
     console.log('🌍 Seed Mundial 2026...');
@@ -234,6 +246,15 @@ async function main() {
     await prisma.$connect();
 
     try {
+        // 0. Upsert torneo
+        console.log('\n🏆 Creando torneo FIFA Mundial 2026...');
+        const tournament = await prisma.tournament.upsert({
+            where: { apiFootballLeagueId: WC2026_TOURNAMENT.apiFootballLeagueId },
+            create: WC2026_TOURNAMENT,
+            update: { name: WC2026_TOURNAMENT.name, active: true, season: WC2026_TOURNAMENT.season },
+        });
+        console.log(`  ✓ Torneo: ${tournament.name} (id: ${tournament.id})`);
+
         // 1. Upsert equipos
         console.log(`\n📋 Insertando ${TEAMS.length} equipos...`);
         for (const t of TEAMS) {
@@ -253,30 +274,51 @@ async function main() {
         const missingCodes = [...new Set(MATCHES.flatMap(m => [m.home, m.away]))].filter(c => !teamMap.has(c));
         if (missingCodes.length > 0) throw new Error(`Equipos no encontrados: ${missingCodes.join(', ')}`);
 
-        // 3. Crear partidos (skip si matchNumber ya existe)
+        // 3. Crear/actualizar partidos con tournamentId
         console.log(`\n⚽ Insertando ${MATCHES.length} partidos...`);
-        let created = 0, skipped = 0;
+        let created = 0, updated = 0;
         for (const m of MATCHES) {
             const exists = await prisma.match.findFirst({ where: { matchNumber: m.num } });
-            if (exists) { skipped++; continue; }
+            if (exists) {
+                // Actualizar tournamentId si aún no lo tiene
+                if (!exists.tournamentId) {
+                    await prisma.match.update({
+                        where: { id: exists.id },
+                        data: { tournamentId: tournament.id },
+                    });
+                    updated++;
+                }
+                continue;
+            }
 
             await prisma.match.create({
                 data: {
-                    matchNumber: m.num,
-                    homeTeamId:  teamMap.get(m.home)!,
-                    awayTeamId:  teamMap.get(m.away)!,
-                    phase:       m.phase as any,
-                    group:       m.group,
-                    matchDate:   new Date(m.date),
-                    venue:       m.venue,
-                    status:      'SCHEDULED',
+                    matchNumber:  m.num,
+                    homeTeamId:   teamMap.get(m.home)!,
+                    awayTeamId:   teamMap.get(m.away)!,
+                    phase:        m.phase as any,
+                    group:        m.group,
+                    matchDate:    new Date(m.date),
+                    venue:        m.venue,
+                    status:       'SCHEDULED',
+                    tournamentId: tournament.id,
                 },
             });
             created++;
             process.stdout.write(`  Partido ${m.num}/104\r`);
         }
 
-        console.log(`\n✅ Partidos creados: ${created} | omitidos (ya existían): ${skipped}`);
+        console.log(`\n✅ Partidos creados: ${created} | actualizados con torneo: ${updated}`);
+
+        // 4. Asignar tournamentId a partidos huérfanos (sin torneo)
+        const orphans = await prisma.match.updateMany({
+            where: { tournamentId: null },
+            data: { tournamentId: tournament.id },
+        });
+        if (orphans.count > 0) {
+            console.log(`  ✓ ${orphans.count} partidos huérfanos vinculados al torneo`);
+        }
+
         console.log('\n🏆 Seed Mundial 2026 completo!');
     } catch (err) {
         console.error('\n❌ Error:', err);
