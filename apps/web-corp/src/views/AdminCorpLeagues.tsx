@@ -526,15 +526,22 @@ export default function AdminCorpLeagues() {
 
     function openEdit(league: CorpLeague) {
         setEditTarget(league);
+        const tournamentStillValid = league.primaryTournamentId
+            ? tournaments.some(t => t.id === league.primaryTournamentId)
+            : false;
+        const resolvedTournamentId = tournamentStillValid ? (league.primaryTournamentId ?? '') : '';
         setForm({
             name: league.name,
             description: league.description ?? '',
             privacy: league.isPublic ? 'PUBLIC' : 'PRIVATE',
             maxParticipants: '',
-            primaryTournamentId: league.primaryTournamentId ?? '',
+            primaryTournamentId: resolvedTournamentId,
         });
         setSelectedMatchIds(new Set());
         setError(null);
+        if (league.primaryTournamentId && !tournamentStillValid) {
+            setError('El torneo asignado a esta polla ya no existe. Selecciona uno nuevo.');
+        }
         setModal('edit');
     }
 
