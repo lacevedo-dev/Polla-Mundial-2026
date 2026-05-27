@@ -96,8 +96,8 @@ export class TenantProvisioningService {
             await Promise.all(
                 activeLeagues.map((league) =>
                     this.prisma.leagueMember.upsert({
-                        where: { leagueId_userId: { leagueId: league.id, userId } },
-                        create: { leagueId: league.id, userId, role: 'MEMBER', status: 'ACTIVE', joinedAt: new Date() },
+                        where: { userId_leagueId: { userId, leagueId: league.id } },
+                        create: { leagueId: league.id, userId, role: 'PLAYER', status: 'ACTIVE', joinedAt: new Date() },
                         update: { status: 'ACTIVE' },
                     }),
                 ),

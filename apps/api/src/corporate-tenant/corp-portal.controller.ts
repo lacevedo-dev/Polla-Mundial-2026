@@ -711,8 +711,8 @@ export class CorpPortalController {
         for (const member of activeMembers) {
             for (const league of activeLeagues) {
                 await this.prisma.leagueMember.upsert({
-                    where: { leagueId_userId: { leagueId: league.id, userId: member.userId } },
-                    create: { leagueId: league.id, userId: member.userId, role: 'MEMBER', status: 'ACTIVE', joinedAt: new Date() },
+                    where: { userId_leagueId: { userId: member.userId, leagueId: league.id } },
+                    create: { leagueId: league.id, userId: member.userId, role: 'PLAYER', status: 'ACTIVE', joinedAt: new Date() },
                     update: { status: 'ACTIVE' },
                 });
                 synced++;
