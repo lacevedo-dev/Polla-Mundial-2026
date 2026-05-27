@@ -87,6 +87,23 @@ export class TenantProvisioningService {
             },
         });
 
+        // Auto-enrolar en todas las pollas ACTIVE del tenant
+        const activeLeagues = await this.prisma.league.findMany({
+            where: { tenantId, status: 'ACTIVE' },
+            select: { id: true },
+        });
+        if (activeLeagues.length > 0) {
+            await Promise.all(
+                activeLeagues.map((league) =>
+                    this.prisma.leagueMember.upsert({
+                        where: { leagueId_userId: { leagueId: league.id, userId } },
+                        create: { leagueId: league.id, userId, role: 'MEMBER', status: 'ACTIVE', joinedAt: new Date() },
+                        update: { status: 'ACTIVE' },
+                    }),
+                ),
+            );
+        }
+
         // Marcar invitación previa como ACEPTADA si existe
         await this.prisma.tenantInvitation.updateMany({
             where: { tenantId, email, status: { in: ['SENT', 'CLICKED'] } },

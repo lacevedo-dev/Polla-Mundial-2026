@@ -58,21 +58,17 @@ export class CorpPortalController {
         const userId: string = req.user.userId;
         const tenantRole: string = req.tenantRole;
 
-        const [myLeagues, totalMembers, upcomingMatches] = await Promise.all([
+        const [leagueMemberships, tenantLeagues, totalMembers, upcomingMatches] = await Promise.all([
             this.prisma.leagueMember.findMany({
-                where: {
-                    userId,
-                    league: { tenantId },
-                    status: 'ACTIVE',
-                },
-                include: {
-                    league: {
-                        select: {
-                            id: true,
-                            name: true,
-                            _count: { select: { members: { where: { status: 'ACTIVE' } } } },
-                        },
-                    },
+                where: { userId, league: { tenantId }, status: 'ACTIVE' },
+                select: { leagueId: true },
+            }),
+            this.prisma.league.findMany({
+                where: { tenantId, status: 'ACTIVE' },
+                select: {
+                    id: true,
+                    name: true,
+                    _count: { select: { members: { where: { status: 'ACTIVE' } } } },
                 },
                 take: 10,
             }),
@@ -89,6 +85,12 @@ export class CorpPortalController {
             }),
         ]);
 
+        /* Usar ligas propias si existen, si no usar todas las activas del tenant */
+        const memberLeagueIds = new Set(leagueMemberships.map((m) => m.leagueId));
+        const myLeagues = tenantLeagues.filter((l) => memberLeagueIds.has(l.id));
+        const displayLeagues = myLeagues.length > 0 ? myLeagues : tenantLeagues;
+        const displayLeagueIds = displayLeagues.map((l) => l.id);
+
         const upcomingMatchIds = upcomingMatches.map((m) => m.id);
         const predictionsPending = upcomingMatchIds.length
             ? await this.prisma.match.count({
@@ -99,37 +101,30 @@ export class CorpPortalController {
               })
             : 0;
 
-        const myLeagueIds = myLeagues.map((m) => m.leagueId);
-
-        const pointsPerLeague = myLeagueIds.length
+        const pointsPerLeague = displayLeagueIds.length
             ? await this.prisma.prediction.groupBy({
                   by: ['leagueId'],
-                  where: { userId, leagueId: { in: myLeagueIds } },
+                  where: { userId, leagueId: { in: displayLeagueIds } },
                   _sum: { points: true },
               })
             : [];
 
         const pointsMap = new Map(pointsPerLeague.map((p) => [p.leagueId, p._sum.points ?? 0]));
-
-        const allLeaguePoints = [...pointsMap.values()];
-        const totalPoints = allLeaguePoints.reduce((a, b) => a + b, 0);
+        const totalPoints = [...pointsMap.values()].reduce((a, b) => a + b, 0);
 
         const allMemberPoints = await this.prisma.prediction.groupBy({
             by: ['userId'],
-            where: {
-                league: { tenantId },
-                userId: { not: userId },
-            },
+            where: { league: { tenantId }, userId: { not: userId } },
             _sum: { points: true },
         });
         const rank = allMemberPoints.filter((m) => (m._sum.points ?? 0) > totalPoints).length + 1;
 
         return {
-            myLeagues: myLeagues.map((m) => ({
-                id: m.league.id,
-                name: m.league.name,
-                participantsCount: m.league._count.members,
-                myPoints: pointsMap.get(m.leagueId) ?? 0,
+            myLeagues: displayLeagues.map((l) => ({
+                id: l.id,
+                name: l.name,
+                participantsCount: l._count.members,
+                myPoints: pointsMap.get(l.id) ?? 0,
             })),
             globalRank: rank,
             totalMembers,
@@ -691,6 +686,40 @@ export class CorpPortalController {
             data: { status: 'INACTIVE' },
         });
         return { ok: true };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Post('members/sync-leagues')
+    async syncMembersToLeagues(@Req() req: any) {
+        const tenantId: string = req.tenantId;
+
+        const [activeMembers, activeLeagues] = await Promise.all([
+            this.prisma.tenantMember.findMany({
+                where: { tenantId, status: 'ACTIVE' },
+                select: { userId: true },
+            }),
+            this.prisma.league.findMany({
+                where: { tenantId, status: 'ACTIVE' },
+                select: { id: true },
+            }),
+        ]);
+
+        if (!activeLeagues.length) return { synced: 0, message: 'No hay pollas activas' };
+
+        let synced = 0;
+        for (const member of activeMembers) {
+            for (const league of activeLeagues) {
+                await this.prisma.leagueMember.upsert({
+                    where: { leagueId_userId: { leagueId: league.id, userId: member.userId } },
+                    create: { leagueId: league.id, userId: member.userId, role: 'MEMBER', status: 'ACTIVE', joinedAt: new Date() },
+                    update: { status: 'ACTIVE' },
+                });
+                synced++;
+            }
+        }
+
+        return { synced, members: activeMembers.length, leagues: activeLeagues.length };
     }
 
     @UseGuards(TenantAdminGuard)

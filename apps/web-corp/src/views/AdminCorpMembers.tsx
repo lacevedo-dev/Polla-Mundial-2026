@@ -73,6 +73,7 @@ export default function AdminCorpMembers() {
     const [bulkResults, setBulkResults] = useState<any[] | null>(null);
 
     const [resending, setResending] = useState<string | null>(null);
+    const [syncing, setSyncing] = useState(false);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
 
@@ -136,6 +137,15 @@ export default function AdminCorpMembers() {
         finally { setSaving(false); }
     }
 
+    async function handleSyncLeagues() {
+        setSyncing(true);
+        try {
+            const res = await request<{ synced: number; members: number; leagues: number }>('/corp/members/sync-leagues', { method: 'POST' });
+            showSuccess(`Sincronización completa: ${res.members} miembro${res.members !== 1 ? 's' : ''} enrolados en ${res.leagues} polla${res.leagues !== 1 ? 's' : ''}.`);
+        } catch (e) { setGlobalError(e instanceof ApiError ? e.message : 'Error al sincronizar.'); setTimeout(() => setGlobalError(null), 4000); }
+        finally { setSyncing(false); }
+    }
+
     async function handleResend(member: Member) {
         setResending(member.id);
         try {
@@ -189,6 +199,12 @@ export default function AdminCorpMembers() {
                     <p className="text-slate-500 text-sm">{loading ? 'Cargando...' : `${members.filter(m => m.status === 'ACTIVE').length} miembro${members.length !== 1 ? 's' : ''} en ${orgName}`}</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button onClick={handleSyncLeagues} disabled={syncing}
+                        title="Enrola a todos los miembros activos en todas las pollas del tenant"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
+                        {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        Sincronizar pollas
+                    </button>
                     <button onClick={() => { setBulkText(''); setBulkSharedPass(''); setBulkSendEmail(true); setBulkResults(null); setModalError(null); setModal('bulk'); }}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors">
                         <Upload size={14} /> Importar

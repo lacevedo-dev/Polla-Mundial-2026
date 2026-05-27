@@ -40,8 +40,9 @@ interface LeagueDetail {
     recentPredictions: RecentPrediction[];
     topRanking: TopRankEntry[];
 }
+interface LeagueSummary { id: string; name: string; participantsCount: number; myPoints: number; }
 interface DashboardData {
-    myLeagues: { id: string; name: string; participantsCount: number; myPoints: number }[];
+    myLeagues: LeagueSummary[];
     globalRank: number | null;
     totalMembers: number;
     predictionsPending: number;
@@ -186,13 +187,25 @@ export default function Dashboard() {
     const [leagueDetail, setLeagueDetail] = useState<LeagueDetail | null>(null);
     const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    const [allLeagues, setAllLeagues] = useState<LeagueSummary[]>([]);
 
     useEffect(() => {
         request<DashboardData>('/corp/dashboard')
-            .then((d) => {
+            .then(async (d) => {
                 setData(d);
                 if (d.tenantRole) setTenantRole(d.tenantRole);
-                if (d.myLeagues.length) setSelectedLeagueId(d.myLeagues[0].id);
+                if (d.myLeagues.length) {
+                    setSelectedLeagueId(d.myLeagues[0].id);
+                } else {
+                    /* Fallback: cargar todas las pollas del tenant */
+                    try {
+                        const all = await request<{ id: string; name: string; participantsCount: number; myPoints: number }[]>('/corp/leagues');
+                        if (all.length) {
+                            setAllLeagues(all);
+                            setSelectedLeagueId(all[0].id);
+                        }
+                    } catch { /* ignorar */ }
+                }
             })
             .catch(() => setData(null))
             .finally(() => setLoadingDash(false));
@@ -226,6 +239,9 @@ export default function Dashboard() {
     const openMatches = useMemo(() => matches.filter(m => !isLive(m.status) && !isFinished(m.status)), [matches]);
 
     const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+    /* Ligas a mostrar en el selector: las propias o fallback a todas las del tenant */
+    const displayLeagues = (data?.myLeagues.length ?? 0) > 0 ? (data?.myLeagues ?? []) : allLeagues;
 
     /* ── Métricas de rendimiento calculadas desde predicciones recientes ── */
     const aciertos = useMemo(() => leagueDetail?.recentPredictions.filter(p => isFinished(p.status) && (p.points ?? 0) > 0).length ?? 0, [leagueDetail]);
@@ -277,26 +293,26 @@ export default function Dashboard() {
             </div>
 
             {/* ── League selector ── */}
-            {!loadingDash && data?.myLeagues && data.myLeagues.length > 1 && (
+            {!loadingDash && displayLeagues.length > 1 && (
                 <div className="flex gap-1.5 flex-wrap mb-4">
-                    {data.myLeagues.map((l) => (
+                    {displayLeagues.map((l) => (
                         <button key={l.id} onClick={() => setSelectedLeagueId(l.id)}
                             className="px-3 py-1.5 rounded-xl text-xs font-black transition-all border"
                             style={selectedLeagueId === l.id
                                 ? { background: 'var(--color-primary,#f59e0b)', color: '#fff', borderColor: 'transparent' }
                                 : { background: 'white', color: '#64748b', borderColor: '#f1f5f9' }}>
                             {l.name}
-                            <span className="ml-1.5 opacity-70">{l.myPoints}pts</span>
+                            {l.myPoints > 0 && <span className="ml-1.5 opacity-70">{l.myPoints}pts</span>}
                         </button>
                     ))}
                 </div>
             )}
 
-            {/* ── Empty state ── */}
-            {!loadingDash && !selectedLeagueId && (
+            {/* ── Empty state: solo si no hay ninguna polla en el tenant ── */}
+            {!loadingDash && !selectedLeagueId && displayLeagues.length === 0 && (
                 <div className="bg-white rounded-2xl border border-slate-100 p-10 text-center">
                     <Trophy size={32} className="mx-auto mb-3 text-slate-200" />
-                    <p className="text-sm font-bold text-slate-400">No estás en ninguna polla aún</p>
+                    <p className="text-sm font-bold text-slate-400">No hay pollas disponibles aún</p>
                     <Link to="/pollas" className="mt-2 inline-block text-sm font-bold hover:underline"
                         style={{ color: 'var(--color-primary,#f59e0b)' }}>
                         Explorar pollas →
