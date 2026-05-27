@@ -44,6 +44,13 @@ class UpdateMemberRoleDto {
     @IsEnum(TenantRole) role: TenantRole;
 }
 
+class CorpPredictionDto {
+    @IsString() @IsNotEmpty() matchId: string;
+    @IsString() @IsNotEmpty() leagueId: string;
+    @IsInt() @Min(0) @Max(99) homeScore: number;
+    @IsInt() @Min(0) @Max(99) awayScore: number;
+}
+
 @Controller('corp')
 @UseGuards(JwtAuthGuard, TenantMemberGuard)
 export class CorpPortalController {
@@ -720,6 +727,52 @@ export class CorpPortalController {
         }
 
         return { synced, members: activeMembers.length, leagues: activeLeagues.length };
+    }
+
+    @Post('predictions')
+    async upsertPrediction(@Req() req: any, @Body() dto: CorpPredictionDto) {
+        const tenantId: string = req.tenantId;
+        const userId: string = req.user.userId;
+        const { matchId, leagueId, homeScore, awayScore } = dto;
+
+        // Verificar que la polla pertenece al tenant
+        const league = await this.prisma.league.findFirst({
+            where: { id: leagueId, tenantId },
+        });
+        if (!league) throw new NotFoundException('Polla no encontrada en este tenant');
+
+        // Verificar que el partido está activo en la polla
+        const leagueMatch = await this.prisma.leagueMatch.findUnique({
+            where: { leagueId_matchId: { leagueId, matchId } },
+        });
+        if (!leagueMatch || !leagueMatch.active) {
+            throw new BadRequestException('Este partido no está disponible para pronósticos');
+        }
+
+        // Validar tiempo de cierre
+        const match = await this.prisma.match.findUnique({ where: { id: matchId } });
+        if (!match) throw new NotFoundException('Partido no encontrado');
+        const now = new Date();
+        const closingTime = new Date(new Date(match.matchDate).getTime() - league.closePredictionMinutes * 60000);
+        if (now > closingTime) {
+            throw new BadRequestException('El tiempo para realizar predicciones ha expirado');
+        }
+
+        // Auto-enrolar al usuario como LeagueMember ACTIVE si no existe
+        await this.prisma.leagueMember.upsert({
+            where: { userId_leagueId: { userId, leagueId } },
+            create: { leagueId, userId, role: 'PLAYER', status: 'ACTIVE', joinedAt: now },
+            update: { status: 'ACTIVE' },
+        });
+
+        // Guardar pronóstico
+        const prediction = await this.prisma.prediction.upsert({
+            where: { userId_matchId_leagueId: { userId, matchId, leagueId } },
+            update: { homeScore, awayScore, submittedAt: now },
+            create: { userId, matchId, leagueId, homeScore, awayScore, submittedAt: now },
+        });
+
+        return { ok: true, id: prediction.id };
     }
 
     @UseGuards(TenantAdminGuard)

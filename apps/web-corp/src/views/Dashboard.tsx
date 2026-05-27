@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { Link, useBlocker } from 'react-router-dom';
 import {
     Trophy, Users, ChevronRight,
     Clock, CheckCircle2, Star, Save, Lock, Loader2, AlertTriangle,
-    Zap, Radio,
+    Zap, Radio, X,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { useTenantStore } from '../stores/tenant.store';
@@ -176,6 +176,164 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
     );
 }
 
+/* ─── MatchCard: tarjeta tipo "próximo reto" con inputs centrados ─── */
+function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSave, resetTick }: {
+    match: UpcomingMatch; leagueId: string; closeMin: number;
+    onSaved: (matchId: string, h: number, a: number) => void;
+    onDirtyChange?: (matchId: string, dirty: boolean, home: string, away: string) => void;
+    forceSave?: number;
+    resetTick?: number;
+}) {
+    const closed = isPredictionClosed(match.matchDate, closeMin);
+    const live = isLive(match.status);
+    const finished = isFinished(match.status);
+    const canPredict = !closed && !finished && !live;
+
+    const [home, setHome] = useState(match.myPrediction?.homeScore?.toString() ?? '');
+    const [away, setAway] = useState(match.myPrediction?.awayScore?.toString() ?? '');
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [err, setErr] = useState<string | null>(null);
+    const initHome = match.myPrediction?.homeScore?.toString() ?? '';
+    const initAway = match.myPrediction?.awayScore?.toString() ?? '';
+    const isDirty = home !== initHome || away !== initAway;
+    const homeCode = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
+    const awayCode = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
+    const hasPred = !!match.myPrediction;
+    const prevForceSave = useRef(forceSave);
+    const prevResetTick = useRef(resetTick);
+
+    useEffect(() => {
+        onDirtyChange?.(match.id, isDirty, home, away);
+    }, [isDirty, home, away]);
+
+    useEffect(() => {
+        if (forceSave !== prevForceSave.current && forceSave !== undefined) {
+            prevForceSave.current = forceSave;
+            if (isDirty && canPredict) void submit();
+        }
+    }, [forceSave]);
+
+    useEffect(() => {
+        if (resetTick !== prevResetTick.current && resetTick !== undefined) {
+            prevResetTick.current = resetTick;
+            setHome(initHome);
+            setAway(initAway);
+            setErr(null);
+            onDirtyChange?.(match.id, false, initHome, initAway);
+        }
+    }, [resetTick]);
+
+    function handleHomeChange(v: string) {
+        setHome(v);
+        onDirtyChange?.(match.id, v !== initHome || away !== initAway, v, away);
+    }
+    function handleAwayChange(v: string) {
+        setAway(v);
+        onDirtyChange?.(match.id, home !== initHome || v !== initAway, home, v);
+    }
+
+    async function submit() {
+        const h = parseInt(home), a = parseInt(away);
+        if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Marcadores inválidos'); return; }
+        setSaving(true); setErr(null);
+        try {
+            await request('/corp/predictions', { method: 'POST', body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }) });
+            setSaved(true); onSaved(match.id, h, a);
+            onDirtyChange?.(match.id, false, home, away);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (e: any) { setErr(e?.message ?? 'Error'); }
+        finally { setSaving(false); }
+    }
+
+    return (
+        <div className={`bg-white rounded-2xl border shadow-sm p-4 space-y-3 ${
+            saved ? 'border-emerald-200 bg-emerald-50/30' :
+            hasPred && !isDirty ? 'border-amber-100' :
+            'border-slate-100'
+        }`}>
+            {/* Fecha + estado */}
+            <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-slate-400">
+                    {fmtDate(match.matchDate)} · {fmtTime(match.matchDate)}
+                </span>
+                {live && <span className="text-[9px] font-black text-rose-500 animate-pulse bg-rose-50 px-2 py-0.5 rounded-full">● EN VIVO</span>}
+                {closed && !finished && <span className="flex items-center gap-0.5 text-[9px] font-black text-slate-400"><Lock size={8} /> Cerrado</span>}
+                {saved && <span className="text-[9px] font-black text-emerald-600">✓ Guardado</span>}
+                {hasPred && !isDirty && !saved && canPredict && <CheckCircle2 size={12} className="text-emerald-400" />}
+            </div>
+
+            {/* Equipos + inputs centrados */}
+            <div className="flex items-center gap-3">
+                {/* Local */}
+                <div className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                    {match.homeTeam.flagUrl
+                        ? <img src={match.homeTeam.flagUrl} alt={homeCode} className="w-10 h-7 object-cover rounded-md shadow-sm" />
+                        : <div className="w-10 h-7 rounded-md bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500">{homeCode.slice(0,2)}</div>}
+                    <p className="text-sm font-black text-slate-900">{homeCode}</p>
+                    <p className="text-[9px] text-slate-400 truncate w-full text-center">{match.homeTeam.name}</p>
+                </div>
+
+                {/* Inputs / marcador */}
+                <div className="flex flex-col items-center gap-1.5 shrink-0">
+                    {finished || live ? (
+                        <div className="flex items-center gap-1">
+                            <span className={`text-2xl font-black ${live ? 'text-rose-500' : 'text-slate-800'}`}>{match.homeScore ?? 0}</span>
+                            <span className="text-slate-300 font-black">–</span>
+                            <span className={`text-2xl font-black ${live ? 'text-rose-500' : 'text-slate-800'}`}>{match.awayScore ?? 0}</span>
+                        </div>
+                    ) : canPredict ? (
+                        <div className="flex items-center gap-1.5">
+                            <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
+                                onChange={e => handleHomeChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                className="w-11 h-11 text-center font-black text-lg rounded-xl border-2 focus:outline-none transition-colors appearance-none"
+                                style={{ borderColor: isDirty || home !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
+                            <span className="text-slate-300 font-black text-lg">:</span>
+                            <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
+                                onChange={e => handleAwayChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                className="w-11 h-11 text-center font-black text-lg rounded-xl border-2 focus:outline-none transition-colors appearance-none"
+                                style={{ borderColor: isDirty || away !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 opacity-60">
+                            <span className="w-11 h-11 flex items-center justify-center font-black text-lg text-slate-500 border-2 border-slate-100 rounded-xl bg-slate-50">
+                                {hasPred ? match.myPrediction!.homeScore : '–'}
+                            </span>
+                            <span className="text-slate-300 font-black">:</span>
+                            <span className="w-11 h-11 flex items-center justify-center font-black text-lg text-slate-500 border-2 border-slate-100 rounded-xl bg-slate-50">
+                                {hasPred ? match.myPrediction!.awayScore : '–'}
+                            </span>
+                        </div>
+                    )}
+                    <span className="text-[8px] text-slate-300 font-bold">Mi pronóstico</span>
+                </div>
+
+                {/* Visitante */}
+                <div className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                    {match.awayTeam.flagUrl
+                        ? <img src={match.awayTeam.flagUrl} alt={awayCode} className="w-10 h-7 object-cover rounded-md shadow-sm" />
+                        : <div className="w-10 h-7 rounded-md bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500">{awayCode.slice(0,2)}</div>}
+                    <p className="text-sm font-black text-slate-900">{awayCode}</p>
+                    <p className="text-[9px] text-slate-400 truncate w-full text-center">{match.awayTeam.name}</p>
+                </div>
+            </div>
+
+            {/* Botón guardar */}
+            {canPredict && (
+                <button onClick={submit} disabled={saving || !isDirty}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-black transition-all disabled:opacity-40"
+                    style={saved
+                        ? { backgroundColor: '#d1fae5', color: '#059669' }
+                        : { backgroundColor: 'var(--color-primary,#f59e0b)', color: '#fff' }}>
+                    {saving ? <Loader2 size={11} className="animate-spin" /> : saved ? <CheckCircle2 size={11} /> : <Save size={11} />}
+                    {saved ? '¡Guardado!' : 'Guardar pronóstico'}
+                </button>
+            )}
+            {err && <p className="text-[9px] text-rose-500 flex items-center gap-1 justify-center"><AlertTriangle size={9} />{err}</p>}
+        </div>
+    );
+}
+
 /* ─── Main Component ─────────────────────────────────────────── */
 
 export default function Dashboard() {
@@ -188,6 +346,10 @@ export default function Dashboard() {
     const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [allLeagues, setAllLeagues] = useState<LeagueSummary[]>([]);
+    const [pendingDrafts, setPendingDrafts] = useState<Map<string, { home: string; away: string }>>(new Map());
+    const [isSavingAll, setIsSavingAll] = useState(false);
+    const [forceSaveTick, setForceSaveTick] = useState(0);
+    const [resetTick, setResetTick] = useState(0);
 
     useEffect(() => {
         request<DashboardData>('/corp/dashboard')
@@ -225,7 +387,51 @@ export default function Dashboard() {
             ? { ...m, myPrediction: { homeScore: h, awayScore: a, points: null } }
             : m
         ));
+        setPendingDrafts(prev => { const next = new Map(prev); next.delete(matchId); return next; });
     }
+
+    const onDirtyChange = useCallback((matchId: string, dirty: boolean, home: string, away: string) => {
+        setPendingDrafts(prev => {
+            const next = new Map(prev);
+            if (dirty) next.set(matchId, { home, away }); else next.delete(matchId);
+            return next;
+        });
+    }, []);
+
+    const hasDirtyChanges = pendingDrafts.size > 0;
+
+    async function handleSaveAll() {
+        if (!leagueDetail || pendingDrafts.size === 0) return;
+        setIsSavingAll(true);
+        try {
+            await Promise.all(
+                Array.from(pendingDrafts.entries()).map(([matchId, { home, away }]) => {
+                    const h = parseInt(home), a = parseInt(away);
+                    if (isNaN(h) || isNaN(a)) return Promise.resolve();
+                    return request('/corp/predictions', {
+                        method: 'POST',
+                        body: JSON.stringify({ matchId, leagueId: leagueDetail.id, homeScore: h, awayScore: a }),
+                    }).then(() => onSaved(matchId, h, a));
+                })
+            );
+        } finally {
+            setIsSavingAll(false);
+        }
+    }
+
+    function discardAll() {
+        setPendingDrafts(new Map());
+        setResetTick(t => t + 1);
+    }
+
+    const blocker = useBlocker(hasDirtyChanges);
+
+    useEffect(() => {
+        if (!hasDirtyChanges) return;
+        const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [hasDirtyChanges]);
 
     const Spinner = () => (
         <div className="w-5 h-5 border-2 rounded-full animate-spin mx-auto"
@@ -341,7 +547,7 @@ export default function Dashboard() {
                 ) : !leagueDetail ? (
                     <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-sm text-slate-400">Error cargando la polla.</div>
                 ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_280px] gap-4 items-start">
+                    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_300px] gap-4 items-start">
 
                         {/* ══ COLUMNA IZQUIERDA: Mi desempeño + Próximo reto + Stats ══ */}
                         <div className="space-y-4">
@@ -501,7 +707,7 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* ══ COLUMNA CENTRAL: Rendimiento + Predicciones recientes ══ */}
+                        {/* ══ COLUMNA CENTRAL: En vivo + Próximos partidos + Predicciones recientes ══ */}
                         <div className="space-y-4">
 
                             {/* Partidos en vivo */}
@@ -512,34 +718,64 @@ export default function Dashboard() {
                                         <span className="text-[11px] font-black uppercase tracking-wider text-rose-400">En vivo</span>
                                         <span className="ml-auto text-[10px] text-slate-500 font-bold">{liveMatches.length} partido{liveMatches.length !== 1 ? 's' : ''}</span>
                                     </div>
-                                    <div className="divide-y divide-slate-800">
+                                    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         {liveMatches.map((m) => {
                                             const hc = (m.homeTeam.shortCode ?? m.homeTeam.name.slice(0, 3)).toUpperCase();
                                             const ac = (m.awayTeam.shortCode ?? m.awayTeam.name.slice(0, 3)).toUpperCase();
                                             return (
-                                                <div key={m.id} className="px-4 py-3 flex items-center gap-3">
-                                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                <div key={m.id} className="flex items-center gap-2 bg-slate-800 rounded-xl px-3 py-2">
+                                                    <div className="flex items-center gap-1 flex-1 min-w-0">
                                                         {m.homeTeam.flagUrl ? <img src={m.homeTeam.flagUrl} alt={hc} className="w-5 h-3.5 object-cover rounded shrink-0" /> : <div className="w-5 h-3.5 rounded bg-slate-700 shrink-0" />}
                                                         <span className="text-[11px] font-black text-white truncate">{hc}</span>
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
-                                                        <span className="text-base font-black text-rose-400 tabular-nums">{m.homeScore ?? 0}</span>
+                                                        <span className="text-base font-black text-rose-400">{m.homeScore ?? 0}</span>
                                                         <span className="text-xs font-black text-slate-600">–</span>
-                                                        <span className="text-base font-black text-rose-400 tabular-nums">{m.awayScore ?? 0}</span>
+                                                        <span className="text-base font-black text-rose-400">{m.awayScore ?? 0}</span>
                                                     </div>
-                                                    <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
+                                                    <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
                                                         <span className="text-[11px] font-black text-white truncate text-right">{ac}</span>
                                                         {m.awayTeam.flagUrl ? <img src={m.awayTeam.flagUrl} alt={ac} className="w-5 h-3.5 object-cover rounded shrink-0" /> : <div className="w-5 h-3.5 rounded bg-slate-700 shrink-0" />}
                                                     </div>
-                                                    {m.myPrediction && (
-                                                        <span className="text-[10px] font-black text-slate-400 shrink-0">{m.myPrediction.homeScore}–{m.myPrediction.awayScore}</span>
-                                                    )}
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
                             )}
+
+                            {/* Próximos partidos — tarjetas tipo "próximo reto" */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                        <Clock size={11} className="text-slate-400" /> Próximos partidos
+                                    </h3>
+                                    {openMatches.length > 3 && (
+                                        <Link to={`/pollas/${leagueDetail.id}`}
+                                            className="text-[10px] font-black hover:opacity-80 transition-opacity"
+                                            style={{ color: 'var(--color-primary,#f59e0b)' }}>
+                                            Ver {openMatches.length - 3} más →
+                                        </Link>
+                                    )}
+                                </div>
+                                {nextMatches.length === 0 ? (
+                                    <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-6 text-center">
+                                        <CheckCircle2 size={20} className="mx-auto mb-2 text-emerald-400" />
+                                        <p className="text-xs font-bold text-slate-500">¡Todos los pronósticos al día!</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+                                        {nextMatches.map((m) => (
+                                            <MatchCard key={m.id} match={m} leagueId={leagueDetail.id}
+                                                closeMin={leagueDetail.closePredictionMinutes}
+                                                onSaved={onSaved}
+                                                onDirtyChange={onDirtyChange}
+                                                forceSave={forceSaveTick}
+                                                resetTick={resetTick} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Predicciones recientes */}
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -560,7 +796,7 @@ export default function Dashboard() {
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-slate-50">
-                                        {leagueDetail.recentPredictions.slice(0, 6).map((p, i) => {
+                                        {leagueDetail.recentPredictions.slice(0, 5).map((p, i) => {
                                             const hc = (p.homeTeam.shortCode ?? p.homeTeam.name.slice(0, 3)).toUpperCase();
                                             const ac = (p.awayTeam.shortCode ?? p.awayTeam.name.slice(0, 3)).toUpperCase();
                                             const fin = isFinished(p.status);
@@ -568,17 +804,21 @@ export default function Dashboard() {
                                             const isExact = fin && pts >= 5;
                                             const hasPoints = fin && pts > 0 && pts < 5;
                                             return (
-                                                <div key={i} className={`px-4 py-3 flex items-center gap-3 ${isExact ? 'bg-emerald-50/60' : hasPoints ? 'bg-amber-50/40' : ''}`}>
-                                                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                                                <div key={i} className={`px-4 py-3 flex items-center gap-3 ${
+                                                    isExact ? 'bg-emerald-50/60' : hasPoints ? 'bg-amber-50/40' : ''
+                                                }`}>
+                                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                                         {p.homeTeam.flagUrl ? <img src={p.homeTeam.flagUrl} alt={hc} className="w-5 h-3.5 object-cover rounded shrink-0" /> : <div className="w-5 h-3.5 rounded bg-slate-100 shrink-0" />}
-                                                        <span className="text-[11px] font-black text-slate-800">{hc}</span>
-                                                        <span className="text-[10px] text-slate-300 font-bold mx-0.5">vs</span>
-                                                        <span className="text-[11px] font-black text-slate-800">{ac}</span>
+                                                        <span className="text-[11px] font-black text-slate-800 truncate">{hc}</span>
+                                                        <span className="text-[10px] text-slate-300 font-bold">vs</span>
+                                                        <span className="text-[11px] font-black text-slate-800 truncate">{ac}</span>
                                                         {p.awayTeam.flagUrl ? <img src={p.awayTeam.flagUrl} alt={ac} className="w-5 h-3.5 object-cover rounded shrink-0" /> : <div className="w-5 h-3.5 rounded bg-slate-100 shrink-0" />}
                                                     </div>
-                                                    <span className="text-[11px] font-black text-slate-600 shrink-0">{p.myHome}–{p.myAway}</span>
-                                                    {fin && <span className="text-[10px] text-slate-400 shrink-0">{p.homeScore}–{p.awayScore}</span>}
-                                                    <div className="shrink-0 ml-auto">
+                                                    <div className="shrink-0 text-right">
+                                                        <p className="text-[11px] font-black text-slate-700">{p.myHome}–{p.myAway}</p>
+                                                        {fin && <p className="text-[9px] text-slate-400">Real: {p.homeScore}–{p.awayScore}</p>}
+                                                    </div>
+                                                    <div className="shrink-0 w-16 text-right">
                                                         {!fin && <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Pendiente</span>}
                                                         {isExact && <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">+{pts}pts ⚽</span>}
                                                         {hasPoints && <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{pts}pts</span>}
@@ -592,7 +832,7 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* ══ COLUMNA DERECHA: Ranking + Próximos partidos ══ */}
+                        {/* ══ COLUMNA DERECHA: Ranking ══ */}
                         <div className="space-y-4">
 
                             {/* Top actual / Ranking */}
@@ -607,13 +847,13 @@ export default function Dashboard() {
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-slate-50">
-                                        {leagueDetail.topRanking.slice(0, 5).map((e) => (
+                                        {leagueDetail.topRanking.slice(0, 8).map((e) => (
                                             <div key={e.userId}
                                                 className={`flex items-center gap-2.5 px-4 py-2.5 ${e.isMe ? 'bg-amber-50' : 'hover:bg-slate-50/60'} transition-colors`}>
                                                 <span className="text-xs w-5 text-center font-black text-slate-400 shrink-0 tabular-nums">
                                                     {MEDAL[e.rank] ?? `#${e.rank}`}
                                                 </span>
-                                                <div className="w-6 h-6 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200">
+                                                <div className="w-7 h-7 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200">
                                                     {e.avatar
                                                         ? <img src={e.avatar} alt={e.name} className="w-full h-full object-cover" />
                                                         : <span className="text-[9px] font-black text-slate-500">{e.name.charAt(0).toUpperCase()}</span>
@@ -623,7 +863,7 @@ export default function Dashboard() {
                                                     style={e.isMe ? { color: 'var(--color-primary,#f59e0b)' } : { color: '#1e293b' }}>
                                                     {e.isMe ? `${e.name.split(' ')[0]} (Tú)` : e.name.split(' ')[0]}
                                                 </span>
-                                                <span className="text-[11px] font-black text-slate-700 shrink-0 tabular-nums">{e.totalPoints}</span>
+                                                <span className="text-[11px] font-black text-slate-700 shrink-0 tabular-nums">{e.totalPoints}pts</span>
                                             </div>
                                         ))}
                                     </div>
@@ -636,42 +876,59 @@ export default function Dashboard() {
                                     </Link>
                                 </div>
                             </div>
-
-                            {/* Próximos partidos — solo los 3 más cercanos */}
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between">
-                                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Próximos partidos</h3>
-                                    <Clock size={12} className="text-slate-300" />
-                                </div>
-                                {nextMatches.length === 0 ? (
-                                    <div className="p-6 text-center">
-                                        <CheckCircle2 size={20} className="mx-auto mb-2 text-emerald-400" />
-                                        <p className="text-xs font-bold text-slate-500">¡Todos al día!</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {nextMatches.map((m) => (
-                                            <PredRow key={m.id} match={m} leagueId={leagueDetail.id}
-                                                closeMin={leagueDetail.closePredictionMinutes}
-                                                onSaved={onSaved} />
-                                        ))}
-                                        {openMatches.length > 3 && (
-                                            <div className="px-4 py-2.5 text-center border-t border-slate-50">
-                                                <Link to={`/pollas/${leagueDetail.id}`}
-                                                    className="text-[10px] font-black hover:opacity-80 transition-opacity"
-                                                    style={{ color: 'var(--color-primary,#f59e0b)' }}>
-                                                    Ver {openMatches.length - 3} más →
-                                                </Link>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
                         </div>
 
                     </div>
                 )
             )}
+        {/* FAB — guardar todos los pronósticos pendientes */}
+        {hasDirtyChanges && (
+            <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={isSavingAll}
+                className="fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-2xl px-5 py-3 text-[11px] font-black uppercase tracking-widest shadow-lg transition-all disabled:opacity-70 md:bottom-6 md:right-6"
+                style={{ backgroundColor: 'var(--color-primary,#f59e0b)', color: '#fff', boxShadow: '0 8px 20px rgba(245,158,11,0.4)' }}>
+                {isSavingAll
+                    ? <><Loader2 size={14} className="animate-spin" /><span>Guardando...</span></>
+                    : <><Save size={14} /><span>Guardar {pendingDrafts.size} pronóstico{pendingDrafts.size !== 1 ? 's' : ''}</span></>}
+            </button>
+        )}
+
+        {/* Modal blocker — cambios sin guardar al navegar */}
+        {blocker.state === 'blocked' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                    <div className="flex items-start justify-between gap-2">
+                        <div>
+                            <p className="font-black text-slate-900 text-base">¿Salir sin guardar?</p>
+                            <p className="text-sm text-slate-500 mt-1">Tienes {pendingDrafts.size} pronóstico{pendingDrafts.size !== 1 ? 's' : ''} sin guardar. ¿Qué deseas hacer?</p>
+                        </div>
+                        <button onClick={() => blocker.reset()} className="shrink-0 text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={async () => { await handleSaveAll(); blocker.proceed(); }}
+                            disabled={isSavingAll}
+                            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-60"
+                            style={{ backgroundColor: 'var(--color-primary,#f59e0b)', color: '#fff' }}>
+                            {isSavingAll ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                            Guardar y salir
+                        </button>
+                        <button
+                            onClick={() => { discardAll(); blocker.proceed(); }}
+                            className="w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                            Descartar y salir
+                        </button>
+                        <button
+                            onClick={() => blocker.reset()}
+                            className="w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
         </CorpLayout>
     );
 }
