@@ -172,7 +172,6 @@ export class CorpPortalController {
                     },
                 },
                 orderBy: { match: { matchDate: 'asc' } },
-                take: 10,
             }),
             this.prisma.prediction.findMany({
                 where: { userId, leagueId },
@@ -489,6 +488,32 @@ export class CorpPortalController {
         }
 
         return { ok: true };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Post('leagues/:leagueId/sync-tournament-matches')
+    async syncTournamentMatches(@Req() req: any, @Param('leagueId') leagueId: string) {
+        const tenantId: string = req.tenantId;
+        const league = await this.prisma.league.findFirst({
+            where: { id: leagueId, tenantId },
+            select: { id: true, primaryTournamentId: true },
+        });
+        if (!league) throw new NotFoundException('Polla no encontrada');
+        if (!league.primaryTournamentId) throw new BadRequestException('La polla no tiene un torneo asignado');
+
+        const matches = await this.prisma.match.findMany({
+            where: { tournamentId: league.primaryTournamentId },
+            select: { id: true },
+        });
+        if (matches.length === 0) throw new BadRequestException('El torneo no tiene partidos registrados');
+
+        await this.prisma.leagueMatch.deleteMany({ where: { leagueId } });
+        await this.prisma.leagueMatch.createMany({
+            data: matches.map(m => ({ leagueId, matchId: m.id })),
+            skipDuplicates: true,
+        });
+        return { ok: true, count: matches.length };
     }
 
     @UseGuards(TenantAdminGuard)

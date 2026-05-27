@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
     Trophy, Plus, Pencil, Trash2, Globe, Lock, ChevronRight,
     X, Check, AlertTriangle, Loader2, Flag, Users, Search,
-    CheckSquare, Square, ListFilter,
+    CheckSquare, Square, ListFilter, RefreshCw,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, ApiError } from '../api';
@@ -490,6 +490,7 @@ export default function AdminCorpLeagues() {
 
     const [deleteTarget, setDeleteTarget] = useState<CorpLeague | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [syncingId, setSyncingId] = useState<string | null>(null);
     const [showMatchSelector, setShowMatchSelector] = useState(false);
     const [selectedMatchIds, setSelectedMatchIds] = useState<Set<string>>(new Set());
 
@@ -637,6 +638,21 @@ export default function AdminCorpLeagues() {
         }
     }
 
+    async function handleSyncMatches(league: CorpLeague) {
+        if (!league.primaryTournamentId) return;
+        setSyncingId(league.id);
+        try {
+            const res = await request<{ ok: boolean; count: number }>(`/corp/leagues/${league.id}/sync-tournament-matches`, { method: 'POST' });
+            setSuccess(`Sincronizados ${res.count} partidos en "${league.name}".`);
+            setTimeout(() => setSuccess(null), 5000);
+        } catch (e) {
+            setError(e instanceof ApiError ? e.message : 'Error al sincronizar partidos.');
+            setTimeout(() => setError(null), 5000);
+        } finally {
+            setSyncingId(null);
+        }
+    }
+
     async function handleDelete() {
         if (!deleteTarget) return;
         setDeleting(true);
@@ -758,6 +774,18 @@ export default function AdminCorpLeagues() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
+                                        {league.primaryTournamentId && (
+                                            <button
+                                                onClick={() => handleSyncMatches(league)}
+                                                disabled={syncingId === league.id}
+                                                className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
+                                                title="Sincronizar todos los partidos del torneo"
+                                            >
+                                                {syncingId === league.id
+                                                    ? <Loader2 size={14} className="animate-spin" />
+                                                    : <RefreshCw size={14} />}
+                                            </button>
+                                        )}
                                         <Link
                                             to={`/pollas/${league.id}`}
                                             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
