@@ -191,7 +191,6 @@ export class CorpPortalController {
                 where: { leagueId },
                 _sum: { points: true },
                 orderBy: { _sum: { points: 'desc' } },
-                take: 5,
             }),
         ]);
 
