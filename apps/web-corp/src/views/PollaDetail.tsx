@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, Circle, ListChecks, Users, Trophy, Star } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, Circle, Trophy, Star, Save, Lock, Loader2, AlertTriangle, Zap } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 
@@ -46,6 +46,8 @@ function fmtDate(d: string) {
 function isPredictionClosed(matchDate: string, closeMin = 15) {
     return Date.now() > new Date(matchDate).getTime() - closeMin * 60_000;
 }
+function isLiveStatus(s: string) { return ['LIVE', 'IN_PLAY', 'HALFTIME'].includes(s); }
+function isFinishedStatus(s: string) { return ['FINISHED', 'FT'].includes(s); }
 
 function TeamBadge({ team, size = 'md' }: { team: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>; size?: 'sm' | 'md' }) {
     const sz = size === 'sm' ? 'w-7 h-7 text-[9px]' : 'w-10 h-10 text-xs';
@@ -66,11 +68,108 @@ function TeamBadge({ team, size = 'md' }: { team: Pick<Team, 'name' | 'shortCode
     );
 }
 
+/* ─── PredictionRow ──────────────────────────────────────────── */
+
+function PredictionRow({ match, leagueId, closeMin, onSaved }: {
+    match: UpcomingMatch; leagueId: string; closeMin: number;
+    onSaved: (matchId: string, home: number, away: number) => void;
+}) {
+    const closed = isPredictionClosed(match.matchDate, closeMin);
+    const live = isLiveStatus(match.status);
+    const finished = isFinishedStatus(match.status);
+    const canPredict = !closed && !finished && !live;
+
+    const [home, setHome] = useState(match.myPrediction?.homeScore?.toString() ?? '');
+    const [away, setAway] = useState(match.myPrediction?.awayScore?.toString() ?? '');
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [err, setErr] = useState<string | null>(null);
+    const initHome = match.myPrediction?.homeScore?.toString() ?? '';
+    const initAway = match.myPrediction?.awayScore?.toString() ?? '';
+    const isDirty = home !== initHome || away !== initAway;
+
+    async function submit() {
+        const h = parseInt(home); const a = parseInt(away);
+        if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Ingresa marcadores válidos'); return; }
+        setSaving(true); setErr(null);
+        try {
+            await request('/predictions', { method: 'POST', body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }) });
+            setSaved(true); onSaved(match.id, h, a);
+            setTimeout(() => setSaved(false), 2500);
+        } catch (e: any) { setErr(e?.message ?? 'Error al guardar'); }
+        finally { setSaving(false); }
+    }
+
+    return (
+        <div className={`px-4 py-3.5 transition-colors ${canPredict ? 'hover:bg-slate-50/60' : ''}`}>
+            <div className="flex items-center gap-3">
+                <div className="shrink-0 w-4 flex justify-center">
+                    {live ? <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse block" />
+                        : match.myPrediction ? <CheckCircle2 size={14} className="text-emerald-500" />
+                        : (closed || finished) ? <Lock size={13} className="text-slate-300" />
+                        : <Circle size={14} className="text-slate-200" />}
+                </div>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <TeamBadge team={match.homeTeam} size="md" />
+                    <div className="flex-1 text-center">
+                        {finished || live ? (
+                            <div>
+                                <span className="text-lg font-black text-slate-900">{match.homeScore ?? 0} – {match.awayScore ?? 0}</span>
+                                {live && <p className="text-[9px] font-black text-rose-500 animate-pulse mt-0.5">EN VIVO</p>}
+                                {finished && match.myPrediction && <p className="text-[10px] text-slate-400 mt-0.5">Tu pred: <span className="font-bold">{match.myPrediction.homeScore}–{match.myPrediction.awayScore}</span></p>}
+                            </div>
+                        ) : canPredict ? (
+                            <div className="flex items-center justify-center gap-1">
+                                <input type="number" min={0} max={99} inputMode="numeric" value={home}
+                                    onChange={(e) => setHome(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()}
+                                    placeholder="0" className="w-10 h-9 text-center font-black text-base rounded-lg border-2 focus:outline-none transition-colors"
+                                    style={{ borderColor: home !== '' ? 'var(--color-primary, #f59e0b)' : '#e2e8f0' }} />
+                                <span className="text-slate-400 font-black">–</span>
+                                <input type="number" min={0} max={99} inputMode="numeric" value={away}
+                                    onChange={(e) => setAway(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()}
+                                    placeholder="0" className="w-10 h-9 text-center font-black text-base rounded-lg border-2 focus:outline-none transition-colors"
+                                    style={{ borderColor: away !== '' ? 'var(--color-primary, #f59e0b)' : '#e2e8f0' }} />
+                            </div>
+                        ) : (
+                            <div>
+                                <p className="text-xs text-slate-400">{fmtDate(match.matchDate)}</p>
+                                {match.myPrediction
+                                    ? <p className="text-xs font-bold mt-0.5" style={{ color: 'var(--color-primary, #f59e0b)' }}>Pred: {match.myPrediction.homeScore}–{match.myPrediction.awayScore}</p>
+                                    : <p className="text-[10px] text-slate-400 mt-0.5">Sin pronóstico</p>}
+                            </div>
+                        )}
+                    </div>
+                    <TeamBadge team={match.awayTeam} size="md" />
+                </div>
+                <div className="shrink-0 w-16 flex flex-col items-end gap-1">
+                    {finished && match.myPrediction?.points != null && (
+                        <span className="text-sm font-black" style={{ color: match.myPrediction.points > 0 ? 'var(--color-primary, #f59e0b)' : '#94a3b8' }}>
+                            {match.myPrediction.points > 0 ? `+${match.myPrediction.points}` : '0'} pts
+                        </span>
+                    )}
+                    {canPredict && (
+                        <button onClick={submit} disabled={saving || !isDirty}
+                            className="flex items-center gap-1 text-[11px] font-black px-2 py-1 rounded-lg transition-all disabled:opacity-30"
+                            style={saved ? { backgroundColor: '#d1fae5', color: '#059669' } : { backgroundColor: 'var(--color-primary, #f59e0b)', color: '#fff' }}>
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : saved ? <CheckCircle2 size={11} /> : <Save size={11} />}
+                            {saved ? 'Guardado' : 'Guardar'}
+                        </button>
+                    )}
+                    {!canPredict && !finished && <span className="text-[10px] text-slate-300 font-bold">Cerrado</span>}
+                </div>
+            </div>
+            {canPredict && <p className="text-[10px] text-slate-400 mt-1.5 ml-7">{fmtDate(match.matchDate)}</p>}
+            {err && <p className="text-[10px] text-rose-500 font-bold ml-7 mt-1 flex items-center gap-1"><AlertTriangle size={10} /> {err}</p>}
+        </div>
+    );
+}
+
 /* ─── Component ─────────────────────────────────────────────── */
 
 export default function PollaDetail() {
     const { id } = useParams<{ id: string }>();
     const [league, setLeague] = useState<LeagueDetail | null>(null);
+    const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<'partidos' | 'ranking' | 'reglas'>('partidos');
 
@@ -78,10 +177,21 @@ export default function PollaDetail() {
         if (!id) return;
         setLoading(true);
         request<LeagueDetail>(`/corp/leagues/${id}`)
-            .then(setLeague)
+            .then((l) => { setLeague(l); setMatches(l.upcomingMatches); })
             .catch(() => setLeague(null))
             .finally(() => setLoading(false));
     }, [id]);
+
+    function handlePredictionSaved(matchId: string, home: number, away: number) {
+        setMatches((prev) => prev.map((m) =>
+            m.id === matchId ? { ...m, myPrediction: { homeScore: home, awayScore: away, points: null } } : m
+        ));
+    }
+
+    const pendingCount = matches.filter((m) => {
+        const cl = isPredictionClosed(m.matchDate, league?.closePredictionMinutes ?? 15);
+        return !cl && !isFinishedStatus(m.status) && !isLiveStatus(m.status) && !m.myPrediction;
+    }).length;
 
     const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
@@ -129,6 +239,15 @@ export default function PollaDetail() {
                         </div>
                     </div>
 
+                    {/* Alerta pronósticos pendientes */}
+                    {pendingCount > 0 && (
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-bold"
+                            style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary,#f59e0b) 10%, white)', borderColor: 'color-mix(in srgb, var(--color-primary,#f59e0b) 35%, white)', color: 'color-mix(in srgb, var(--color-primary,#f59e0b) 80%, #1e293b)' }}>
+                            <Zap size={15} />
+                            <span>{pendingCount} partido{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''} de pronóstico</span>
+                        </div>
+                    )}
+
                     {/* Tabs */}
                     <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
                         {(['partidos', 'ranking', 'reglas'] as const).map((t) => (
@@ -147,103 +266,18 @@ export default function PollaDetail() {
                                 <h2 className="font-black text-slate-900 text-sm flex items-center gap-2">
                                     <Clock size={14} className="text-slate-400" /> Partidos
                                 </h2>
-                                <span className="text-[10px] font-bold text-slate-400">{league.upcomingMatches.length} en la polla</span>
+                                <span className="text-[10px] font-bold text-slate-400">{matches.length} en la polla</span>
                             </div>
-                            {league.upcomingMatches.length === 0 ? (
+                            {matches.length === 0 ? (
                                 <div className="p-8 text-center text-slate-400 text-sm">No hay partidos en esta polla aún</div>
                             ) : (
                                 <div className="divide-y divide-slate-50">
-                                    {league.upcomingMatches.map((m) => {
-                                        const closed = isPredictionClosed(m.matchDate, league.closePredictionMinutes);
-                                        const hasPred = !!m.myPrediction;
-                                        const isLive = m.status === 'LIVE' || m.status === 'IN_PLAY' || m.status === 'HALFTIME';
-                                        const isFinished = m.status === 'FINISHED' || m.status === 'FT';
-                                        return (
-                                            <div key={m.id} className="flex items-center gap-3 px-4 py-4 hover:bg-slate-50 transition-colors">
-                                                <div className="shrink-0 w-5 flex justify-center">
-                                                    {isLive ? (
-                                                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse block" />
-                                                    ) : hasPred ? (
-                                                        <CheckCircle2 size={15} className="text-emerald-500" />
-                                                    ) : (
-                                                        <Circle size={15} className="text-slate-200" />
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                    <TeamBadge team={m.homeTeam} size="md" />
-                                                    <div className="flex-1 text-center">
-                                                        {isFinished || isLive ? (
-                                                            <div>
-                                                                <span className="text-xl font-black text-slate-900">
-                                                                    {m.homeScore ?? 0} – {m.awayScore ?? 0}
-                                                                </span>
-                                                                {isLive && <p className="text-[9px] font-bold text-rose-500 mt-0.5 animate-pulse">EN VIVO</p>}
-                                                            </div>
-                                                        ) : (
-                                                            <div>
-                                                                <p className="text-xs text-slate-400">{fmtDate(m.matchDate)}</p>
-                                                                {hasPred && (
-                                                                    <p className="text-xs font-bold mt-0.5" style={{ color: 'var(--color-primary, #f59e0b)' }}>
-                                                                        Pred: {m.myPrediction!.homeScore}–{m.myPrediction!.awayScore}
-                                                                    </p>
-                                                                )}
-                                                                {!hasPred && !closed && (
-                                                                    <p className="text-[10px] font-bold text-sky-500 mt-0.5">Pendiente de pronóstico</p>
-                                                                )}
-                                                                {!hasPred && closed && (
-                                                                    <p className="text-[10px] text-slate-400 mt-0.5">Cerrado</p>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <TeamBadge team={m.awayTeam} size="md" />
-                                                </div>
-                                                {isFinished && hasPred && m.myPrediction!.points != null && (
-                                                    <div className="shrink-0 text-right">
-                                                        <span className="text-sm font-black" style={{ color: m.myPrediction!.points > 0 ? 'var(--color-primary, #f59e0b)' : '#94a3b8' }}>
-                                                            {m.myPrediction!.points > 0 ? `+${m.myPrediction!.points}` : '0'} pts
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                                    {matches.map((m) => (
+                                        <PredictionRow key={m.id} match={m} leagueId={league.id} closeMin={league.closePredictionMinutes} onSaved={handlePredictionSaved} />
+                                    ))}
                                 </div>
                             )}
 
-                            {/* Recent predictions section */}
-                            {league.recentPredictions.length > 0 && (
-                                <>
-                                    <div className="flex items-center gap-2 px-4 py-3 border-t border-slate-100">
-                                        <ListChecks size={13} className="text-slate-400" />
-                                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-wide">Últimos pronósticos</h3>
-                                    </div>
-                                    <div className="divide-y divide-slate-50">
-                                        {league.recentPredictions.map((p, i) => {
-                                            const finished = p.status === 'FINISHED' || p.status === 'FT';
-                                            return (
-                                                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                        <TeamBadge team={p.homeTeam} size="sm" />
-                                                        <span className="text-xs font-black text-slate-500 mx-1">
-                                                            {finished ? `${p.homeScore ?? 0}–${p.awayScore ?? 0}` : fmtDate(p.matchDate)}
-                                                        </span>
-                                                        <TeamBadge team={p.awayTeam} size="sm" />
-                                                    </div>
-                                                    <div className="shrink-0 text-right">
-                                                        <p className="text-[10px] text-slate-400">Tu pred: {p.myHome}–{p.myAway}</p>
-                                                        {finished && p.points != null && (
-                                                            <p className="text-xs font-black" style={{ color: p.points > 0 ? 'var(--color-primary, #f59e0b)' : '#94a3b8' }}>
-                                                                {p.points > 0 ? `+${p.points} pts` : 'Sin puntos'}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </>
-                            )}
                         </div>
                     )}
 

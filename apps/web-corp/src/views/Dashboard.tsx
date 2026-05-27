@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     Trophy, Users, TrendingUp, ChevronRight, Calendar,
     Shield, Clock, CheckCircle2, Circle, Star, ListChecks,
@@ -82,7 +82,8 @@ function TeamBadge({ team, size = 'md' }: { team: Pick<Team, 'name' | 'shortName
     );
 }
 
-function MatchRow({ match, closeMin }: { match: UpcomingMatch; closeMin: number }) {
+function MatchRow({ match, closeMin, leagueId }: { match: UpcomingMatch; closeMin: number; leagueId: string }) {
+    const navigate = useNavigate();
     const closed = isPredictionClosed(match.matchDate, closeMin);
     const hasPred = !!match.myPrediction;
     const isLive = match.status === 'LIVE' || match.status === 'IN_PLAY' || match.status === 'HALFTIME';
@@ -132,7 +133,7 @@ function MatchRow({ match, closeMin }: { match: UpcomingMatch; closeMin: number 
                         +{match.myPrediction!.points} pts
                     </span>
                 ) : !closed && !hasPred ? (
-                    <span className="text-[10px] font-bold text-sky-500">Pronosticar</span>
+                    <button onClick={() => navigate(`/pollas/${leagueId}`)} className="text-[10px] font-bold text-sky-500 hover:text-sky-700 transition-colors">Pronosticar</button>
                 ) : null}
             </div>
         </div>
@@ -368,7 +369,7 @@ export default function Dashboard() {
                                 ) : (
                                     <div className="divide-y divide-slate-50">
                                         {leagueDetail.upcomingMatches.slice(0, 6).map((m) => (
-                                            <MatchRow key={m.id} match={m} closeMin={leagueDetail.closePredictionMinutes} />
+                                            <MatchRow key={m.id} match={m} closeMin={leagueDetail.closePredictionMinutes} leagueId={leagueDetail.id} />
                                         ))}
                                     </div>
                                 )}
