@@ -249,6 +249,12 @@ export default function Dashboard() {
         .sort((a, b) => new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime())
         .slice(0, 3), [openMatches]);
 
+    /* Partido más próximo sin pronóstico */
+    const nextUnsaved = useMemo(() => nextMatches.find(m => !m.myPrediction), [nextMatches]);
+    /* Puntos totales del usuario en la liga */
+    const myPoints = leagueDetail?.myPoints ?? 0;
+    const myRank = leagueDetail?.myRank ?? null;
+
     /* Ligas a mostrar en el selector: las propias o fallback a todas las del tenant */
     const displayLeagues = (data?.myLeagues.length ?? 0) > 0 ? (data?.myLeagues ?? []) : allLeagues;
 
@@ -337,53 +343,140 @@ export default function Dashboard() {
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_280px] gap-4 items-start">
 
-                        {/* ══ COLUMNA IZQUIERDA: Cupos + Reglas de puntos ══ */}
+                        {/* ══ COLUMNA IZQUIERDA: Mi desempeño + Próximo reto + Stats ══ */}
                         <div className="space-y-4">
 
-                            {/* Cupos de liga */}
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between">
-                                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Cupos de liga</h3>
-                                    <Users size={13} className="text-slate-300" />
-                                </div>
-                                <div className="px-4 py-4">
-                                    <div className="flex items-end gap-1 mb-1">
-                                        <span className="text-3xl font-black text-slate-900 leading-none">{leagueDetail.participantsCount}</span>
-                                        <span className="text-sm text-slate-400 font-bold mb-0.5">/ {leagueDetail.maxParticipants > 0 ? leagueDetail.maxParticipants : '∞'}</span>
-                                        {leagueDetail.maxParticipants > 0 && (
-                                            <span className="ml-auto text-[11px] font-black text-slate-400">
-                                                {Math.round((leagueDetail.participantsCount / leagueDetail.maxParticipants) * 100)}%
+                            {/* Mi desempeño — tarjeta oscura estilo spectator */}
+                            <div className="rounded-2xl overflow-hidden shadow-sm" style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e293b 100%)' }}>
+                                <div className="p-4 space-y-3">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--color-primary,#f59e0b)' }}>Mi desempeño</p>
+                                            <p className="text-[10px] text-slate-400 mt-0.5">Puntos acumulados</p>
+                                        </div>
+                                        {myRank && (
+                                            <span className="rounded-xl bg-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                                                Puesto #{myRank}
                                             </span>
                                         )}
                                     </div>
-                                    {leagueDetail.maxParticipants > 0 && (
-                                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden mt-2">
-                                            <div className="h-full rounded-full transition-all"
-                                                style={{
-                                                    width: `${Math.min(100, (leagueDetail.participantsCount / leagueDetail.maxParticipants) * 100)}%`,
-                                                    background: 'var(--color-primary,#f59e0b)'
-                                                }} />
+                                    <div className="flex items-end gap-3">
+                                        <div>
+                                            <p className="text-5xl font-black text-white leading-none">{myPoints}</p>
+                                            <p className="text-[10px] text-slate-400 mt-1">pts totales</p>
                                         </div>
-                                    )}
-                                    <div className="flex gap-2 mt-3">
+                                        <div className="ml-auto opacity-60">
+                                            <Trophy size={40} className="text-amber-400" />
+                                        </div>
+                                    </div>
+                                    {/* Barra progreso de cupos */}
+                                    <div className="pt-1">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[9px] text-slate-400 font-bold">{leagueDetail.participantsCount} participante{leagueDetail.participantsCount !== 1 ? 's' : ''}</span>
+                                            {leagueDetail.maxParticipants > 0 && (
+                                                <span className="text-[9px] text-slate-400 font-bold">máx {leagueDetail.maxParticipants}</span>
+                                            )}
+                                        </div>
+                                        {leagueDetail.maxParticipants > 0 && (
+                                            <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                                                <div className="h-full rounded-full transition-all"
+                                                    style={{
+                                                        width: `${Math.min(100, (leagueDetail.participantsCount / leagueDetail.maxParticipants) * 100)}%`,
+                                                        background: 'var(--color-primary,#f59e0b)'
+                                                    }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* Acciones admin */}
+                                {(isAdmin || canInvite) && (
+                                    <div className="flex gap-2 px-4 pb-4">
                                         {isAdmin && (
                                             <Link to={`/pollas/${leagueDetail.id}`}
-                                                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600">
+                                                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white">
                                                 <Star size={10} /> Configurar
                                             </Link>
                                         )}
                                         {canInvite && (
                                             <Link to={`/pollas/${leagueDetail.id}`}
-                                                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl text-white transition-opacity hover:opacity-90"
+                                                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl text-slate-900 transition-opacity hover:opacity-90"
                                                 style={{ background: 'var(--color-primary,#f59e0b)' }}>
                                                 <Users size={10} /> Invitar
                                             </Link>
                                         )}
                                     </div>
+                                )}
+                            </div>
+
+                            {/* Tu próximo reto */}
+                            {nextUnsaved ? (
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tu próximo reto</p>
+                                        <Clock size={12} className="text-slate-300" />
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="text-center flex-1 min-w-0">
+                                            {nextUnsaved.homeTeam.flagUrl
+                                                ? <img src={nextUnsaved.homeTeam.flagUrl} alt="" className="w-8 h-6 object-cover rounded mx-auto mb-1" />
+                                                : null}
+                                            <p className="text-lg font-black uppercase text-slate-900 leading-none">
+                                                {(nextUnsaved.homeTeam.shortCode ?? nextUnsaved.homeTeam.name.slice(0, 3)).toUpperCase()}
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 truncate">{nextUnsaved.homeTeam.name}</p>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-300">vs</span>
+                                        <div className="text-center flex-1 min-w-0">
+                                            {nextUnsaved.awayTeam.flagUrl
+                                                ? <img src={nextUnsaved.awayTeam.flagUrl} alt="" className="w-8 h-6 object-cover rounded mx-auto mb-1" />
+                                                : null}
+                                            <p className="text-lg font-black uppercase text-slate-900 leading-none">
+                                                {(nextUnsaved.awayTeam.shortCode ?? nextUnsaved.awayTeam.name.slice(0, 3)).toUpperCase()}
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 truncate">{nextUnsaved.awayTeam.name}</p>
+                                        </div>
+                                    </div>
+                                    <Link to={`/pollas/${leagueDetail.id}`}
+                                        className="flex w-full items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide text-white transition-opacity hover:opacity-90"
+                                        style={{ background: 'var(--color-primary,#f59e0b)' }}>
+                                        <Zap size={12} /> Pronosticar
+                                    </Link>
+                                    <p className="text-[9px] text-slate-400 text-center">
+                                        {fmtDate(nextUnsaved.matchDate)} · {fmtTime(nextUnsaved.matchDate)}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-4 text-center space-y-1.5">
+                                    <CheckCircle2 size={20} className="text-emerald-400 mx-auto" />
+                                    <p className="text-xs font-black text-slate-700">¡Al día con pronósticos!</p>
+                                    <p className="text-[10px] text-slate-400">No tienes partidos pendientes.</p>
+                                </div>
+                            )}
+
+                            {/* Mis estadísticas — colores suaves */}
+                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mis estadísticas</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="rounded-xl bg-lime-50 p-3 text-center">
+                                        <p className="text-[10px] font-black text-lime-700">Aciertos</p>
+                                        <p className="text-2xl font-black text-lime-900">{aciertos}</p>
+                                    </div>
+                                    <div className="rounded-xl bg-rose-50 p-3 text-center">
+                                        <p className="text-[10px] font-black text-rose-700">Errores</p>
+                                        <p className="text-2xl font-black text-rose-900">{errores}</p>
+                                    </div>
+                                    <div className="rounded-xl bg-amber-50 p-3 text-center">
+                                        <p className="text-[10px] font-black text-amber-700">Racha</p>
+                                        <p className="text-2xl font-black text-amber-900">{racha}</p>
+                                    </div>
+                                    <div className="rounded-xl bg-blue-50 p-3 text-center">
+                                        <p className="text-[10px] font-black text-blue-700">Tasa</p>
+                                        <p className="text-2xl font-black text-blue-900">{tasa}%</p>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Reglas de puntos */}
+                            {/* Reglas de puntos — colapsable */}
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                                 <div className="px-4 py-3 border-b border-slate-50">
                                     <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Reglas de puntos</h3>
@@ -392,26 +485,18 @@ export default function Dashboard() {
                                     {(leagueDetail.scoringRules.length > 0
                                         ? leagueDetail.scoringRules.map(r => ({ label: r.description ?? r.ruleType, pts: r.points, icon: '' }))
                                         : [
-                                            { label: 'Marcador exacto', pts: 5, icon: '🎯', sub: 'Ambos goles exactos' },
-                                            { label: 'Ganador + gol', pts: 3, icon: '✅', sub: 'Resultado + un marcador correcto' },
-                                            { label: 'Solo ganador', pts: 2, icon: '☑', sub: 'Empate o equipo ganador' },
-                                            { label: 'Solo gol acertado', pts: 1, icon: '⚽', sub: 'Al menos un marcador exacto' },
+                                            { label: 'Marcador exacto', pts: 5, icon: '🎯' },
+                                            { label: 'Ganador + gol', pts: 3, icon: '✅' },
+                                            { label: 'Solo ganador', pts: 2, icon: '☑' },
+                                            { label: 'Solo gol acertado', pts: 1, icon: '⚽' },
                                         ] as any[]
                                     ).map((r: any) => (
-                                        <div key={r.label} className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
-                                            {r.icon && <span className="text-base shrink-0">{r.icon}</span>}
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[11px] font-black text-slate-800 truncate">{r.label}</p>
-                                                {r.sub && <p className="text-[9px] text-slate-400 truncate">{r.sub}</p>}
-                                            </div>
-                                            <span className="text-sm font-black shrink-0" style={{ color: 'var(--color-primary,#f59e0b)' }}>{r.pts} pts</span>
+                                        <div key={r.label} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                                            {r.icon && <span className="text-sm shrink-0">{r.icon}</span>}
+                                            <p className="text-[11px] font-black text-slate-800 flex-1 truncate">{r.label}</p>
+                                            <span className="text-sm font-black shrink-0" style={{ color: 'var(--color-primary,#f59e0b)' }}>{r.pts}pts</span>
                                         </div>
                                     ))}
-                                </div>
-                                <div className="px-4 pb-3">
-                                    <p className="text-[9px] text-slate-400 leading-snug">
-                                        El marcador exacto (5pts) no se suma con otros bonos. El resto es aditivo.
-                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -455,31 +540,6 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             )}
-
-                            {/* Mi rendimiento */}
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b border-slate-50">
-                                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Mi rendimiento</h3>
-                                </div>
-                                <div className="p-3 grid grid-cols-2 gap-2.5">
-                                    <div className="rounded-xl p-3 text-white" style={{ background: '#22c55e' }}>
-                                        <p className="text-[10px] font-black uppercase tracking-wider opacity-80">Aciertos</p>
-                                        <p className="text-3xl font-black leading-none mt-1">{aciertos}</p>
-                                    </div>
-                                    <div className="rounded-xl p-3 text-white" style={{ background: '#ef4444' }}>
-                                        <p className="text-[10px] font-black uppercase tracking-wider opacity-80">Errores</p>
-                                        <p className="text-3xl font-black leading-none mt-1">{errores}</p>
-                                    </div>
-                                    <div className="rounded-xl p-3 text-white" style={{ background: '#f59e0b' }}>
-                                        <p className="text-[10px] font-black uppercase tracking-wider opacity-80">Racha</p>
-                                        <p className="text-3xl font-black leading-none mt-1">{racha}</p>
-                                    </div>
-                                    <div className="rounded-xl p-3 text-white" style={{ background: '#3b82f6' }}>
-                                        <p className="text-[10px] font-black uppercase tracking-wider opacity-80">Tasa</p>
-                                        <p className="text-3xl font-black leading-none mt-1">{tasa}%</p>
-                                    </div>
-                                </div>
-                            </div>
 
                             {/* Predicciones recientes */}
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
