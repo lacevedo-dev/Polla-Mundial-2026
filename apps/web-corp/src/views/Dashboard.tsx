@@ -240,6 +240,15 @@ export default function Dashboard() {
 
     const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
+    /* ── Permisos basados en rol y configuración del tenant ── */
+    const tenantRole = data?.tenantRole ?? '';
+    const isAdmin = tenantRole === 'OWNER' || tenantRole === 'ADMIN';
+    const canInvite = isAdmin || !(tenant?.config?.requireInvitation ?? true);
+    /* Solo próximos 3 partidos ordenados por fecha */
+    const nextMatches = useMemo(() => [...openMatches]
+        .sort((a, b) => new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime())
+        .slice(0, 3), [openMatches]);
+
     /* Ligas a mostrar en el selector: las propias o fallback a todas las del tenant */
     const displayLeagues = (data?.myLeagues.length ?? 0) > 0 ? (data?.myLeagues ?? []) : allLeagues;
 
@@ -282,7 +291,7 @@ export default function Dashboard() {
                         <Zap size={12} />
                         Pronosticar
                     </Link>
-                    {leagueDetail && (
+                    {leagueDetail && canInvite && (
                         <Link to={`/pollas/${leagueDetail.id}`}
                             className="flex items-center gap-1.5 text-[11px] font-black px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">
                             <Users size={12} />
@@ -357,15 +366,19 @@ export default function Dashboard() {
                                         </div>
                                     )}
                                     <div className="flex gap-2 mt-3">
-                                        <Link to={`/pollas/${leagueDetail.id}`}
-                                            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600">
-                                            <Star size={10} /> Configurar
-                                        </Link>
-                                        <Link to={`/pollas/${leagueDetail.id}`}
-                                            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl text-white transition-opacity hover:opacity-90"
-                                            style={{ background: 'var(--color-primary,#f59e0b)' }}>
-                                            <Users size={10} /> Invitar
-                                        </Link>
+                                        {isAdmin && (
+                                            <Link to={`/pollas/${leagueDetail.id}`}
+                                                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600">
+                                                <Star size={10} /> Configurar
+                                            </Link>
+                                        )}
+                                        {canInvite && (
+                                            <Link to={`/pollas/${leagueDetail.id}`}
+                                                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-2 rounded-xl text-white transition-opacity hover:opacity-90"
+                                                style={{ background: 'var(--color-primary,#f59e0b)' }}>
+                                                <Users size={10} /> Invitar
+                                            </Link>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -564,34 +577,34 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            {/* Próximos partidos */}
+                            {/* Próximos partidos — solo los 3 más cercanos */}
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                                 <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between">
                                     <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Próximos partidos</h3>
                                     <Clock size={12} className="text-slate-300" />
                                 </div>
-                                {openMatches.length === 0 ? (
+                                {nextMatches.length === 0 ? (
                                     <div className="p-6 text-center">
                                         <CheckCircle2 size={20} className="mx-auto mb-2 text-emerald-400" />
                                         <p className="text-xs font-bold text-slate-500">¡Todos al día!</p>
                                     </div>
                                 ) : (
-                                    <div className="divide-y divide-slate-50">
-                                        {openMatches.slice(0, 5).map((m) => (
+                                    <>
+                                        {nextMatches.map((m) => (
                                             <PredRow key={m.id} match={m} leagueId={leagueDetail.id}
                                                 closeMin={leagueDetail.closePredictionMinutes}
                                                 onSaved={onSaved} />
                                         ))}
-                                        {openMatches.length > 5 && (
-                                            <div className="px-4 py-2.5 text-center">
+                                        {openMatches.length > 3 && (
+                                            <div className="px-4 py-2.5 text-center border-t border-slate-50">
                                                 <Link to={`/pollas/${leagueDetail.id}`}
                                                     className="text-[10px] font-black hover:opacity-80 transition-opacity"
                                                     style={{ color: 'var(--color-primary,#f59e0b)' }}>
-                                                    Ver {openMatches.length - 5} más →
+                                                    Ver {openMatches.length - 3} más →
                                                 </Link>
                                             </div>
                                         )}
-                                    </div>
+                                    </>
                                 )}
                             </div>
                         </div>
