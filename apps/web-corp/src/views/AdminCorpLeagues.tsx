@@ -104,6 +104,7 @@ function MatchSelectorModal({
 }) {
     const [matches, setMatches] = useState<MatchItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
 
     const [search, setSearch] = useState('');
@@ -113,9 +114,16 @@ function MatchSelectorModal({
     const [groupBy, setGroupBy] = useState<'phase' | 'group' | 'date' | 'none'>('phase');
 
     useEffect(() => {
+        setLoading(true);
+        setLoadError(null);
         request<{ matches: MatchItem[]; total: number }>(`/corp/tournaments/${tournamentId}/matches`)
-            .then(({ matches: m }) => setMatches(m))
-            .catch(() => {})
+            .then(({ matches: m }) => {
+                setMatches(m);
+                setSelected(new Set(m.map(x => x.id)));
+            })
+            .catch((e) => {
+                setLoadError(e?.message ?? 'No se pudieron cargar los partidos. Verifica que el servidor esté actualizado.');
+            })
             .finally(() => setLoading(false));
     }, [tournamentId]);
 
@@ -295,8 +303,28 @@ function MatchSelectorModal({
                 {/* Lista de partidos */}
                 <div className="flex-1 overflow-y-auto px-5 py-3">
                     {loading ? (
-                        <div className="flex justify-center items-center h-40">
+                        <div className="flex flex-col justify-center items-center h-40 gap-2 text-slate-400">
                             <Loader2 size={24} className="animate-spin text-slate-300" />
+                            <p className="text-xs">Cargando partidos...</p>
+                        </div>
+                    ) : loadError ? (
+                        <div className="flex flex-col items-center justify-center h-40 text-center px-4">
+                            <AlertTriangle size={28} className="mb-2 text-red-300" />
+                            <p className="text-sm font-semibold text-red-500">Error al cargar partidos</p>
+                            <p className="text-xs text-slate-400 mt-1 max-w-xs">{loadError}</p>
+                            <button
+                                onClick={() => {
+                                    setLoading(true);
+                                    setLoadError(null);
+                                    request<{ matches: MatchItem[]; total: number }>(`/corp/tournaments/${tournamentId}/matches`)
+                                        .then(({ matches: m }) => { setMatches(m); setSelected(new Set(m.map(x => x.id))); })
+                                        .catch((e) => setLoadError(e?.message ?? 'Error al cargar partidos.'))
+                                        .finally(() => setLoading(false));
+                                }}
+                                className="mt-3 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
+                            >
+                                Reintentar
+                            </button>
                         </div>
                     ) : filtered.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-40 text-slate-400">
