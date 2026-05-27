@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Trophy, Plus, Pencil, Trash2, Globe, Lock, ChevronRight,
-    X, Check, AlertTriangle, Loader2, Flag, Users,
+    X, Check, AlertTriangle, Loader2, Flag, Users, Search,
+    CheckSquare, Square, ListFilter,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, ApiError } from '../api';
@@ -14,6 +15,26 @@ interface Tournament {
     season: string | null;
     logoUrl: string | null;
     active: boolean;
+}
+
+interface TeamInfo {
+    id: string;
+    name: string;
+    code: string;
+    flagUrl: string | null;
+}
+
+interface MatchItem {
+    id: string;
+    matchNumber: number | null;
+    matchDate: string;
+    phase: string;
+    group: string | null;
+    venue: string | null;
+    status: string;
+    round: string | null;
+    homeTeam: TeamInfo;
+    awayTeam: TeamInfo;
 }
 
 interface CorpLeague {
@@ -46,6 +67,387 @@ const EMPTY_FORM: FormState = {
 
 type ModalMode = 'create' | 'edit' | null;
 
+const PHASE_LABELS: Record<string, string> = {
+    GROUP: 'Fase de Grupos',
+    ROUND_OF_32: 'Dieciseisavos',
+    ROUND_OF_16: 'Octavos de Final',
+    QUARTER: 'Cuartos de Final',
+    SEMI: 'Semifinales',
+    THIRD_PLACE: 'Tercer Puesto',
+    FINAL: 'Final',
+};
+
+const PHASE_ORDER: Record<string, number> = {
+    GROUP: 1, ROUND_OF_32: 2, ROUND_OF_16: 3, QUARTER: 4, SEMI: 5, THIRD_PLACE: 6, FINAL: 7,
+};
+
+function formatDate(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-CO', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'America/Bogota' });
+}
+function formatTime(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' });
+}
+
+// ── Selector de partidos (modal interno) ────────────────────────────────────
+function MatchSelectorModal({
+    tournamentId,
+    selectedIds,
+    onConfirm,
+    onClose,
+}: {
+    tournamentId: string;
+    selectedIds: Set<string>;
+    onConfirm: (ids: Set<string>) => void;
+    onClose: () => void;
+}) {
+    const [matches, setMatches] = useState<MatchItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
+
+    const [search, setSearch] = useState('');
+    const [filterPhase, setFilterPhase] = useState('');
+    const [filterGroup, setFilterGroup] = useState('');
+    const [sortBy, setSortBy] = useState<'date' | 'phase' | 'group' | 'number'>('date');
+    const [groupBy, setGroupBy] = useState<'phase' | 'group' | 'date' | 'none'>('phase');
+
+    useEffect(() => {
+        request<{ matches: MatchItem[]; total: number }>(`/corp/tournaments/${tournamentId}/matches`)
+            .then(({ matches: m }) => setMatches(m))
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, [tournamentId]);
+
+    const phases = useMemo(() => [...new Set(matches.map(m => m.phase))].sort((a, b) => (PHASE_ORDER[a] ?? 9) - (PHASE_ORDER[b] ?? 9)), [matches]);
+    const groups = useMemo(() => [...new Set(matches.map(m => m.group).filter(Boolean))] as string[], [matches]);
+
+    const filtered = useMemo(() => {
+        let list = [...matches];
+        if (filterPhase) list = list.filter(m => m.phase === filterPhase);
+        if (filterGroup) list = list.filter(m => m.group === filterGroup);
+        if (search.trim()) {
+            const q = search.trim().toLowerCase();
+            list = list.filter(m =>
+                m.homeTeam.name.toLowerCase().includes(q) ||
+                m.awayTeam.name.toLowerCase().includes(q) ||
+                m.homeTeam.code.toLowerCase().includes(q) ||
+                m.awayTeam.code.toLowerCase().includes(q) ||
+                (m.venue ?? '').toLowerCase().includes(q) ||
+                (m.group ?? '').toLowerCase().includes(q) ||
+                String(m.matchNumber ?? '').includes(q),
+            );
+        }
+        list.sort((a, b) => {
+            if (sortBy === 'date') return new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime();
+            if (sortBy === 'phase') return (PHASE_ORDER[a.phase] ?? 9) - (PHASE_ORDER[b.phase] ?? 9);
+            if (sortBy === 'group') return (a.group ?? 'Z').localeCompare(b.group ?? 'Z');
+            if (sortBy === 'number') return (a.matchNumber ?? 999) - (b.matchNumber ?? 999);
+            return 0;
+        });
+        return list;
+    }, [matches, filterPhase, filterGroup, search, sortBy]);
+
+    const grouped = useMemo(() => {
+        if (groupBy === 'none') return { '': filtered };
+        const map: Record<string, MatchItem[]> = {};
+        filtered.forEach(m => {
+            let key = '';
+            if (groupBy === 'phase') key = PHASE_LABELS[m.phase] ?? m.phase;
+            else if (groupBy === 'group') key = m.group ? `Grupo ${m.group}` : 'Sin grupo';
+            else if (groupBy === 'date') key = formatDate(m.matchDate);
+            (map[key] = map[key] ?? []).push(m);
+        });
+        return map;
+    }, [filtered, groupBy]);
+
+    const toggleMatch = useCallback((id: string) => {
+        setSelected(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }, []);
+
+    const toggleGroup = useCallback((ids: string[]) => {
+        const allSel = ids.every(id => selected.has(id));
+        setSelected(prev => {
+            const next = new Set(prev);
+            ids.forEach(id => allSel ? next.delete(id) : next.add(id));
+            return next;
+        });
+    }, [selected]);
+
+    const selectAll = () => setSelected(new Set(filtered.map(m => m.id)));
+    const selectNone = () => setSelected(new Set());
+
+    const groupKeys = Object.keys(grouped);
+    const sortedGroupKeys = groupBy === 'phase'
+        ? groupKeys.sort((a, b) => {
+            const pa = Object.entries(PHASE_LABELS).find(([, v]) => v === a)?.[0] ?? '';
+            const pb = Object.entries(PHASE_LABELS).find(([, v]) => v === b)?.[0] ?? '';
+            return (PHASE_ORDER[pa] ?? 9) - (PHASE_ORDER[pb] ?? 9);
+        })
+        : groupKeys;
+
+    return (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '92vh' }}>
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div>
+                        <h3 className="font-black text-slate-900 text-lg">Seleccionar partidos</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                            {selected.size} seleccionados de {matches.length} partidos totales
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors"><X size={18} /></button>
+                </div>
+
+                {/* Controles */}
+                <div className="px-5 py-3 border-b border-slate-100 shrink-0 space-y-2">
+                    {/* Búsqueda */}
+                    <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Buscar equipo, grupo, sede..."
+                            className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2"
+                            style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any}
+                        />
+                    </div>
+
+                    {/* Filtros y orden */}
+                    <div className="flex flex-wrap gap-2">
+                        {/* Fase */}
+                        <select
+                            value={filterPhase}
+                            onChange={e => setFilterPhase(e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                        >
+                            <option value="">Todas las fases</option>
+                            {phases.map(p => <option key={p} value={p}>{PHASE_LABELS[p] ?? p}</option>)}
+                        </select>
+
+                        {/* Grupo */}
+                        {groups.length > 0 && (
+                            <select
+                                value={filterGroup}
+                                onChange={e => setFilterGroup(e.target.value)}
+                                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                            >
+                                <option value="">Todos los grupos</option>
+                                {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+                            </select>
+                        )}
+
+                        {/* Ordenar */}
+                        <select
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value as any)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                        >
+                            <option value="date">Ordenar por fecha</option>
+                            <option value="phase">Ordenar por fase</option>
+                            <option value="group">Ordenar por grupo</option>
+                            <option value="number">Ordenar por N°</option>
+                        </select>
+
+                        {/* Agrupar */}
+                        <select
+                            value={groupBy}
+                            onChange={e => setGroupBy(e.target.value as any)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                        >
+                            <option value="phase">Agrupar por fase</option>
+                            <option value="group">Agrupar por grupo</option>
+                            <option value="date">Agrupar por fecha</option>
+                            <option value="none">Sin agrupación</option>
+                        </select>
+
+                        {/* Acciones masivas */}
+                        <div className="ml-auto flex gap-1.5">
+                            <button
+                                onClick={selectAll}
+                                className="text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-colors hover:bg-slate-50 border-slate-200 text-slate-600"
+                            >
+                                Todos ({filtered.length})
+                            </button>
+                            <button
+                                onClick={selectNone}
+                                className="text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-colors hover:bg-slate-50 border-slate-200 text-slate-600"
+                            >
+                                Ninguno
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Contadores de estado */}
+                    <div className="flex gap-3 text-xs text-slate-500">
+                        <span>Mostrando <strong className="text-slate-700">{filtered.length}</strong> partidos</span>
+                        {filterPhase && <span className="text-amber-600 font-medium">• {PHASE_LABELS[filterPhase] ?? filterPhase}</span>}
+                        {filterGroup && <span className="text-amber-600 font-medium">• Grupo {filterGroup}</span>}
+                    </div>
+                </div>
+
+                {/* Lista de partidos */}
+                <div className="flex-1 overflow-y-auto px-5 py-3">
+                    {loading ? (
+                        <div className="flex justify-center items-center h-40">
+                            <Loader2 size={24} className="animate-spin text-slate-300" />
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                            <Search size={28} className="mb-2 text-slate-200" />
+                            <p className="text-sm font-medium">Sin resultados</p>
+                            <p className="text-xs mt-1">Prueba con otros filtros</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {sortedGroupKeys.map(gKey => {
+                                const gMatches = grouped[gKey];
+                                const gIds = gMatches.map(m => m.id);
+                                const allGroupSel = gIds.every(id => selected.has(id));
+                                const someGroupSel = gIds.some(id => selected.has(id));
+                                return (
+                                    <div key={gKey}>
+                                        {groupBy !== 'none' && gKey && (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <button
+                                                    onClick={() => toggleGroup(gIds)}
+                                                    className="flex items-center gap-1.5 text-xs font-black text-slate-600 hover:text-slate-900 transition-colors"
+                                                >
+                                                    {allGroupSel
+                                                        ? <CheckSquare size={13} style={{ color: 'var(--color-primary,#f59e0b)' }} />
+                                                        : someGroupSel
+                                                        ? <CheckSquare size={13} className="text-slate-400" />
+                                                        : <Square size={13} className="text-slate-300" />
+                                                    }
+                                                    <span className="uppercase tracking-wide">{gKey}</span>
+                                                </button>
+                                                <span className="text-xs text-slate-400 font-normal">({gIds.length} partidos)</span>
+                                                <div className="flex-1 h-px bg-slate-100" />
+                                            </div>
+                                        )}
+                                        <div className="space-y-1">
+                                            {gMatches.map(match => {
+                                                const isSel = selected.has(match.id);
+                                                return (
+                                                    <button
+                                                        key={match.id}
+                                                        onClick={() => toggleMatch(match.id)}
+                                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
+                                                            isSel
+                                                                ? 'border-current'
+                                                                : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                                                        }`}
+                                                        style={isSel ? {
+                                                            borderColor: 'var(--color-primary,#f59e0b)',
+                                                            backgroundColor: 'color-mix(in srgb, var(--color-primary,#f59e0b) 8%, white)',
+                                                        } : {}}
+                                                    >
+                                                        {/* Checkbox */}
+                                                        <div className="shrink-0">
+                                                            {isSel
+                                                                ? <CheckSquare size={16} style={{ color: 'var(--color-primary,#f59e0b)' }} />
+                                                                : <Square size={16} className="text-slate-300" />
+                                                            }
+                                                        </div>
+
+                                                        {/* Número */}
+                                                        {match.matchNumber && (
+                                                            <span className="shrink-0 text-xs font-bold text-slate-400 w-6 text-right">
+                                                                #{match.matchNumber}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Equipos */}
+                                                        <div className="flex-1 flex items-center gap-2 min-w-0">
+                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                {match.homeTeam.flagUrl && (
+                                                                    <img src={match.homeTeam.flagUrl} alt="" className="w-5 h-4 object-cover rounded-sm shrink-0" />
+                                                                )}
+                                                                <span className="text-sm font-bold text-slate-800 truncate">{match.homeTeam.name}</span>
+                                                            </div>
+                                                            <span className="text-xs text-slate-400 font-bold shrink-0">vs</span>
+                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                {match.awayTeam.flagUrl && (
+                                                                    <img src={match.awayTeam.flagUrl} alt="" className="w-5 h-4 object-cover rounded-sm shrink-0" />
+                                                                )}
+                                                                <span className="text-sm font-bold text-slate-800 truncate">{match.awayTeam.name}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Meta */}
+                                                        <div className="shrink-0 text-right hidden sm:block">
+                                                            <p className="text-xs font-semibold text-slate-600">{formatDate(match.matchDate)}</p>
+                                                            <p className="text-xs text-slate-400">{formatTime(match.matchDate)}</p>
+                                                        </div>
+
+                                                        {/* Fase/Grupo badge */}
+                                                        <div className="shrink-0 hidden md:flex flex-col items-end gap-1">
+                                                            {match.group && (
+                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                                                                    G-{match.group}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600">
+                                                                {PHASE_LABELS[match.phase] ?? match.phase}
+                                                            </span>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-4 border-t border-slate-100 shrink-0 flex items-center gap-3">
+                    <div className="flex-1">
+                        <p className="text-sm font-bold text-slate-700">
+                            {selected.size === 0
+                                ? 'Sin partidos seleccionados'
+                                : selected.size === matches.length
+                                ? `Todos los partidos seleccionados (${selected.size})`
+                                : `${selected.size} de ${matches.length} partidos seleccionados`
+                            }
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                            {selected.size === 0
+                                ? 'Selecciona al menos un partido para continuar'
+                                : 'Los participantes podrán pronosticar estos partidos'
+                            }
+                        </p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={() => onConfirm(selected)}
+                        className="px-5 py-2 rounded-xl text-sm font-bold text-black transition-all hover:brightness-90"
+                        style={{ backgroundColor: 'var(--color-primary,#f59e0b)' }}
+                    >
+                        <span className="flex items-center gap-1.5">
+                            <Check size={14} />
+                            Confirmar selección
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function AdminCorpLeagues() {
     const [leagues, setLeagues] = useState<CorpLeague[]>([]);
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -60,6 +462,8 @@ export default function AdminCorpLeagues() {
 
     const [deleteTarget, setDeleteTarget] = useState<CorpLeague | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [showMatchSelector, setShowMatchSelector] = useState(false);
+    const [selectedMatchIds, setSelectedMatchIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         Promise.all([
@@ -71,9 +475,23 @@ export default function AdminCorpLeagues() {
             .finally(() => setLoading(false));
     }, []);
 
+    async function handleTournamentChange(tournamentId: string) {
+        setForm(f => ({ ...f, primaryTournamentId: tournamentId }));
+        setSelectedMatchIds(new Set());
+        if (tournamentId) {
+            try {
+                const { matches } = await request<{ matches: MatchItem[]; total: number }>(
+                    `/corp/tournaments/${tournamentId}/matches`
+                );
+                setSelectedMatchIds(new Set(matches.map(m => m.id)));
+            } catch { /* silencioso */ }
+        }
+    }
+
     function openCreate() {
         setEditTarget(null);
         setForm(EMPTY_FORM);
+        setSelectedMatchIds(new Set());
         setError(null);
         setModal('create');
     }
@@ -87,6 +505,7 @@ export default function AdminCorpLeagues() {
             maxParticipants: '',
             primaryTournamentId: league.primaryTournamentId ?? '',
         });
+        setSelectedMatchIds(new Set());
         setError(null);
         setModal('edit');
     }
@@ -95,6 +514,7 @@ export default function AdminCorpLeagues() {
         setModal(null);
         setEditTarget(null);
         setError(null);
+        setShowMatchSelector(false);
     }
 
     async function handleSave() {
@@ -126,7 +546,9 @@ export default function AdminCorpLeagues() {
                     primaryTournamentId: created.primaryTournamentId,
                 };
                 setLeagues((prev) => [newLeague, ...prev]);
-                setSuccess('Polla creada exitosamente.');
+                setSuccess(selectedMatchIds.size > 0
+                    ? `Polla creada con ${selectedMatchIds.size} partidos asignados.`
+                    : 'Polla creada exitosamente.');
             } else if (modal === 'edit' && editTarget) {
                 const updatePayload: any = {
                     name: form.name.trim(),
@@ -181,6 +603,7 @@ export default function AdminCorpLeagues() {
 
     const activeTournaments = tournaments.filter((t) => t.active);
     const inactiveTournaments = tournaments.filter((t) => !t.active);
+    const selectedTournament = tournaments.find(t => t.id === form.primaryTournamentId);
 
     return (
         <CorpLayout>
@@ -396,7 +819,7 @@ export default function AdminCorpLeagues() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Torneo / Competición</label>
                                 <select
                                     value={form.primaryTournamentId}
-                                    onChange={(e) => setForm((f) => ({ ...f, primaryTournamentId: e.target.value }))}
+                                    onChange={(e) => handleTournamentChange(e.target.value)}
                                     className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent bg-white"
                                 >
                                     <option value="">— Sin torneo asignado —</option>
@@ -419,8 +842,41 @@ export default function AdminCorpLeagues() {
                                         </optgroup>
                                     )}
                                 </select>
-                                <p className="text-xs text-slate-400 mt-1">Define qué partidos estarán disponibles para pronosticar</p>
                             </div>
+
+                            {/* Selector de partidos */}
+                            {form.primaryTournamentId && (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                    <div className="px-4 py-3 bg-slate-50 flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black text-slate-700">Partidos de la polla</p>
+                                            <p className="text-xs text-slate-400 mt-0.5">
+                                                {selectedMatchIds.size === 0
+                                                    ? 'Ningún partido seleccionado'
+                                                    : `${selectedMatchIds.size} partido${selectedMatchIds.size !== 1 ? 's' : ''} seleccionado${selectedMatchIds.size !== 1 ? 's' : ''}`}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowMatchSelector(true)}
+                                            className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors hover:bg-white"
+                                            style={{ borderColor: 'var(--color-primary,#f59e0b)', color: 'var(--color-primary,#f59e0b)' }}
+                                        >
+                                            <ListFilter size={13} />
+                                            {selectedMatchIds.size === 0 ? 'Seleccionar' : 'Editar selección'}
+                                        </button>
+                                    </div>
+                                    {selectedMatchIds.size > 0 && (
+                                        <div className="px-4 py-2.5 flex items-center gap-2 text-xs text-slate-500">
+                                            <CheckSquare size={13} style={{ color: 'var(--color-primary,#f59e0b)' }} />
+                                            <span>
+                                                <strong className="text-slate-700">{selectedMatchIds.size}</strong> partidos habilitados
+                                                {selectedTournament && <span className="text-slate-400"> · {selectedTournament.name}</span>}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
@@ -481,6 +937,15 @@ export default function AdminCorpLeagues() {
                         </div>
                     </div>
                 </div>
+            )}
+            {/* ── Modal selector de partidos ───────────────────────────── */}
+            {showMatchSelector && form.primaryTournamentId && (
+                <MatchSelectorModal
+                    tournamentId={form.primaryTournamentId}
+                    selectedIds={selectedMatchIds}
+                    onConfirm={(ids) => { setSelectedMatchIds(ids); setShowMatchSelector(false); }}
+                    onClose={() => setShowMatchSelector(false)}
+                />
             )}
         </CorpLayout>
     );

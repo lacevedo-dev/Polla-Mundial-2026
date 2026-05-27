@@ -312,6 +312,31 @@ export class CorpPortalController {
         });
     }
 
+    @Get('tournaments/:tournamentId/matches')
+    async getTournamentMatches(@Param('tournamentId') tournamentId: string) {
+        const tournament = await this.prisma.tournament.findUnique({ where: { id: tournamentId } });
+        if (!tournament) throw new NotFoundException('Torneo no encontrado');
+
+        const matches = await this.prisma.match.findMany({
+            where: { tournamentId },
+            orderBy: [{ matchDate: 'asc' }],
+            select: {
+                id: true,
+                matchNumber: true,
+                matchDate: true,
+                phase: true,
+                group: true,
+                venue: true,
+                status: true,
+                round: true,
+                homeTeam: { select: { id: true, name: true, code: true, flagUrl: true } },
+                awayTeam: { select: { id: true, name: true, code: true, flagUrl: true } },
+            },
+        });
+
+        return { tournament, matches, total: matches.length };
+    }
+
     @UseGuards(TenantAdminGuard)
     @Post('leagues')
     async createLeague(@Req() req: any, @Body() dto: CreateCorpLeagueDto) {
