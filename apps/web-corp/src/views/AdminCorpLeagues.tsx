@@ -524,7 +524,7 @@ export default function AdminCorpLeagues() {
         setModal('create');
     }
 
-    function openEdit(league: CorpLeague) {
+    async function openEdit(league: CorpLeague) {
         setEditTarget(league);
         const tournamentStillValid = league.primaryTournamentId
             ? tournaments.some(t => t.id === league.primaryTournamentId)
@@ -543,6 +543,19 @@ export default function AdminCorpLeagues() {
             setError('El torneo asignado a esta polla ya no existe. Selecciona uno nuevo.');
         }
         setModal('edit');
+        if (resolvedTournamentId) {
+            try {
+                const { matches } = await request<{ matches: MatchItem[]; total: number }>(
+                    `/corp/tournaments/${resolvedTournamentId}/matches`
+                );
+                const leagueMatchRes = await request<{ matchIds: string[] }>(`/corp/leagues/${league.id}/match-ids`).catch(() => null);
+                if (leagueMatchRes && leagueMatchRes.matchIds.length > 0) {
+                    setSelectedMatchIds(new Set(leagueMatchRes.matchIds));
+                } else {
+                    setSelectedMatchIds(new Set(matches.map(m => m.id)));
+                }
+            } catch { /* silencioso */ }
+        }
     }
 
     function closeModal() {
@@ -564,6 +577,7 @@ export default function AdminCorpLeagues() {
                     privacy: form.privacy,
                     ...(form.maxParticipants ? { maxParticipants: parseInt(form.maxParticipants) } : {}),
                     ...(form.primaryTournamentId ? { primaryTournamentId: form.primaryTournamentId } : {}),
+                    ...(selectedMatchIds.size > 0 ? { matchIds: [...selectedMatchIds] } : {}),
                 };
                 const created = await request<any>('/corp/leagues', {
                     method: 'POST',
@@ -601,6 +615,10 @@ export default function AdminCorpLeagues() {
                         body: JSON.stringify({ tournamentId: form.primaryTournamentId || null }),
                     });
                 }
+                await request(`/corp/leagues/${editTarget.id}/matches`, {
+                    method: 'POST',
+                    body: JSON.stringify({ matchIds: [...selectedMatchIds] }),
+                });
                 setLeagues((prev) =>
                     prev.map((l) =>
                         l.id === editTarget.id
@@ -608,7 +626,7 @@ export default function AdminCorpLeagues() {
                             : l,
                     ),
                 );
-                setSuccess('Polla actualizada.');
+                setSuccess(`Polla actualizada con ${selectedMatchIds.size} partido${selectedMatchIds.size !== 1 ? 's' : ''} asignados.`);
             }
             closeModal();
             setTimeout(() => setSuccess(null), 4000);

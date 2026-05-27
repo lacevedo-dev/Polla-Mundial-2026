@@ -15,6 +15,7 @@ class CreateCorpLeagueDto {
     @IsOptional() @IsEnum(Privacy) privacy?: Privacy;
     @IsOptional() @IsInt() @Min(2) @Max(500) maxParticipants?: number;
     @IsOptional() @IsString() primaryTournamentId?: string;
+    @IsOptional() @IsArray() @IsString({ each: true }) matchIds?: string[];
 }
 
 class ProvisionMemberDto {
@@ -291,6 +292,8 @@ export class CorpPortalController {
             participantsCount: l._count.members,
             isMember: l.members.length > 0,
             myPoints: pointsMap.get(l.id) ?? 0,
+            status: l.status,
+            primaryTournamentId: l.primaryTournamentId ?? null,
         }));
     }
 
@@ -423,6 +426,19 @@ export class CorpPortalController {
             }
         }
 
+        if (dto.matchIds && dto.matchIds.length > 0) {
+            const validMatches = await this.prisma.match.findMany({
+                where: { id: { in: dto.matchIds } },
+                select: { id: true },
+            });
+            if (validMatches.length > 0) {
+                await this.prisma.leagueMatch.createMany({
+                    data: validMatches.map(m => ({ leagueId: league.id, matchId: m.id })),
+                    skipDuplicates: true,
+                });
+            }
+        }
+
         return league;
     }
 
@@ -473,6 +489,48 @@ export class CorpPortalController {
         }
 
         return { ok: true };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Get('leagues/:leagueId/match-ids')
+    async getLeagueMatchIds(@Req() req: any, @Param('leagueId') leagueId: string) {
+        const tenantId: string = req.tenantId;
+        const league = await this.prisma.league.findFirst({ where: { id: leagueId, tenantId } });
+        if (!league) throw new NotFoundException('Polla no encontrada');
+        const rows = await this.prisma.leagueMatch.findMany({
+            where: { leagueId },
+            select: { matchId: true },
+        });
+        return { matchIds: rows.map(r => r.matchId) };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Post('leagues/:leagueId/matches')
+    async setLeagueMatches(
+        @Req() req: any,
+        @Param('leagueId') leagueId: string,
+        @Body('matchIds') matchIds: string[],
+    ) {
+        const tenantId: string = req.tenantId;
+        const league = await this.prisma.league.findFirst({ where: { id: leagueId, tenantId } });
+        if (!league) throw new NotFoundException('Polla no encontrada');
+        if (!Array.isArray(matchIds)) throw new BadRequestException('matchIds debe ser un array');
+
+        await this.prisma.leagueMatch.deleteMany({ where: { leagueId } });
+        if (matchIds.length > 0) {
+            const validMatches = await this.prisma.match.findMany({
+                where: { id: { in: matchIds } },
+                select: { id: true },
+            });
+            if (validMatches.length > 0) {
+                await this.prisma.leagueMatch.createMany({
+                    data: validMatches.map(m => ({ leagueId, matchId: m.id })),
+                    skipDuplicates: true,
+                });
+            }
+        }
+        return { ok: true, count: matchIds.length };
     }
 
     @UseGuards(TenantAdminGuard)
