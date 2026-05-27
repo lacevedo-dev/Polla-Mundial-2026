@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { PrismaService } from '../prisma/prisma.service';
-import { IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber, Min, Max, IsInt } from 'class-validator';
-import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan } from '@prisma/client';
+import { TenantProvisioningService } from './tenant-provisioning.service';
+import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 class CreateCorpLeagueDto {
@@ -15,10 +17,39 @@ class CreateCorpLeagueDto {
     @IsOptional() @IsString() primaryTournamentId?: string;
 }
 
+class ProvisionMemberDto {
+    @IsString() @IsNotEmpty() name: string;
+    @IsEmail() email: string;
+    @IsOptional() @IsString() username?: string;
+    @IsOptional() @IsString() phone?: string;
+    @IsOptional() @IsString() tempPassword?: string;
+    @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
+    @IsOptional() @IsBoolean() sendEmail?: boolean;
+}
+
+class BulkUserRow {
+    @IsString() @IsNotEmpty() name: string;
+    @IsEmail() email: string;
+    @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
+}
+
+class BulkProvisionMembersDto {
+    @IsArray() @ValidateNested({ each: true }) @Type(() => BulkUserRow) users: BulkUserRow[];
+    @IsOptional() @IsString() sharedTempPassword?: string;
+    @IsOptional() @IsBoolean() sendEmail?: boolean;
+}
+
+class UpdateMemberRoleDto {
+    @IsEnum(TenantRole) role: TenantRole;
+}
+
 @Controller('corp')
 @UseGuards(JwtAuthGuard, TenantMemberGuard)
 export class CorpPortalController {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly provisioning: TenantProvisioningService,
+    ) {}
 
     @Get('dashboard')
     async getDashboard(@Req() req: any) {
@@ -471,9 +502,9 @@ export class CorpPortalController {
         }
 
         const members = await this.prisma.tenantMember.findMany({
-            where: { tenantId, status: 'ACTIVE' },
+            where: { tenantId },
             include: {
-                user: { select: { id: true, name: true, email: true, username: true, avatar: true } },
+                user: { select: { id: true, name: true, email: true, username: true, avatar: true, mustChangePassword: true, emailVerified: true, createdAt: true } },
             },
             orderBy: { invitedAt: 'asc' },
         });
@@ -485,8 +516,90 @@ export class CorpPortalController {
             email: m.user.email,
             username: m.user.username,
             avatar: m.user.avatar,
+            mustChangePassword: m.user.mustChangePassword,
+            emailVerified: m.user.emailVerified,
             role: m.role,
+            status: m.status,
             joinedAt: m.joinedAt ?? m.invitedAt,
+            createdAt: m.user.createdAt,
         }));
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Post('members')
+    async createMember(@Req() req: any, @Body() dto: ProvisionMemberDto) {
+        const tenantId: string = req.tenantId;
+        return this.provisioning.provisionOwner(tenantId, {
+            name: dto.name,
+            email: dto.email,
+            username: dto.username,
+            phone: dto.phone,
+            tempPassword: dto.tempPassword,
+            role: dto.role ?? TenantRole.PLAYER,
+            sendEmail: dto.sendEmail !== false,
+        });
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Post('members/bulk')
+    async bulkCreateMembers(@Req() req: any, @Body() dto: BulkProvisionMembersDto) {
+        const tenantId: string = req.tenantId;
+        const results: any[] = [];
+        for (const user of dto.users) {
+            try {
+                const result = await this.provisioning.provisionOwner(tenantId, {
+                    name: user.name,
+                    email: user.email,
+                    role: user.role ?? TenantRole.PLAYER,
+                    tempPassword: dto.sharedTempPassword,
+                    sendEmail: dto.sendEmail !== false,
+                });
+                results.push({ email: user.email, ok: true, isNewUser: result.isNewUser });
+            } catch (e: any) {
+                results.push({ email: user.email, ok: false, error: e?.message ?? 'Error desconocido' });
+            }
+        }
+        const successful = results.filter(r => r.ok).length;
+        return { total: dto.users.length, successful, failed: dto.users.length - successful, results };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Patch('members/:memberId')
+    async updateMember(@Req() req: any, @Param('memberId') memberId: string, @Body() dto: UpdateMemberRoleDto) {
+        const tenantId: string = req.tenantId;
+        const member = await this.prisma.tenantMember.findFirst({ where: { id: memberId, tenantId } });
+        if (!member) throw new NotFoundException('Miembro no encontrado');
+        await this.prisma.tenantMember.update({ where: { id: memberId }, data: { role: dto.role } });
+        return { ok: true };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Delete('members/:memberId')
+    async removeMember(@Req() req: any, @Param('memberId') memberId: string) {
+        const tenantId: string = req.tenantId;
+        const member = await this.prisma.tenantMember.findFirst({
+            where: { id: memberId, tenantId },
+            include: { user: { select: { id: true } } },
+        });
+        if (!member) throw new NotFoundException('Miembro no encontrado');
+        await this.prisma.tenantMember.update({
+            where: { id: memberId },
+            data: { status: 'INACTIVE' },
+        });
+        return { ok: true };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @HttpCode(HttpStatus.OK)
+    @Post('members/:memberId/resend-credentials')
+    async resendMemberCredentials(@Req() req: any, @Param('memberId') memberId: string) {
+        const tenantId: string = req.tenantId;
+        const member = await this.prisma.tenantMember.findFirst({
+            where: { id: memberId, tenantId },
+            include: { user: { select: { email: true } } },
+        });
+        if (!member) throw new NotFoundException('Miembro no encontrado');
+        return this.provisioning.resendCredentials(tenantId, { email: member.user.email });
     }
 }
