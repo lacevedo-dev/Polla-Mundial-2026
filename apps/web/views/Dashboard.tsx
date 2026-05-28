@@ -296,9 +296,6 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const memberCount = activeLeague?.stats.memberCount ?? 0;
-    const maxParticipants = activeLeague?.settings.maxParticipants ?? 0;
-
     /* ── Empty state ── */
     if (!isLoading && myLeagues.length === 0 && !error) {
         return (
