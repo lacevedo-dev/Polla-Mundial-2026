@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Clock, Minus, Plus, Settings } from 'lucide-react';
+import { Clock, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fade, formatMatchTime, safeText, summarizeCloseTime, isPredictionWindowClosed } from '../../utils/dashboard';
 import type { MatchViewModel } from '../../stores/prediction.store';
@@ -54,7 +54,7 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                             initial={{ opacity: 0, y: 6 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 + i * 0.07 }}
-                            className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4 shadow-sm shadow-slate-100"
+                            className="rounded-3xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm shadow-slate-100"
                         >
                             <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -74,90 +74,65 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                             </div>
 
                             {/* ── Equipos + marcador ── */}
-                            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2">
 
                                 {/* Local */}
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex flex-col items-start gap-0.5 min-w-0 overflow-hidden">
                                     <img
                                         src={match.homeFlag}
                                         alt=""
                                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                        className="h-8 w-11 shrink-0 rounded-md object-cover shadow-sm"
+                                        className="h-8 w-12 rounded-md object-cover shadow-sm"
                                     />
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-tight">
-                                            {match.homeTeamCode || match.homeTeam.slice(0, 3).toUpperCase()}
-                                        </p>
-                                        <p className="text-[9px] text-slate-400 leading-tight truncate">
-                                            {match.homeTeam}
-                                        </p>
-                                    </div>
+                                    <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">
+                                        {match.homeTeamCode || match.homeTeam.slice(0, 3).toUpperCase()}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 leading-none truncate w-full">
+                                        {match.homeTeam}
+                                    </p>
                                 </div>
 
-                                {/* Inputs de marcador — centro */}
-                                <div className="flex items-center gap-1 shrink-0">
-                                    {(['home', 'away'] as const).map((side, scoreIndex) => (
-                                        <React.Fragment key={side}>
-                                            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const cur = parseInt(side === 'home' ? draft.home || '0' : draft.away || '0', 10) || 0;
-                                                        onDraftChange(match.id, side, String(Math.max(0, cur - 1)));
-                                                    }}
-                                                    disabled={!canEdit || savingMatchId === match.id}
-                                                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
-                                                    aria-label={`Disminuir ${side === 'home' ? 'local' : 'visitante'}`}
-                                                >
-                                                    <Minus size={11} />
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={99}
-                                                    inputMode="numeric"
-                                                    value={side === 'home' ? draft.home : draft.away}
-                                                    onChange={(e) => onDraftChange(match.id, side, e.target.value)}
-                                                    disabled={!canEdit || savingMatchId === match.id}
-                                                    aria-label={`Marcador ${side === 'home' ? 'local' : 'visitante'}`}
-                                                    className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-lime-400 focus:bg-white disabled:opacity-60"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const cur = parseInt(side === 'home' ? draft.home || '0' : draft.away || '0', 10) || 0;
-                                                        onDraftChange(match.id, side, String(cur + 1));
-                                                    }}
-                                                    disabled={!canEdit || savingMatchId === match.id}
-                                                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
-                                                    aria-label={`Aumentar ${side === 'home' ? 'local' : 'visitante'}`}
-                                                >
-                                                    <Plus size={11} />
-                                                </button>
-                                            </div>
-                                            {scoreIndex === 0 && (
-                                                <span className="text-slate-300 font-black px-0.5">-</span>
-                                            )}
-                                        </React.Fragment>
-                                    ))}
+                                {/* Inputs — centro compacto */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={99}
+                                        inputMode="numeric"
+                                        value={draft.home}
+                                        onChange={(e) => onDraftChange(match.id, 'home', e.target.value)}
+                                        disabled={!canEdit || savingMatchId === match.id}
+                                        aria-label="Marcador local"
+                                        className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                    />
+                                    <span className="text-lg font-black text-slate-300 leading-none">:</span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={99}
+                                        inputMode="numeric"
+                                        value={draft.away}
+                                        onChange={(e) => onDraftChange(match.id, 'away', e.target.value)}
+                                        disabled={!canEdit || savingMatchId === match.id}
+                                        aria-label="Marcador visitante"
+                                        className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                    />
                                 </div>
 
                                 {/* Visitante */}
-                                <div className="flex items-center gap-2 min-w-0 justify-end">
-                                    <div className="min-w-0 text-right">
-                                        <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-tight">
-                                            {match.awayTeamCode || match.awayTeam.slice(0, 3).toUpperCase()}
-                                        </p>
-                                        <p className="text-[9px] text-slate-400 leading-tight truncate">
-                                            {match.awayTeam}
-                                        </p>
-                                    </div>
+                                <div className="flex flex-col items-end gap-0.5 min-w-0 overflow-hidden">
                                     <img
                                         src={match.awayFlag}
                                         alt=""
                                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                        className="h-8 w-11 shrink-0 rounded-md object-cover shadow-sm"
+                                        className="h-8 w-12 rounded-md object-cover shadow-sm"
                                     />
+                                    <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">
+                                        {match.awayTeamCode || match.awayTeam.slice(0, 3).toUpperCase()}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 leading-none truncate w-full text-right">
+                                        {match.awayTeam}
+                                    </p>
                                 </div>
                             </div>
 
