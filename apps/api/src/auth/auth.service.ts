@@ -278,6 +278,115 @@ export class AuthService {
         return { ok: true, message: 'Contraseña actualizada exitosamente' };
     }
 
+    async forgotPassword(email: string) {
+        const user = await this.usersService.findByEmail(email);
+        if (!user) {
+            return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
+        }
+
+        const token = generateVerificationToken();
+        const expiresAt = calculateTokenExpiration(1);
+
+        await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+        await this.prisma.passwordResetToken.create({
+            data: { token, userId: user.id, expiresAt },
+        });
+
+        const appUrl = process.env.APP_URL || 'https://polla2026.com';
+        await this.emailService.sendPasswordResetEmail(user.email, token, user.name.split(' ')[0], appUrl);
+
+        return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
+    }
+
+    async resetPassword(token: string, newPassword: string) {
+        if (newPassword.length < 8) {
+            throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
+        }
+
+        const resetToken = await this.prisma.passwordResetToken.findUnique({
+            where: { token },
+            include: { user: true },
+        });
+
+        if (!resetToken) throw new BadRequestException('Token inválido o expirado');
+        if (resetToken.usedAt) throw new BadRequestException('Este enlace ya fue utilizado');
+        if (new Date() > resetToken.expiresAt) throw new BadRequestException('El enlace ha expirado. Solicita uno nuevo');
+
+        const newHash = await bcrypt.hash(newPassword, 10);
+
+        await this.prisma.$transaction([
+            this.prisma.user.update({
+                where: { id: resetToken.userId },
+                data: { passwordHash: newHash, mustChangePassword: false },
+            }),
+            this.prisma.passwordResetToken.update({
+                where: { id: resetToken.id },
+                data: { usedAt: new Date() },
+            }),
+        ]);
+
+        return { ok: true, message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.' };
+    }
+
+    async validateOAuthUser(profile: {
+        provider: 'google' | 'github';
+        providerId: string;
+        email: string;
+        name: string;
+        avatar?: string;
+    }) {
+        const { provider, providerId, email, name, avatar } = profile;
+        const providerField = provider === 'google' ? 'googleId' : 'githubId';
+
+        let user = await this.prisma.user.findFirst({
+            where: { [providerField]: providerId },
+        });
+
+        if (!user && email) {
+            user = await this.usersService.findByEmail(email);
+            if (user) {
+                await this.prisma.user.update({
+                    where: { id: user.id },
+                    data: { [providerField]: providerId },
+                });
+            }
+        }
+
+        if (!user) {
+            const base = name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+            let username = base.slice(0, 15);
+            const exists = await this.usersService.findByUsername(username);
+            if (exists) username = `${username}${Date.now().toString().slice(-4)}`;
+
+            user = await this.prisma.user.create({
+                data: {
+                    name: name || 'Usuario',
+                    email: email || `${providerId}@${provider}.oauth`,
+                    username,
+                    [providerField]: providerId,
+                    avatar: avatar ?? null,
+                    emailVerified: true,
+                    passwordHash: null,
+                },
+            });
+        }
+
+        const { passwordHash: _, ...result } = user as any;
+        const payload = {
+            username: result.username,
+            sub: result.id,
+            email: result.email,
+            emailVerified: result.emailVerified,
+            systemRole: result.systemRole ?? 'USER',
+        };
+
+        return {
+            accessToken: this.jwtService.sign(payload),
+            user: { ...result },
+        };
+    }
+
     private async wrapRegisterDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
         try {
             return await operation();

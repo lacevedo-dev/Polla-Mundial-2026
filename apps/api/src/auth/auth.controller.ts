@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Request, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Redirect, Request, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { AuthService } from './auth.service';
@@ -7,7 +7,11 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { GithubAuthGuard } from './guards/github-auth.guard';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseSystemConfigValue } from '../system-config/system-config.util';
@@ -89,5 +93,47 @@ export class AuthController {
     @Post('change-password')
     async changePassword(@Body() dto: ChangePasswordDto, @Request() req) {
         return this.authService.changePassword(req.user.userId, dto.currentPassword, dto.newPassword);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Post('forgot-password')
+    async forgotPassword(@Body() dto: ForgotPasswordDto) {
+        return this.authService.forgotPassword(dto.email);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @Post('reset-password')
+    async resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.authService.resetPassword(dto.token, dto.newPassword);
+    }
+
+    @Get('google')
+    @UseGuards(GoogleAuthGuard)
+    googleAuth() {
+        // Redirige a Google OAuth — Passport maneja la redirección
+    }
+
+    @Get('google/callback')
+    @UseGuards(GoogleAuthGuard)
+    @Redirect()
+    async googleCallback(@Request() req) {
+        const appUrl = process.env.APP_URL || 'http://localhost:5173';
+        const { accessToken } = req.user;
+        return { url: `${appUrl}/oauth/callback?token=${accessToken}` };
+    }
+
+    @Get('github')
+    @UseGuards(GithubAuthGuard)
+    githubAuth() {
+        // Redirige a GitHub OAuth — Passport maneja la redirección
+    }
+
+    @Get('github/callback')
+    @UseGuards(GithubAuthGuard)
+    @Redirect()
+    async githubCallback(@Request() req) {
+        const appUrl = process.env.APP_URL || 'http://localhost:5173';
+        const { accessToken } = req.user;
+        return { url: `${appUrl}/oauth/callback?token=${accessToken}` };
     }
 }

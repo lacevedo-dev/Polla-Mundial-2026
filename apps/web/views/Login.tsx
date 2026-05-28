@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { ArrowLeft, ArrowRight, AlertCircle, LogIn, ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { EmailAutocompleteInput } from '../components/UI';
 import { LegalDialog } from '../components/legal/LegalDialog';
@@ -15,12 +15,19 @@ export const normalizeCheckboxState = (checked: boolean | 'indeterminate') => ch
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isLoading } = useAuthStore();
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(
+    searchParams.get('error') === 'oauth_failed'
+      ? 'No fue posible autenticarte con el proveedor externo. Intenta de nuevo.'
+      : null,
+  );
   const [rememberMe, setRememberMe] = React.useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = React.useState<LegalDocumentKey | null>(null);
+
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3004';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +121,7 @@ const Login: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Contraseña</label>
-                <button type="button" className="text-[10px] font-bold text-slate-400 hover:text-black transition-colors uppercase tracking-wider" disabled={isLoading}>¿Olvidaste tu contraseña?</button>
+                <button type="button" onClick={() => navigate('/forgot-password')} className="text-[10px] font-bold text-slate-400 hover:text-black transition-colors uppercase tracking-wider" disabled={isLoading}>¿Olvidaste tu contraseña?</button>
               </div>
               <Input
                 type="password"
@@ -152,11 +159,23 @@ const Login: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="gap-2 text-slate-600" disabled={isLoading}>
-                <img src="https://github.com/favicon.ico" className="w-4 h-4 grayscale opacity-70" alt="G" /> GitHub
+              <Button
+                variant="outline"
+                className="gap-2 text-slate-600"
+                disabled={isLoading}
+                type="button"
+                onClick={() => { window.location.href = `${apiUrl}/auth/github`; }}
+              >
+                <img src="https://github.com/favicon.ico" className="w-4 h-4 grayscale opacity-70" alt="" /> GitHub
               </Button>
-              <Button variant="outline" className="gap-2 text-slate-600" disabled={isLoading}>
-                <img src="https://www.google.com/favicon.ico" className="w-4 h-4 grayscale opacity-70" alt="G" /> Google
+              <Button
+                variant="outline"
+                className="gap-2 text-slate-600"
+                disabled={isLoading}
+                type="button"
+                onClick={() => { window.location.href = `${apiUrl}/auth/google`; }}
+              >
+                <img src="https://www.google.com/favicon.ico" className="w-4 h-4 grayscale opacity-70" alt="" /> Google
               </Button>
             </div>
           </form>

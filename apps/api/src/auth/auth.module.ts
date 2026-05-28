@@ -8,6 +8,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AvatarStorageService } from './avatar-storage.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { GithubStrategy } from './strategies/github.strategy';
 
 @Module({
     imports: [
@@ -20,7 +22,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
             signOptions: { expiresIn: '7d' },
         }),
     ],
-    providers: [AuthService, AvatarStorageService, JwtStrategy],
+    providers: [AuthService, AvatarStorageService, JwtStrategy, GoogleStrategy, GithubStrategy],
     controllers: [AuthController],
     exports: [AuthService],
 })

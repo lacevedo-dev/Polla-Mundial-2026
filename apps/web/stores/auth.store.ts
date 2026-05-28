@@ -24,6 +24,7 @@ interface AuthState {
     emailVerified: boolean;
     login: (data: any) => Promise<void>;
     register: (data: any) => Promise<void>;
+    loginWithToken: (token: string) => Promise<void>;
     logout: () => void;
     checkAuth: () => Promise<boolean>;
     verifyEmail: (token: string) => Promise<void>;
@@ -126,6 +127,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         } catch (error) {
             set({ isLoading: false });
             throw normalizeAuthError(error, 'register');
+        }
+    },
+
+    loginWithToken: async (token: string) => {
+        localStorage.setItem('token', token);
+        set({ token, isLoading: true });
+        try {
+            const user: any = await request('/auth/profile');
+            const emailVerified = user?.emailVerified ?? true;
+            set({ user: normalizeUser(user), token, emailVerified, sessionChecked: true, isLoading: false });
+        } catch (error) {
+            localStorage.removeItem('token');
+            set({ user: null, token: null, isLoading: false, sessionChecked: true });
+            throw error;
         }
     },
 

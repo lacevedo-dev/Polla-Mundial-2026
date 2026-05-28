@@ -43,6 +43,9 @@ import Register from './views/Register';
 
 // Vistas públicas - lazy loaded
 const EmailVerification = React.lazy(() => import('./views/EmailVerification'));
+const ForgotPassword = React.lazy(() => import('./views/ForgotPassword'));
+const ResetPassword = React.lazy(() => import('./views/ResetPassword'));
+const OAuthCallback = React.lazy(() => import('./views/OAuthCallback'));
 const JoinLeague = React.lazy(() => import('./views/JoinLeague'));
 const ConfirmInvitation = React.lazy(() => import('./views/ConfirmInvitation'));
 const Checkout = React.lazy(() => import('./views/Checkout'));
@@ -71,6 +74,9 @@ const publicRoutes: RouteObject[] = [
     { path: '/login', element: <Login /> },
     { path: '/register', element: <Register /> },
     { path: '/verify-email', element: <Suspense fallback={<LoadingFallback />}><EmailVerification /></Suspense> },
+    { path: '/forgot-password', element: <Suspense fallback={<LoadingFallback />}><ForgotPassword /></Suspense> },
+    { path: '/reset-password', element: <Suspense fallback={<LoadingFallback />}><ResetPassword /></Suspense> },
+    { path: '/oauth/callback', element: <Suspense fallback={<LoadingFallback />}><OAuthCallback /></Suspense> },
     { path: '/join/:code', element: <Suspense fallback={<LoadingFallback />}><JoinLeague /></Suspense> },
     { path: '/join', element: <Suspense fallback={<LoadingFallback />}><JoinLeague /></Suspense> },
     { path: '/confirm-invitation', element: <Suspense fallback={<LoadingFallback />}><ConfirmInvitation /></Suspense> },

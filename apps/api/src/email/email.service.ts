@@ -78,6 +78,72 @@ export class EmailService {
     }
   }
 
+  async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    userName: string,
+    appUrl: string = process.env.APP_URL || 'https://polla2026.com',
+  ): Promise<void> {
+    try {
+      const resetLink = `${appUrl}/reset-password?token=${token}`;
+      const html = this.getPasswordResetTemplate(userName, resetLink, token);
+      const text = `Restablece tu contraseña\n\nHola ${userName},\n\nRecibimos una solicitud para restablecer tu contraseña.\n\nEnlace: ${resetLink}\n\nO usa este código: ${token}\n\nEste enlace expira en 1 hora. Si no solicitaste esto, ignora este correo.`;
+
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.VERIFICATION,
+        priority: EmailJobPriority.HIGH,
+        required: true,
+        recipientEmail: email,
+        subject: 'Restablece tu contraseña - Polla 2026',
+        html,
+        text,
+        dedupeKey: `password-reset:${email}:${token}`,
+      });
+
+      if (queued) {
+        this.logger.log(`Password reset email queued for ${email}`);
+      } else {
+        this.logger.warn(`Password reset email for ${email} was not queued`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue password reset email for ${email}: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  private getPasswordResetTemplate(userName: string, resetLink: string, token: string): string {
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restablecer contraseña</title>
+</head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 30px rgba(15,23,42,.12)">
+    <div style="background:#111827;color:#ffffff;padding:24px 28px;">
+      <h1 style="margin:0;font-size:24px;">Polla 2026</h1>
+      <p style="margin:8px 0 0;font-size:14px;opacity:.9">Restablecer contraseña</p>
+    </div>
+    <div style="padding:28px;line-height:1.7;">
+      <p>Hola ${userName},</p>
+      <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el siguiente botón para crear una nueva contraseña:</p>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${resetLink}" style="display:inline-block;background:#a3e635;color:#0f172a;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;">Restablecer contraseña</a>
+      </p>
+      <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+      <p><a href="${resetLink}">${resetLink}</a></p>
+      <p>También puedes usar este código:</p>
+      <div style="padding:14px 16px;background:#f0fdf4;border-radius:12px;font-family:monospace;font-size:16px;font-weight:700;letter-spacing:.06em;">${token}</div>
+      <p style="margin-top:20px;color:#475569;font-size:13px;">Este enlace expira en <strong>1 hora</strong>. Si no solicitaste restablecer tu contraseña, puedes ignorar este correo de forma segura.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
   private getEmailTemplate(userName: string, verificationLink: string, token: string, title = 'Verifica tu correo'): string {
     return `<!DOCTYPE html>
 <html lang="es">
