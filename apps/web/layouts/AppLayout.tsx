@@ -128,9 +128,19 @@ const AppLayout: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        <button onClick={handleLogout} className="text-slate-400 hover:text-rose-400 transition-colors">
-                            <LogOut size={18} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                            <NavLink
+                                to="/profile"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-lime-400 hover:bg-slate-900 transition-colors"
+                                aria-label="Mi perfil"
+                                title="Mi perfil"
+                            >
+                                <UserCircle size={18} />
+                            </NavLink>
+                            <button onClick={handleLogout} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition-colors" title="Cerrar sesión">
+                                <LogOut size={18} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </aside>
