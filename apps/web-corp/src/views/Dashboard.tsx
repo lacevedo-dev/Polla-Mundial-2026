@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Link, useBlocker } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     Trophy, Users, ChevronRight,
     Clock, CheckCircle2, Star, Save, Lock, Loader2, AlertTriangle,
@@ -350,6 +350,8 @@ export default function Dashboard() {
     const [isSavingAll, setIsSavingAll] = useState(false);
     const [forceSaveTick, setForceSaveTick] = useState(0);
     const [resetTick, setResetTick] = useState(0);
+    const [pendingNavTo, setPendingNavTo] = useState<string | null>(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         request<DashboardData>('/corp/dashboard')
@@ -424,7 +426,10 @@ export default function Dashboard() {
         setResetTick(t => t + 1);
     }
 
-    const blocker = useBlocker(hasDirtyChanges);
+    function guardedNavigate(to: string) {
+        if (hasDirtyChanges) { setPendingNavTo(to); }
+        else { navigate(to); }
+    }
 
     useEffect(() => {
         if (!hasDirtyChanges) return;
@@ -895,8 +900,8 @@ export default function Dashboard() {
             </button>
         )}
 
-        {/* Modal blocker — cambios sin guardar al navegar */}
-        {blocker.state === 'blocked' && (
+        {/* Modal — cambios sin guardar al navegar */}
+        {pendingNavTo !== null && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
                     <div className="flex items-start justify-between gap-2">
@@ -904,11 +909,11 @@ export default function Dashboard() {
                             <p className="font-black text-slate-900 text-base">¿Salir sin guardar?</p>
                             <p className="text-sm text-slate-500 mt-1">Tienes {pendingDrafts.size} pronóstico{pendingDrafts.size !== 1 ? 's' : ''} sin guardar. ¿Qué deseas hacer?</p>
                         </div>
-                        <button onClick={() => blocker.reset()} className="shrink-0 text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                        <button onClick={() => setPendingNavTo(null)} className="shrink-0 text-slate-400 hover:text-slate-600"><X size={18} /></button>
                     </div>
                     <div className="flex flex-col gap-2">
                         <button
-                            onClick={async () => { await handleSaveAll(); blocker.proceed(); }}
+                            onClick={async () => { await handleSaveAll(); navigate(pendingNavTo!); setPendingNavTo(null); }}
                             disabled={isSavingAll}
                             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-60"
                             style={{ backgroundColor: 'var(--color-primary,#f59e0b)', color: '#fff' }}>
@@ -916,12 +921,12 @@ export default function Dashboard() {
                             Guardar y salir
                         </button>
                         <button
-                            onClick={() => { discardAll(); blocker.proceed(); }}
+                            onClick={() => { discardAll(); navigate(pendingNavTo!); setPendingNavTo(null); }}
                             className="w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
                             Descartar y salir
                         </button>
                         <button
-                            onClick={() => blocker.reset()}
+                            onClick={() => setPendingNavTo(null)}
                             className="w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">
                             Cancelar
                         </button>
