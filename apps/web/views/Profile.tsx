@@ -390,22 +390,56 @@ const Profile: React.FC = () => {
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user?.email}</div>
           </div>
 
-          {/* Tab bar - scrollable */}
-          <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-custom">
-            {TABS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => { setActiveTab(t.id); setSaveStatus('idle'); setSaveMsg(''); }}
-                className={`shrink-0 px-4 py-3 text-[9px] font-black uppercase tracking-widest transition-all ${
-                  activeTab === t.id
-                    ? (t.id === 'peligroso' ? 'text-rose-600 border-b-2 border-rose-500' : 'text-black border-b-2 border-lime-400')
-                    : (t.id === 'peligroso' ? 'text-rose-400 hover:text-rose-600' : 'text-slate-400 hover:text-slate-700')
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {/* Tab grid 3×3 */}
+          {(() => {
+            const TAB_ICONS: Record<Tab, React.ReactNode> = {
+              datos:      <User size={18} />,
+              cuenta:     <Shield size={18} />,
+              foto:       <Camera size={18} />,
+              seguridad:  <Lock size={18} />,
+              alertas:    <Bell size={18} />,
+              plan:       <Crown size={18} />,
+              privacidad: <Eye size={18} />,
+              historial:  <Package size={18} />,
+              peligroso:  <AlertTriangle size={18} />,
+            };
+            return (
+              <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100" role="tablist" aria-label="Secciones del perfil">
+                {TABS.map(t => {
+                  const isActive = activeTab === t.id;
+                  const isDanger = t.id === 'peligroso';
+                  return (
+                    <button
+                      key={t.id}
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={`panel-${t.id}`}
+                      onClick={() => { setActiveTab(t.id); setSaveStatus('idle'); setSaveMsg(''); }}
+                      className={`relative flex flex-col items-center justify-center gap-1.5 py-3 px-1 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-inset
+                        ${isActive
+                          ? isDanger
+                            ? 'bg-rose-50 text-rose-600'
+                            : 'bg-white text-black'
+                          : isDanger
+                            ? 'bg-white text-rose-400 hover:bg-rose-50 hover:text-rose-600'
+                            : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700'
+                        }`}
+                    >
+                      <span className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                        isActive
+                          ? isDanger ? 'bg-rose-100' : 'bg-lime-400 text-slate-950'
+                          : 'bg-slate-100'
+                      }`}>
+                        {TAB_ICONS[t.id]}
+                      </span>
+                      <span className="text-[8px] font-black uppercase tracking-wider leading-none">{t.label}</span>
+                      {isActive && !isDanger && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-lime-400 rounded-full" />}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Tab content */}
           <div className="p-6 md:p-8">
