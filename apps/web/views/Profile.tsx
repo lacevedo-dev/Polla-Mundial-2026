@@ -4,11 +4,14 @@ import {
   User, Camera, Lock, Eye, EyeOff, Save, ArrowLeft,
   CheckCircle2, CheckCircle, AlertCircle as AlertIcon, Calendar,
   UploadCloud, RefreshCcw, ChevronDown, Search, Check,
-  FileWarning, Sparkles, XCircle
+  FileWarning, Sparkles, XCircle, Bell, Shield,
+  Package, AlertTriangle, Trash2, Diamond, ExternalLink,
+  CreditCard, Crown
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { request } from '../api';
 import { Input, AutocompleteInput, Button } from '../components/UI';
+import { NotificationToggle } from '../components/PWAPrompt';
 
 const COUNTRY_CODES = [
   { code: '+57', name: 'Colombia', iso: 'co', length: 10, placeholder: '310 123 4567', regex: /^3\d{9}$/ },
@@ -22,14 +25,34 @@ const COUNTRY_CODES = [
   { code: '+55', name: 'Brasil', iso: 'br', length: 11, placeholder: '11 91234 5678' },
 ];
 
-type Tab = 'datos' | 'cuenta' | 'foto' | 'seguridad';
+type Tab = 'datos' | 'cuenta' | 'foto' | 'seguridad' | 'alertas' | 'plan' | 'privacidad' | 'historial' | 'peligroso';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'datos',     label: 'Datos' },
-  { id: 'cuenta',    label: 'Cuenta' },
-  { id: 'foto',      label: 'Foto' },
-  { id: 'seguridad', label: 'Seguridad' },
+  { id: 'datos',      label: 'Datos' },
+  { id: 'cuenta',     label: 'Cuenta' },
+  { id: 'foto',       label: 'Foto' },
+  { id: 'seguridad',  label: 'Seguridad' },
+  { id: 'alertas',    label: 'Alertas' },
+  { id: 'plan',       label: 'Plan' },
+  { id: 'privacidad', label: 'Privacidad' },
+  { id: 'historial',  label: 'Historial' },
+  { id: 'peligroso',  label: 'Peligroso' },
 ];
+
+const PLANS = {
+  FREE:    { name: 'Gratuito',        badge: 'bg-slate-200 text-slate-700', accent: 'slate',  Icon: Crown,    price: '$0',      period: 'Siempre gratis', maxParticipants: 10,  features: ['1 polla activa', 'Hasta 10 jugadores', 'Estadísticas básicas', 'Soporte comunidad'] },
+  GOLD:    { name: 'Premium Gold',    badge: 'bg-amber-400 text-slate-950', accent: 'amber',  Icon: Sparkles, price: '$29.900', period: 'Pago único COP',  maxParticipants: 50,  features: ['Pollas ilimitadas', 'Hasta 50 jugadores', 'IA Ilimitada', 'Estética Gold', 'Soporte estándar'] },
+  DIAMOND: { name: 'Empresa Diamond', badge: 'bg-cyan-400 text-slate-950',  accent: 'cyan',   Icon: Diamond,  price: '$89.900', period: 'Pago único COP',  maxParticipants: 200, features: ['Todo Gold incluido', 'Hasta 200 jugadores', 'Branding personalizado', 'Panel empresarial', 'Soporte prioritario'] },
+};
+
+interface Order {
+  id: string;
+  amount: number;
+  currency: string;
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
+  createdAt: string;
+  items: { name: string; quantity: number }[];
+}
 
 const formatToTitleCase = (str: string) =>
   str.toLocaleLowerCase('es-CO').replace(/(^|[\s'-])(\p{L})/gu, (_, sep: string, ch: string) => `${sep}${ch.toLocaleUpperCase('es-CO')}`);
@@ -84,6 +107,45 @@ const Profile: React.FC = () => {
   const [pwStatus, setPwStatus] = React.useState<'idle' | 'success' | 'error'>('idle');
   const [pwMsg, setPwMsg] = React.useState('');
 
+  /* ─── Alertas (email prefs almacenadas en localStorage) ─── */
+  const [emailPrefs, setEmailPrefs] = React.useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem(`emailprefs_${user?.id}`) || '{}'); }
+    catch { return {}; }
+  });
+  const emailPrefDefaults: Record<string, boolean> = { reminder: true, closing: true, result: true, report: false };
+  const getEmailPref = (k: string) => emailPrefs[k] ?? emailPrefDefaults[k] ?? true;
+  const toggleEmailPref = (k: string) => {
+    const next = { ...emailPrefs, [k]: !getEmailPref(k) };
+    setEmailPrefs(next);
+    localStorage.setItem(`emailprefs_${user?.id}`, JSON.stringify(next));
+  };
+
+  /* ─── Plan ─── */
+  const currentPlanKey = ((user?.plan as string) || 'FREE').toUpperCase() as keyof typeof PLANS;
+
+  /* ─── Privacidad ─── */
+  const [privPrefs, setPrivPrefs] = React.useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem(`privprefs_${user?.id}`) || '{}'); }
+    catch { return {}; }
+  });
+  const privDefaults: Record<string, boolean> = { profilePublic: true, showInRanking: true, showStats: true, showPredictions: false };
+  const getPriv = (k: string) => privPrefs[k] ?? privDefaults[k];
+  const togglePriv = (k: string) => {
+    const next = { ...privPrefs, [k]: !getPriv(k) };
+    setPrivPrefs(next);
+    localStorage.setItem(`privprefs_${user?.id}`, JSON.stringify(next));
+  };
+
+  /* ─── Historial ─── */
+  const [orders, setOrders] = React.useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = React.useState(false);
+  const [ordersError, setOrdersError] = React.useState<string | null>(null);
+
+  /* ─── Peligroso ─── */
+  const [showDeleteModal, setShowDeleteModal] = React.useState(false);
+  const [deleteConfirm, setDeleteConfirm] = React.useState('');
+  const { logout } = useAuthStore();
+
   /* ─── Effects ─── */
   React.useEffect(() => {
     if (!name) { setNameStatus('idle'); return; }
@@ -135,6 +197,17 @@ const Profile: React.FC = () => {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  React.useEffect(() => {
+    if (activeTab !== 'historial') return;
+    if (orders.length > 0) return;
+    setOrdersLoading(true);
+    setOrdersError(null);
+    request<{ orders: Order[] }>('/orders')
+      .then(r => setOrders(r.orders || []))
+      .catch(e => setOrdersError(e.message || 'Error al cargar el historial'))
+      .finally(() => setOrdersLoading(false));
+  }, [activeTab]);
 
   /* ─── Sugerencias de username ─── */
   const usernameSuggestions = React.useMemo(() => {
@@ -265,12 +338,22 @@ const Profile: React.FC = () => {
     c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.includes(countrySearch)
   );
 
+  const TABS_WITH_SAVE: Tab[] = ['datos', 'cuenta', 'foto'];
+
   const isSaveDisabled = () => {
     if (isLoading || isProcessingFile) return true;
     if (activeTab === 'datos') return nameStatus !== 'valid' || (!!birthDate && birthStatus === 'underage');
     if (activeTab === 'cuenta') return usernameStatus !== 'available';
     if (activeTab === 'foto') return !avatarFile;
     return false;
+  };
+
+  const formatCurrency = (amount: number, currency: string) =>
+    new Intl.NumberFormat('es-CO', { style: 'currency', currency: currency || 'COP', maximumFractionDigits: 0 }).format(amount / 100);
+
+  const getOrderStatusBadge = (status: Order['status']) => {
+    const map = { COMPLETED: 'bg-lime-50 text-lime-700 border-lime-200', PENDING: 'bg-amber-50 text-amber-700 border-amber-200', FAILED: 'bg-rose-50 text-rose-700 border-rose-200', REFUNDED: 'bg-slate-50 text-slate-600 border-slate-200' };
+    return map[status] || map.PENDING;
   };
 
   return (
@@ -307,16 +390,16 @@ const Profile: React.FC = () => {
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user?.email}</div>
           </div>
 
-          {/* Tab bar */}
-          <div className="flex border-b border-slate-100">
+          {/* Tab bar - scrollable */}
+          <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-custom">
             {TABS.map(t => (
               <button
                 key={t.id}
                 onClick={() => { setActiveTab(t.id); setSaveStatus('idle'); setSaveMsg(''); }}
-                className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
+                className={`shrink-0 px-4 py-3 text-[9px] font-black uppercase tracking-widest transition-all ${
                   activeTab === t.id
-                    ? 'text-black border-b-2 border-lime-400'
-                    : 'text-slate-400 hover:text-slate-700'
+                    ? (t.id === 'peligroso' ? 'text-rose-600 border-b-2 border-rose-500' : 'text-black border-b-2 border-lime-400')
+                    : (t.id === 'peligroso' ? 'text-rose-400 hover:text-rose-600' : 'text-slate-400 hover:text-slate-700')
                 }`}
               >
                 {t.label}
@@ -613,8 +696,238 @@ const Profile: React.FC = () => {
               </div>
             )}
 
-            {/* ─── Feedback + Botón guardar (excepto seguridad) ─── */}
-            {activeTab !== 'seguridad' && (
+            {/* ─── TAB: ALERTAS ─── */}
+            {activeTab === 'alertas' && (
+              <div className="space-y-5 animate-in fade-in slide-in-from-right-2 duration-200">
+                <div>
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Notificaciones Push</h3>
+                  <NotificationToggle />
+                </div>
+
+                <div>
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Alertas por Correo</h3>
+                  <div className="space-y-2">
+                    {[
+                      { k: 'reminder', icon: Bell,    label: 'Recordatorio de partido',      desc: '1 hora antes de cada partido' },
+                      { k: 'closing',  icon: AlertIcon, label: 'Cierre de pronósticos',       desc: '15 min antes del cierre' },
+                      { k: 'result',   icon: CheckCircle, label: 'Resultados publicados',     desc: 'Cuando salen los marcadores' },
+                      { k: 'report',   icon: Package,  label: 'Reporte semanal de mi ranking', desc: 'Resumen de posiciones y puntos' },
+                    ].map(({ k, icon: Icon, label, desc }) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => toggleEmailPref(k)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${getEmailPref(k) ? 'bg-lime-50 border-lime-200' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}
+                      >
+                        <Icon size={16} className={getEmailPref(k) ? 'text-lime-600' : 'text-slate-400'} />
+                        <div className="flex-1">
+                          <p className={`text-xs font-bold ${getEmailPref(k) ? 'text-lime-900' : 'text-slate-700'}`}>{label}</p>
+                          <p className="text-[9px] text-slate-500">{desc}</p>
+                        </div>
+                        <span className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 ${getEmailPref(k) ? 'bg-lime-400' : 'bg-slate-200'}`} />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-slate-400 mt-3 ml-1">Los cambios se guardan automáticamente en este dispositivo.</p>
+                </div>
+              </div>
+            )}
+
+            {/* ─── TAB: PLAN ─── */}
+            {activeTab === 'plan' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
+                {/* Plan actual */}
+                <div className={`p-4 rounded-2xl flex items-center gap-3 ${currentPlanKey === 'FREE' ? 'bg-slate-100' : currentPlanKey === 'GOLD' ? 'bg-amber-50 border border-amber-200' : 'bg-cyan-50 border border-cyan-200'}`}>
+                  {React.createElement(PLANS[currentPlanKey].Icon, { size: 20, className: currentPlanKey === 'FREE' ? 'text-slate-500' : currentPlanKey === 'GOLD' ? 'text-amber-500' : 'text-cyan-500' })}
+                  <div className="flex-1">
+                    <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Plan Actual</p>
+                    <p className="font-black text-slate-900 text-sm uppercase">{PLANS[currentPlanKey].name}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${PLANS[currentPlanKey].badge}`}>{currentPlanKey}</span>
+                </div>
+
+                {/* Comparación */}
+                <div className="space-y-3">
+                  {(Object.entries(PLANS) as [keyof typeof PLANS, typeof PLANS.FREE][]).map(([key, plan]) => {
+                    const isCurrent = key === currentPlanKey;
+                    const isUpgrade = Object.keys(PLANS).indexOf(key) > Object.keys(PLANS).indexOf(currentPlanKey);
+                    return (
+                      <div key={key} className={`p-4 rounded-2xl border-2 transition-all ${isCurrent ? (key === 'FREE' ? 'border-slate-300 bg-white' : key === 'GOLD' ? 'border-amber-400 bg-amber-50/30' : 'border-cyan-400 bg-cyan-50/30') : 'border-slate-100 bg-white'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            {React.createElement(plan.Icon, { size: 16, className: key === 'FREE' ? 'text-slate-400' : key === 'GOLD' ? 'text-amber-500' : 'text-cyan-500' })}
+                            <div>
+                              <p className="text-xs font-black text-slate-900 uppercase">{plan.name}</p>
+                              <p className="text-[9px] text-slate-500">{plan.period} · hasta {plan.maxParticipants} jugadores</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-black text-slate-900">{plan.price}</p>
+                            {isCurrent && <span className="text-[8px] font-black text-lime-600 uppercase">Tu plan</span>}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3">
+                          {plan.features.map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                              <Check size={9} className={key === 'FREE' ? 'text-slate-400' : key === 'GOLD' ? 'text-amber-500' : 'text-cyan-500'} />
+                              <span className="text-[9px] text-slate-600 font-bold">{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {isUpgrade && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className={`w-full h-9 mt-3 rounded-xl font-black text-[9px] uppercase tracking-widest ${key === 'GOLD' ? 'bg-amber-400 text-slate-950 hover:bg-amber-500' : 'bg-cyan-400 text-slate-950 hover:bg-cyan-500'}`}
+                            onClick={() => navigate('/checkout', { state: { plan: key.toLowerCase() } })}
+                          >
+                            <ExternalLink size={12} className="mr-1.5" /> Mejorar a {plan.name}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-center text-[9px] text-slate-400">Los planes son pagos únicos · sin suscripción mensual</p>
+              </div>
+            )}
+
+            {/* ─── TAB: PRIVACIDAD ─── */}
+            {activeTab === 'privacidad' && (
+              <div className="space-y-5 animate-in fade-in slide-in-from-right-2 duration-200">
+                <div>
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Visibilidad de Perfil</h3>
+                  <div className="space-y-2">
+                    {[
+                      { k: 'profilePublic',   icon: Shield,      label: 'Perfil público',              desc: 'Otros usuarios pueden ver tu perfil y estadísticas' },
+                      { k: 'showInRanking',   icon: Crown,       label: 'Aparecer en rankings',         desc: 'Tu posición es visible en tablas globales' },
+                      { k: 'showStats',       icon: CheckCircle, label: 'Mostrar mis estadísticas',     desc: 'Precisión de pronósticos visible para otros' },
+                      { k: 'showPredictions', icon: Eye,         label: 'Mostrar mis pronósticos',      desc: 'Solo visibles después del cierre del partido' },
+                    ].map(({ k, icon: Icon, label, desc }) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => togglePriv(k)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${getPriv(k) ? 'bg-lime-50 border-lime-200' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}
+                      >
+                        <Icon size={16} className={getPriv(k) ? 'text-lime-600' : 'text-slate-400'} />
+                        <div className="flex-1">
+                          <p className={`text-xs font-bold ${getPriv(k) ? 'text-lime-900' : 'text-slate-700'}`}>{label}</p>
+                          <p className="text-[9px] text-slate-500">{desc}</p>
+                        </div>
+                        <span className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 ${getPriv(k) ? 'bg-lime-400' : 'bg-slate-200'}`} />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-slate-400 mt-3 ml-1">Preferencias guardadas localmente en este dispositivo.</p>
+                </div>
+              </div>
+            )}
+
+            {/* ─── TAB: HISTORIAL ─── */}
+            {activeTab === 'historial' && (
+              <div className="animate-in fade-in slide-in-from-right-2 duration-200">
+                {ordersLoading && (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="w-8 h-8 border-2 border-slate-200 border-t-lime-500 rounded-full animate-spin" />
+                    <p className="text-xs text-slate-400 font-bold">Cargando historial...</p>
+                  </div>
+                )}
+                {ordersError && (
+                  <div className="flex items-center gap-2 text-rose-600 bg-rose-50 p-4 rounded-2xl border border-rose-200">
+                    <AlertIcon size={16} /><p className="text-xs font-bold">{ordersError}</p>
+                  </div>
+                )}
+                {!ordersLoading && !ordersError && orders.length === 0 && (
+                  <div className="text-center py-12 space-y-3">
+                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto">
+                      <Package size={28} className="text-slate-300" />
+                    </div>
+                    <p className="font-bold text-slate-500 text-sm">Sin historial de compras</p>
+                    <p className="text-[10px] text-slate-400">Aún no has realizado ningún pago en la plataforma.</p>
+                    {currentPlanKey === 'FREE' && (
+                      <Button type="button" variant="secondary" className="h-10 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest mt-2" onClick={() => navigate('/checkout')}>
+                        <CreditCard size={14} className="mr-1.5" /> Ver planes disponibles
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {!ordersLoading && orders.length > 0 && (
+                  <div className="space-y-3">
+                    {orders.map(order => (
+                      <div key={order.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 space-y-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border ${getOrderStatusBadge(order.status)}`}>{order.status}</span>
+                              <span className="text-[9px] font-bold text-slate-400">#{order.id.slice(-8)}</span>
+                            </div>
+                            {order.items.map((item, i) => <p key={i} className="text-xs font-bold text-slate-800">{item.name}</p>)}
+                            <p className="text-[9px] text-slate-500">{new Date(order.createdAt).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                          </div>
+                          <p className="text-base font-black text-slate-900 shrink-0">{formatCurrency(order.amount, order.currency)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ─── TAB: PELIGROSO ─── */}
+            {activeTab === 'peligroso' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 font-bold leading-relaxed">Las acciones en esta sección son permanentes o afectan tu sesión activa. Procede con precaución.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="p-4 rounded-2xl border border-slate-100 bg-white space-y-3">
+                    <div>
+                      <p className="text-xs font-black text-slate-800">Cerrar sesión</p>
+                      <p className="text-[9px] text-slate-500 mt-0.5">Salir de tu cuenta en este dispositivo.</p>
+                    </div>
+                    <Button type="button" variant="outline" className="w-full h-10 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 text-slate-700 hover:border-rose-300 hover:text-rose-700" onClick={logout}>
+                      Cerrar sesión
+                    </Button>
+                  </div>
+
+                  <div className="p-4 rounded-2xl border border-rose-100 bg-rose-50/50 space-y-3">
+                    <div>
+                      <p className="text-xs font-black text-rose-800">Eliminar mi cuenta</p>
+                      <p className="text-[9px] text-rose-600 mt-0.5">Elimina permanentemente tu cuenta, historial de pronósticos y datos personales. Esta acción no se puede deshacer.</p>
+                    </div>
+                    {!showDeleteModal ? (
+                      <Button type="button" variant="outline" className="w-full h-10 rounded-xl font-black text-[10px] uppercase tracking-widest border-rose-300 text-rose-700 hover:bg-rose-100" onClick={() => setShowDeleteModal(true)}>
+                        <Trash2 size={13} className="mr-1.5" /> Eliminar cuenta
+                      </Button>
+                    ) : (
+                      <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <p className="text-[9px] font-bold text-rose-700">Escribe <strong>ELIMINAR</strong> para confirmar:</p>
+                        <input
+                          type="text"
+                          value={deleteConfirm}
+                          onChange={e => setDeleteConfirm(e.target.value)}
+                          placeholder="ELIMINAR"
+                          className="w-full px-4 py-2.5 rounded-xl border-2 border-rose-300 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-rose-400 bg-white"
+                        />
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" className="flex-1 h-9 rounded-xl text-[9px] font-black uppercase tracking-widest" onClick={() => { setShowDeleteModal(false); setDeleteConfirm(''); }}>Cancelar</Button>
+                          <Button type="button" variant="secondary" className="flex-1 h-9 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase tracking-widest" disabled={deleteConfirm !== 'ELIMINAR'}
+                            onClick={async () => { try { await request('/auth/account', { method: 'DELETE' }); logout(); } catch { alert('Contacta soporte para eliminar tu cuenta.'); setShowDeleteModal(false); } }}>
+                            Confirmar eliminación
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ─── Feedback + Botón guardar ─── */}
+            {TABS_WITH_SAVE.includes(activeTab) && (
               <div className="mt-6 space-y-3">
                 {saveStatus !== 'idle' && (
                   <div className={`p-3 rounded-xl flex items-center gap-2 text-sm font-medium animate-in fade-in ${saveStatus === 'success' ? 'bg-lime-50 text-lime-700 border border-lime-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
