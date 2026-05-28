@@ -73,34 +73,30 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                 </span>
                             </div>
 
-                            <div className="mt-3 flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex-1 text-left">
-                                    <div className="flex items-center gap-2">
-                                        <img src={match.homeFlag} alt={`Bandera de ${match.homeTeam}`} className="h-5 w-7 rounded-md object-cover shadow-sm" />
-                                        <p className="truncate text-base font-black uppercase text-slate-900 sm:text-lg">{match.homeTeamCode}</p>
-                                    </div>
-                                    <p className="mt-1 truncate text-[10px] text-slate-400">{match.homeTeam}</p>
+                            {/* ── Equipos + inputs ── */}
+                            <div className="mt-3 flex items-center justify-between gap-3">
+
+                                {/* Local */}
+                                <div className="flex flex-col items-center gap-1 w-16 shrink-0">
+                                    <img
+                                        src={match.homeFlag}
+                                        alt=""
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                        className="h-7 w-10 rounded-md object-cover shadow-sm"
+                                    />
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-900 text-center leading-tight">
+                                        {match.homeTeamCode || match.homeTeam.slice(0, 3).toUpperCase()}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 text-center leading-tight truncate w-full">
+                                        {match.homeTeam}
+                                    </p>
                                 </div>
 
-                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                {/* Inputs de marcador */}
+                                <div className="flex items-center gap-1.5 flex-1 justify-center">
                                     {(['home', 'away'] as const).map((side, scoreIndex) => (
                                         <React.Fragment key={side}>
-                                            {/* Mobile: plain input */}
-                                            <div className="sm:hidden">
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={99}
-                                                    inputMode="numeric"
-                                                    value={side === 'home' ? draft.home : draft.away}
-                                                    onChange={(e) => onDraftChange(match.id, side, e.target.value)}
-                                                    disabled={!canEdit || savingMatchId === match.id}
-                                                    aria-label={`Marcador ${side === 'home' ? 'local' : 'visitante'} para ${side === 'home' ? match.homeTeam : match.awayTeam}`}
-                                                    className="h-11 w-12 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
-                                                />
-                                            </div>
-                                            {/* Desktop: stepper */}
-                                            <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm shadow-slate-100 sm:flex">
+                                            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm">
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -108,10 +104,10 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                                         onDraftChange(match.id, side, String(Math.max(0, cur - 1)));
                                                     }}
                                                     disabled={!canEdit || savingMatchId === match.id}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
-                                                    aria-label={`Disminuir marcador ${side === 'home' ? 'local' : 'visitante'}`}
+                                                    className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+                                                    aria-label={`Disminuir ${side === 'home' ? 'local' : 'visitante'}`}
                                                 >
-                                                    <Minus size={14} />
+                                                    <Minus size={12} />
                                                 </button>
                                                 <input
                                                     type="number"
@@ -121,8 +117,8 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                                     value={side === 'home' ? draft.home : draft.away}
                                                     onChange={(e) => onDraftChange(match.id, side, e.target.value)}
                                                     disabled={!canEdit || savingMatchId === match.id}
-                                                    aria-label={`Marcador ${side === 'home' ? 'local' : 'visitante'} para ${side === 'home' ? match.homeTeam : match.awayTeam}`}
-                                                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                                                    aria-label={`Marcador ${side === 'home' ? 'local' : 'visitante'}`}
+                                                    className="h-8 w-9 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-lime-400 focus:bg-white disabled:opacity-60"
                                                 />
                                                 <button
                                                     type="button"
@@ -131,23 +127,33 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                                         onDraftChange(match.id, side, String(cur + 1));
                                                     }}
                                                     disabled={!canEdit || savingMatchId === match.id}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
-                                                    aria-label={`Aumentar marcador ${side === 'home' ? 'local' : 'visitante'}`}
+                                                    className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black text-slate-500 transition hover:bg-slate-100 disabled:opacity-40"
+                                                    aria-label={`Aumentar ${side === 'home' ? 'local' : 'visitante'}`}
                                                 >
-                                                    <Plus size={14} />
+                                                    <Plus size={12} />
                                                 </button>
                                             </div>
-                                            {scoreIndex === 0 ? <span className="text-slate-300 font-black">-</span> : null}
+                                            {scoreIndex === 0 && (
+                                                <span className="text-slate-300 font-black text-sm">-</span>
+                                            )}
                                         </React.Fragment>
                                     ))}
                                 </div>
 
-                                <div className="min-w-0 flex-1 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <p className="truncate text-base font-black uppercase text-slate-900 sm:text-lg">{match.awayTeamCode}</p>
-                                        <img src={match.awayFlag} alt={`Bandera de ${match.awayTeam}`} className="h-5 w-7 rounded-md object-cover shadow-sm" />
-                                    </div>
-                                    <p className="mt-1 truncate text-[10px] text-slate-400">{match.awayTeam}</p>
+                                {/* Visitante */}
+                                <div className="flex flex-col items-center gap-1 w-16 shrink-0">
+                                    <img
+                                        src={match.awayFlag}
+                                        alt=""
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                        className="h-7 w-10 rounded-md object-cover shadow-sm"
+                                    />
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-900 text-center leading-tight">
+                                        {match.awayTeamCode || match.awayTeam.slice(0, 3).toUpperCase()}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 text-center leading-tight truncate w-full">
+                                        {match.awayTeam}
+                                    </p>
                                 </div>
                             </div>
 
