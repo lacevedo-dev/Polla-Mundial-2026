@@ -29,7 +29,7 @@ export class AuthService {
             user = await this.usersService.findByUsername(identifier);
         }
 
-        if (user && await bcrypt.compare(pass, user.passwordHash)) {
+        if (user && user.passwordHash && await bcrypt.compare(pass, user.passwordHash)) {
             const { passwordHash, ...result } = user;
             return result;
         }
@@ -266,6 +266,7 @@ export class AuthService {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new UnauthorizedException('Usuario no encontrado');
 
+        if (!user.passwordHash) throw new BadRequestException('Esta cuenta usa login social. Usa Google o GitHub para ingresar.');
         const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
         if (!isValid) throw new UnauthorizedException('La contraseña actual es incorrecta');
 
