@@ -390,59 +390,55 @@ const Profile: React.FC = () => {
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user?.email}</div>
           </div>
 
-          {/* Tab grid 3×3 */}
-          {(() => {
-            const TAB_ICONS: Record<Tab, React.ReactNode> = {
-              datos:      <User size={18} />,
-              cuenta:     <Shield size={18} />,
-              foto:       <Camera size={18} />,
-              seguridad:  <Lock size={18} />,
-              alertas:    <Bell size={18} />,
-              plan:       <Crown size={18} />,
-              privacidad: <Eye size={18} />,
-              historial:  <Package size={18} />,
-              peligroso:  <AlertTriangle size={18} />,
-            };
-            return (
-              <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100" role="tablist" aria-label="Secciones del perfil">
-                {TABS.map(t => {
-                  const isActive = activeTab === t.id;
-                  const isDanger = t.id === 'peligroso';
-                  return (
-                    <button
-                      key={t.id}
-                      role="tab"
-                      aria-selected={isActive}
-                      aria-controls={`panel-${t.id}`}
-                      onClick={() => { setActiveTab(t.id); setSaveStatus('idle'); setSaveMsg(''); }}
-                      className={`relative flex flex-col items-center justify-center gap-1.5 py-3 px-1 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-inset
-                        ${isActive
-                          ? isDanger
-                            ? 'bg-rose-50 text-rose-600'
-                            : 'bg-white text-black'
-                          : isDanger
-                            ? 'bg-white text-rose-400 hover:bg-rose-50 hover:text-rose-600'
-                            : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700'
-                        }`}
-                    >
-                      <span className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
-                        isActive
-                          ? isDanger ? 'bg-rose-100' : 'bg-lime-400 text-slate-950'
-                          : 'bg-slate-100'
-                      }`}>
-                        {TAB_ICONS[t.id]}
-                      </span>
-                      <span className="text-[8px] font-black uppercase tracking-wider leading-none">{t.label}</span>
-                      {isActive && !isDanger && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-lime-400 rounded-full" />}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
+          {/* ── Navigation + Content (responsive layout) ── */}
+          <div className="md:flex">
 
-          {/* Tab content */}
-          <div className="p-6 md:p-8">
+            {/* MOBILE: fila de iconos compacta con scroll */}
+            <div role="tablist" aria-label="Secciones del perfil"
+              className="md:hidden flex overflow-x-auto scrollbar-custom border-b border-slate-100 bg-white px-2 py-1.5 gap-0.5">
+              {TABS.map(t => {
+                const active = activeTab === t.id;
+                const danger = t.id === 'peligroso';
+                const shortLabel: Record<Tab, string> = { datos:'Datos', cuenta:'Cuenta', foto:'Foto', seguridad:'Segur.', alertas:'Alertas', plan:'Plan', privacidad:'Priv.', historial:'Hist.', peligroso:'Peligro' };
+                const iconMap: Record<Tab, React.ReactNode> = { datos:<User size={14}/>, cuenta:<Shield size={14}/>, foto:<Camera size={14}/>, seguridad:<Lock size={14}/>, alertas:<Bell size={14}/>, plan:<Crown size={14}/>, privacidad:<Eye size={14}/>, historial:<Package size={14}/>, peligroso:<AlertTriangle size={14}/> };
+                return (
+                  <button key={t.id} role="tab" aria-selected={active} title={t.label}
+                    onClick={() => { setActiveTab(t.id); setSaveStatus('idle'); setSaveMsg(''); }}
+                    className={`shrink-0 flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 ${
+                      active ? (danger ? 'bg-rose-50 text-rose-600' : 'bg-lime-400 text-slate-950')
+                             : (danger ? 'text-rose-400 hover:bg-rose-50' : 'text-slate-400 hover:bg-slate-50')}`}>
+                    {iconMap[t.id]}
+                    <span className="text-[6.5px] font-black uppercase tracking-wide leading-none">{shortLabel[t.id]}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* DESKTOP: sidebar izquierdo */}
+            <nav role="tablist" aria-label="Secciones del perfil"
+              className="hidden md:flex md:flex-col md:w-44 md:shrink-0 md:border-r border-slate-100 md:py-3">
+              {TABS.map(t => {
+                const active = activeTab === t.id;
+                const danger = t.id === 'peligroso';
+                const fullLabel: Record<Tab, string> = { datos:'Datos', cuenta:'Cuenta', foto:'Foto de perfil', seguridad:'Seguridad', alertas:'Alertas', plan:'Plan', privacidad:'Privacidad', historial:'Historial', peligroso:'Peligroso' };
+                const iconMap: Record<Tab, React.ReactNode> = { datos:<User size={14}/>, cuenta:<Shield size={14}/>, foto:<Camera size={14}/>, seguridad:<Lock size={14}/>, alertas:<Bell size={14}/>, plan:<Crown size={14}/>, privacidad:<Eye size={14}/>, historial:<Package size={14}/>, peligroso:<AlertTriangle size={14}/> };
+                return (
+                  <button key={t.id} role="tab" aria-selected={active}
+                    onClick={() => { setActiveTab(t.id); setSaveStatus('idle'); setSaveMsg(''); }}
+                    className={`flex items-center gap-2.5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all text-left focus:outline-none focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-lime-400 ${
+                      active ? (danger ? 'bg-rose-50 text-rose-600 border-r-2 border-rose-400' : 'bg-lime-50 text-slate-950 border-r-2 border-lime-400')
+                             : (danger ? 'text-rose-400 hover:bg-rose-50 hover:text-rose-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700')}`}>
+                    <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${active ? (danger ? 'bg-rose-100' : 'bg-lime-400 text-slate-950') : 'bg-slate-100'}`}>
+                      {iconMap[t.id]}
+                    </span>
+                    {fullLabel[t.id]}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* CONTENT */}
+            <div className="flex-1 min-w-0 p-5 md:p-6">
 
             {/* ─── TAB: DATOS ─── */}
             {activeTab === 'datos' && (
@@ -981,7 +977,8 @@ const Profile: React.FC = () => {
                 </Button>
               </div>
             )}
-          </div>
+            </div>{/* end content */}
+          </div>{/* end md:flex */}
         </div>
       </div>
     </div>
