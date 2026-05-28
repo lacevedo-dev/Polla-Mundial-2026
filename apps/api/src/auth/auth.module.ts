@@ -11,6 +11,11 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GithubStrategy } from './strategies/github.strategy';
 
+const oauthProviders = [
+    ...(process.env.GOOGLE_CLIENT_ID ? [GoogleStrategy] : []),
+    ...(process.env.GITHUB_CLIENT_ID ? [GithubStrategy] : []),
+];
+
 @Module({
     imports: [
         UsersModule,
@@ -22,7 +27,7 @@ import { GithubStrategy } from './strategies/github.strategy';
             signOptions: { expiresIn: '7d' },
         }),
     ],
-    providers: [AuthService, AvatarStorageService, JwtStrategy, GoogleStrategy, GithubStrategy],
+    providers: [AuthService, AvatarStorageService, JwtStrategy, ...oauthProviders],
     controllers: [AuthController],
     exports: [AuthService],
 })
