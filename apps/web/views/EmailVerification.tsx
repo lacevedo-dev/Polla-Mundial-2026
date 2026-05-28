@@ -23,7 +23,8 @@ interface EmailVerificationProps {
 const EmailVerification: React.FC<EmailVerificationProps> = ({ email: propEmail }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { verifyEmail, resendVerification, isLoading, user } = useAuthStore();
+  const { verifyEmail, resendVerification, isLoading, user, isSuperAdmin } = useAuthStore();
+  const superAdmin = isSuperAdmin();
 
   const [token, setToken] = React.useState('');
   const [manualToken, setManualToken] = React.useState('');
@@ -303,19 +304,23 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({ email: propEmail 
                 <Copy size={18} /> {showTokenInput ? 'Ocultar' : 'Ingresar'} Código Manualmente
               </Button>
 
-              <div className="relative py-2">
-                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100"></span></div>
-                <span className="relative bg-white px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Demo Mode</span>
-              </div>
+              {superAdmin && (
+                <>
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100"></span></div>
+                    <span className="relative bg-white px-2 text-[10px] font-black text-amber-500 uppercase tracking-widest">⚙ Superadmin</span>
+                  </div>
 
-              <Button
-                className="w-full gap-2 border-dashed"
-                variant="outline"
-                isLoading={isSimulating}
-                onClick={simulateLinkClick}
-              >
-                <MousePointerClick size={18} /> Simular click en enlace
-              </Button>
+                  <Button
+                    className="w-full gap-2 border-dashed border-amber-300 text-amber-700 hover:bg-amber-50"
+                    variant="outline"
+                    isLoading={isSimulating}
+                    onClick={simulateLinkClick}
+                  >
+                    <MousePointerClick size={18} /> Simular click en enlace
+                  </Button>
+                </>
+              )}
 
               <div className="pt-2">
                 <button
