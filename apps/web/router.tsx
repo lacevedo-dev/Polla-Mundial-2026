@@ -59,6 +59,7 @@ const CreateLeague = React.lazy(() => import('./views/CreateLeague'));
 const ManagePayments = React.lazy(() => import('./views/ManagePayments'));
 const OrderHistory = React.lazy(() => import('./views/OrderHistory'));
 const Help = React.lazy(() => import('./views/Help'));
+const Profile = React.lazy(() => import('./views/Profile'));
 const DesignSystem = React.lazy(() => import('./views/DesignSystem'));
 const BeforeAfter = React.lazy(() => import('./views/BeforeAfter'));
 
@@ -93,6 +94,7 @@ const appRoutes: RouteObject[] = [
     { path: '/manage-payments', element: <Suspense fallback={<LoadingFallback />}><ManagePayments /></Suspense> },
     { path: '/orders', element: <Suspense fallback={<LoadingFallback />}><OrderHistory /></Suspense> },
     { path: '/help', element: <Suspense fallback={<LoadingFallback />}><Help /></Suspense> },
+    { path: '/profile', element: <Suspense fallback={<LoadingFallback />}><Profile /></Suspense> },
 ];
 
 const developmentOnlyRoutes: RouteObject[] = [

@@ -388,6 +388,36 @@ export class AuthService {
         };
     }
 
+    async updateProfile(
+        userId: string,
+        data: { name?: string; username?: string; phone?: string; countryCode?: string; birthDate?: string },
+        avatarFile?: AvatarUploadFile,
+    ) {
+        if (data.username) {
+            const existing = await this.usersService.findByUsername(data.username);
+            if (existing && existing.id !== userId) {
+                throw new BadRequestException('El nombre de usuario ya está en uso');
+            }
+        }
+
+        let avatar: string | undefined;
+        if (avatarFile) {
+            avatar = await this.avatarStorageService.save(avatarFile);
+        }
+
+        const updateData: any = {};
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.username !== undefined) updateData.username = data.username;
+        if (data.phone !== undefined) updateData.phone = data.phone || null;
+        if (data.countryCode !== undefined) updateData.countryCode = data.countryCode || null;
+        if (data.birthDate !== undefined) updateData.birthDate = data.birthDate ? new Date(data.birthDate) : null;
+        if (avatar) updateData.avatar = avatar;
+
+        const updated = await this.prisma.user.update({ where: { id: userId }, data: updateData });
+        const { passwordHash: _, ...result } = updated as any;
+        return result;
+    }
+
     private async wrapRegisterDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
         try {
             return await operation();

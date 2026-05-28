@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Redirect, Request, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Patch, Post, Redirect, Request, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { AuthService } from './auth.service';
@@ -7,6 +7,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -88,6 +89,28 @@ export class AuthController {
      * Se usa también en el flujo "primer login" para tenants corporativos
      * provisionados con contraseña temporal.
      */
+    @UseGuards(JwtAuthGuard)
+    @Patch('profile')
+    @UseInterceptors(
+        FileInterceptor('avatar', {
+            storage: memoryStorage(),
+            fileFilter: (_req, file, cb) => {
+                if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+                    return cb(new BadRequestException('El avatar debe ser JPG, PNG o WebP.'), false);
+                }
+                return cb(null, true);
+            },
+            limits: { fileSize: 5 * 1024 * 1024 },
+        }),
+    )
+    async updateProfile(
+        @Body() dto: UpdateProfileDto,
+        @Request() req,
+        @UploadedFile() avatarFile?: AvatarUploadFile,
+    ) {
+        return this.authService.updateProfile(req.user.userId, dto, avatarFile);
+    }
+
     @HttpCode(HttpStatus.OK)
     @UseGuards(JwtAuthGuard)
     @Post('change-password')

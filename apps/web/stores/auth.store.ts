@@ -31,6 +31,7 @@ interface AuthState {
     resendVerification: () => Promise<void>;
     isEmailVerified: () => boolean;
     isSuperAdmin: () => boolean;
+    updateProfile: (data: FormData) => Promise<void>;
 }
 
 function normalizeUser(user: User | null | undefined): User | null {
@@ -209,5 +210,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     isSuperAdmin: () => {
         return get().user?.systemRole === 'SUPERADMIN';
+    },
+
+    updateProfile: async (formData: FormData) => {
+        set({ isLoading: true });
+        try {
+            const updated: any = await request('/auth/profile', {
+                method: 'PATCH',
+                body: formData,
+            });
+            set({ user: normalizeUser(updated), isLoading: false });
+        } catch (error) {
+            set({ isLoading: false });
+            throw normalizeAuthError(error, 'updateProfile');
+        }
     },
 }));

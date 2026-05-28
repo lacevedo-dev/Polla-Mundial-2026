@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut, Shield } from 'lucide-react';
+import { Home, Trophy, ListOrdered, Palette, ArrowLeftRight, Menu, X, HelpCircle, LogOut, Shield, UserCircle } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { useConfigStore } from '../stores/config.store';
 import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
@@ -194,13 +194,24 @@ const AppLayout: React.FC = () => {
                                     )}
                                 </div>
                             </div>
-                            <button
-                                onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
-                                className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors shrink-0"
-                                aria-label="Cerrar sesión"
-                            >
-                                <LogOut size={16} />
-                            </button>
+                            <div className="flex flex-col gap-1">
+                                <NavLink
+                                    to="/profile"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-lime-400 transition-colors"
+                                    aria-label="Mi perfil"
+                                    title="Mi perfil"
+                                >
+                                    <UserCircle size={16} />
+                                </NavLink>
+                                <button
+                                    onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
+                                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors shrink-0"
+                                    aria-label="Cerrar sesión"
+                                >
+                                    <LogOut size={16} />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
