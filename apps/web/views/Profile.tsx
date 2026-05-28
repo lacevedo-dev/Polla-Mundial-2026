@@ -44,15 +44,19 @@ const Profile: React.FC = () => {
   /* ─── Datos personales ─── */
   const [name, setName] = React.useState(user?.name || '');
   const [nameStatus, setNameStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
-  const [birthDate, setBirthDate] = React.useState('');
+  const [birthDate, setBirthDate] = React.useState(
+    user?.birthDate ? new Date(user.birthDate).toISOString().split('T')[0] : ''
+  );
   const [birthStatus, setBirthStatus] = React.useState<'idle' | 'valid' | 'underage' | 'invalid'>('idle');
 
   /* ─── Cuenta ─── */
   const [username, setUsername] = React.useState(user?.username || '');
   const [usernameStatus, setUsernameStatus] = React.useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
-  const [phone, setPhone] = React.useState('');
+  const [phone, setPhone] = React.useState(user?.phone || '');
   const [phoneStatus, setPhoneStatus] = React.useState<'idle' | 'valid' | 'invalid'>('idle');
-  const [selectedCountry, setSelectedCountry] = React.useState(COUNTRY_CODES[0]);
+  const [selectedCountry, setSelectedCountry] = React.useState(
+    COUNTRY_CODES.find(c => c.code === user?.countryCode) || COUNTRY_CODES[0]
+  );
   const [countryOpen, setCountryOpen] = React.useState(false);
   const [countrySearch, setCountrySearch] = React.useState('');
   const selectorRef = React.useRef<HTMLDivElement>(null);

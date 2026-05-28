@@ -14,6 +14,9 @@ export interface User {
     emailVerified?: boolean;
     creditResetAt?: string | null;
     createdAt?: string;
+    phone?: string | null;
+    countryCode?: string | null;
+    birthDate?: string | null;
 }
 
 interface AuthState {
