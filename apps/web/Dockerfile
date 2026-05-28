@@ -19,7 +19,9 @@ COPY apps/api/package.json ./apps/api/
 COPY packages/shared/package.json ./packages/shared/
 
 # Instalar dependencias
-RUN npm ci
+RUN npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
+    npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
+    npm install --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5
 
 # ARG CACHEBUST debe ir ANTES del COPY de fuentes para que un valor dinámico
 # invalide el cache de Docker desde esta capa hacia adelante (COPY + build).
