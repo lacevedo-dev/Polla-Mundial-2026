@@ -248,7 +248,14 @@ function resolveMatchStatus(apiStatus: string, matchDate: string): MatchViewMode
 }
 
 function toDisplayDate(matchDate: string): string {
-    return matchDate.includes('T') ? matchDate.split('T')[0] : matchDate;
+    const date = new Date(matchDate);
+    if (Number.isNaN(date.getTime())) return matchDate;
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(date);
 }
 
 function resolveTeamCompactCode(
