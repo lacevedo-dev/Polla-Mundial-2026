@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAdminLeaguesStore } from '../../stores/admin.leagues.store';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
+import { Input } from '../ui/input';
 import {
     Select,
     SelectContent,
@@ -11,9 +12,28 @@ import {
     SelectTrigger,
     SelectValue,
 } from '../ui/select';
-import { format } from 'date-fns';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { format, compareAsc, compareDesc } from 'date-fns';
+import { 
+    CheckCircle2, 
+    AlertCircle, 
+    Search, 
+    ArrowUpDown, 
+    Calendar, 
+    Trophy, 
+    X,
+    CheckSquare,
+    Square,
+    ChevronDown
+} from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
+
+type SortField = 'date' | 'team' | 'phase' | 'status';
+type SortOrder = 'asc' | 'desc';
+
+interface SortConfig {
+    field: SortField;
+    order: SortOrder;
+}
 
 interface LeagueMatchesManagerProps {
     leagueId: string;
@@ -22,6 +42,9 @@ interface LeagueMatchesManagerProps {
 export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
     const [selectedTournament, setSelectedTournament] = useState<string>('ALL');
     const [selectedPhase, setSelectedPhase] = useState<string>('ALL');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [selectedMatches, setSelectedMatches] = useState<Set<string>>(new Set());
+    const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', order: 'asc' });
     const { showToast } = useToast();
 
     const {
@@ -51,6 +74,137 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
 
     const activeCount = leagueMatches.filter((m) => m.activeInLeague).length;
 
+    // Filtrar partidos por búsqueda
+    const filteredMatches = useMemo(() => {
+        if (!searchQuery.trim()) return leagueMatches;
+        
+        const query = searchQuery.toLowerCase().trim();
+        return leagueMatches.filter((match) => {
+            const homeTeam = match.homeTeam.name.toLowerCase();
+            const awayTeam = match.awayTeam.name.toLowerCase();
+            const homeCode = (match.homeTeam.shortCode || '').toLowerCase();
+            const awayCode = (match.awayTeam.shortCode || '').toLowerCase();
+            const phase = (match.phase || '').toLowerCase();
+            const formattedDate = format(new Date(match.matchDate), 'dd/MM/yyyy');
+            
+            return (
+                homeTeam.includes(query) ||
+                awayTeam.includes(query) ||
+                homeCode.includes(query) ||
+                awayCode.includes(query) ||
+                phase.includes(query) ||
+                formattedDate.includes(query)
+            );
+        });
+    }, [leagueMatches, searchQuery]);
+
+    // Ordenar partidos
+    const sortedMatches = useMemo(() => {
+        const sorted = [...filteredMatches];
+        
+        return sorted.sort((a, b) => {
+            switch (sortConfig.field) {
+                case 'date':
+                    return sortConfig.order === 'asc' 
+                        ? compareAsc(new Date(a.matchDate), new Date(b.matchDate))
+                        : compareDesc(new Date(a.matchDate), new Date(b.matchDate));
+                
+                case 'team':
+                    const teamA = a.homeTeam.name.toLowerCase();
+                    const teamB = b.homeTeam.name.toLowerCase();
+                    return sortConfig.order === 'asc' 
+                        ? teamA.localeCompare(teamB)
+                        : teamB.localeCompare(teamA);
+                
+                case 'phase':
+                    const phaseOrder = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
+                    const phaseIndexA = phaseOrder.indexOf(a.phase);
+                    const phaseIndexB = phaseOrder.indexOf(b.phase);
+                    return sortConfig.order === 'asc' 
+                        ? phaseIndexA - phaseIndexB
+                        : phaseIndexB - phaseIndexA;
+                
+                case 'status':
+                    const statusA = a.activeInLeague ? 1 : 0;
+                    const statusB = b.activeInLeague ? 1 : 0;
+                    return sortConfig.order === 'asc' 
+                        ? statusA - statusB
+                        : statusB - statusA;
+                
+                default:
+                    return 0;
+            }
+        });
+    }, [filteredMatches, sortConfig]);
+
+    // Manejo de selección masiva
+    const toggleSelectAll = () => {
+        if (selectedMatches.size === sortedMatches.length && sortedMatches.length > 0) {
+            setSelectedMatches(new Set());
+        } else {
+            setSelectedMatches(new Set(sortedMatches.map(m => m.id)));
+        }
+    };
+
+    const toggleSelectMatch = (matchId: string) => {
+        const newSelected = new Set(selectedMatches);
+        if (newSelected.has(matchId)) {
+            newSelected.delete(matchId);
+        } else {
+            newSelected.add(matchId);
+        }
+        setSelectedMatches(newSelected);
+    };
+
+    const clearSelection = () => {
+        setSelectedMatches(new Set());
+    };
+
+    const handleSort = (field: SortField) => {
+        setSortConfig(current => ({
+            field,
+            order: current.field === field && current.order === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
+    const handleBulkActivate = async () => {
+        if (selectedMatches.size === 0) {
+            showToast('No hay partidos seleccionados', 'warning');
+            return;
+        }
+        
+        try {
+            const promises = Array.from(selectedMatches).map(matchId => 
+                activateMatch(leagueId, matchId)
+            );
+            await Promise.all(promises);
+            showToast(`✓ ${selectedMatches.size} partidos activados`, 'success');
+            setSelectedMatches(new Set());
+        } catch (error) {
+            console.error('Error bulk activating:', error);
+            showToast('Error al activar partidos', 'error');
+        }
+    };
+
+    const handleBulkDeactivate = async () => {
+        if (selectedMatches.size === 0) {
+            showToast('No hay partidos seleccionados', 'warning');
+            return;
+        }
+        
+        try {
+            const promises = Array.from(selectedMatches).map(matchId => 
+                deactivateMatch(leagueId, matchId)
+            );
+            await Promise.all(promises);
+            showToast(`✓ ${selectedMatches.size} partidos desactivados`, 'success');
+            setSelectedMatches(new Set());
+        } catch (error) {
+            console.error('Error bulk deactivating:', error);
+            showToast('Error al desactivar partidos', 'error');
+        }
+    };
+
     const handleActivateAll = async () => {
         if (!selectedTournament || selectedTournament === 'ALL') {
             showToast('Selecciona un torneo específico primero', 'warning');
@@ -58,7 +212,7 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
         }
         
         const tournamentName = leagueTournaments.find(t => t.id === selectedTournament)?.name || 'el torneo';
-        const inactiveCount = leagueMatches.filter(m => !m.activeInLeague).length;
+        const inactiveCount = sortedMatches.filter(m => !m.activeInLeague).length;
         
         if (inactiveCount === 0) {
             showToast('Todos los partidos ya están activos', 'info');
@@ -68,6 +222,7 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
         try {
             await activateAllTournamentMatches(leagueId, selectedTournament);
             showToast(`✓ ${inactiveCount} partidos de ${tournamentName} activados correctamente`, 'success');
+            setSelectedMatches(new Set());
         } catch (error) {
             console.error('Error activating all matches:', error);
             showToast('Error al activar los partidos. Intenta de nuevo.', 'error');
@@ -98,8 +253,96 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
 
     return (
         <div className="space-y-6">
-            {/* Filtros */}
-            <div className="flex gap-4 items-center flex-wrap">
+            {/* Barra de búsqueda y filtros */}
+            <div className="flex flex-col gap-4">
+                {/* Fila 1: Búsqueda y filtros principales */}
+                <div className="flex gap-4 items-center flex-wrap">
+                    <div className="relative flex-1 min-w-[280px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                            placeholder="Buscar por equipo, código, fase o fecha (DD/MM/YYYY)..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Ordenar:</span>
+                        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                            <button
+                                onClick={() => handleSort('date')}
+                                className={`px-3 py-2 text-sm font-medium flex items-center gap-1 transition-colors ${
+                                    sortConfig.field === 'date' 
+                                        ? 'bg-amber-100 text-amber-800 border-amber-200' 
+                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                }`}
+                                title="Ordenar por fecha"
+                            >
+                                <Calendar className="h-4 w-4" />
+                                Fecha
+                                {sortConfig.field === 'date' && (
+                                    <span className="text-xs">{sortConfig.order === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => handleSort('team')}
+                                className={`px-3 py-2 text-sm font-medium flex items-center gap-1 border-l border-gray-200 transition-colors ${
+                                    sortConfig.field === 'team' 
+                                        ? 'bg-amber-100 text-amber-800' 
+                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                }`}
+                                title="Ordenar por equipo local"
+                            >
+                                <Trophy className="h-4 w-4" />
+                                Equipo
+                                {sortConfig.field === 'team' && (
+                                    <span className="text-xs">{sortConfig.order === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => handleSort('phase')}
+                                className={`px-3 py-2 text-sm font-medium flex items-center gap-1 border-l border-gray-200 transition-colors ${
+                                    sortConfig.field === 'phase' 
+                                        ? 'bg-amber-100 text-amber-800' 
+                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                }`}
+                                title="Ordenar por fase"
+                            >
+                                Fase
+                                {sortConfig.field === 'phase' && (
+                                    <span className="text-xs">{sortConfig.order === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => handleSort('status')}
+                                className={`px-3 py-2 text-sm font-medium flex items-center gap-1 border-l border-gray-200 transition-colors ${
+                                    sortConfig.field === 'status' 
+                                        ? 'bg-amber-100 text-amber-800' 
+                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                }`}
+                                title="Ordenar por estado"
+                            >
+                                <CheckCircle2 className="h-4 w-4" />
+                                Estado
+                                {sortConfig.field === 'status' && (
+                                    <span className="text-xs">{sortConfig.order === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Fila 2: Filtros de torneo y fase */}
+                <div className="flex gap-4 items-center flex-wrap">
                 <div className="flex flex-col gap-1">
                     <Select value={selectedTournament} onValueChange={setSelectedTournament}>
                         <SelectTrigger className="w-64">
@@ -168,12 +411,75 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                 </div>
             </div>
 
+            {/* Barra de acciones masivas */}
+            {selectedMatches.size > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <CheckSquare className="h-5 w-5 text-amber-600" />
+                        <span className="text-sm font-medium text-amber-900">
+                            {selectedMatches.size} partido{selectedMatches.size !== 1 ? 's' : ''} seleccionado{selectedMatches.size !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleBulkActivate}
+                            disabled={isSaving}
+                            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        >
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Activar
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleBulkDeactivate}
+                            disabled={isSaving}
+                            className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                        >
+                            <Square className="h-4 w-4 mr-1" />
+                            Desactivar
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={clearSelection}
+                            className="text-gray-500"
+                        >
+                            <X className="h-4 w-4 mr-1" />
+                            Limpiar
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* Lista de partidos */}
             <div className="border rounded-lg">
-                <div className="p-4 border-b bg-gray-50">
-                    <p className="text-sm font-medium">
-                        {activeCount} de {leagueMatches.length} partidos activos
-                    </p>
+                <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Checkbox
+                            checked={selectedMatches.size === sortedMatches.length && sortedMatches.length > 0}
+                            onCheckedChange={toggleSelectAll}
+                            disabled={isLoadingMatches || sortedMatches.length === 0 || isSaving}
+                            aria-label="Seleccionar todos los partidos visibles"
+                        />
+                        <span className="text-sm font-medium">
+                            {activeCount} de {leagueMatches.length} partidos activos
+                            {searchQuery && ` • ${sortedMatches.length} resultado${sortedMatches.length !== 1 ? 's' : ''} de búsqueda`}
+                        </span>
+                    </div>
+                    
+                    {/* Indicador de ordenamiento */}
+                    <div className="text-xs text-gray-500">
+                        Ordenado por: {' '}
+                        <span className="font-medium">
+                            {sortConfig.field === 'date' && `Fecha ${sortConfig.order === 'asc' ? '(más reciente)' : '(más antiguo)'}`}
+                            {sortConfig.field === 'team' && `Equipo ${sortConfig.order === 'asc' ? '(A-Z)' : '(Z-A)'}`}
+                            {sortConfig.field === 'phase' && `Fase ${sortConfig.order === 'asc' ? '(ascendente)' : '(descendente)'}`}
+                            {sortConfig.field === 'status' && `Estado ${sortConfig.order === 'asc' ? '(inactivos primero)' : '(activos primero)'}`}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="divide-y max-h-[600px] overflow-y-auto">
@@ -181,17 +487,35 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                         <div className="p-8 text-center text-gray-500">
                             Cargando partidos...
                         </div>
-                    ) : leagueMatches.length === 0 ? (
+                    ) : sortedMatches.length === 0 ? (
                         <div className="p-8 text-center text-gray-500">
-                            No hay partidos. Vincula un torneo primero en la pestaña "Torneos".
+                            {searchQuery ? (
+                                <>
+                                    <p className="font-medium">Sin resultados para la búsqueda</p>
+                                    <p className="text-sm mt-1">Intenta con otro término o limpia los filtros</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p>No hay partidos. Vincula un torneo primero en la pestaña "Torneos".</p>
+                                </>
+                            )}
                         </div>
                     ) : (
-                        leagueMatches.map((match) => (
+                        sortedMatches.map((match) => (
                             <div
                                 key={match.id}
-                                className="p-4 flex items-center justify-between hover:bg-gray-50"
+                                className={`p-4 flex items-center justify-between hover:bg-gray-50 transition-colors ${selectedMatches.has(match.id) ? 'bg-amber-50/50' : ''}`}
                             >
                                 <div className="flex items-center gap-4">
+                                    {/* Checkbox de selección masiva */}
+                                    <Checkbox
+                                        checked={selectedMatches.has(match.id)}
+                                        onCheckedChange={() => toggleSelectMatch(match.id)}
+                                        disabled={isSaving}
+                                        aria-label={`Seleccionar partido ${match.homeTeam.name} vs ${match.awayTeam.name}`}
+                                    />
+                                    
+                                    {/* Checkbox de activación en liga */}
                                     <Checkbox
                                         checked={match.activeInLeague}
                                         onCheckedChange={() =>
@@ -265,10 +589,19 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                             </p>
                             <ul className="list-disc list-inside space-y-1 ml-2">
                                 <li>
-                                    <strong>Activar todos:</strong> Selecciona un torneo específico y haz clic en "Activar Todos del Torneo"
+                                    <strong>Activar todos de un torneo:</strong> Selecciona un torneo específico y haz clic en "Activar Todos del Torneo"
+                                </li>
+                                <li>
+                                    <strong>Selección masiva:</strong> Usa los checkboxes para seleccionar varios partidos y activarlos/desactivarlos en grupo
                                 </li>
                                 <li>
                                     <strong>Activar individual:</strong> Marca el checkbox al lado de cada partido
+                                </li>
+                                <li>
+                                    <strong>Buscar:</strong> Escribe el nombre del equipo, código, fase o fecha para filtrar rápidamente
+                                </li>
+                                <li>
+                                    <strong>Ordenar:</strong> Usa el botón "Ordenar por" para organizar por fecha, equipo, fase o estado
                                 </li>
                             </ul>
                             <p className="text-xs mt-2 text-blue-700">
