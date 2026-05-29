@@ -3,7 +3,7 @@ import {
     NotFoundException, ParseIntPipe, DefaultValuePipe, BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { Phase, MatchStatus } from '@prisma/client';
+import { Phase, MatchStatus, SyncLogStatus } from '@prisma/client';
 import { IsOptional, IsEnum, IsString, IsNumber, IsDateString } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -40,6 +40,12 @@ export class AdminUpdateMatchDto {
     @IsOptional() @IsString() linkSource?: 'manual' | 'suggested';
 }
 
+const MAX_MATCHES_PAGE_LIMIT = 100;
+const LINK_SOURCE_AUDIT_SCAN_LIMIT = 2000;
+const PAGE_LINK_AUDIT_SCAN_LIMIT = 1000;
+const VALID_RISKS = ['blocked', 'failing', 'healthy'] as const;
+const VALID_LINK_SOURCES = ['manual', 'suggested'] as const;
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -54,11 +60,81 @@ export class AdminMatchesController {
 
     private parseAuditDetail(detail?: string | null) {
         if (!detail) return null;
+        // Los detalles de auditoría son LongText; no intentes parsear blobs enormes
+        // en endpoints de listado porque pueden bloquear el event loop.
+        if (detail.length > 10_000) return null;
         try {
             return JSON.parse(detail);
         } catch {
             return null;
         }
+    }
+
+    private assertPositiveInt(value: number, field: string, max?: number) {
+        if (!Number.isInteger(value) || value < 1) {
+            throw new BadRequestException(`${field} debe ser un entero positivo`);
+        }
+        if (max && value > max) {
+            throw new BadRequestException(`${field} no puede ser mayor a ${max}`);
+        }
+        return value;
+    }
+
+    private validateOptionalEnum<T extends string>(value: T | undefined, allowed: readonly T[], field: string) {
+        if (value === undefined || value === null || value === '') return undefined;
+        if (!allowed.includes(value)) {
+            throw new BadRequestException(`${field} no es válido`);
+        }
+        return value;
+    }
+
+    private andWhere(where: Record<string, unknown>, extra: Record<string, unknown>) {
+        return { AND: [where, extra] };
+    }
+
+    private async getSummary(where: Record<string, unknown>) {
+        const [blocked, failing, healthy, pending] = await Promise.all([
+            this.prisma.match.count({ where: this.andWhere(where, { externalId: null }) }),
+            this.prisma.match.count({
+                where: this.andWhere(where, {
+                    NOT: { externalId: null },
+                    syncLogs: { some: { status: SyncLogStatus.FAILED } },
+                }),
+            }),
+            this.prisma.match.count({
+                where: this.andWhere(where, {
+                    NOT: { externalId: null },
+                    syncLogs: { some: { status: SyncLogStatus.SUCCESS } },
+                }),
+            }),
+            this.prisma.match.count({
+                where: this.andWhere(where, {
+                    NOT: { externalId: null },
+                    syncLogs: { none: { status: { in: [SyncLogStatus.FAILED, SyncLogStatus.SUCCESS] } } },
+                }),
+            }),
+        ]);
+
+        return { blocked, failing, healthy, pending };
+    }
+
+    private async getRecentMatchIdsByLinkSource(linkSource: 'manual' | 'suggested') {
+        const audits = await this.prisma.auditLog.findMany({
+            where: { action: 'MATCH_EXTERNAL_LINK_UPDATED' },
+            orderBy: { createdAt: 'desc' },
+            take: LINK_SOURCE_AUDIT_SCAN_LIMIT,
+            select: { detail: true },
+        });
+
+        const ids = new Set<string>();
+        for (const audit of audits) {
+            const detail = this.parseAuditDetail(audit.detail);
+            if (detail?.linkSource === linkSource && typeof detail.matchId === 'string') {
+                ids.add(detail.matchId);
+            }
+        }
+
+        return [...ids];
     }
 
     private parseDateComponent(dateValue: string) {
@@ -106,22 +182,16 @@ export class AdminMatchesController {
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
     ) {
-        const skip = (page - 1) * limit;
-        const linkSourceMatchIds = linkSource
-            ? Array.from(new Set(
-                (await this.prisma.auditLog.findMany({
-                    where: {
-                        action: 'MATCH_EXTERNAL_LINK_UPDATED',
-                        detail: {
-                            contains: `"linkSource":"${linkSource}"`,
-                        },
-                    },
-                    orderBy: { createdAt: 'desc' },
-                    select: { detail: true },
-                }))
-                    .map((audit) => this.parseAuditDetail(audit.detail)?.matchId as string | undefined)
-                    .filter(Boolean),
-            ))
+        const safePage = this.assertPositiveInt(page, 'page');
+        const safeLimit = this.assertPositiveInt(limit, 'limit', MAX_MATCHES_PAGE_LIMIT);
+        const phaseFilter = this.validateOptionalEnum(phase, Object.values(Phase), 'phase');
+        const statusFilter = this.validateOptionalEnum(status, Object.values(MatchStatus), 'status');
+        const linkedFilter = this.validateOptionalEnum(linked as 'true' | 'false' | undefined, ['true', 'false'], 'linked');
+        const riskFilter = this.validateOptionalEnum(risk, VALID_RISKS, 'risk');
+        const linkSourceFilter = this.validateOptionalEnum(linkSource, VALID_LINK_SOURCES, 'linkSource');
+        const skip = (safePage - 1) * safeLimit;
+        const linkSourceMatchIds = linkSourceFilter
+            ? await this.getRecentMatchIdsByLinkSource(linkSourceFilter)
             : null;
 
         const matchDateFilter = {
@@ -130,23 +200,23 @@ export class AdminMatchesController {
         };
 
         const where: any = {
-            ...(phase && { phase }),
-            ...(status && { status }),
-            ...(linked === 'true' ? { NOT: { externalId: null } } : {}),
-            ...(linked === 'false' ? { externalId: null } : {}),
-            ...(risk === 'blocked' ? { externalId: null } : {}),
-            ...(risk === 'failing' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'FAILED' } } } : {}),
-            ...(risk === 'healthy' ? { NOT: { externalId: null }, syncLogs: { some: { status: 'SUCCESS' } } } : {}),
-            ...(linkSource ? { id: { in: linkSourceMatchIds?.length ? linkSourceMatchIds : ['__none__'] } } : {}),
+            ...(phaseFilter && { phase: phaseFilter }),
+            ...(statusFilter && { status: statusFilter }),
+            ...(linkedFilter === 'true' ? { NOT: { externalId: null } } : {}),
+            ...(linkedFilter === 'false' ? { externalId: null } : {}),
+            ...(riskFilter === 'blocked' ? { externalId: null } : {}),
+            ...(riskFilter === 'failing' ? { NOT: { externalId: null }, syncLogs: { some: { status: SyncLogStatus.FAILED } } } : {}),
+            ...(riskFilter === 'healthy' ? { NOT: { externalId: null }, syncLogs: { some: { status: SyncLogStatus.SUCCESS } } } : {}),
+            ...(linkSourceFilter ? { id: { in: linkSourceMatchIds?.length ? linkSourceMatchIds : ['__none__'] } } : {}),
             ...(tournamentId ? { tournamentId } : {}),
             ...((startDate || endDate) ? { matchDate: matchDateFilter } : {}),
         };
 
-        const [data, total, summaryMatches] = await Promise.all([
+        const [data, total] = await Promise.all([
             this.prisma.match.findMany({
                 where,
                 skip,
-                take: limit,
+                take: safeLimit,
                 orderBy: { matchDate: 'asc' },
                 include: {
                     homeTeam: true,
@@ -159,52 +229,28 @@ export class AdminMatchesController {
                 },
             }),
             this.prisma.match.count({ where }),
-            this.prisma.match.findMany({
-                where,
-                select: {
-                    id: true,
-                    externalId: true,
-                    syncLogs: {
-                        orderBy: { createdAt: 'desc' },
-                        take: 1,
-                        select: { status: true },
-                    },
-                },
-            }),
         ]);
 
+        const summary = await this.getSummary(where);
+
+        const pageMatchIds = new Set(data.map((m) => m.id));
         const latestLinkAudits = data.length
-            ? await this.prisma.auditLog.findMany({
-                where: {
-                    action: 'MATCH_EXTERNAL_LINK_UPDATED',
-                    OR: data.map((match) => ({
-                        detail: {
-                            contains: `"matchId":"${match.id}"`,
-                        },
-                    })),
-                },
+            ? (await this.prisma.auditLog.findMany({
+                where: { action: 'MATCH_EXTERNAL_LINK_UPDATED' },
                 orderBy: { createdAt: 'desc' },
+                take: PAGE_LINK_AUDIT_SCAN_LIMIT,
                 select: { detail: true, createdAt: true },
-            })
+            }))
             : [];
 
         const latestLinkSourceByMatch = new Map<string, 'manual' | 'suggested'>();
         for (const audit of latestLinkAudits) {
             const detail = this.parseAuditDetail(audit.detail);
-            if (!detail?.matchId || latestLinkSourceByMatch.has(detail.matchId)) continue;
+            if (!detail?.matchId || !pageMatchIds.has(detail.matchId) || latestLinkSourceByMatch.has(detail.matchId)) continue;
             if (detail?.linkSource === 'manual' || detail?.linkSource === 'suggested') {
                 latestLinkSourceByMatch.set(detail.matchId, detail.linkSource);
             }
         }
-
-        const summary = summaryMatches.reduce((acc, match) => {
-            const latestStatus = match.syncLogs[0]?.status ?? null;
-            if (!match.externalId) acc.blocked += 1;
-            else if (latestStatus === 'FAILED') acc.failing += 1;
-            else if (latestStatus === 'SUCCESS') acc.healthy += 1;
-            else acc.pending += 1;
-            return acc;
-        }, { blocked: 0, failing: 0, healthy: 0, pending: 0 });
 
         return {
             data: data.map(({ syncLogs, tournament, ...match }) => ({
@@ -220,8 +266,8 @@ export class AdminMatchesController {
             })),
             total,
             summary,
-            page,
-            limit,
+            page: safePage,
+            limit: safeLimit,
         };
     }
 

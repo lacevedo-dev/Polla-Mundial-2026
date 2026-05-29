@@ -4,8 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LeagueStatus, Plan, MemberStatus, ScoringType, Privacy, Phase, MatchStatus } from '@prisma/client';
-import { IsOptional, IsEnum, IsString, IsInt, IsArray, ValidateNested, Min, IsNotEmpty, IsNumber, IsBoolean } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsEnum, IsString, IsInt, Min, IsBoolean } from 'class-validator';
 import * as bcrypt from 'bcrypt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -63,6 +62,12 @@ export class BulkCreateTestLeaguesDto {
     activateMatches?: boolean;
 }
 
+const MAX_LEAGUES_PAGE_LIMIT = 100;
+const MAX_LEAGUE_MEMBERS_LIMIT = 500;
+const MAX_LEAGUE_MATCHES_LIMIT = 1000;
+const MAX_BULK_MATCH_IDS = 1000;
+const CREATE_MANY_CHUNK_SIZE = 500;
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -73,6 +78,61 @@ export class AdminLeaguesController {
         private readonly prisma: PrismaService,
         private readonly leaguesService: LeaguesService,
     ) {}
+
+    private assertPositiveInt(value: number, field: string, max?: number) {
+        if (!Number.isInteger(value) || value < 1) {
+            throw new BadRequestException(`${field} debe ser un entero positivo`);
+        }
+        if (max && value > max) {
+            throw new BadRequestException(`${field} no puede ser mayor a ${max}`);
+        }
+        return value;
+    }
+
+    private validateOptionalEnum<T extends string>(value: T | undefined, allowed: readonly T[], field: string) {
+        if (value === undefined || value === null || value === '') return undefined;
+        if (!allowed.includes(value)) {
+            throw new BadRequestException(`${field} no es válido`);
+        }
+        return value;
+    }
+
+    private normalizeSearch(search?: string) {
+        const trimmed = search?.trim();
+        if (!trimmed) return undefined;
+        if (trimmed.length > 100) {
+            throw new BadRequestException('search no puede superar 100 caracteres');
+        }
+        return trimmed;
+    }
+
+    private normalizeMatchIds(matchIds?: string[]) {
+        if (!Array.isArray(matchIds) || matchIds.length === 0) return [];
+        const normalized = [...new Set(matchIds.map((id) => String(id).trim()).filter(Boolean))];
+        if (normalized.length > MAX_BULK_MATCH_IDS) {
+            throw new BadRequestException(`No se pueden procesar más de ${MAX_BULK_MATCH_IDS} partidos por operación`);
+        }
+        return normalized;
+    }
+
+    private async createLeagueMatchesInChunks(
+        leagueId: string,
+        matchIds: string[],
+        userId: string,
+    ) {
+        for (let i = 0; i < matchIds.length; i += CREATE_MANY_CHUNK_SIZE) {
+            const chunk = matchIds.slice(i, i + CREATE_MANY_CHUNK_SIZE);
+            await this.prisma.leagueMatch.createMany({
+                data: chunk.map(matchId => ({
+                    leagueId,
+                    matchId,
+                    active: true,
+                    addedBy: userId,
+                })),
+                skipDuplicates: true,
+            });
+        }
+    }
 
     @Post()
     @ApiOperation({ summary: 'Create a new league as admin' })
@@ -89,18 +149,23 @@ export class AdminLeaguesController {
         @Query('plan') plan?: Plan,
         @Query('search') search?: string,
     ) {
-        const skip = (page - 1) * limit;
+        const safePage = this.assertPositiveInt(page, 'page');
+        const safeLimit = this.assertPositiveInt(limit, 'limit', MAX_LEAGUES_PAGE_LIMIT);
+        const statusFilter = this.validateOptionalEnum(status, Object.values(LeagueStatus), 'status');
+        const planFilter = this.validateOptionalEnum(plan, Object.values(Plan), 'plan');
+        const searchFilter = this.normalizeSearch(search);
+        const skip = (safePage - 1) * safeLimit;
         const where: any = {
-            ...(status && { status }),
-            ...(plan && { plan }),
-            ...(search && { name: { contains: search } }),
+            ...(statusFilter && { status: statusFilter }),
+            ...(planFilter && { plan: planFilter }),
+            ...(searchFilter && { name: { contains: searchFilter } }),
         };
 
         const [data, total] = await Promise.all([
             this.prisma.league.findMany({
                 where,
                 skip,
-                take: limit,
+                take: safeLimit,
                 orderBy: { createdAt: 'desc' },
                 include: {
                     _count: { select: { members: true, predictions: true } },
@@ -109,21 +174,16 @@ export class AdminLeaguesController {
             this.prisma.league.count({ where }),
         ]);
 
-        return { data, total, page, limit };
+        return { data, total, page: safePage, limit: safeLimit };
     }
 
     @Get(':id')
-    @ApiOperation({ summary: 'Get league detail with members' })
+    @ApiOperation({ summary: 'Get league detail' })
     async findOne(@Param('id') id: string) {
         const league = await this.prisma.league.findUnique({
             where: { id },
             include: {
-                members: {
-                    include: {
-                        user: { select: { id: true, name: true, email: true, avatar: true } },
-                    },
-                },
-                _count: { select: { predictions: true, payments: true } },
+                _count: { select: { members: true, predictions: true, payments: true } },
             },
         });
         if (!league) throw new NotFoundException('Liga no encontrada');
@@ -140,12 +200,21 @@ export class AdminLeaguesController {
 
     @Get(':id/members')
     @ApiOperation({ summary: 'Get league members' })
-    async getMembers(@Param('id') id: string) {
+    async getMembers(
+        @Param('id') id: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(200), ParseIntPipe) limit: number,
+    ) {
+        const safePage = this.assertPositiveInt(page, 'page');
+        const safeLimit = this.assertPositiveInt(limit, 'limit', MAX_LEAGUE_MEMBERS_LIMIT);
         const league = await this.prisma.league.findUnique({ where: { id } });
         if (!league) throw new NotFoundException('Liga no encontrada');
 
         return this.prisma.leagueMember.findMany({
             where: { leagueId: id },
+            skip: (safePage - 1) * safeLimit,
+            take: safeLimit,
+            orderBy: { joinedAt: 'desc' },
             include: {
                 user: { select: { id: true, name: true, email: true, avatar: true, plan: true } },
             },
@@ -264,8 +333,10 @@ export class AdminLeaguesController {
         @Param('id') id: string,
         @Query('tournamentId') tournamentId?: string,
         @Query('phase') phase?: Phase,
+        @Query('limit', new DefaultValuePipe(MAX_LEAGUE_MATCHES_LIMIT), ParseIntPipe) limit?: number,
     ) {
         const where: any = {};
+        const safeLimit = this.assertPositiveInt(limit ?? MAX_LEAGUE_MATCHES_LIMIT, 'limit', MAX_LEAGUE_MATCHES_LIMIT);
 
         if (tournamentId) {
             where.tournamentId = tournamentId;
@@ -279,11 +350,13 @@ export class AdminLeaguesController {
             where.tournamentId = { in: leagueTournaments.map(lt => lt.tournamentId) };
         }
 
-        if (phase) where.phase = phase;
+        const phaseFilter = this.validateOptionalEnum(phase, Object.values(Phase), 'phase');
+        if (phaseFilter) where.phase = phaseFilter;
 
         const matches = await this.prisma.match.findMany({
             where,
             orderBy: { matchDate: 'asc' },
+            take: safeLimit,
             select: {
                 id: true,
                 homeTeamId: true,
@@ -317,22 +390,16 @@ export class AdminLeaguesController {
         @Body() body: { matchIds: string[] },
         @CurrentUser() user: { userId: string },
     ) {
-        if (!body.matchIds?.length) return { activated: 0 };
+        const matchIds = this.normalizeMatchIds(body.matchIds);
+        if (!matchIds.length) return { activated: 0 };
 
-        const matchIds = body.matchIds;
+        const league = await this.prisma.league.findUnique({ where: { id: leagueId }, select: { id: true } });
+        if (!league) throw new NotFoundException('Liga no encontrada');
 
-        // Paso 1: crear registros nuevos (los que aún no existen en leagueMatch)
-        await this.prisma.leagueMatch.createMany({
-            data: matchIds.map(matchId => ({
-                leagueId,
-                matchId,
-                active: true,
-                addedBy: user.userId,
-            })),
-            skipDuplicates: true,
-        });
+        // Paso 1: crear registros nuevos (los que aun no existen en leagueMatch)
+        await this.createLeagueMatchesInChunks(leagueId, matchIds, user.userId);
 
-        // Paso 2: activar TODOS (incluyendo los que ya existían con active: false)
+        // Paso 2: activar TODOS (incluyendo los que ya existian con active: false)
         const result = await this.prisma.leagueMatch.updateMany({
             where: { leagueId, matchId: { in: matchIds } },
             data: { active: true },
@@ -347,10 +414,11 @@ export class AdminLeaguesController {
         @Param('id') leagueId: string,
         @Body() body: { matchIds: string[] },
     ) {
-        if (!body.matchIds?.length) return { deactivated: 0 };
+        const matchIds = this.normalizeMatchIds(body.matchIds);
+        if (!matchIds.length) return { deactivated: 0 };
 
         const result = await this.prisma.leagueMatch.updateMany({
-            where: { leagueId, matchId: { in: body.matchIds } },
+            where: { leagueId, matchId: { in: matchIds } },
             data: { active: false },
         });
 
@@ -426,23 +494,19 @@ export class AdminLeaguesController {
 
         const matches = await this.prisma.match.findMany({
             where: { tournamentId },
+            take: MAX_BULK_MATCH_IDS + 1,
             select: { id: true },
         });
 
         if (matches.length === 0) return { message: 'No hay partidos en este torneo', count: 0 };
+        if (matches.length > MAX_BULK_MATCH_IDS) {
+            throw new BadRequestException(`El torneo supera el límite de ${MAX_BULK_MATCH_IDS} partidos por operación`);
+        }
 
         const matchIds = matches.map(m => m.id);
 
         // Paso 1: crear registros nuevos (skipDuplicates evita errores en los existentes)
-        await this.prisma.leagueMatch.createMany({
-            data: matchIds.map(matchId => ({
-                leagueId,
-                matchId,
-                active: true,
-                addedBy: user.userId,
-            })),
-            skipDuplicates: true,
-        });
+        await this.createLeagueMatchesInChunks(leagueId, matchIds, user.userId);
 
         // Paso 2: activar todos (incluyendo los que ya existían con active: false)
         const result = await this.prisma.leagueMatch.updateMany({
@@ -518,6 +582,7 @@ export class AdminLeaguesController {
         // Get active tournaments with matches
         let activeTournaments: any[] = [];
         let totalMatchesLinked = 0;
+        const testPasswordHash = useExistingUsers ? null : await bcrypt.hash('test123', 10);
 
         if (linkTournaments) {
             // First, try to find tournaments that already have matches
@@ -638,9 +703,6 @@ export class AdminLeaguesController {
                 membersToAdd.push(...shuffled.slice(0, membersPerLeague - 1).map(u => u.id));
             } else {
                 // Create random test users (one less since SUPERADMIN is already included)
-                // Generate a valid bcrypt hash for password "test123" (only once for performance)
-                const testPasswordHash = await bcrypt.hash('test123', 10);
-                
                 for (let j = 1; j < membersPerLeague; j++) {
                     const randomId = Math.random().toString(36).substring(2, 10);
                     const testUser = await this.prisma.user.create({
@@ -648,7 +710,7 @@ export class AdminLeaguesController {
                             email: `test.user.${randomId}@testpolla.local`,
                             username: `testuser${randomId}`,
                             name: `Test User ${randomId}`,
-                            passwordHash: testPasswordHash,
+                            passwordHash: testPasswordHash!,
                             status: 'ACTIVE',
                             plan: Plan.FREE,
                         },
@@ -694,19 +756,16 @@ export class AdminLeaguesController {
                         if (activateMatches) {
                             const matches = await this.prisma.match.findMany({
                                 where: { tournamentId: tournament.id },
+                                take: MAX_BULK_MATCH_IDS + 1,
                                 select: { id: true },
                             });
 
+                            if (matches.length > MAX_BULK_MATCH_IDS) {
+                                throw new BadRequestException(`El torneo ${tournament.id} supera el límite de ${MAX_BULK_MATCH_IDS} partidos por operación`);
+                            }
+
                             if (matches.length > 0) {
-                                await this.prisma.leagueMatch.createMany({
-                                    data: matches.map(match => ({
-                                        leagueId: league.id,
-                                        matchId: match.id,
-                                        active: true,
-                                        addedBy: user.userId,
-                                    })),
-                                    skipDuplicates: true,
-                                });
+                                await this.createLeagueMatchesInChunks(league.id, matches.map(match => match.id), user.userId);
                                 activatedMatches += matches.length;
                             }
                         }
