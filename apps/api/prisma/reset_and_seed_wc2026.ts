@@ -1,10 +1,17 @@
 /**
  * Reset + Seed Mundial 2026
+ * Fuente: FWC26 Match Schedule v17 — 10/04/2026 (calendario oficial FIFA)
  * Borra TODO el historial (predicciones, partidos, eventos, equipos)
  * y recarga los 50 equipos + 104 partidos del Mundial 2026.
  *
  * Ejecutar: npx tsx -r dotenv/config prisma/reset_and_seed_wc2026.ts
  * ⚠️  IRREVERSIBLE — Elimina predicciones y partidos existentes.
+ *
+ * Estructura:
+ *   - 12 grupos × 4 equipos = 48 equipos
+ *   - Fase de grupos: 72 partidos (Jornadas 1-3)
+ *   - Dieciseisavos: 16 | Octavos: 8 | Cuartos: 4 | Semis: 2 | 3er/Final: 2
+ *   - Todos los horarios en UTC (referencia: zona horaria ET de EE.UU.)
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
@@ -192,6 +199,24 @@ const MATCHES = [
     { num: 104, home:'TBDA', away:'TBDB', date:'2026-07-19T19:00:00Z', venue:'MetLife Stadium, East Rutherford',          phase:'FINAL', group:null },
 ] as const;
 
+// ─── HELPER ─────────────────────────────────────────────────────────────────
+function getRound(num: number, phase: string): string {
+    if (phase === 'GROUP') {
+        if (num <= 24) return 'Jornada 1';
+        if (num <= 48) return 'Jornada 2';
+        return 'Jornada 3';
+    }
+    const map: Record<string, string> = {
+        ROUND_OF_32:  'Dieciseisavos de Final',
+        ROUND_OF_16:  'Octavos de Final',
+        QUARTER:      'Cuartos de Final',
+        SEMI:         'Semifinal',
+        THIRD_PLACE:  'Tercer Puesto',
+        FINAL:        'Final',
+    };
+    return map[phase] ?? phase;
+}
+
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 async function main() {
     console.log('⚠️  RESET + Seed Mundial 2026...');
@@ -299,7 +324,7 @@ async function main() {
         console.log(`\n📋 Insertando ${TEAMS.length} equipos...`);
         for (const t of TEAMS) {
             await prisma.team.create({
-                data: { name: t.name, code: t.code, group: t.group, flagUrl: t.flagUrl },
+                data: { name: t.name, code: t.code, shortCode: t.code, group: t.group, flagUrl: t.flagUrl },
             });
             process.stdout.write(`  ✓ ${t.code}\r`);
         }
@@ -314,14 +339,15 @@ async function main() {
         for (const m of MATCHES) {
             await prisma.match.create({
                 data: {
-                    matchNumber: m.num,
-                    homeTeamId:  teamMap.get(m.home)!,
-                    awayTeamId:  teamMap.get(m.away)!,
-                    phase:       m.phase as any,
-                    group:       m.group,
-                    matchDate:   new Date(m.date),
-                    venue:       m.venue,
-                    status:      'SCHEDULED',
+                    matchNumber:  m.num,
+                    homeTeamId:   teamMap.get(m.home)!,
+                    awayTeamId:   teamMap.get(m.away)!,
+                    phase:        m.phase as any,
+                    group:        m.group,
+                    round:        getRound(m.num, m.phase),
+                    matchDate:    new Date(m.date),
+                    venue:        m.venue,
+                    status:       'SCHEDULED',
                     tournamentId: tournament.id,
                 },
             });
