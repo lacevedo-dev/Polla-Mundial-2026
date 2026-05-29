@@ -2019,14 +2019,22 @@ const Predictions: React.FC = () => {
     React.useEffect(() => {
         setDrafts((currentDrafts) => {
             const nextDrafts = buildDrafts(matches);
-            dirtyMatchIds.forEach((matchId) => {
-                if (currentDrafts[matchId]) {
-                    nextDrafts[matchId] = currentDrafts[matchId];
+            Object.keys(currentDrafts).forEach((matchId) => {
+                const current = currentDrafts[matchId];
+                const built = nextDrafts[matchId];
+                if (current && built) {
+                    const modified =
+                        current.home !== built.home ||
+                        current.away !== built.away ||
+                        current.advanceTeamId !== built.advanceTeamId;
+                    if (modified) {
+                        nextDrafts[matchId] = current;
+                    }
                 }
             });
             return areDraftMapsEqual(currentDrafts, nextDrafts) ? currentDrafts : nextDrafts;
         });
-    }, [dirtyMatchIds, matches]);
+    }, [matches]);
 
     React.useEffect(() => {
         if (!activeLeague?.id || dirtyMatchIds.length > 0) {
