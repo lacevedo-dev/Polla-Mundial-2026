@@ -410,6 +410,7 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                     )}
                 </div>
             </div>
+            </div>
 
             {/* Barra de acciones masivas */}
             {selectedMatches.size > 0 && (
@@ -620,9 +621,9 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
                             <p className="font-medium mb-2">No hay partidos disponibles</p>
                             <p>Para agregar partidos a esta polla:</p>
                             <ol className="list-decimal list-inside space-y-1 ml-2 mt-2">
-                                <li>Ve a la pestaña <strong>"Torneos"</strong></li>
+                                <li>Ve a la pestaña <strong>Torneos</strong></li>
                                 <li>Vincula un torneo a esta polla</li>
-                                <li>Regresa aquí para activar los partidos</li>
+                                <li>Regresa aqui para activar los partidos</li>
                             </ol>
                         </div>
                     </div>
