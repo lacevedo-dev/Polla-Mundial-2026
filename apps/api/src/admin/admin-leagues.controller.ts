@@ -274,9 +274,9 @@ export class AdminLeaguesController {
                 where: { leagueId: id },
                 select: { tournamentId: true },
             });
-            if (leagueTournaments.length > 0) {
-                where.tournamentId = { in: leagueTournaments.map(lt => lt.tournamentId) };
-            }
+            // Early return: si no hay torneos vinculados, no hay partidos
+            if (leagueTournaments.length === 0) return [];
+            where.tournamentId = { in: leagueTournaments.map(lt => lt.tournamentId) };
         }
 
         if (phase) where.phase = phase;
@@ -284,7 +284,16 @@ export class AdminLeaguesController {
         const matches = await this.prisma.match.findMany({
             where,
             orderBy: { matchDate: 'asc' },
-            include: {
+            select: {
+                id: true,
+                homeTeamId: true,
+                awayTeamId: true,
+                homeScore: true,
+                awayScore: true,
+                phase: true,
+                matchDate: true,
+                status: true,
+                tournamentId: true,
                 homeTeam: { select: { name: true, shortCode: true, flagUrl: true } },
                 awayTeam: { select: { name: true, shortCode: true, flagUrl: true } },
                 leagueMatches: {
@@ -294,14 +303,70 @@ export class AdminLeaguesController {
             },
         });
 
-        return matches.map(m => ({
+        return matches.map(({ leagueMatches, ...m }) => ({
             ...m,
-            activeInLeague: m.leagueMatches[0]?.active ?? false,
-            addedAt: m.leagueMatches[0]?.addedAt,
+            activeInLeague: leagueMatches[0]?.active ?? false,
+            addedAt: leagueMatches[0]?.addedAt ?? null,
         }));
     }
 
+    @Post(':id/matches/bulk-activate')
+    @ApiOperation({ summary: 'Bulk activate matches for league in a single transaction' })
+    async bulkActivateMatches(
+        @Param('id') leagueId: string,
+        @Body() body: { matchIds: string[] },
+        @CurrentUser() user: { userId: string },
+    ) {
+        if (!body.matchIds?.length) return { activated: 0 };
+
+        // Obtener torneos vinculados a la liga en una sola query
+        const linkedTournamentIds = (await this.prisma.leagueTournament.findMany({
+            where: { leagueId },
+            select: { tournamentId: true },
+        })).map(lt => lt.tournamentId);
+
+        if (linkedTournamentIds.length === 0) return { activated: 0 };
+
+        // Filtrar solo partidos válidos (pertenecen a torneos vinculados)
+        const validMatches = await this.prisma.match.findMany({
+            where: { id: { in: body.matchIds }, tournamentId: { in: linkedTournamentIds } },
+            select: { id: true },
+        });
+
+        if (validMatches.length === 0) return { activated: 0 };
+
+        // Upsert masivo en una sola transacción
+        await this.prisma.$transaction(
+            validMatches.map(m =>
+                this.prisma.leagueMatch.upsert({
+                    where: { leagueId_matchId: { leagueId, matchId: m.id } },
+                    create: { leagueId, matchId: m.id, active: true, addedBy: user.userId },
+                    update: { active: true },
+                })
+            )
+        );
+
+        return { activated: validMatches.length };
+    }
+
+    @Post(':id/matches/bulk-deactivate')
+    @ApiOperation({ summary: 'Bulk deactivate matches for league in a single query' })
+    async bulkDeactivateMatches(
+        @Param('id') leagueId: string,
+        @Body() body: { matchIds: string[] },
+    ) {
+        if (!body.matchIds?.length) return { deactivated: 0 };
+
+        const result = await this.prisma.leagueMatch.updateMany({
+            where: { leagueId, matchId: { in: body.matchIds } },
+            data: { active: false },
+        });
+
+        return { deactivated: result.count };
+    }
+
     @Post(':id/matches/:matchId/activate')
+    // Nota: preferir bulk-activate para múltiples partidos
     @ApiOperation({ summary: 'Activate match for league' })
     async activateMatch(
         @Param('id') leagueId: string,
@@ -340,6 +405,7 @@ export class AdminLeaguesController {
     }
 
     @Delete(':id/matches/:matchId')
+    // Nota: preferir bulk-deactivate para múltiples partidos
     @ApiOperation({ summary: 'Deactivate match (keeps existing predictions)' })
     async deactivateMatch(
         @Param('id') leagueId: string,

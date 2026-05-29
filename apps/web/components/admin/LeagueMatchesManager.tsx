@@ -54,49 +54,60 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
         isSaving,
         fetchLeagueMatches,
         fetchLeagueTournaments,
+        bulkActivateMatches,
+        bulkDeactivateMatches,
         activateMatch,
         deactivateMatch,
         activateAllTournamentMatches,
     } = useAdminLeaguesStore();
 
     useEffect(() => {
-        // Cargar torneos vinculados
-        fetchLeagueTournaments(leagueId);
-    }, [leagueId, fetchLeagueTournaments]);
-
-    useEffect(() => {
-        // Cargar partidos cuando cambian los filtros
-        fetchLeagueMatches(leagueId, {
-            tournamentId: selectedTournament !== 'ALL' ? selectedTournament : undefined,
-            phase: selectedPhase !== 'ALL' ? selectedPhase : undefined,
-        });
-    }, [leagueId, selectedTournament, selectedPhase, fetchLeagueMatches]);
+        // Carga paralela: torneos + partidos al mismo tiempo
+        Promise.all([
+            fetchLeagueTournaments(leagueId),
+            fetchLeagueMatches(leagueId),
+        ]);
+    }, [leagueId]); // Solo re-fetch si cambia la liga
 
     const activeCount = leagueMatches.filter((m) => m.activeInLeague).length;
 
-    // Filtrar partidos por búsqueda
+    // Filtrado client-side: torneo + fase + búsqueda (sin llamadas extra a la API)
     const filteredMatches = useMemo(() => {
-        if (!searchQuery.trim()) return leagueMatches;
-        
-        const query = searchQuery.toLowerCase().trim();
-        return leagueMatches.filter((match) => {
-            const homeTeam = match.homeTeam.name.toLowerCase();
-            const awayTeam = match.awayTeam.name.toLowerCase();
-            const homeCode = (match.homeTeam.shortCode || '').toLowerCase();
-            const awayCode = (match.awayTeam.shortCode || '').toLowerCase();
-            const phase = (match.phase || '').toLowerCase();
-            const formattedDate = format(new Date(match.matchDate), 'dd/MM/yyyy');
-            
-            return (
-                homeTeam.includes(query) ||
-                awayTeam.includes(query) ||
-                homeCode.includes(query) ||
-                awayCode.includes(query) ||
-                phase.includes(query) ||
-                formattedDate.includes(query)
-            );
-        });
-    }, [leagueMatches, searchQuery]);
+        let matches = leagueMatches;
+
+        // Filtro por torneo
+        if (selectedTournament !== 'ALL') {
+            matches = matches.filter(m => m.tournamentId === selectedTournament);
+        }
+
+        // Filtro por fase
+        if (selectedPhase !== 'ALL') {
+            matches = matches.filter(m => m.phase === selectedPhase);
+        }
+
+        // Filtro por búsqueda de texto
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            matches = matches.filter((match) => {
+                const homeTeam = match.homeTeam.name.toLowerCase();
+                const awayTeam = match.awayTeam.name.toLowerCase();
+                const homeCode = (match.homeTeam.shortCode || '').toLowerCase();
+                const awayCode = (match.awayTeam.shortCode || '').toLowerCase();
+                const phase = (match.phase || '').toLowerCase();
+                const formattedDate = format(new Date(match.matchDate), 'dd/MM/yyyy');
+                return (
+                    homeTeam.includes(query) ||
+                    awayTeam.includes(query) ||
+                    homeCode.includes(query) ||
+                    awayCode.includes(query) ||
+                    phase.includes(query) ||
+                    formattedDate.includes(query)
+                );
+            });
+        }
+
+        return matches;
+    }, [leagueMatches, selectedTournament, selectedPhase, searchQuery]);
 
     // Ordenar partidos
     const sortedMatches = useMemo(() => {
@@ -172,13 +183,9 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
             showToast('No hay partidos seleccionados', 'warning');
             return;
         }
-        
         try {
-            const promises = Array.from(selectedMatches).map(matchId => 
-                activateMatch(leagueId, matchId)
-            );
-            await Promise.all(promises);
-            showToast(`✓ ${selectedMatches.size} partidos activados`, 'success');
+            const count = await bulkActivateMatches(leagueId, Array.from(selectedMatches));
+            showToast(`✓ ${count} partidos activados`, 'success');
             setSelectedMatches(new Set());
         } catch (error) {
             console.error('Error bulk activating:', error);
@@ -191,13 +198,9 @@ export function LeagueMatchesManager({ leagueId }: LeagueMatchesManagerProps) {
             showToast('No hay partidos seleccionados', 'warning');
             return;
         }
-        
         try {
-            const promises = Array.from(selectedMatches).map(matchId => 
-                deactivateMatch(leagueId, matchId)
-            );
-            await Promise.all(promises);
-            showToast(`✓ ${selectedMatches.size} partidos desactivados`, 'success');
+            const count = await bulkDeactivateMatches(leagueId, Array.from(selectedMatches));
+            showToast(`✓ ${count} partidos desactivados`, 'success');
             setSelectedMatches(new Set());
         } catch (error) {
             console.error('Error bulk deactivating:', error);

@@ -83,6 +83,8 @@ interface AdminLeaguesState {
     setPrimaryTournament: (leagueId: string, tournamentId: string) => Promise<void>;
     activateMatch: (leagueId: string, matchId: string) => Promise<void>;
     deactivateMatch: (leagueId: string, matchId: string) => Promise<void>;
+    bulkActivateMatches: (leagueId: string, matchIds: string[]) => Promise<number>;
+    bulkDeactivateMatches: (leagueId: string, matchIds: string[]) => Promise<number>;
     activateAllTournamentMatches: (leagueId: string, tournamentId: string) => Promise<void>;
     banMember: (leagueId: string, userId: string) => Promise<void>;
     setFilters: (filters: Partial<LeaguesFilters>) => void;
@@ -235,6 +237,46 @@ export const useAdminLeaguesStore = create<AdminLeaguesState>((set, get) => ({
             set({ leagueMatches: res, isLoadingMatches: false });
         } catch (error) {
             set({ isLoadingMatches: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    bulkActivateMatches: async (leagueId, matchIds) => {
+        if (!matchIds.length) return 0;
+        try {
+            const res = await request<{ activated: number }>(`/admin/leagues/${leagueId}/matches/bulk-activate`, {
+                method: 'POST',
+                body: JSON.stringify({ matchIds }),
+            });
+            // Actualizar estado local
+            set((state) => ({
+                leagueMatches: state.leagueMatches.map((m) =>
+                    matchIds.includes(m.id) ? { ...m, activeInLeague: true } : m
+                ),
+            }));
+            return res.activated;
+        } catch (error) {
+            set({ error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    bulkDeactivateMatches: async (leagueId, matchIds) => {
+        if (!matchIds.length) return 0;
+        try {
+            const res = await request<{ deactivated: number }>(`/admin/leagues/${leagueId}/matches/bulk-deactivate`, {
+                method: 'POST',
+                body: JSON.stringify({ matchIds }),
+            });
+            // Actualizar estado local
+            set((state) => ({
+                leagueMatches: state.leagueMatches.map((m) =>
+                    matchIds.includes(m.id) ? { ...m, activeInLeague: false } : m
+                ),
+            }));
+            return res.deactivated;
+        } catch (error) {
+            set({ error: error instanceof Error ? error.message : 'Error' });
             throw error;
         }
     },
