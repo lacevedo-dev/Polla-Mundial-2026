@@ -311,7 +311,7 @@ export class AdminLeaguesController {
     }
 
     @Post(':id/matches/bulk-activate')
-    @ApiOperation({ summary: 'Bulk activate matches for league in a single transaction' })
+    @ApiOperation({ summary: 'Bulk activate matches for league in 2 queries' })
     async bulkActivateMatches(
         @Param('id') leagueId: string,
         @Body() body: { matchIds: string[] },
@@ -319,34 +319,26 @@ export class AdminLeaguesController {
     ) {
         if (!body.matchIds?.length) return { activated: 0 };
 
-        // Obtener torneos vinculados a la liga en una sola query
-        const linkedTournamentIds = (await this.prisma.leagueTournament.findMany({
-            where: { leagueId },
-            select: { tournamentId: true },
-        })).map(lt => lt.tournamentId);
+        const matchIds = body.matchIds;
 
-        if (linkedTournamentIds.length === 0) return { activated: 0 };
-
-        // Filtrar solo partidos válidos (pertenecen a torneos vinculados)
-        const validMatches = await this.prisma.match.findMany({
-            where: { id: { in: body.matchIds }, tournamentId: { in: linkedTournamentIds } },
-            select: { id: true },
+        // Paso 1: crear registros nuevos (los que aún no existen en leagueMatch)
+        await this.prisma.leagueMatch.createMany({
+            data: matchIds.map(matchId => ({
+                leagueId,
+                matchId,
+                active: true,
+                addedBy: user.userId,
+            })),
+            skipDuplicates: true,
         });
 
-        if (validMatches.length === 0) return { activated: 0 };
+        // Paso 2: activar TODOS (incluyendo los que ya existían con active: false)
+        const result = await this.prisma.leagueMatch.updateMany({
+            where: { leagueId, matchId: { in: matchIds } },
+            data: { active: true },
+        });
 
-        // Upsert masivo en una sola transacción
-        await this.prisma.$transaction(
-            validMatches.map(m =>
-                this.prisma.leagueMatch.upsert({
-                    where: { leagueId_matchId: { leagueId, matchId: m.id } },
-                    create: { leagueId, matchId: m.id, active: true, addedBy: user.userId },
-                    update: { active: true },
-                })
-            )
-        );
-
-        return { activated: validMatches.length };
+        return { activated: result.count };
     }
 
     @Post(':id/matches/bulk-deactivate')
@@ -437,17 +429,28 @@ export class AdminLeaguesController {
             select: { id: true },
         });
 
-        const operations = matches.map(m =>
-            this.prisma.leagueMatch.upsert({
-                where: { leagueId_matchId: { leagueId, matchId: m.id } },
-                create: { leagueId, matchId: m.id, active: true, addedBy: user.userId },
-                update: { active: true },
-            })
-        );
+        if (matches.length === 0) return { message: 'No hay partidos en este torneo', count: 0 };
 
-        await this.prisma.$transaction(operations);
+        const matchIds = matches.map(m => m.id);
 
-        return { message: 'Partidos activados', count: matches.length };
+        // Paso 1: crear registros nuevos (skipDuplicates evita errores en los existentes)
+        await this.prisma.leagueMatch.createMany({
+            data: matchIds.map(matchId => ({
+                leagueId,
+                matchId,
+                active: true,
+                addedBy: user.userId,
+            })),
+            skipDuplicates: true,
+        });
+
+        // Paso 2: activar todos (incluyendo los que ya existían con active: false)
+        const result = await this.prisma.leagueMatch.updateMany({
+            where: { leagueId, matchId: { in: matchIds } },
+            data: { active: true },
+        });
+
+        return { message: 'Partidos activados', count: result.count };
     }
 
     /* ── Scoring rules ── */
