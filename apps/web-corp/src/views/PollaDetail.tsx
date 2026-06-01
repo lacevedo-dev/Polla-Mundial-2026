@@ -1,99 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, Trophy, Star, Save, Lock, Loader2, AlertTriangle, Zap, LayoutGrid, AlignJustify, Info, Search, Filter } from 'lucide-react';
+import { ArrowLeft, Trophy, Zap, Loader2 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
+import { LeagueDetail, UpcomingMatch } from './PollaDetail/types';
+import { isPredictionClosed, isLiveStatus, isFinishedStatus } from './PollaDetail/helpers';
+import { LeagueHero } from './PollaDetail/LeagueHero';
+import { MatchFiltersBar } from './PollaDetail/MatchFiltersBar';
+import { MatchSections } from './PollaDetail/MatchSections';
+import { RankingTab } from './PollaDetail/RankingTab';
+import { RulesTab } from './PollaDetail/RulesTab';
 
-/* ─── Types ─────────────────────────────────────────────────── */
+/* ─── Orquestador ───────────────────────────────────────────── */
 
-interface Team { id: string; name: string; shortCode: string | null; flagUrl: string | null; code: string; }
-interface UpcomingMatch {
-    id: string; matchDate: string; status: string;
-    homeScore: number | null; awayScore: number | null;
-    homeTeam: Team; awayTeam: Team;
-    phase?: string | null;
-    group?: string | null;
-    venue?: string | null;
-    myPrediction: { homeScore: number; awayScore: number; points: number | null } | null;
-}
-interface RecentPrediction {
-    matchId: string; matchDate: string;
-    homeTeam: string; awayTeam: string;
-    homeScore: number | null; awayScore: number | null;
-    predictedHome: number; predictedAway: number;
-    points: number | null;
-}
-interface TopRankEntry {
-    userId: string; name: string; username: string | null;
-    avatar: string | null; totalPoints: number; rank: number; isMe: boolean;
-}
-interface LeagueDetail {
-    id: string; name: string; description: string | null;
-    status: string; participantsCount: number; maxParticipants: number;
-    closePredictionMinutes: number; myPoints: number; myRank: number;
-    scoringRules: { ruleType: string; points: number; description: string | null; multiplier: number }[];
-    upcomingMatches: UpcomingMatch[];
-    recentPredictions: RecentPrediction[];
-    topRanking: TopRankEntry[];
-}
 
-/* ─── Helpers ────────────────────────────────────────────────── */
-
-function isPredictionClosed(matchDate: string, closeMin = 15) {
-    return Date.now() > new Date(matchDate).getTime() - closeMin * 60_000;
-}
-function isLiveStatus(s: string) { return ['LIVE', 'IN_PLAY', 'HALFTIME'].includes(s); }
-function isFinishedStatus(s: string) { return ['FINISHED', 'FT'].includes(s); }
-
-function formatMatchTime(matchDate: string): string {
-    return new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }).format(new Date(matchDate));
-}
-function getDateKey(matchDate: string): string {
-    return new Intl.DateTimeFormat('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Bogota' }).format(new Date(matchDate));
-}
-function formatDateHeader(matchDate: string): string {
-    return new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' }).format(new Date(matchDate)).toUpperCase();
-}
-function getDaysUntil(matchDate: string): number | null {
-    const diff = new Date(matchDate).getTime() - Date.now();
-    if (diff <= 0) return null;
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-function formatDateShort(matchDate: string): string {
-    return new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'America/Bogota' }).format(new Date(matchDate));
-}
-function formatPhaseLabel(phase?: string | null): string {
-    switch (phase) {
-        case 'GROUP': return 'Fase de grupos';
-        case 'ROUND_OF_32': return 'R32';
-        case 'ROUND_OF_16': return 'Octavos';
-        case 'QUARTER': return 'Cuartos';
-        case 'SEMI': return 'Semis';
-        case 'FINAL': return 'Final';
-        default: return phase ?? '';
-    }
-}
-
-/* ─── PredictionRow ──────────────────────────────────────────── */
-
-function Flag({ team, size = 'sm' }: { team: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>; size?: 'sm' | 'lg' }) {
-    const abbr = (team.shortCode ?? team.name.slice(0, 3)).toUpperCase();
-    const cls = size === 'lg'
-        ? 'w-11 h-8 rounded-md border border-slate-200 object-cover shadow-sm'
-        : 'w-7 h-5 object-cover rounded border border-slate-200';
-    const fallback = size === 'lg'
-        ? 'w-11 h-8 rounded-md border border-slate-200 bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500'
-        : 'w-7 h-5 rounded border border-slate-200 bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-500';
-    return team.flagUrl
-        ? <img src={team.flagUrl} alt={abbr} className={cls} />
-        : <div className={fallback}>{abbr.slice(0, 2)}</div>;
-}
-
-function PredictionRow({ match, leagueId, closeMin, onSaved, compact = false, isNext = false, isWithoutPrediction = false }: {
-    match: UpcomingMatch; leagueId: string; closeMin: number; compact?: boolean;
-    isNext?: boolean; isWithoutPrediction?: boolean;
-    onSaved: (matchId: string, home: number, away: number) => void;
-}) {
+export default function PollaDetail() {
     const closed = isPredictionClosed(match.matchDate, closeMin);
     const live = isLiveStatus(match.status);
     const finished = isFinishedStatus(match.status);
