@@ -13,7 +13,7 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
 
-    const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'ZonaPronosticos';
+    const orgName = tenant?.branding?.companyDisplayName?.trim() || tenant?.name || 'ZonaPronosticos';
     const primaryColor = tenant?.branding?.primaryColor ?? '#f59e0b';
     const configuredBackground = tenant?.branding?.heroImageUrl?.trim();
     const loginBackgroundUrl = configuredBackground || (tenant?.slug === 'coopcanapro'

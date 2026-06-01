@@ -1,4 +1,4 @@
-ï»¿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Loader2, Palette, Save, ShieldAlert } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
@@ -20,6 +20,11 @@ type BrandingDraft = {
 
 function trimValue(value: string) {
     return value.trim();
+}
+
+function optionalTrimmed(value: string) {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
 }
 
 export default function AdminCorpSettings() {
@@ -69,10 +74,10 @@ export default function AdminCorpSettings() {
             await request('/corp/branding', {
                 method: 'PATCH',
                 body: JSON.stringify({
-                    companyDisplayName: trimValue(draft.companyDisplayName),
-                    logoUrl: trimValue(draft.logoUrl),
-                    faviconUrl: trimValue(draft.faviconUrl),
-                    heroImageUrl: trimValue(draft.heroImageUrl),
+                    companyDisplayName: optionalTrimmed(draft.companyDisplayName),
+                    logoUrl: optionalTrimmed(draft.logoUrl),
+                    faviconUrl: optionalTrimmed(draft.faviconUrl),
+                    heroImageUrl: optionalTrimmed(draft.heroImageUrl),
                     primaryColor: draft.primaryColor,
                     secondaryColor: draft.secondaryColor,
                     accentColor: draft.accentColor,
@@ -80,9 +85,9 @@ export default function AdminCorpSettings() {
                 }),
             });
             await bootstrap();
-            setMessage('ConfiguraciÃ³n guardada. El fondo del login se actualizarÃ¡ para los usuarios del portal.');
+            setMessage('Configuración guardada. El fondo del login se actualizará para los usuarios del portal.');
         } catch (err: any) {
-            setError(err?.message ?? 'No fue posible guardar la configuraciÃ³n.');
+            setError(err?.message ?? 'No fue posible guardar la configuración.');
         } finally {
             setSaving(false);
         }
@@ -107,7 +112,7 @@ export default function AdminCorpSettings() {
             <div className="mb-6">
                 <div className="flex items-center gap-2 mb-1">
                     <Palette size={20} style={{ color: 'var(--color-primary, #f59e0b)' }} />
-                    <h1 className="text-2xl font-black text-slate-900">ConfiguraciÃ³n del portal</h1>
+                    <h1 className="text-2xl font-black text-slate-900">Configuración del portal</h1>
                 </div>
                 <p className="text-slate-500 text-sm">Personaliza la identidad visual y la imagen de fondo del login corporativo.</p>
             </div>
@@ -139,7 +144,7 @@ export default function AdminCorpSettings() {
                     <label className="block space-y-1.5">
                         <span className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2"><Image size={14} /> Fondo del login</span>
                         <input value={draft.heroImageUrl} onChange={(e) => setField('heroImageUrl', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:border-amber-400" placeholder={COOPCANAPRO_LOGIN_BACKGROUND} />
-                        <span className="text-xs text-slate-400">Para Coopcanapro se prellenÃ³ la imagen solicitada; puedes reemplazarla por otra URL pÃºblica cuando sea necesario.</span>
+                        <span className="text-xs text-slate-400">Para Coopcanapro se prellenó la imagen solicitada; puedes reemplazarla por otra URL pública cuando sea necesario.</span>
                     </label>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -160,7 +165,7 @@ export default function AdminCorpSettings() {
 
                     <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-black text-black transition disabled:opacity-60" style={{ backgroundColor: 'var(--color-primary, #f59e0b)' }}>
                         {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                        {saving ? 'Guardando...' : 'Guardar configuraciÃ³n'}
+                        {saving ? 'Guardando...' : 'Guardar configuración'}
                     </button>
                 </div>
 
