@@ -1,8 +1,7 @@
-﻿import React from 'react';
+import React from 'react';
 import { ArrowLeft, ArrowRight, AlertCircle, LogIn, ShieldCheck } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { EmailAutocompleteInput } from '../components/UI';
 import { LegalDialog } from '../components/legal/LegalDialog';
 import type { LegalDocumentKey } from '../components/legal/legal-documents';
 import { Button } from '../components/ui/button';
@@ -10,6 +9,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useAuthStore } from '../stores/auth.store';
+import { getRecaptchaToken } from '../recaptcha';
 
 export const normalizeCheckboxState = (checked: boolean | 'indeterminate') => checked === true;
 
@@ -17,7 +17,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, isLoading } = useAuthStore();
-  const [email, setEmail] = React.useState('');
+  const [documentNumber, setDocumentNumber] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState<string | null>(
     searchParams.get('error') === 'oauth_failed'
@@ -33,12 +33,13 @@ const Login: React.FC = () => {
     e.preventDefault();
     setError(null);
     try {
-      await login({ identifier: email, password });
+      const recaptchaToken = await getRecaptchaToken('login');
+      await login({ identifier: documentNumber, password, recaptchaToken });
       // Check if email is verified
       const { user } = useAuthStore.getState();
       if (user && user.emailVerified === false) {
         // Store email in sessionStorage for display in EmailVerification view
-        sessionStorage.setItem('registrationEmail', email);
+        sessionStorage.setItem('registrationEmail', user.email ?? documentNumber);
         navigate('/verify-email');
       } else {
         navigate('/dashboard');
@@ -107,15 +108,15 @@ const Login: React.FC = () => {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Correo Electrónico</label>
-              <EmailAutocompleteInput
-                name="email"
-                placeholder="tu@email.com"
+              <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Documento</label>
+              <Input
+                name="documentNumber"
+                placeholder="Cédula o documento"
                 autoComplete="username"
                 required
                 disabled={isLoading}
-                value={email}
-                onValueChange={setEmail}
+                value={documentNumber}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentNumber(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -131,7 +132,7 @@ const Login: React.FC = () => {
                 required
                 disabled={isLoading}
                 value={password}
-                onChange={(e: any) => setPassword(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
               />
             </div>
 

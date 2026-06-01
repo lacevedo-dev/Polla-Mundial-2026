@@ -74,6 +74,18 @@ export class UsersService {
         });
     }
 
+    async findByDocumentNumber(identifier: string, options: FindUserOptions = {}) {
+        const value = identifier.trim();
+        const documentDigits = value.replace(/\D/g, '');
+        const documentCandidates = Array.from(new Set([value, documentDigits].filter(Boolean)));
+        return this.prisma.user.findFirst({
+            where: {
+                OR: documentCandidates.map((documentNumber) => ({ documentNumber })),
+                ...this.buildStatusWhere(options.includeInactive),
+            },
+        });
+    }
+
     async findById(id: string, options: FindUserOptions = {}) {
         return this.prisma.user.findFirst({
             where: {

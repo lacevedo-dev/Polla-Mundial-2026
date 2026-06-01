@@ -1,11 +1,15 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
-    @IsNotEmpty({ message: 'El correo electrónico o usuario es requerido' })
+    @IsNotEmpty({ message: 'El documento de identidad es requerido' })
     @IsString()
     identifier: string;
 
-    @IsNotEmpty({ message: 'La contraseña es requerida' })
+    @IsNotEmpty({ message: 'La contraseÃ±a es requerida' })
     @IsString()
     password: string;
+
+    @IsOptional()
+    @IsString()
+    recaptchaToken?: string;
 }

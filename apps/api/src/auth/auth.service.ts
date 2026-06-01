@@ -24,7 +24,7 @@ export class AuthService {
     ) { }
 
     async validateUser(identifier: string, pass: string): Promise<any> {
-        const user = await this.usersService.findByEmailOrUsername(identifier);
+        const user = await this.usersService.findByDocumentNumber(identifier);
 
         if (user && user.passwordHash && await bcrypt.compare(pass, user.passwordHash)) {
             const { passwordHash, ...result } = user;
@@ -34,6 +34,7 @@ export class AuthService {
     }
 
     async login(loginDto: LoginDto) {
+        await this.verifyRecaptcha(loginDto.recaptchaToken, 'login');
         const user = await this.validateUser(loginDto.identifier, loginDto.password);
         if (!user) {
             throw new UnauthorizedException('Credenciales inválidas');
@@ -420,6 +421,40 @@ export class AuthService {
             return await operation();
         } catch (error) {
             throw mapRegisterOperationalError(error);
+        }
+    }
+
+    private async verifyRecaptcha(token: string | undefined, expectedAction: string) {
+        const secret = process.env.RECAPTCHA_SECRET_KEY;
+        if (!secret) {
+            if (process.env.NODE_ENV === 'production') {
+                throw new UnauthorizedException('reCAPTCHA no está configurado');
+            }
+            return;
+        }
+        if (!token) throw new UnauthorizedException('Verificación reCAPTCHA requerida');
+
+        const params = new URLSearchParams();
+        params.set('secret', secret);
+        params.set('response', token);
+
+        let result: any;
+        try {
+            const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params,
+            });
+            result = await response.json();
+        } catch (error) {
+            this.logger.warn(`No se pudo verificar reCAPTCHA: ${error instanceof Error ? error.message : String(error)}`);
+            throw new UnauthorizedException('No se pudo validar reCAPTCHA');
+        }
+
+        const minScore = Number(process.env.RECAPTCHA_MIN_SCORE ?? '0.5');
+        if (!result?.success || result.action !== expectedAction || typeof result.score !== 'number' || result.score < minScore) {
+            this.logger.warn(`reCAPTCHA rechazado action=${result?.action} score=${result?.score} errors=${JSON.stringify(result?.['error-codes'] ?? [])}`);
+            throw new UnauthorizedException('No pudimos validar que seas una persona. Intenta de nuevo.');
         }
     }
 }

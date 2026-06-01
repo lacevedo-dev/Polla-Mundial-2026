@@ -23,7 +23,7 @@ interface AuthStoreState {
     user: AuthUser | null;
     isLoading: boolean;
     error: string | null;
-    login: (identifier: string, password: string) => Promise<AuthUser>;
+    login: (identifier: string, password: string, recaptchaToken?: string) => Promise<AuthUser>;
     logout: () => void;
     restoreSession: () => Promise<void>;
     setMustChangePassword: (value: boolean) => void;
@@ -35,12 +35,12 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     isLoading: false,
     error: null,
 
-    login: async (identifier, password) => {
+    login: async (identifier, password, recaptchaToken) => {
         set({ isLoading: true, error: null });
         try {
             const res = await request<LoginResponse>('/auth/login', {
                 method: 'POST',
-                body: JSON.stringify({ identifier, password }),
+                body: JSON.stringify({ identifier, password, recaptchaToken }),
             });
             localStorage.setItem('corp_token', res.accessToken);
             set({ user: res.user, isLoading: false });

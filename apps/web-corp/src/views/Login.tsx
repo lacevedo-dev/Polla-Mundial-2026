@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Eye, EyeOff, Building2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenantStore } from '../stores/tenant.store';
+import { getRecaptchaToken } from '../recaptcha';
 
 export default function Login() {
     const navigate = useNavigate();
@@ -23,7 +24,8 @@ export default function Login() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const user = await login(identifier.trim(), password);
+            const recaptchaToken = await getRecaptchaToken('login');
+            const user = await login(identifier.trim(), password, recaptchaToken);
             if (user.mustChangePassword) {
                 navigate('/change-password', { replace: true });
             } else {
@@ -68,14 +70,14 @@ export default function Login() {
                     )}
 
                     <div>
-                        <label className="block text-sm font-semibold text-slate-300 mb-1.5">Correo o documento</label>
+                        <label className="block text-sm font-semibold text-slate-300 mb-1.5">Documento</label>
                         <input
                             type="text"
                             value={identifier}
                             onChange={(e) => setIdentifier(e.target.value)}
                             required
                             autoComplete="username"
-                            placeholder="tu@empresa.com o cédula"
+                            placeholder="Cédula o documento"
                             className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 transition-colors"
                         />
                     </div>
