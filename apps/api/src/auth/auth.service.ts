@@ -24,10 +24,7 @@ export class AuthService {
     ) { }
 
     async validateUser(identifier: string, pass: string): Promise<any> {
-        let user = await this.usersService.findByEmail(identifier);
-        if (!user) {
-            user = await this.usersService.findByUsername(identifier);
-        }
+        const user = await this.usersService.findByEmailOrUsername(identifier);
 
         if (user && user.passwordHash && await bcrypt.compare(pass, user.passwordHash)) {
             const { passwordHash, ...result } = user;
@@ -279,8 +276,8 @@ export class AuthService {
         return { ok: true, message: 'Contraseña actualizada exitosamente' };
     }
 
-    async forgotPassword(email: string) {
-        const user = await this.usersService.findByEmail(email);
+    async forgotPassword(identifier: string) {
+        const user = await this.usersService.findByEmailOrUsername(identifier);
         if (!user) {
             return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
         }

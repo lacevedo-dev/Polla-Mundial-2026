@@ -57,6 +57,19 @@ export class UsersService {
         });
     }
 
+    async findByEmailOrUsername(identifier: string, options: FindUserOptions = {}) {
+        const value = identifier.trim();
+        return this.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: value.toLowerCase() },
+                    { username: value },
+                ],
+                ...this.buildStatusWhere(options.includeInactive),
+            },
+        });
+    }
+
     async findById(id: string, options: FindUserOptions = {}) {
         return this.prisma.user.findFirst({
             where: {

@@ -6,7 +6,7 @@ import { request } from '../api';
 
 const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = React.useState('');
+  const [identifier, setIdentifier] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [success, setSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -18,7 +18,7 @@ const ForgotPassword: React.FC = () => {
     try {
       await request('/auth/forgot-password', {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ identifier }),
       });
       setSuccess(true);
     } catch (err: any) {
@@ -46,7 +46,7 @@ const ForgotPassword: React.FC = () => {
             <h1 className="font-brand text-xl tracking-tight">POLLA<span className="text-lime-400">2026</span></h1>
           </div>
           <h2 className="text-2xl font-black font-brand uppercase">¿Olvidaste tu contraseña?</h2>
-          <p className="text-slate-400 mt-2 text-sm">Ingresa tu correo y te enviaremos las instrucciones para restablecerla.</p>
+          <p className="text-slate-400 mt-2 text-sm">Ingresa tu correo o documento y te enviaremos las instrucciones para restablecerla.</p>
         </div>
 
         <div className="p-8">
@@ -59,7 +59,7 @@ const ForgotPassword: React.FC = () => {
               </div>
               <h3 className="text-lg font-black text-slate-900">¡Correo enviado!</h3>
               <p className="text-sm text-slate-500">
-                Si el correo <strong>{email}</strong> está registrado, recibirás las instrucciones en los próximos minutos.
+                Si <strong>{identifier}</strong> est� registrado, recibir�s las instrucciones en los pr�ximos minutos.
               </p>
               <p className="text-xs text-slate-400">Revisa también tu carpeta de spam.</p>
               <Button className="w-full mt-4" onClick={() => navigate('/login')}>
@@ -75,16 +75,16 @@ const ForgotPassword: React.FC = () => {
               )}
 
               <div className="space-y-2">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Correo Electrónico</label>
+                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Correo o documento</label>
                 <div className="relative">
                   <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="email"
+                    type="text"
                     required
                     disabled={isLoading}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tu@email.com"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="tu@email.com o c�dula"
                     className="w-full pl-9 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-transparent disabled:opacity-60"
                   />
                 </div>

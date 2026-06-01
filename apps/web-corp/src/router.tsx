@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/auth.store';
 
 const LandingB2B = React.lazy(() => import('./views/LandingB2B'));
 const Login = React.lazy(() => import('./views/Login'));
+const ForgotPassword = React.lazy(() => import('./views/ForgotPassword'));
 const Dashboard = React.lazy(() => import('./views/Dashboard'));
 const Pollas = React.lazy(() => import('./views/Pollas'));
 const Ranking = React.lazy(() => import('./views/Ranking'));
@@ -51,6 +52,7 @@ export function AppRouter() {
                 <Routes>
                     <Route path="/" element={<LandingB2B />} />
                     <Route path="/login" element={<Login />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
@@ -58,6 +60,7 @@ export function AppRouter() {
                 /* ── Con tenant: empresa.zonapronosticos.com ── */
                 <Routes>
                     <Route path="/login" element={<Login />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
                     <Route path="/onboarding" element={<Onboarding />} />
                     <Route
