@@ -59,14 +59,16 @@ export class UsersService {
 
     async findByEmailOrUsername(identifier: string, options: FindUserOptions = {}) {
         const value = identifier.trim();
+        const where: any = {
+            OR: [
+                { email: value.toLowerCase() },
+                { username: value },
+                { documentNumber: value },
+            ],
+            ...this.buildStatusWhere(options.includeInactive),
+        };
         return this.prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email: value.toLowerCase() },
-                    { username: value },
-                ],
-                ...this.buildStatusWhere(options.includeInactive),
-            },
+            where,
         });
     }
 

@@ -75,7 +75,7 @@ export default function Login() {
                             onChange={(e) => setIdentifier(e.target.value)}
                             required
                             autoComplete="username"
-                            placeholder="tu@empresa.com o cédula"
+                            placeholder="tu@empresa.com o cÃ©dula"
                             className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 transition-colors"
                         />
                     </div>
@@ -112,7 +112,7 @@ export default function Login() {
                     </button>
                     <div className="text-right">
                         <Link to="/forgot-password" className="text-xs font-bold text-amber-400 hover:underline">
-                            ¿Olvidaste tu contraseña?
+                            Â¿Olvidaste tu contraseÃ±a?
                         </Link>
                     </div>
                 </form>

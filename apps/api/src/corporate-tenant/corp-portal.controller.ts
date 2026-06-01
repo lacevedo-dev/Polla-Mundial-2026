@@ -23,6 +23,7 @@ class CreateCorpLeagueDto {
 class ProvisionMemberDto {
     @IsString() @IsNotEmpty() name: string;
     @IsEmail() email: string;
+    @IsOptional() @IsString() documentNumber?: string;
     @IsOptional() @IsString() username?: string;
     @IsOptional() @IsString() phone?: string;
     @IsOptional() @IsString() tempPassword?: string;
@@ -31,6 +32,7 @@ class ProvisionMemberDto {
 }
 
 class BulkUserRow {
+    @IsString() @IsNotEmpty() documentNumber: string;
     @IsString() @IsNotEmpty() name: string;
     @IsEmail() email: string;
     @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
@@ -209,7 +211,7 @@ export class CorpPortalController {
         const userIdsList = memberPoints.map((p) => p.userId);
         const users = await this.prisma.user.findMany({
             where: { id: { in: userIdsList } },
-            select: { id: true, name: true, username: true, avatar: true },
+            select: { id: true, name: true, username: true, documentNumber: true, avatar: true },
         });
         const userMap = new Map(users.map((u) => [u.id, u]));
 
@@ -259,7 +261,7 @@ export class CorpPortalController {
                 rank: i + 1,
                 userId: p.userId,
                 name: userMap.get(p.userId)?.name ?? '—',
-                username: userMap.get(p.userId)?.username ?? '',
+                username: (userMap.get(p.userId) as any)?.documentNumber ?? userMap.get(p.userId)?.username ?? '',
                 avatar: userMap.get(p.userId)?.avatar ?? null,
                 totalPoints: p._sum.points ?? 0,
                 isMe: p.userId === userId,
@@ -336,7 +338,7 @@ export class CorpPortalController {
             .map((m) => ({
                 userId: m.userId,
                 name: m.user.name,
-                username: m.user.username,
+                username: (m.user as any).documentNumber ?? m.user.username,
                 avatar: m.user.avatar,
                 totalPoints: scoreMap.get(m.userId) ?? 0,
                 isMe: m.userId === userId,
@@ -619,7 +621,7 @@ export class CorpPortalController {
         const members = await this.prisma.tenantMember.findMany({
             where: { tenantId },
             include: {
-                user: { select: { id: true, name: true, email: true, username: true, avatar: true, mustChangePassword: true, emailVerified: true, createdAt: true } },
+                user: { select: { id: true, name: true, email: true, username: true, documentNumber: true, avatar: true, mustChangePassword: true, emailVerified: true, createdAt: true } },
             },
             orderBy: { invitedAt: 'asc' },
         });
@@ -629,7 +631,7 @@ export class CorpPortalController {
             userId: m.userId,
             name: m.user.name,
             email: m.user.email,
-            username: m.user.username,
+            username: (m.user as any).documentNumber ?? m.user.username,
             avatar: m.user.avatar,
             mustChangePassword: m.user.mustChangePassword,
             emailVerified: m.user.emailVerified,
@@ -647,7 +649,8 @@ export class CorpPortalController {
         return this.provisioning.provisionOwner(tenantId, {
             name: dto.name,
             email: dto.email,
-            username: dto.username,
+            documentNumber: dto.documentNumber,
+            username: dto.documentNumber ?? dto.username,
             phone: dto.phone,
             tempPassword: dto.tempPassword,
             role: dto.role ?? TenantRole.PLAYER,
@@ -665,6 +668,8 @@ export class CorpPortalController {
                 const result = await this.provisioning.provisionOwner(tenantId, {
                     name: user.name,
                     email: user.email,
+                    documentNumber: user.documentNumber,
+                    username: user.documentNumber,
                     role: user.role ?? TenantRole.PLAYER,
                     tempPassword: dto.sharedTempPassword,
                     sendEmail: dto.sendEmail !== false,

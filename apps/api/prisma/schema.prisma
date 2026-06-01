@@ -11,6 +11,7 @@ model User {
   name                     String
   email                    String                    @unique
   username                 String                    @unique
+  documentNumber           String?                   @unique @db.VarChar(64)
   phone                    String?
   countryCode              String                    @default("+57")
   avatar                   String?

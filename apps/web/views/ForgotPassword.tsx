@@ -59,7 +59,7 @@ const ForgotPassword: React.FC = () => {
               </div>
               <h3 className="text-lg font-black text-slate-900">Â¡Correo enviado!</h3>
               <p className="text-sm text-slate-500">
-                Si <strong>{identifier}</strong> está registrado, recibirás las instrucciones en los próximos minutos.
+                Si <strong>{identifier}</strong> estÃ¡ registrado, recibirÃ¡s las instrucciones en los prÃ³ximos minutos.
               </p>
               <p className="text-xs text-slate-400">Revisa tambiÃ©n tu carpeta de spam.</p>
               <Button className="w-full mt-4" onClick={() => navigate('/login')}>
@@ -84,7 +84,7 @@ const ForgotPassword: React.FC = () => {
                     disabled={isLoading}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="tu@email.com o cédula"
+                    placeholder="tu@email.com o cÃ©dula"
                     className="w-full pl-9 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400 focus:border-transparent disabled:opacity-60"
                   />
                 </div>

@@ -181,6 +181,10 @@ export class ProvisionTenantOwnerDto {
 
     @IsOptional()
     @IsString()
+    documentNumber?: string;
+
+    @IsOptional()
+    @IsString()
     phone?: string;
 
     @IsOptional()

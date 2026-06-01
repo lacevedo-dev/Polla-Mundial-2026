@@ -29,12 +29,18 @@ export class TenantProvisioningService {
         if (!tenant) throw new NotFoundException('Tenant no encontrado');
 
         const email = dto.email.toLowerCase().trim();
+        const documentNumber = dto.documentNumber?.trim() || dto.username?.trim() || null;
         const role = (dto.role ?? 'OWNER') as TenantRole;
         const sendEmail = dto.sendEmail !== false;
 
         // Buscar usuario existente
-        const existingUser = await this.prisma.user.findUnique({
-            where: { email },
+        const existingUser = await this.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email },
+                    ...(documentNumber ? [{ documentNumber }] : []),
+                ],
+            } as any,
             select: { id: true, name: true, email: true },
         });
 
@@ -51,13 +57,14 @@ export class TenantProvisioningService {
 
             tempPassword = dto.tempPassword?.trim() || this.generateTempPassword();
             const passwordHash = await bcrypt.hash(tempPassword, 10);
-            const username = await this.resolveUniqueUsername(dto.username || email.split('@')[0]);
+            const username = await this.resolveUniqueUsername(dto.username || documentNumber || email.split('@')[0]);
 
             const created = await this.prisma.user.create({
                 data: {
                     name: dto.name.trim(),
                     email,
                     username,
+                    documentNumber,
                     phone: dto.phone,
                     passwordHash,
                     mustChangePassword: true,

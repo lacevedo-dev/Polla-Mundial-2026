@@ -64,7 +64,7 @@ export default function AdminCorpMembers() {
     const [saving, setSaving] = useState(false);
     const [modalError, setModalError] = useState<string | null>(null);
 
-    const [form, setForm] = useState({ name: '', email: '', role: 'PLAYER' as Member['role'], tempPassword: '', sendEmail: true });
+    const [form, setForm] = useState({ documentNumber: '', name: '', email: '', role: 'PLAYER' as Member['role'], tempPassword: '', sendEmail: true });
     const [showPass, setShowPass] = useState(false);
 
     const [bulkText, setBulkText] = useState('');
@@ -90,23 +90,23 @@ export default function AdminCorpMembers() {
     function showSuccess(msg: string) { setSuccess(msg); setTimeout(() => setSuccess(null), 4000); }
 
     function openCreate() {
-        setForm({ name: '', email: '', role: 'PLAYER', tempPassword: '', sendEmail: true });
+        setForm({ documentNumber: '', name: '', email: '', role: 'PLAYER', tempPassword: '', sendEmail: true });
         setModalError(null); setModal('create');
     }
     function openEdit(m: Member) {
-        setTarget(m); setForm({ name: m.name, email: m.email, role: m.role, tempPassword: '', sendEmail: false });
+        setTarget(m); setForm({ documentNumber: m.username ?? '', name: m.name, email: m.email, role: m.role, tempPassword: '', sendEmail: false });
         setModalError(null); setModal('edit');
     }
     function openDelete(m: Member) { setTarget(m); setModalError(null); setModal('delete'); }
     function closeModal() { setModal(null); setTarget(null); setModalError(null); setBulkResults(null); }
 
     async function handleCreate() {
-        if (!form.name.trim() || !form.email.trim()) { setModalError('Nombre y email son obligatorios.'); return; }
+        if (!form.documentNumber.trim() || !form.name.trim() || !form.email.trim()) { setModalError('Documento, nombre y email son obligatorios.'); return; }
         setSaving(true); setModalError(null);
         try {
             await request('/corp/members', {
                 method: 'POST',
-                body: JSON.stringify({ name: form.name.trim(), email: form.email.trim(), role: form.role, tempPassword: form.tempPassword || undefined, sendEmail: form.sendEmail }),
+                body: JSON.stringify({ documentNumber: form.documentNumber.trim(), name: form.name.trim(), email: form.email.trim(), role: form.role, tempPassword: form.tempPassword || undefined, sendEmail: form.sendEmail }),
             });
             loadMembers();
             closeModal();
@@ -161,9 +161,9 @@ export default function AdminCorpMembers() {
         const users: any[] = [];
         for (const line of lines) {
             const parts = line.split(',').map(p => p.trim());
-            if (parts.length < 2) { setModalError(`Línea inválida: "${line}". Formato: Nombre,email[,ROL]`); return; }
-            const [name, email, role] = parts;
-            users.push({ name, email, role: ['OWNER', 'ADMIN', 'PLAYER'].includes(role?.toUpperCase()) ? role.toUpperCase() : 'PLAYER' });
+            if (parts.length < 3) { setModalError(`Línea inválida: "${line}". Formato: Documento,Nombre,email[,ROL]`); return; }
+            const [documentNumber, name, email, role] = parts;
+            users.push({ documentNumber, name, email, role: ['OWNER', 'ADMIN', 'PLAYER'].includes(role?.toUpperCase()) ? role.toUpperCase() : 'PLAYER' });
         }
         setSaving(true); setModalError(null);
         try {
@@ -330,6 +330,10 @@ export default function AdminCorpMembers() {
                         <div className="px-6 py-5 space-y-4">
                             {modalError && <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2.5 text-sm"><AlertTriangle size={14} className="shrink-0 mt-0.5" />{modalError}</div>}
                             <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Documento *</label>
+                                <input value={form.documentNumber} onChange={e => setForm(f => ({ ...f, documentNumber: e.target.value }))} placeholder="Cédula o documento" className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent" style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
+                            </div>
+                            <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Nombre completo *</label>
                                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej. María García" className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent" style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
                             </div>
@@ -436,7 +440,7 @@ export default function AdminCorpMembers() {
                         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
                             <div>
                                 <h3 className="font-black text-slate-900">Importar usuarios masivamente</h3>
-                                <p className="text-xs text-slate-400 mt-0.5">Un usuario por línea: <code className="bg-slate-100 px-1 rounded">Nombre,email[,ROL]</code></p>
+                                <p className="text-xs text-slate-400 mt-0.5">Un usuario por línea: <code className="bg-slate-100 px-1 rounded">Documento,Nombre,email[,ROL]</code></p>
                             </div>
                             <button onClick={closeModal} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X size={17} /></button>
                         </div>
@@ -444,7 +448,7 @@ export default function AdminCorpMembers() {
                             {modalError && <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2.5 text-sm"><AlertTriangle size={14} className="shrink-0 mt-0.5" />{modalError}</div>}
                             <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Lista de usuarios *</label>
-                                <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={8} placeholder={"Carlos Pérez,carlos@empresa.com,PLAYER\nAna Torres,ana@empresa.com,ADMIN\nJuan López,juan@empresa.com"}
+                                <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={8} placeholder={"123456789,Carlos Pérez,carlos@empresa.com,PLAYER\n987654321,Ana Torres,ana@empresa.com,ADMIN\n555555555,Juan López,juan@empresa.com"}
                                     className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent resize-y font-mono"
                                     style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
                                 <p className="text-xs text-slate-400 mt-1">Roles disponibles: <code>PLAYER</code> (defecto), <code>ADMIN</code>, <code>OWNER</code>.</p>
