@@ -277,8 +277,8 @@ export class AuthService {
         return { ok: true, message: 'Contraseña actualizada exitosamente' };
     }
 
-    async forgotPassword(identifier: string) {
-        const user = await this.usersService.findByEmailOrUsername(identifier);
+    async forgotPassword(identifier: string, appUrl?: string) {
+        const user = await this.usersService.findByDocumentNumber(identifier);
         if (!user) {
             return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
         }
@@ -292,8 +292,8 @@ export class AuthService {
             data: { token, userId: user.id, expiresAt },
         });
 
-        const appUrl = process.env.APP_URL || 'https://polla2026.com';
-        await this.emailService.sendPasswordResetEmail(user.email, token, user.name.split(' ')[0], appUrl);
+        const resetBaseUrl = appUrl || process.env.CORP_APP_URL || process.env.APP_URL || 'https://polla2026.com';
+        await this.emailService.sendPasswordResetEmail(user.email, token, user.name.split(' ')[0], resetBaseUrl);
 
         return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
     }

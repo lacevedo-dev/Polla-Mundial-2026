@@ -18,6 +18,7 @@ const AdminCorpLeagues = React.lazy(() => import('./views/AdminCorpLeagues'));
 const PollaDetail = React.lazy(() => import('./views/PollaDetail'));
 const Help = React.lazy(() => import('./views/Help'));
 const AdminCorpSettings = React.lazy(() => import('./views/AdminCorpSettings'));
+const ResetPassword = React.lazy(() => import('./views/ResetPassword'));
 
 const Loader = () => (
     <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -53,6 +54,7 @@ export function AppRouter() {
                     <Route path="/" element={<LandingB2B />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
@@ -61,6 +63,7 @@ export function AppRouter() {
                 <Routes>
                     <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
                     <Route path="/onboarding" element={<Onboarding />} />
                     <Route

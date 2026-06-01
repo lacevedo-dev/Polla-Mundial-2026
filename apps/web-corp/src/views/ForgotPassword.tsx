@@ -21,7 +21,7 @@ export default function ForgotPassword() {
         try {
             await request('/auth/forgot-password', {
                 method: 'POST',
-                body: JSON.stringify({ identifier: identifier.trim() }),
+                body: JSON.stringify({ identifier: identifier.trim(), appUrl: window.location.origin }),
             });
             setSent(true);
         } catch (err) {
@@ -51,7 +51,7 @@ export default function ForgotPassword() {
                         <div className="text-center space-y-4">
                             <CheckCircle2 size={44} className="text-emerald-400 mx-auto" />
                             <p className="text-sm text-slate-300">
-                                Si <strong>{identifier}</strong> está registrado, enviaremos las instrucciones al correo asociado.
+                                Si el documento <strong>{identifier}</strong> está registrado, enviaremos las instrucciones al correo asociado.
                             </p>
                             <Link to="/login" className="block w-full rounded-xl py-3 text-center text-sm font-black text-white" style={{ backgroundColor: primaryColor }}>
                                 Volver al login
@@ -67,14 +67,15 @@ export default function ForgotPassword() {
                             )}
 
                             <div>
-                                <label className="block text-sm font-semibold text-slate-300 mb-1.5">Correo o documento</label>
+                                <label className="block text-sm font-semibold text-slate-300 mb-1.5">Número de documento</label>
                                 <input
                                     type="text"
                                     required
                                     value={identifier}
                                     onChange={(e) => setIdentifier(e.target.value)}
                                     autoComplete="username"
-                                    placeholder="tu@empresa.com o cédula"
+                                    inputMode="numeric"
+                                    placeholder="Cédula o documento de identidad"
                                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 transition-colors"
                                 />
                             </div>
