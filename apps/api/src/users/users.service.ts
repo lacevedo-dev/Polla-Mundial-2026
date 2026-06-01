@@ -59,11 +59,13 @@ export class UsersService {
 
     async findByEmailOrUsername(identifier: string, options: FindUserOptions = {}) {
         const value = identifier.trim();
+        const documentDigits = value.replace(/\D/g, '');
+        const documentCandidates = Array.from(new Set([value, documentDigits].filter(Boolean)));
         const where: any = {
             OR: [
                 { email: value.toLowerCase() },
                 { username: value },
-                { documentNumber: value },
+                ...documentCandidates.map((documentNumber) => ({ documentNumber })),
             ],
             ...this.buildStatusWhere(options.includeInactive),
         };

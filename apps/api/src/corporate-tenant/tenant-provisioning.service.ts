@@ -29,7 +29,7 @@ export class TenantProvisioningService {
         if (!tenant) throw new NotFoundException('Tenant no encontrado');
 
         const email = dto.email.toLowerCase().trim();
-        const documentNumber = dto.documentNumber?.trim() || dto.username?.trim() || null;
+        const documentNumber = this.normalizeDocumentNumber(dto.documentNumber ?? dto.username);
         const role = (dto.role ?? 'OWNER') as TenantRole;
         const sendEmail = dto.sendEmail !== false;
 
@@ -41,7 +41,7 @@ export class TenantProvisioningService {
                     ...(documentNumber ? [{ documentNumber }] : []),
                 ],
             } as any,
-            select: { id: true, name: true, email: true },
+            select: { id: true, name: true, email: true, documentNumber: true },
         });
 
         let userId: string;
@@ -51,6 +51,12 @@ export class TenantProvisioningService {
         if (existingUser) {
             userId = existingUser.id;
             await this.limitsService.checkUserLimit(tenantId);
+            if (documentNumber && existingUser.documentNumber !== documentNumber) {
+                await this.prisma.user.update({
+                    where: { id: existingUser.id },
+                    data: { documentNumber },
+                });
+            }
         } else {
             // Validar límite ANTES de crear el user
             await this.limitsService.checkUserLimit(tenantId);
@@ -311,6 +317,13 @@ export class TenantProvisioningService {
             if (i > 999) throw new BadRequestException('No se pudo generar un username único');
         }
         return candidate;
+    }
+
+    private normalizeDocumentNumber(value?: string | null): string | null {
+        const trimmed = value?.trim();
+        if (!trimmed) return null;
+        const digitsOnly = trimmed.replace(/\D/g, '');
+        return digitsOnly || trimmed;
     }
 
     private buildCredentialsEmail(params: {
