@@ -16,6 +16,7 @@ const AdminCorpMembers = React.lazy(() => import('./views/AdminCorpMembers'));
 const AdminCorpLeagues = React.lazy(() => import('./views/AdminCorpLeagues'));
 const PollaDetail = React.lazy(() => import('./views/PollaDetail'));
 const Help = React.lazy(() => import('./views/Help'));
+const AdminCorpSettings = React.lazy(() => import('./views/AdminCorpSettings'));
 
 const Loader = () => (
     <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -128,6 +129,14 @@ export function AppRouter() {
                         element={
                             <RequireAuth>
                                 <AdminCorpLeagues />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin/settings"
+                        element={
+                            <RequireAuth>
+                                <AdminCorpSettings />
                             </RequireAuth>
                         }
                     />

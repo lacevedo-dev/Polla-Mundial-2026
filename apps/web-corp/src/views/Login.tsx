@@ -15,6 +15,10 @@ export default function Login() {
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'ZonaPronosticos';
     const primaryColor = tenant?.branding?.primaryColor ?? '#f59e0b';
+    const configuredBackground = tenant?.branding?.heroImageUrl?.trim();
+    const loginBackgroundUrl = configuredBackground || (tenant?.slug === 'coopcanapro'
+        ? 'https://coopcanapro.coop/wp-content/uploads/2026/05/Pagina-web.jpg'
+        : null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -29,8 +33,16 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4">
-            <div className="w-full max-w-sm">
+        <div
+            className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4 relative overflow-hidden"
+            style={loginBackgroundUrl ? {
+                backgroundImage: `linear-gradient(rgba(2,6,23,0.48), rgba(2,6,23,0.72)), url(${loginBackgroundUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+            } : undefined}
+        >
+            <div className="w-full max-w-sm relative z-10">
                 {/* Logo / Brand */}
                 <div className="text-center mb-8">
                     {tenant?.branding?.logoUrl ? (
@@ -48,7 +60,7 @@ export default function Login() {
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="bg-slate-900 rounded-2xl p-6 space-y-4 border border-slate-800">
+                <form onSubmit={handleSubmit} className="bg-slate-900/95 backdrop-blur-sm rounded-2xl p-6 space-y-4 border border-slate-800 shadow-2xl">
                     {error && (
                         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm">
                             {error}

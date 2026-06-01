@@ -18,7 +18,7 @@ interface TenantDetail {
     contactEmail: string; status: TenantStatus; planTier: PlanTier;
     maxUsers: number; maxLeagues: number; customDomain: string | null;
     createdAt: string; updatedAt: string;
-    branding: { primaryColor: string; secondaryColor: string; accentColor: string; fontFamily: string; companyDisplayName: string | null; logoUrl: string | null; faviconUrl: string | null; customCss: string | null; } | null;
+    branding: { primaryColor: string; secondaryColor: string; accentColor: string; fontFamily: string; companyDisplayName: string | null; logoUrl: string | null; faviconUrl: string | null; heroImageUrl: string | null; customCss: string | null; } | null;
     config: { enablePayments: boolean; enableAiInsights: boolean; enablePublicLeagues: boolean; enableUserSelfRegister: boolean; requireInvitation: boolean; enableEmailNotif: boolean; enablePushNotif: boolean; enableStageFees: boolean; } | null;
     _count: { members: number; leagues: number };
 }
@@ -81,7 +81,7 @@ export default function AdminTenantDetail() {
     const [infoDraft, setInfoDraft] = useState<Partial<TenantDetail>>({});
     const [brandingDraft, setBrandingDraft] = useState<NonNullable<TenantDetail['branding']>>({
         primaryColor: '#16a34a', secondaryColor: '#15803d', accentColor: '#bbf7d0',
-        fontFamily: 'Inter', companyDisplayName: null, logoUrl: null, faviconUrl: null, customCss: null,
+        fontFamily: 'Inter', companyDisplayName: null, logoUrl: null, faviconUrl: null, heroImageUrl: null, customCss: null,
     });
     const [configDraft, setConfigDraft] = useState<NonNullable<TenantDetail['config']>>({
         enablePayments: true, enableAiInsights: false, enablePublicLeagues: false,
@@ -132,8 +132,8 @@ export default function AdminTenantDetail() {
             setTenant(t);
             setInfoDraft({ name: t.name, legalName: t.legalName, contactEmail: t.contactEmail, planTier: t.planTier, maxUsers: t.maxUsers, maxLeagues: t.maxLeagues, customDomain: t.customDomain });
             if (t.branding) {
-                const { primaryColor, secondaryColor, accentColor, fontFamily, companyDisplayName, logoUrl, faviconUrl, customCss, emailHeaderHtml, emailFooterHtml, emailInviteTemplate } = t.branding as any;
-                setBrandingDraft({ primaryColor, secondaryColor, accentColor, fontFamily, companyDisplayName: companyDisplayName ?? null, logoUrl: logoUrl ?? null, faviconUrl: faviconUrl ?? null, customCss: customCss ?? null });
+                const { primaryColor, secondaryColor, accentColor, fontFamily, companyDisplayName, logoUrl, faviconUrl, heroImageUrl, customCss, emailHeaderHtml, emailFooterHtml, emailInviteTemplate } = t.branding as any;
+                setBrandingDraft({ primaryColor, secondaryColor, accentColor, fontFamily, companyDisplayName: companyDisplayName ?? null, logoUrl: logoUrl ?? null, faviconUrl: faviconUrl ?? null, heroImageUrl: heroImageUrl ?? null, customCss: customCss ?? null });
             }
             if (t.config) {
                 const { enablePayments, enableAiInsights, enablePublicLeagues, enableUserSelfRegister, requireInvitation, enableEmailNotif, enablePushNotif, enableStageFees } = t.config as any;
@@ -482,6 +482,14 @@ export default function AdminTenantDetail() {
                                 onChange={e => setBrandingDraft(b => ({ ...b, faviconUrl: e.target.value || null }))}
                                 placeholder="https://..." className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Imagen de fondo del login</label>
+                        <input value={brandingDraft.heroImageUrl ?? ''}
+                            onChange={e => setBrandingDraft(b => ({ ...b, heroImageUrl: e.target.value || null }))}
+                            placeholder="https://coopcanapro.coop/wp-content/uploads/2026/05/Pagina-web.jpg"
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
                     </div>
 
                     <div>

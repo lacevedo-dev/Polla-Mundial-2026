@@ -4,6 +4,8 @@ import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantProvisioningService } from './tenant-provisioning.service';
+import { TenantService } from './tenant.service';
+import { UpdateTenantBrandingDto } from './dto/tenant.dto';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole } from '@prisma/client';
@@ -57,7 +59,15 @@ export class CorpPortalController {
     constructor(
         private readonly prisma: PrismaService,
         private readonly provisioning: TenantProvisioningService,
+        private readonly tenantService: TenantService,
     ) {}
+
+    @UseGuards(TenantAdminGuard)
+    @Patch('branding')
+    async updateBranding(@Req() req: any, @Body() dto: UpdateTenantBrandingDto) {
+        const tenantId: string = req.tenantId;
+        return this.tenantService.updateBranding(tenantId, dto);
+    }
 
     @Get('dashboard')
     async getDashboard(@Req() req: any) {
