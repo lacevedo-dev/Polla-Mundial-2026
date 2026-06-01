@@ -11,6 +11,8 @@ interface UpcomingMatch {
     id: string; matchDate: string; status: string;
     homeScore: number | null; awayScore: number | null;
     homeTeam: Team; awayTeam: Team;
+    phase?: string | null;
+    group?: string | null;
     myPrediction: { homeScore: number; awayScore: number; points: number | null } | null;
 }
 interface RecentPrediction {
@@ -79,8 +81,13 @@ function PredictionRow({ match, leagueId, closeMin, onSaved, compact = false }: 
 
     const dateFmt = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: '2-digit', month: 'short' }).format(new Date(match.matchDate));
     const timeFmt = new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(match.matchDate));
-    const phase = (match as any).phase as string | undefined;
-    const group = (match as any).group as string | undefined;
+    const phase = match.phase;
+    const group = match.group;
+
+    function adjust(side: 'home' | 'away', delta: number) {
+        if (side === 'home') setHome(v => String(Math.max(0, Math.min(99, (parseInt(v) || 0) + delta))));
+        else setAway(v => String(Math.max(0, Math.min(99, (parseInt(v) || 0) + delta))));
+    }
 
     async function submit() {
         const h = parseInt(home); const a = parseInt(away);
@@ -210,15 +217,31 @@ function PredictionRow({ match, leagueId, closeMin, onSaved, compact = false }: 
                             )}
                         </div>
                     ) : canPredict ? (
-                        <div className="flex items-center gap-1.5 rounded-xl bg-white px-1.5 py-1 shadow-sm ring-1 ring-slate-200">
+                        <div className="flex items-center gap-2">
+                            {/* Local */}
+                            <div className="hidden sm:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm">
+                                <button type="button" onClick={() => adjust('home', -1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 hover:bg-slate-100">−</button>
+                                <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
+                                    onChange={e => setHome(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none appearance-none" />
+                                <button type="button" onClick={() => adjust('home', 1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 hover:bg-slate-100">+</button>
+                            </div>
                             <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
                                 onChange={e => setHome(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 appearance-none"
+                                className="sm:hidden h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition appearance-none"
                                 style={{ borderColor: home !== '' ? 'var(--color-primary,#f59e0b)' : undefined }} />
-                            <span className="text-base font-black text-slate-300">-</span>
+                            <span className="text-base font-black text-slate-300">–</span>
+                            {/* Visitante */}
+                            <div className="hidden sm:flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm">
+                                <button type="button" onClick={() => adjust('away', -1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 hover:bg-slate-100">−</button>
+                                <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
+                                    onChange={e => setAway(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none appearance-none" />
+                                <button type="button" onClick={() => adjust('away', 1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-500 hover:bg-slate-100">+</button>
+                            </div>
                             <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
                                 onChange={e => setAway(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 appearance-none"
+                                className="sm:hidden h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition appearance-none"
                                 style={{ borderColor: away !== '' ? 'var(--color-primary,#f59e0b)' : undefined }} />
                         </div>
                     ) : (
@@ -281,6 +304,7 @@ export default function PollaDetail() {
     const [tab, setTab] = useState<'partidos' | 'ranking' | 'reglas'>('partidos');
     const [viewMode, setViewMode] = useState<'expanded' | 'compact'>('expanded');
     const [phaseFilter, setPhaseFilter] = useState<'ALL' | 'GROUP' | 'KNOCKOUT'>('ALL');
+    const [groupFilter, setGroupFilter] = useState<string>('ALL');
 
     useEffect(() => {
         if (!id) return;
@@ -366,18 +390,53 @@ export default function PollaDetail() {
 
                     {/* Tab: Partidos */}
                     {tab === 'partidos' && (() => {
-                        const filtered = phaseFilter === 'ALL' ? matches
-                            : phaseFilter === 'GROUP' ? matches.filter(m => (m as any).phase === 'GROUP' || !(m as any).phase)
-                            : matches.filter(m => (m as any).phase && (m as any).phase !== 'GROUP');
+                        const closeMin = league.closePredictionMinutes;
+
+                        // Filtro fase
+                        const byPhase = phaseFilter === 'ALL' ? matches
+                            : phaseFilter === 'GROUP' ? matches.filter(m => m.phase === 'GROUP' || !m.phase)
+                            : matches.filter(m => m.phase && m.phase !== 'GROUP');
+
+                        // Grupos disponibles (solo en fase GROUP)
+                        const availableGroups = Array.from(
+                            new Set(byPhase.filter(m => m.group).map(m => m.group!))
+                        ).sort();
+                        const showGroupFilter = phaseFilter !== 'KNOCKOUT' && availableGroups.length > 1;
+
+                        // Filtro grupo
+                        const filtered = (groupFilter === 'ALL' || !showGroupFilter)
+                            ? byPhase
+                            : byPhase.filter(m => m.group === groupFilter);
+
+                        // Secciones
+                        const nextMatch = filtered.find(m => {
+                            return !isFinishedStatus(m.status) && !isLiveStatus(m.status);
+                        });
+                        const withoutPrediction = filtered.filter(m => {
+                            const cl = isPredictionClosed(m.matchDate, closeMin);
+                            return !cl && !isFinishedStatus(m.status) && !isLiveStatus(m.status) && !m.myPrediction && m.id !== nextMatch?.id;
+                        });
+                        const rest = filtered.filter(m => m.id !== nextMatch?.id && !withoutPrediction.find(x => x.id === m.id));
+
+                        const rowProps = (m: UpcomingMatch) => (
+                            <PredictionRow
+                                key={m.id} match={m}
+                                leagueId={league.id}
+                                closeMin={closeMin}
+                                onSaved={handlePredictionSaved}
+                                compact={viewMode === 'compact'}
+                            />
+                        );
+
                         return (
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="space-y-3">
                                 {/* Cabecera con controles */}
-                                <div className="px-4 py-3 border-b border-slate-50 space-y-2.5">
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 space-y-2.5">
                                     <div className="flex items-center justify-between">
                                         <h2 className="font-black text-slate-900 text-sm flex items-center gap-2">
                                             <Clock size={14} className="text-slate-400" /> Partidos
+                                            <span className="text-[10px] font-bold text-slate-400">{filtered.length}</span>
                                         </h2>
-                                        {/* Toggle vista */}
                                         <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg">
                                             <button onClick={() => setViewMode('expanded')}
                                                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${viewMode === 'expanded' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -389,36 +448,80 @@ export default function PollaDetail() {
                                             </button>
                                         </div>
                                     </div>
-                                    {/* Filtro de fase */}
-                                    <div className="flex items-center gap-1.5">
+                                    {/* Filtro fase */}
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                         <Filter size={10} className="text-slate-400 shrink-0" />
                                         {(['ALL', 'GROUP', 'KNOCKOUT'] as const).map((f) => (
-                                            <button key={f} onClick={() => setPhaseFilter(f)}
+                                            <button key={f} onClick={() => { setPhaseFilter(f); setGroupFilter('ALL'); }}
                                                 className={`px-2.5 py-1 rounded-full text-[10px] font-black transition-all ${phaseFilter === f ? 'text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                                                 style={phaseFilter === f ? { backgroundColor: 'var(--color-primary,#f59e0b)' } : undefined}>
                                                 {f === 'ALL' ? 'Todos' : f === 'GROUP' ? 'Grupos' : 'Eliminación'}
                                             </button>
                                         ))}
-                                        <span className="ml-auto text-[10px] font-bold text-slate-400">{filtered.length} partidos</span>
                                     </div>
+                                    {/* Filtro letra de grupo */}
+                                    {showGroupFilter && (
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                            <button onClick={() => setGroupFilter('ALL')}
+                                                className={`px-2.5 py-1 rounded-full text-[10px] font-black transition-all ${groupFilter === 'ALL' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                                General
+                                            </button>
+                                            {availableGroups.map(g => (
+                                                <button key={g} onClick={() => setGroupFilter(g)}
+                                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black transition-all ${groupFilter === g ? 'text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                                    style={groupFilter === g ? { backgroundColor: 'var(--color-primary,#f59e0b)' } : undefined}>
+                                                    {g}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {filtered.length === 0 ? (
-                                    <div className="p-8 text-center text-slate-400 text-sm">
+                                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-400 text-sm">
                                         No hay partidos{phaseFilter !== 'ALL' ? ' en esta fase' : ' en esta polla aún'}
                                     </div>
                                 ) : (
-                                    <div className={viewMode === 'compact' ? '' : 'divide-y divide-slate-100'}>
-                                        {filtered.map((m) => (
-                                            <PredictionRow
-                                                key={m.id} match={m}
-                                                leagueId={league.id}
-                                                closeMin={league.closePredictionMinutes}
-                                                onSaved={handlePredictionSaved}
-                                                compact={viewMode === 'compact'}
-                                            />
-                                        ))}
-                                    </div>
+                                    <>
+                                        {/* Próximo partido */}
+                                        {nextMatch && (
+                                            <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: 'var(--color-primary,#f59e0b)' }}>
+                                                <div className="px-4 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--color-primary,#f59e0b)' }}>
+                                                    <Zap size={12} className="text-white" />
+                                                    <span className="text-[11px] font-black text-white uppercase tracking-wider">
+                                                        {isLiveStatus(nextMatch.status) ? 'En vivo' : 'Próximo partido'}
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white">
+                                                    {rowProps(nextMatch)}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Sin pronóstico */}
+                                        {withoutPrediction.length > 0 && (
+                                            <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+                                                <div className="px-4 py-2 border-b border-amber-100 flex items-center gap-2">
+                                                    <AlertTriangle size={12} className="text-amber-500" />
+                                                    <span className="text-[11px] font-black text-amber-700 uppercase tracking-wider">
+                                                        Sin pronóstico ({withoutPrediction.length})
+                                                    </span>
+                                                </div>
+                                                <div className={viewMode === 'compact' ? '' : 'divide-y divide-slate-100'}>
+                                                    {withoutPrediction.map(rowProps)}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Resto de partidos */}
+                                        {rest.length > 0 && (
+                                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                                                <div className={viewMode === 'compact' ? '' : 'divide-y divide-slate-100'}>
+                                                    {rest.map(rowProps)}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         );

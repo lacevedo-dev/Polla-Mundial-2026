@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query } from '@nestjs/common';
+﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
@@ -242,6 +242,7 @@ export class CorpPortalController {
                 awayScore: lm.match.awayScore,
                 venue: lm.match.venue,
                 phase: lm.match.phase,
+                group: lm.match.group,
                 homeTeam: lm.match.homeTeam,
                 awayTeam: lm.match.awayTeam,
                 myPrediction: lm.match.predictions[0] ?? null,
@@ -260,7 +261,7 @@ export class CorpPortalController {
             topRanking: memberPoints.map((p, i) => ({
                 rank: i + 1,
                 userId: p.userId,
-                name: userMap.get(p.userId)?.name ?? '—',
+                name: userMap.get(p.userId)?.name ?? 'â€”',
                 username: (userMap.get(p.userId) as any)?.documentNumber ?? userMap.get(p.userId)?.username ?? '',
                 avatar: userMap.get(p.userId)?.avatar ?? null,
                 totalPoints: p._sum.points ?? 0,
@@ -402,12 +403,12 @@ export class CorpPortalController {
             { ruleType: ScoringType.EXACT_SCORE,       points: 5, description: 'Marcador exacto' },
             { ruleType: ScoringType.CORRECT_WINNER,    points: 2, description: 'Ganador / empate correcto' },
             { ruleType: ScoringType.TEAM_GOALS,        points: 1, description: 'Gol acertado (al menos un equipo)' },
-            { ruleType: ScoringType.UNIQUE_PREDICTION, points: 5, description: 'Predicción única en la liga' },
+            { ruleType: ScoringType.UNIQUE_PREDICTION, points: 5, description: 'PredicciÃ³n Ãºnica en la liga' },
             { ruleType: ScoringType.PHASE_BONUS_R32,   points: 0, description: 'Bono clasificados Fase 32' },
             { ruleType: ScoringType.PHASE_BONUS_R16,   points: 8, description: 'Bono clasificados Octavos' },
             { ruleType: ScoringType.PHASE_BONUS_QF,    points: 4, description: 'Bono clasificados Cuartos' },
             { ruleType: ScoringType.PHASE_BONUS_SF,    points: 2, description: 'Bono clasificados Semifinal' },
-            { ruleType: ScoringType.PHASE_BONUS_FINAL, points: 5, description: 'Bono Campeón (Final)' },
+            { ruleType: ScoringType.PHASE_BONUS_FINAL, points: 5, description: 'Bono CampeÃ³n (Final)' },
         ];
 
         const { primaryTournamentId, ...scalars } = dto;
@@ -602,7 +603,7 @@ export class CorpPortalController {
 
         const hasPredictions = await this.prisma.prediction.count({ where: { leagueId } });
         if (hasPredictions > 0) {
-            throw new BadRequestException('No se puede eliminar una polla que ya tiene pronósticos registrados.');
+            throw new BadRequestException('No se puede eliminar una polla que ya tiene pronÃ³sticos registrados.');
         }
 
         await this.prisma.league.delete({ where: { id: leagueId } });
@@ -756,12 +757,12 @@ export class CorpPortalController {
         });
         if (!league) throw new NotFoundException('Polla no encontrada en este tenant');
 
-        // Verificar que el partido está activo en la polla
+        // Verificar que el partido estÃ¡ activo en la polla
         const leagueMatch = await this.prisma.leagueMatch.findUnique({
             where: { leagueId_matchId: { leagueId, matchId } },
         });
         if (!leagueMatch || !leagueMatch.active) {
-            throw new BadRequestException('Este partido no está disponible para pronósticos');
+            throw new BadRequestException('Este partido no estÃ¡ disponible para pronÃ³sticos');
         }
 
         // Validar tiempo de cierre
@@ -780,7 +781,7 @@ export class CorpPortalController {
             update: { status: 'ACTIVE' },
         });
 
-        // Guardar pronóstico
+        // Guardar pronÃ³stico
         const prediction = await this.prisma.prediction.upsert({
             where: { userId_matchId_leagueId: { userId, matchId, leagueId } },
             update: { homeScore, awayScore, submittedAt: now },
