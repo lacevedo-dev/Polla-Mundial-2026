@@ -59,6 +59,9 @@ function getDaysUntil(matchDate: string): number | null {
     if (diff <= 0) return null;
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
+function formatDateShort(matchDate: string): string {
+    return new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'America/Bogota' }).format(new Date(matchDate));
+}
 function formatPhaseLabel(phase?: string | null): string {
     switch (phase) {
         case 'GROUP': return 'Fase de grupos';
@@ -136,7 +139,7 @@ function PredictionRow({ match, leagueId, closeMin, onSaved, compact = false, is
             <div className={`px-3 py-2 border-b border-slate-50 last:border-0 transition-colors ${canPredict ? 'hover:bg-slate-50/60' : ''}`}>
                 <div className="flex items-center gap-2 min-w-0">
                     <div className="shrink-0 w-12 text-right">
-                        <span className="text-[9px] font-bold text-slate-400 block leading-tight">{dateFmt}</span>
+                        <span className="text-[9px] font-bold text-slate-400 block leading-tight">{formatDateShort(match.matchDate)}</span>
                         <span className="text-[10px] font-black text-slate-600 block">{timeFmt}</span>
                     </div>
                     <div className="flex items-center gap-1 w-20 justify-end shrink-0">
