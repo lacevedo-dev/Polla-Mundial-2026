@@ -64,7 +64,7 @@ export class TenantInvitationService {
         return { html, text };
     }
 
-    async inviteSingle(tenantId: string, email: string, role: 'OWNER' | 'ADMIN' | 'PLAYER' = 'PLAYER') {
+    async inviteSingle(tenantId: string, email: string, role: 'OWNER' | 'ADMIN' | 'STAFF' | 'PLAYER' = 'PLAYER') {
         const tenant = await this.prisma.corporateTenant.findUnique({
             where: { id: tenantId },
             include: { branding: { select: { primaryColor: true, companyDisplayName: true } } },
@@ -104,7 +104,7 @@ export class TenantInvitationService {
         return { ok: true, invitationId: invitation.id };
     }
 
-    async inviteBulk(tenantId: string, emails: string[], role: 'OWNER' | 'ADMIN' | 'PLAYER' = 'PLAYER', bulkBatchId?: string) {
+    async inviteBulk(tenantId: string, emails: string[], role: 'OWNER' | 'ADMIN' | 'STAFF' | 'PLAYER' = 'PLAYER', bulkBatchId?: string) {
         const tenant = await this.prisma.corporateTenant.findUnique({
             where: { id: tenantId },
             include: { branding: { select: { primaryColor: true, companyDisplayName: true } } },
