@@ -18,6 +18,7 @@ const AdminCorpLeagues = React.lazy(() => import('./views/AdminCorpLeagues'));
 const PollaDetail = React.lazy(() => import('./views/PollaDetail'));
 const Help = React.lazy(() => import('./views/Help'));
 const AdminCorpSettings = React.lazy(() => import('./views/AdminCorpSettings'));
+const AdminCorpRoles = React.lazy(() => import('./views/AdminCorpRoles'));
 const ResetPassword = React.lazy(() => import('./views/ResetPassword'));
 
 const Loader = () => (
@@ -143,6 +144,14 @@ export function AppRouter() {
                         element={
                             <RequireAuth>
                                 <AdminCorpSettings />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin/roles"
+                        element={
+                            <RequireAuth>
+                                <AdminCorpRoles />
                             </RequireAuth>
                         }
                     />

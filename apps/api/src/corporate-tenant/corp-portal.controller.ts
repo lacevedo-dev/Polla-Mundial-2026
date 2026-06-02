@@ -8,7 +8,7 @@ import { TenantService } from './tenant.service';
 import { UpdateTenantBrandingDto } from './dto/tenant.dto';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole } from '@prisma/client';
+import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 class CreateCorpLeagueDto {
@@ -44,8 +44,20 @@ class BulkProvisionMembersDto {
     @IsOptional() @IsBoolean() sendEmail?: boolean;
 }
 
-class UpdateMemberRoleDto {
-    @IsEnum(TenantRole) role: TenantRole;
+class UpdateMemberDto {
+    @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
+    @IsOptional() @IsEnum(TenantMemberStatus) status?: TenantMemberStatus;
+}
+
+class UpdateCorpConfigDto {
+    @IsOptional() @IsBoolean() enablePayments?: boolean;
+    @IsOptional() @IsBoolean() enableAiInsights?: boolean;
+    @IsOptional() @IsBoolean() enablePublicLeagues?: boolean;
+    @IsOptional() @IsBoolean() enableUserSelfRegister?: boolean;
+    @IsOptional() @IsBoolean() requireInvitation?: boolean;
+    @IsOptional() @IsBoolean() enableEmailNotif?: boolean;
+    @IsOptional() @IsBoolean() enablePushNotif?: boolean;
+    @IsOptional() @IsBoolean() enableStageFees?: boolean;
 }
 
 class CorpPredictionDto {
@@ -686,11 +698,14 @@ export class CorpPortalController {
 
     @UseGuards(TenantAdminGuard)
     @Patch('members/:memberId')
-    async updateMember(@Req() req: any, @Param('memberId') memberId: string, @Body() dto: UpdateMemberRoleDto) {
+    async updateMember(@Req() req: any, @Param('memberId') memberId: string, @Body() dto: UpdateMemberDto) {
         const tenantId: string = req.tenantId;
         const member = await this.prisma.tenantMember.findFirst({ where: { id: memberId, tenantId } });
         if (!member) throw new NotFoundException('Miembro no encontrado');
-        await this.prisma.tenantMember.update({ where: { id: memberId }, data: { role: dto.role } });
+        const data: Partial<{ role: TenantRole; status: TenantMemberStatus }> = {};
+        if (dto.role !== undefined) data.role = dto.role;
+        if (dto.status !== undefined) data.status = dto.status;
+        if (Object.keys(data).length) await this.prisma.tenantMember.update({ where: { id: memberId }, data });
         return { ok: true };
     }
 
@@ -789,6 +804,22 @@ export class CorpPortalController {
         });
 
         return { ok: true, id: prediction.id };
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Get('config')
+    async getConfig(@Req() req: any) {
+        const tenantId: string = req.tenantId;
+        return (await this.prisma.tenantConfig.findUnique({ where: { tenantId } })) ?? {};
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Patch('config')
+    async updateConfig(@Req() req: any, @Body() dto: UpdateCorpConfigDto) {
+        const tenantId: string = req.tenantId;
+        const existing = await this.prisma.tenantConfig.findUnique({ where: { tenantId } });
+        if (!existing) throw new NotFoundException('Configuración del tenant no encontrada');
+        return this.prisma.tenantConfig.update({ where: { tenantId }, data: dto });
     }
 
     @UseGuards(TenantAdminGuard)
