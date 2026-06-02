@@ -3,14 +3,20 @@ const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 module.exports = (options) => {
     const rules = (options.module?.rules ?? []).map((rule) => {
-        if (rule.loader === 'ts-loader' || (rule.use && JSON.stringify(rule.use).includes('ts-loader'))) {
-            return {
-                ...rule,
-                options: {
-                    ...(rule.options ?? {}),
-                    transpileOnly: true,
-                },
-            };
+        if (Array.isArray(rule.use)) {
+            const newUse = rule.use.map((loader) => {
+                if (typeof loader === 'string' && loader.includes('ts-loader')) {
+                    return { loader, options: { transpileOnly: true } };
+                }
+                if (typeof loader === 'object' && loader !== null && String(loader.loader).includes('ts-loader')) {
+                    return { ...loader, options: { ...(loader.options ?? {}), transpileOnly: true } };
+                }
+                return loader;
+            });
+            return { ...rule, use: newUse };
+        }
+        if (typeof rule.loader === 'string' && rule.loader.includes('ts-loader')) {
+            return { ...rule, options: { ...(rule.options ?? {}), transpileOnly: true } };
         }
         return rule;
     });
