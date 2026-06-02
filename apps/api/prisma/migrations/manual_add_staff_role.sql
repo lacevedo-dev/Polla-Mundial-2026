@@ -1,0 +1,10 @@
+-- Agregar valor STAFF al enum TenantRole en las tablas que lo usan
+ALTER TABLE `TenantMember`
+  MODIFY COLUMN `role` ENUM('OWNER', 'ADMIN', 'STAFF', 'PLAYER') NOT NULL DEFAULT 'PLAYER';
+
+ALTER TABLE `TenantInvitation`
+  MODIFY COLUMN `role` ENUM('OWNER', 'ADMIN', 'STAFF', 'PLAYER') NOT NULL DEFAULT 'PLAYER';
+
+-- Rollback:
+-- ALTER TABLE `TenantMember` MODIFY COLUMN `role` ENUM('OWNER','ADMIN','PLAYER') NOT NULL DEFAULT 'PLAYER';
+-- ALTER TABLE `TenantInvitation` MODIFY COLUMN `role` ENUM('OWNER','ADMIN','PLAYER') NOT NULL DEFAULT 'PLAYER';

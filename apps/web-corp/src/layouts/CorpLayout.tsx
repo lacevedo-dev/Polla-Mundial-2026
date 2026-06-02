@@ -40,6 +40,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'Portal Corporativo';
     const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
+    const isStaff = user?.tenantRole === 'STAFF';
     const primaryColor = 'var(--color-primary, #f59e0b)';
 
     const avatarUrl = user?.avatar
@@ -98,13 +99,16 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                     </nav>
 
                     {/* Admin nav */}
-                    {isAdmin && (
+                    {(isAdmin || isStaff) && (
                         <div className="mt-6">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4 mb-2">
                                 Administración
                             </p>
                             <nav className="space-y-1">
-                                {ADMIN_NAV_ITEMS.map((item) => (
+                                {(isStaff
+                                    ? ADMIN_NAV_ITEMS.filter(i => i.path === '/admin/members')
+                                    : ADMIN_NAV_ITEMS
+                                ).map((item) => (
                                     <SidebarLink key={item.path} {...item} highlight />
                                 ))}
                             </nav>
@@ -255,12 +259,15 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         {NAV_ITEMS.map((item) => (
                             <SidebarLink key={item.path} {...item} />
                         ))}
-                        {isAdmin && (
+                        {(isAdmin || isStaff) && (
                             <>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4 pt-4 pb-1">
                                     Administración
                                 </p>
-                                {ADMIN_NAV_ITEMS.map((item) => (
+                                {(isStaff
+                                    ? ADMIN_NAV_ITEMS.filter(i => i.path === '/admin/members')
+                                    : ADMIN_NAV_ITEMS
+                                ).map((item) => (
                                     <SidebarLink key={item.path} {...item} highlight />
                                 ))}
                             </>
@@ -345,9 +352,9 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         </Link>
                     );
                 })}
-                {isAdmin && (
+                {(isAdmin || isStaff) && (
                     <Link
-                        to="/admin"
+                        to={isStaff ? '/admin/members' : '/admin'}
                         className="flex flex-col items-center gap-1 transition-colors"
                         style={{ color: isActive('/admin') ? primaryColor : '#94a3b8' }}
                     >

@@ -10,6 +10,7 @@ import { TenantInvitationController, TenantInvitationAdminController } from './t
 import { TenantMiddleware } from './tenant.middleware';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
+import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { CorpPortalController } from './corp-portal.controller';
 
 @Module({
@@ -28,8 +29,9 @@ import { CorpPortalController } from './corp-portal.controller';
         TenantProvisioningService,
         TenantMemberGuard,
         TenantAdminGuard,
+        TenantStaffGuard,
     ],
-    exports: [TenantService, TenantLimitsService, TenantInvitationService, TenantProvisioningService, TenantMemberGuard, TenantAdminGuard],
+    exports: [TenantService, TenantLimitsService, TenantInvitationService, TenantProvisioningService, TenantMemberGuard, TenantAdminGuard, TenantStaffGuard],
 })
 export class CorporateTenantModule implements NestModule {
     configure(consumer: MiddlewareConsumer) {

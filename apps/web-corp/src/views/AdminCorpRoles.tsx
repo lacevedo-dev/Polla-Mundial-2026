@@ -11,7 +11,7 @@ import { useAuthStore } from '../stores/auth.store';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-type TenantRole = 'OWNER' | 'ADMIN' | 'PLAYER';
+type TenantRole = 'OWNER' | 'ADMIN' | 'STAFF' | 'PLAYER';
 type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'BANNED';
 
 interface Member {
@@ -42,6 +42,7 @@ interface TenantConfig {
 const ROLE_CFG = {
     OWNER: { label: 'Propietario', icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-300' },
     ADMIN: { label: 'Admin', icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50', ring: 'ring-violet-300' },
+    STAFF: { label: 'Usuario', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50', ring: 'ring-sky-300' },
     PLAYER: { label: 'Jugador', icon: User, color: 'text-slate-500', bg: 'bg-slate-100', ring: 'ring-slate-300' },
 } as const;
 
@@ -55,26 +56,28 @@ const STATUS_CFG = {
 
 const CAPABILITIES = [
     { group: 'Pollas', items: [
-        { label: 'Ver pollas del tenant', OWNER: true, ADMIN: true, PLAYER: true },
-        { label: 'Hacer pronósticos', OWNER: true, ADMIN: true, PLAYER: true },
-        { label: 'Ver ranking', OWNER: true, ADMIN: true, PLAYER: true },
-        { label: 'Crear / editar pollas', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Eliminar pollas', OWNER: true, ADMIN: false, PLAYER: false },
-        { label: 'Asignar torneo a polla', OWNER: true, ADMIN: true, PLAYER: false },
+        { label: 'Ver pollas del tenant', OWNER: true, ADMIN: true, STAFF: false, PLAYER: true },
+        { label: 'Hacer pronósticos', OWNER: true, ADMIN: true, STAFF: false, PLAYER: true },
+        { label: 'Ver ranking', OWNER: true, ADMIN: true, STAFF: false, PLAYER: true },
+        { label: 'Crear / editar pollas', OWNER: true, ADMIN: true, STAFF: false, PLAYER: false },
+        { label: 'Eliminar pollas', OWNER: true, ADMIN: false, STAFF: false, PLAYER: false },
+        { label: 'Asignar torneo a polla', OWNER: true, ADMIN: true, STAFF: false, PLAYER: false },
     ]},
     { group: 'Miembros', items: [
-        { label: 'Ver lista de miembros', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Crear / invitar miembros', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Cambiar rol de miembro', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Bloquear / inactivar miembro', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Eliminar miembro', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Importación masiva', OWNER: true, ADMIN: true, PLAYER: false },
+        { label: 'Ver lista de miembros', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
+        { label: 'Crear / invitar miembros', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
+        { label: 'Cambiar rol (solo a Jugador)', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
+        { label: 'Cambiar rol a Admin / STAFF', OWNER: true, ADMIN: true, STAFF: false, PLAYER: false },
+        { label: 'Bloquear / inactivar miembro', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
+        { label: 'Importación masiva', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
+        { label: 'Reenviar credenciales', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
     ]},
     { group: 'Administración', items: [
-        { label: 'Acceder al panel admin', OWNER: true, ADMIN: true, PLAYER: false },
-        { label: 'Cambiar branding / apariencia', OWNER: true, ADMIN: false, PLAYER: false },
-        { label: 'Configurar funciones del sistema', OWNER: true, ADMIN: false, PLAYER: false },
-        { label: 'Gestionar permisos y roles', OWNER: true, ADMIN: true, PLAYER: false },
+        { label: 'Acceder al panel de miembros', OWNER: true, ADMIN: true, STAFF: true, PLAYER: false },
+        { label: 'Acceder al panel admin general', OWNER: true, ADMIN: true, STAFF: false, PLAYER: false },
+        { label: 'Cambiar branding / apariencia', OWNER: true, ADMIN: false, STAFF: false, PLAYER: false },
+        { label: 'Configurar funciones del sistema', OWNER: true, ADMIN: false, STAFF: false, PLAYER: false },
+        { label: 'Gestionar permisos y roles', OWNER: true, ADMIN: true, STAFF: false, PLAYER: false },
     ]},
 ];
 
@@ -269,12 +272,12 @@ export default function AdminCorpRoles() {
                         <div key={group.group} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                                 <h2 className="font-black text-slate-800 text-sm">{group.group}</h2>
-                                <div className="hidden sm:flex items-center gap-6 pr-1">
-                                    {(Object.keys(ROLE_CFG) as TenantRole[]).map(r => {
+                                <div className="hidden sm:flex items-center gap-4 pr-1">
+                                    {(['OWNER', 'ADMIN', 'STAFF', 'PLAYER'] as TenantRole[]).map(r => {
                                         const cfg = ROLE_CFG[r];
                                         const Icon = cfg.icon;
                                         return (
-                                            <span key={r} className={`text-[10px] font-black flex items-center gap-1 ${cfg.color}`}>
+                                            <span key={r} className={`text-[10px] font-black flex items-center gap-1 w-16 justify-center ${cfg.color}`}>
                                                 <Icon size={10} />{cfg.label}
                                             </span>
                                         );
@@ -285,10 +288,10 @@ export default function AdminCorpRoles() {
                                 {group.items.map(item => (
                                     <div key={item.label} className="flex items-center justify-between px-5 py-3">
                                         <span className="text-sm text-slate-600">{item.label}</span>
-                                        <div className="flex items-center gap-6 sm:gap-9">
-                                            {(['OWNER', 'ADMIN', 'PLAYER'] as TenantRole[]).map(role => (
-                                                <div key={role} className="w-8 flex justify-center">
-                                                    {item[role]
+                                        <div className="flex items-center gap-4 sm:gap-4">
+                                            {(['OWNER', 'ADMIN', 'STAFF', 'PLAYER'] as TenantRole[]).map(role => (
+                                                <div key={role} className="w-16 flex justify-center">
+                                                    {(item as any)[role]
                                                         ? <Check size={16} className="text-emerald-500" />
                                                         : <X size={14} className="text-slate-200" />}
                                                 </div>
@@ -365,6 +368,7 @@ export default function AdminCorpRoles() {
                                                     >
                                                         <option value="OWNER">Propietario</option>
                                                         <option value="ADMIN">Admin</option>
+                                                        <option value="STAFF">Usuario</option>
                                                         <option value="PLAYER">Jugador</option>
                                                     </select>
                                                     <ChevronDown size={10} className={`absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none ${roleCfg.color}`} />

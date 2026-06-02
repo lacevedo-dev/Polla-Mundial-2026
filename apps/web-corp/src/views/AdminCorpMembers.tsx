@@ -7,6 +7,7 @@ import {
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, ApiError } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
+import { useAuthStore } from '../stores/auth.store';
 
 interface Member {
     id: string;
@@ -15,7 +16,7 @@ interface Member {
     email: string;
     username: string;
     avatar: string | null;
-    role: 'OWNER' | 'ADMIN' | 'PLAYER';
+    role: 'OWNER' | 'ADMIN' | 'STAFF' | 'PLAYER';
     status: 'ACTIVE' | 'INACTIVE';
     mustChangePassword: boolean;
     emailVerified: boolean;
@@ -28,6 +29,7 @@ type ModalType = 'create' | 'edit' | 'delete' | 'bulk' | null;
 const ROLE_CONFIG = {
     OWNER: { label: 'Propietario', icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50' },
     ADMIN: { label: 'Admin', icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50' },
+    STAFF: { label: 'Usuario', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50' },
     PLAYER: { label: 'Jugador', icon: User, color: 'text-slate-500', bg: 'bg-slate-100' },
 };
 
@@ -51,7 +53,9 @@ function Avatar({ member }: { member: Member }) {
 }
 
 export default function AdminCorpMembers() {
+    const authUser = useAuthStore((s) => s.user);
     const tenant = useTenantStore((s) => s.tenant);
+    const callerIsStaff = authUser?.tenantRole === 'STAFF';
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -233,6 +237,7 @@ export default function AdminCorpMembers() {
                     <option value="">Todos los roles</option>
                     <option value="OWNER">Propietario</option>
                     <option value="ADMIN">Admin</option>
+                    <option value="STAFF">Usuario</option>
                     <option value="PLAYER">Jugador</option>
                 </select>
                 <button onClick={loadMembers} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600">
@@ -345,8 +350,9 @@ export default function AdminCorpMembers() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
                                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Member['role'] }))} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
                                     <option value="PLAYER">Jugador</option>
-                                    <option value="ADMIN">Admin</option>
-                                    <option value="OWNER">Propietario</option>
+                                    {!callerIsStaff && <option value="STAFF">Usuario</option>}
+                                    {!callerIsStaff && <option value="ADMIN">Admin</option>}
+                                    {!callerIsStaff && <option value="OWNER">Propietario</option>}
                                 </select>
                             </div>
                             <div>
@@ -398,8 +404,9 @@ export default function AdminCorpMembers() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
                                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Member['role'] }))} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
                                     <option value="PLAYER">Jugador</option>
-                                    <option value="ADMIN">Admin</option>
-                                    <option value="OWNER">Propietario</option>
+                                    {!callerIsStaff && <option value="STAFF">Usuario</option>}
+                                    {!callerIsStaff && <option value="ADMIN">Admin</option>}
+                                    {!callerIsStaff && <option value="OWNER">Propietario</option>}
                                 </select>
                             </div>
                         </div>

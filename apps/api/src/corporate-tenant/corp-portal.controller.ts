@@ -2,6 +2,7 @@
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
+import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantProvisioningService } from './tenant-provisioning.service';
 import { TenantService } from './tenant.service';
@@ -627,7 +628,7 @@ export class CorpPortalController {
         const tenantId: string = req.tenantId;
         const tenantRole: string = req.tenantRole;
 
-        if (!['OWNER', 'ADMIN'].includes(tenantRole)) {
+        if (!['OWNER', 'ADMIN', 'STAFF'].includes(tenantRole)) {
             return [];
         }
 
@@ -655,7 +656,7 @@ export class CorpPortalController {
         }));
     }
 
-    @UseGuards(TenantAdminGuard)
+    @UseGuards(TenantStaffGuard)
     @Post('members')
     async createMember(@Req() req: any, @Body() dto: ProvisionMemberDto) {
         const tenantId: string = req.tenantId;
@@ -671,7 +672,7 @@ export class CorpPortalController {
         });
     }
 
-    @UseGuards(TenantAdminGuard)
+    @UseGuards(TenantStaffGuard)
     @Post('members/bulk')
     async bulkCreateMembers(@Req() req: any, @Body() dto: BulkProvisionMembersDto) {
         const tenantId: string = req.tenantId;
@@ -696,12 +697,16 @@ export class CorpPortalController {
         return { total: dto.users.length, successful, failed: dto.users.length - successful, results };
     }
 
-    @UseGuards(TenantAdminGuard)
+    @UseGuards(TenantStaffGuard)
     @Patch('members/:memberId')
     async updateMember(@Req() req: any, @Param('memberId') memberId: string, @Body() dto: UpdateMemberDto) {
         const tenantId: string = req.tenantId;
+        const callerRole: string = req.tenantRole;
         const member = await this.prisma.tenantMember.findFirst({ where: { id: memberId, tenantId } });
         if (!member) throw new NotFoundException('Miembro no encontrado');
+        if (callerRole === 'STAFF' && dto.role && ['OWNER', 'ADMIN', 'STAFF'].includes(dto.role)) {
+            throw new ForbiddenException('El rol Usuario solo puede asignar el rol Jugador');
+        }
         const data: Partial<{ role: TenantRole; status: TenantMemberStatus }> = {};
         if (dto.role !== undefined) data.role = dto.role;
         if (dto.status !== undefined) data.status = dto.status;
@@ -709,7 +714,7 @@ export class CorpPortalController {
         return { ok: true };
     }
 
-    @UseGuards(TenantAdminGuard)
+    @UseGuards(TenantStaffGuard)
     @HttpCode(HttpStatus.OK)
     @Delete('members/:memberId')
     async removeMember(@Req() req: any, @Param('memberId') memberId: string) {
@@ -822,7 +827,7 @@ export class CorpPortalController {
         return this.prisma.tenantConfig.update({ where: { tenantId }, data: dto });
     }
 
-    @UseGuards(TenantAdminGuard)
+    @UseGuards(TenantStaffGuard)
     @HttpCode(HttpStatus.OK)
     @Post('members/:memberId/resend-credentials')
     async resendMemberCredentials(@Req() req: any, @Param('memberId') memberId: string) {
