@@ -1,0 +1,39 @@
+import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ConfigModule } from '@nestjs/config';
+
+// Módulos del API principal (vía alias @corp-api → apps/api/src)
+import { PrismaModule } from '@corp-api/prisma/prisma.module';
+import { AuthModule } from '@corp-api/auth/auth.module';
+import { EmailModule } from '@corp-api/email/email.module';
+import { UsersModule } from '@corp-api/users/users.module';
+import { PushNotificationsModule } from '@corp-api/push-notifications/push-notifications.module';
+import { CorporateTenantModule } from '@corp-api/corporate-tenant/corporate-tenant.module';
+
+// Módulos propios del backend corporativo
+import { FootballProxyModule } from './football-proxy/football-proxy.module';
+import { CorpHealthModule } from './health/corp-health.module';
+
+@Module({
+    imports: [
+        ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+        ScheduleModule.forRoot(),
+
+        // Infraestructura compartida (mismos módulos del api principal)
+        PrismaModule,
+        EmailModule,
+        UsersModule,
+        AuthModule,
+        PushNotificationsModule,
+
+        // Módulo corporativo principal
+        CorporateTenantModule,
+
+        // Módulo nuevo: proxy de datos de fútbol desde el VPS principal
+        FootballProxyModule,
+
+        // Health check propio
+        CorpHealthModule,
+    ],
+})
+export class CorpAppModule {}

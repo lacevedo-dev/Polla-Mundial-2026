@@ -1,0 +1,70 @@
+# ================================================================
+# Dockerfile — Backend Corporativo (api-corp)
+# Contexto de build: Raíz del monorepo
+# Comando: docker build -f apps/api-corp/Dockerfile -t polla-api-corp .
+# ================================================================
+
+# ---- Etapa 1: Build ----
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl build-base python3
+
+# Copiar manifiestos de los workspaces relevantes
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/api-corp/package.json ./apps/api-corp/
+COPY packages/shared/package.json ./packages/shared/
+
+# Instalar dependencias (hoisted por npm workspaces)
+RUN npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
+    npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
+    npm install --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5
+
+# Copiar código fuente
+# api-corp importa módulos de apps/api vía alias @corp-api → apps/api/src
+COPY apps/api ./apps/api
+COPY apps/api-corp ./apps/api-corp
+COPY packages/shared ./packages/shared
+
+# Generar cliente Prisma (usa el schema del api principal)
+WORKDIR /app/apps/api
+RUN mkdir -p /app/apps/api/node_modules
+RUN npx prisma generate
+
+# Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
+WORKDIR /app/apps/api-corp
+RUN mkdir -p /app/apps/api-corp/node_modules
+RUN npm run build
+
+# ---- Etapa 2: Producción ----
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+ENV NODE_ENV=production
+
+# Dependencias hoisted
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+COPY --from=builder /app/packages ./packages
+
+# Artefactos de api-corp
+COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
+COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
+
+# Schema Prisma (necesario para migrate deploy)
+COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
+COPY --from=builder /app/apps/api-corp/prisma.config.ts ./apps/api-corp/prisma.config.ts
+
+WORKDIR /app/apps/api-corp
+
+EXPOSE 3001
+
+# Aplica migraciones pendientes y arranca el servidor
+CMD ["/bin/sh", "-c", "cd /app/apps/api && npx prisma migrate deploy; cd /app/apps/api-corp && node dist/main.js"]

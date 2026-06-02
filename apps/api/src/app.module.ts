@@ -27,6 +27,7 @@ import { ParticipationModule } from './participation/participation.module';
 import { PredictionReportModule } from './prediction-report/prediction-report.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { CorporateTenantModule } from './corporate-tenant/corporate-tenant.module';
+import { InternalModule } from './internal/internal.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { CorporateTenantModule } from './corporate-tenant/corporate-tenant.modul
     PredictionReportModule,
     PushNotificationsModule,
     CorporateTenantModule,
+    InternalModule,
   ],
   controllers: [AppController],
   providers: [AppService],
