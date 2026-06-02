@@ -40,8 +40,8 @@ export class InternalController {
         return this.prisma.match.findMany({
             where,
             include: {
-                homeTeam: { select: { id: true, name: true, code: true, logo: true } },
-                awayTeam: { select: { id: true, name: true, code: true, logo: true } },
+                homeTeam: { select: { id: true, name: true, code: true, flagUrl: true } },
+                awayTeam: { select: { id: true, name: true, code: true, flagUrl: true } },
             },
             orderBy: { matchDate: 'asc' },
             take: 500,
@@ -54,7 +54,6 @@ export class InternalController {
     async getTournaments(@Headers('x-internal-api-key') apiKey: string) {
         this.assertApiKey(apiKey);
         return this.prisma.tournament.findMany({
-            include: { seasons: { include: { stages: true } } },
             orderBy: { name: 'asc' },
         });
     }
@@ -65,7 +64,7 @@ export class InternalController {
     async getTeams(@Headers('x-internal-api-key') apiKey: string) {
         this.assertApiKey(apiKey);
         return this.prisma.team.findMany({
-            select: { id: true, name: true, code: true, logo: true, country: true },
+            select: { id: true, name: true, code: true, flagUrl: true },
             orderBy: { name: 'asc' },
         });
     }
@@ -88,7 +87,7 @@ export class InternalController {
                 email: body.email,
                 name: body.name,
                 username: body.email.split('@')[0],
-                password: body.passwordHash,
+                passwordHash: body.passwordHash,
                 emailVerified: true,
             },
         });
