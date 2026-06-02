@@ -24,29 +24,29 @@ export class EmailBacklogAuditScheduler {
         () => this.emailBacklogAudit.runAudit({ apply: true }),
       );
 
-      if (!execution.ran) {
-        logExclusiveBackgroundJobSkip(this.logger, 'auditEmailBacklog', execution);
-        await this.emailBacklogAudit.recordSkip('lock_held', {
-          holder: execution.skip.holder,
-          heldMs: execution.skip.heldMs,
-          skipCount: execution.skip.skipCount,
-          requestedBy: execution.skip.requestedBy,
-        });
-
+      if (execution.ran) {
         return {
-          status: 'skipped' as const,
-          summary: {
-            reason: 'lock_held',
-            mode: EmailBacklogAuditMode.SANITIZE,
-            heldMs: execution.skip.heldMs,
-            skipCount: execution.skip.skipCount,
-          },
+          status: 'completed' as const,
+          summary: this.emailBacklogAudit.summarizeForObservation(execution.result),
         };
       }
 
+      logExclusiveBackgroundJobSkip(this.logger, 'auditEmailBacklog', execution);
+      await this.emailBacklogAudit.recordSkip('lock_held', {
+        holder: execution.skip.holder,
+        heldMs: execution.skip.heldMs,
+        skipCount: execution.skip.skipCount,
+        requestedBy: execution.skip.requestedBy,
+      });
+
       return {
-        status: 'completed' as const,
-        summary: this.emailBacklogAudit.summarizeForObservation(execution.result),
+        status: 'skipped' as const,
+        summary: {
+          reason: 'lock_held',
+          mode: EmailBacklogAuditMode.SANITIZE,
+          heldMs: execution.skip.heldMs,
+          skipCount: execution.skip.skipCount,
+        },
       };
     });
   }
