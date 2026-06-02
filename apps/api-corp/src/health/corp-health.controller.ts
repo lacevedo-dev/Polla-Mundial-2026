@@ -13,7 +13,7 @@ export class CorpHealthController {
             service: 'api-corp',
             version: process.env.npm_package_version ?? '0.0.1',
             timestamp: new Date().toISOString(),
-            database: db.ok ? 'connected' : db.errorCode,
+            database: db.ok ? 'connected' : db.message,
             mainApiUrl: process.env.MAIN_API_URL ?? 'not configured',
         };
     }
