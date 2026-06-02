@@ -33,7 +33,10 @@ module.exports = (options) => {
     return {
         ...options,
         entry: path.resolve(__dirname, 'src/main.ts'),
-        externals: [nodeExternals()],
+        externals: [nodeExternals({
+            modulesDir: path.resolve(__dirname, '../../node_modules'),
+            additionalModuleDirs: [path.resolve(__dirname, '../../node_modules')],
+        })],
         module: { ...options.module, rules },
         plugins,
         resolve: {
