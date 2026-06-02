@@ -32,9 +32,14 @@ module.exports = (options) => {
     return {
         ...options,
         entry: path.resolve(__dirname, 'src/main.ts'),
-        externalsPresets: { ...(options.externalsPresets ?? {}), node: true },
         externals: [
             { 'bcrypt': 'commonjs bcrypt' },
+            function ({ request }, callback) {
+                if (request && request.startsWith('node:')) {
+                    return callback(null, `commonjs ${request}`);
+                }
+                return callback();
+            },
             ...(Array.isArray(options.externals) ? options.externals : options.externals ? [options.externals] : []),
         ],
         module: { ...options.module, rules },
