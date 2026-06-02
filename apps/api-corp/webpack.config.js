@@ -32,9 +32,11 @@ module.exports = (options) => {
     return {
         ...options,
         entry: path.resolve(__dirname, 'src/main.ts'),
-        externals: {
-            'bcrypt': 'commonjs bcrypt',
-        },
+        externalsPresets: { ...(options.externalsPresets ?? {}), node: true },
+        externals: [
+            { 'bcrypt': 'commonjs bcrypt' },
+            ...(Array.isArray(options.externals) ? options.externals : options.externals ? [options.externals] : []),
+        ],
         module: { ...options.module, rules },
         plugins,
         resolve: {
