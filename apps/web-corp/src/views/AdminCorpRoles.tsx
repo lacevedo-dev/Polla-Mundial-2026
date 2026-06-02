@@ -40,10 +40,14 @@ interface TenantConfig {
 // ─── Configuración visual de roles ───────────────────────────────────────────
 
 const ROLE_CFG = {
-    OWNER: { label: 'Propietario', icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-300' },
-    ADMIN: { label: 'Admin', icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50', ring: 'ring-violet-300' },
-    STAFF: { label: 'Usuario', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50', ring: 'ring-sky-300' },
-    PLAYER: { label: 'Jugador', icon: User, color: 'text-slate-500', bg: 'bg-slate-100', ring: 'ring-slate-300' },
+    OWNER: { label: 'Propietario', icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-300',
+        desc: 'Control total de la organización. Configura branding, planes, feature flags y puede asignar cualquier rol. Solo debe existir uno.' },
+    ADMIN: { label: 'Administrador', icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50', ring: 'ring-violet-300',
+        desc: 'Gestiona pollas, miembros y accesos. Puede crear usuarios, cambiar roles y ver reportes. No puede modificar la configuración del sistema.' },
+    STAFF: { label: 'Usuario (Staff)', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50', ring: 'ring-sky-300',
+        desc: 'Rol operativo: crea y modifica miembros, importa usuarios y reenvía credenciales. No puede acceder a pollas ni a la configuración.' },
+    PLAYER: { label: 'Jugador', icon: User, color: 'text-slate-500', bg: 'bg-slate-100', ring: 'ring-slate-300',
+        desc: 'Rol estándar. Participa en pollas, hace pronósticos y consulta el ranking. Sin acceso a funciones administrativas.' },
 } as const;
 
 const STATUS_CFG = {
@@ -248,20 +252,23 @@ export default function AdminCorpRoles() {
             {tab === 'roles' && (
                 <div className="space-y-4">
                     {/* Leyenda de roles */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                         {(Object.keys(ROLE_CFG) as TenantRole[]).map(role => {
                             const cfg = ROLE_CFG[role];
                             const Icon = cfg.icon;
                             const count = members.filter(m => m.role === role && m.status === 'ACTIVE').length;
                             return (
-                                <div key={role} className={`flex items-center gap-3 p-4 rounded-2xl border ${cfg.bg} border-transparent`}>
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cfg.bg} ring-2 ${cfg.ring}`}>
-                                        <Icon size={18} className={cfg.color} />
+                                <div key={role} className={`flex flex-col gap-3 p-4 rounded-2xl border ${cfg.bg} border-transparent`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ring-2 ${cfg.ring} ${cfg.bg}`}>
+                                            <Icon size={16} className={cfg.color} />
+                                        </div>
+                                        <div>
+                                            <p className={`font-black text-sm ${cfg.color}`}>{cfg.label}</p>
+                                            <p className="text-xs text-slate-400">{count} miembro{count !== 1 ? 's' : ''} activo{count !== 1 ? 's' : ''}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className={`font-black text-sm ${cfg.color}`}>{cfg.label}</p>
-                                        <p className="text-xs text-slate-400">{count} miembro{count !== 1 ? 's' : ''}</p>
-                                    </div>
+                                    <p className="text-xs text-slate-500 leading-relaxed">{cfg.desc}</p>
                                 </div>
                             );
                         })}

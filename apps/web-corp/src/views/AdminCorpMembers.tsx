@@ -26,6 +26,13 @@ interface Member {
 
 type ModalType = 'create' | 'edit' | 'delete' | 'bulk' | null;
 
+const ROLE_DESCS: Record<Member['role'], string> = {
+    OWNER: 'Control total: configura el sistema, branding y puede asignar cualquier rol.',
+    ADMIN: 'Gestiona pollas y miembros. No puede cambiar la configuración del sistema.',
+    STAFF: 'Operativo: crea y modifica miembros, importa usuarios y reenvía credenciales.',
+    PLAYER: 'Participa en pollas y hace pronósticos. Sin acceso a funciones administrativas.',
+};
+
 const ROLE_CONFIG = {
     OWNER: { label: 'Propietario', icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50' },
     ADMIN: { label: 'Admin', icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50' },
@@ -350,10 +357,11 @@ export default function AdminCorpMembers() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
                                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Member['role'] }))} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
                                     <option value="PLAYER">Jugador</option>
-                                    {!callerIsStaff && <option value="STAFF">Usuario</option>}
-                                    {!callerIsStaff && <option value="ADMIN">Admin</option>}
+                                    {!callerIsStaff && <option value="STAFF">Usuario (Staff)</option>}
+                                    {!callerIsStaff && <option value="ADMIN">Administrador</option>}
                                     {!callerIsStaff && <option value="OWNER">Propietario</option>}
                                 </select>
+                                <p className="text-xs text-slate-400 mt-1.5">{ROLE_DESCS[form.role]}</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Contraseña temporal</label>
@@ -404,10 +412,11 @@ export default function AdminCorpMembers() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
                                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Member['role'] }))} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
                                     <option value="PLAYER">Jugador</option>
-                                    {!callerIsStaff && <option value="STAFF">Usuario</option>}
-                                    {!callerIsStaff && <option value="ADMIN">Admin</option>}
+                                    {!callerIsStaff && <option value="STAFF">Usuario (Staff)</option>}
+                                    {!callerIsStaff && <option value="ADMIN">Administrador</option>}
                                     {!callerIsStaff && <option value="OWNER">Propietario</option>}
                                 </select>
+                                <p className="text-xs text-slate-400 mt-1.5">{ROLE_DESCS[form.role]}</p>
                             </div>
                         </div>
                         <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
@@ -458,7 +467,7 @@ export default function AdminCorpMembers() {
                                 <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={8} placeholder={"123456789,Carlos Pérez,carlos@empresa.com,PLAYER\n987654321,Ana Torres,ana@empresa.com,ADMIN\n555555555,Juan López,juan@empresa.com"}
                                     className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent resize-y font-mono"
                                     style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
-                                <p className="text-xs text-slate-400 mt-1">Roles disponibles: <code>PLAYER</code> (defecto), <code>ADMIN</code>, <code>OWNER</code>.</p>
+                                <p className="text-xs text-slate-400 mt-1">Roles disponibles: <code>PLAYER</code> (defecto), <code>STAFF</code>, <code>ADMIN</code>, <code>OWNER</code>.</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Contraseña temporal compartida</label>
