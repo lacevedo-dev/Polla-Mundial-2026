@@ -1,5 +1,6 @@
 const path = require('path');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
+const nodeExternals = require('webpack-node-externals');
 
 module.exports = (options) => {
     const rules = (options.module?.rules ?? []).map((rule) => {
@@ -32,6 +33,7 @@ module.exports = (options) => {
     return {
         ...options,
         entry: path.resolve(__dirname, 'src/main.ts'),
+        externals: [nodeExternals()],
         module: { ...options.module, rules },
         plugins,
         resolve: {

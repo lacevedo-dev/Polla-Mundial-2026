@@ -57,14 +57,9 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
 COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
 
-# Schema Prisma (necesario para migrate deploy)
-COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
-COPY --from=builder /app/apps/api-corp/prisma.config.ts ./apps/api-corp/prisma.config.ts
-
 WORKDIR /app/apps/api-corp
 
 EXPOSE 3001
 
-# Aplica migraciones pendientes y arranca el servidor
-CMD ["/bin/sh", "-c", "cd /app/apps/api && npx prisma migrate deploy; cd /app/apps/api-corp && node dist/main.js"]
+# Arrancar servidor (las migraciones las gestiona el api principal)
+CMD ["node", "dist/main.js"]
