@@ -22,6 +22,10 @@ RUN npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetc
     npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5 || \
     npm install --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retries=5
 
+# Copiar config de build PRIMERO (invalida caché si cambia)
+COPY apps/api-corp/webpack.config.js /app/apps/api-corp/
+COPY apps/api-corp/tsconfig.build.json /app/apps/api-corp/
+
 # Copiar código fuente
 # api-corp importa módulos de apps/api vía alias @corp-api → apps/api/src
 COPY apps/api ./apps/api
@@ -32,10 +36,6 @@ COPY packages/shared ./packages/shared
 WORKDIR /app/apps/api
 RUN mkdir -p /app/apps/api/node_modules
 RUN npx prisma generate
-
-# Copiar config de build específica (invalida caché si cambia webpack config)
-COPY apps/api-corp/webpack.config.js /app/apps/api-corp/
-COPY apps/api-corp/tsconfig.build.json /app/apps/api-corp/
 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
