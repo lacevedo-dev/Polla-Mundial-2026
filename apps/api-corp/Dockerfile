@@ -39,7 +39,7 @@ RUN npx prisma generate
 
 # Generar cliente Prisma corporativo (BD independiente)
 WORKDIR /app/apps/api-corp
-RUN npx prisma generate
+RUN npx prisma generate --schema=./prisma/schema.prisma
 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
