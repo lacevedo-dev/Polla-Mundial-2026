@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 module.exports = (options) => {
@@ -25,9 +26,15 @@ module.exports = (options) => {
         return rule;
     });
 
-    const plugins = (options.plugins ?? []).filter(
-        (p) => p && p.constructor && p.constructor.name !== 'ForkTsCheckerWebpackPlugin',
-    );
+    const plugins = [
+        ...(options.plugins ?? []).filter(
+            (p) => p && p.constructor && p.constructor.name !== 'ForkTsCheckerWebpackPlugin',
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps\/api\/src\/auth\/avatar-storage\.service/,
+            path.resolve(__dirname, 'src/overrides/avatar-storage.service.ts'),
+        ),
+    ];
 
     return {
         ...options,
