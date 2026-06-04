@@ -33,6 +33,10 @@ WORKDIR /app/apps/api
 RUN mkdir -p /app/apps/api/node_modules
 RUN npx prisma generate
 
+# Copiar config de build específica (invalida caché si cambia webpack config)
+COPY apps/api-corp/webpack.config.js /app/apps/api-corp/
+COPY apps/api-corp/tsconfig.build.json /app/apps/api-corp/
+
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules
