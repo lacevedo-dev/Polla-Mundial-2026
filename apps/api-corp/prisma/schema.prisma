@@ -1,0 +1,409 @@
+// Schema Prisma para API Corporativo (BD independiente)
+// Este schema contiene solo las tablas necesarias para el backend corporativo
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-corp"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ─── Usuarios (sincronizados desde API principal) ───────────────────────────
+
+model User {
+  id                 String         @id @default(cuid())
+  name               String
+  email              String         @unique
+  username           String         @unique
+  documentNumber     String?        @unique @db.VarChar(64)
+  phone              String?
+  countryCode        String         @default("+57")
+  avatar             String?
+  birthDate          DateTime?
+  passwordHash       String?
+  mustChangePassword Boolean        @default(false)
+  emailVerified      Boolean        @default(false)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  status             UserStatus     @default(ACTIVE)
+  
+  // Relaciones corporativas
+  tenantMemberships  TenantMember[]
+  leagueMembers      LeagueMember[]
+  predictions        Prediction[]
+
+  @@index([email])
+  @@index([status])
+  @@index([username])
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BANNED
+}
+
+// ─── Tenants Corporativos ───────────────────────────────────────────────────
+
+model CorporateTenant {
+  id             String               @id @default(cuid())
+  slug           String               @unique
+  name           String
+  legalName      String?
+  contactEmail   String
+  status         TenantStatus         @default(PENDING_SETUP)
+  planTier       TenantPlanTier       @default(STARTER)
+  allowedDomains String?              @db.Text
+  customDomain   String?              @unique
+  ssoEnabled     Boolean              @default(false)
+  ssoProvider    String?
+  ssoConfig      String?              @db.LongText
+  maxUsers       Int                  @default(50)
+  maxLeagues     Int                  @default(3)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  
+  branding       TenantBranding?
+  config         TenantConfig?
+  members        TenantMember[]
+  leagues        League[]
+  subscription   TenantSubscription?
+  invitations    TenantInvitation[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([customDomain])
+}
+
+model TenantBranding {
+  id                  String          @id @default(cuid())
+  tenantId            String          @unique
+  logoUrl             String?
+  faviconUrl          String?
+  primaryColor        String          @default("#16a34a")
+  secondaryColor      String          @default("#15803d")
+  accentColor         String          @default("#bbf7d0")
+  fontFamily          String          @default("Inter")
+  heroImageUrl        String?
+  companyDisplayName  String?
+  customCss           String?         @db.LongText
+  emailHeaderHtml     String?         @db.Text
+  emailFooterHtml     String?         @db.Text
+  emailInviteTemplate String?         @db.Text
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  tenant              CorporateTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantConfig {
+  id                     String          @id @default(cuid())
+  tenantId               String          @unique
+  enablePayments         Boolean         @default(true)
+  enableAiInsights       Boolean         @default(false)
+  enablePublicLeagues    Boolean         @default(false)
+  enableUserSelfRegister Boolean         @default(false)
+  requireInvitation      Boolean         @default(true)
+  enableEmailNotif       Boolean         @default(true)
+  enablePushNotif        Boolean         @default(true)
+  enableStageFees        Boolean         @default(true)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  tenant                 CorporateTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantMember {
+  id         String             @id @default(cuid())
+  tenantId   String
+  userId     String
+  role       TenantRole         @default(PLAYER)
+  status     TenantMemberStatus @default(ACTIVE)
+  invitedAt  DateTime           @default(now())
+  joinedAt   DateTime?
+  tenant     CorporateTenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+}
+
+model TenantSubscription {
+  id               String             @id @default(cuid())
+  tenantId         String             @unique
+  billingModel     TenantBillingModel @default(FLAT_MONTHLY)
+  priceMonthly     Int                @default(0)
+  priceSetup       Int                @default(0)
+  currency         Currency           @default(COP)
+  stripeSubId      String?
+  status           String             @default("ACTIVE")
+  currentPeriodEnd DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  tenant           CorporateTenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model TenantInvitation {
+  id          String          @id @default(cuid())
+  tenantId    String
+  email       String
+  role        TenantRole      @default(PLAYER)
+  token       String          @unique
+  status      InviteStatus    @default(SENT)
+  bulkBatchId String?
+  sentAt      DateTime?
+  resendCount Int             @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime        @default(now())
+  tenant      CorporateTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([token])
+  @@index([status])
+}
+
+// ─── Pollas y Competencias ──────────────────────────────────────────────────
+
+model League {
+  id                     String         @id @default(cuid())
+  name                   String
+  description            String?        @db.Text
+  code                   String         @unique
+  privacy                Privacy        @default(PRIVATE)
+  logo                   String?
+  maxParticipants        Int            @default(10)
+  status                 LeagueStatus   @default(SETUP)
+  closePredictionMinutes Int            @default(15)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  primaryTournamentId    String?
+  tenantId               String?
+  
+  tenant                 CorporateTenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  primaryTournament      Tournament?      @relation("LeaguePrimaryTournament", fields: [primaryTournamentId], references: [id])
+  leagueMatches          LeagueMatch[]
+  members                LeagueMember[]
+  leagueTournaments      LeagueTournament[]
+  predictions            Prediction[]
+  scoringRules           ScoringRule[]
+
+  @@index([code])
+  @@index([tenantId])
+  @@index([status])
+  @@index([primaryTournamentId])
+}
+
+model LeagueMember {
+  id        String   @id @default(cuid())
+  leagueId  String
+  userId    String
+  role      String   @default("PLAYER")
+  joinedAt  DateTime @default(now())
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId])
+  @@index([leagueId])
+  @@index([userId])
+}
+
+model LeagueMatch {
+  id       String @id @default(cuid())
+  leagueId String
+  matchId  String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, matchId])
+  @@index([leagueId])
+  @@index([matchId])
+}
+
+model LeagueTournament {
+  id           String     @id @default(cuid())
+  leagueId     String
+  tournamentId String
+  league       League     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, tournamentId])
+  @@index([leagueId])
+  @@index([tournamentId])
+}
+
+model ScoringRule {
+  id                    String  @id @default(cuid())
+  leagueId              String
+  pointsExactScore      Int     @default(10)
+  pointsWinner          Int     @default(5)
+  pointsGoalDifference  Int     @default(3)
+  pointsParticipation   Int     @default(1)
+  league                League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId])
+  @@index([leagueId])
+}
+
+// ─── Pronósticos ─────────────────────────────────────────────────────────────
+
+model Prediction {
+  id           String    @id @default(cuid())
+  userId       String
+  matchId      String
+  leagueId     String
+  homeScore    Int
+  awayScore    Int
+  pointsEarned Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match        Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  league       League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, matchId, leagueId])
+  @@index([userId])
+  @@index([matchId])
+  @@index([leagueId])
+}
+
+// ─── Datos de Fútbol (sincronizados desde API principal) ────────────────────
+
+model Tournament {
+  id                String             @id @default(cuid())
+  name              String
+  season            String?
+  country           String?
+  logo              String?
+  startDate         DateTime?
+  endDate           DateTime?
+  active            Boolean            @default(true)
+  externalId        String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  matches           Match[]
+  leagueTournaments LeagueTournament[]
+  primaryLeagues    League[]           @relation("LeaguePrimaryTournament")
+
+  @@index([active])
+  @@index([externalId])
+}
+
+model Team {
+  id         String   @id @default(cuid())
+  name       String
+  code       String?
+  logo       String?
+  country    String?
+  externalId String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  homeMatches Match[] @relation("HomeTeam")
+  awayMatches Match[] @relation("AwayTeam")
+
+  @@index([externalId])
+}
+
+model Match {
+  id           String        @id @default(cuid())
+  tournamentId String
+  homeTeamId   String
+  awayTeamId   String
+  date         DateTime
+  venue        String?
+  round        String?
+  stage        String?
+  homeScore    Int?
+  awayScore    Int?
+  status       MatchStatus   @default(SCHEDULED)
+  externalId   String?       @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  tournament   Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  homeTeam     Team          @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam     Team          @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  leagueMatches LeagueMatch[]
+  predictions   Prediction[]
+
+  @@index([tournamentId])
+  @@index([date])
+  @@index([status])
+  @@index([externalId])
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum TenantStatus {
+  PENDING_SETUP
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum TenantPlanTier {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+
+enum TenantBillingModel {
+  FLAT_MONTHLY
+  PER_USER
+  ANNUAL
+  CUSTOM
+}
+
+enum TenantRole {
+  OWNER
+  ADMIN
+  STAFF
+  PLAYER
+}
+
+enum TenantMemberStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum InviteStatus {
+  SENT
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum Privacy {
+  PUBLIC
+  PRIVATE
+}
+
+enum LeagueStatus {
+  SETUP
+  ACTIVE
+  PAUSED
+  FINISHED
+  CANCELLED
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum Currency {
+  COP
+  USD
+  EUR
+}

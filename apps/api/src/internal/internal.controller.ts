@@ -31,19 +31,29 @@ export class InternalController {
         this.assertApiKey(apiKey);
         const where: any = {};
         if (from || to) {
-            where.matchDate = {};
-            if (from) where.matchDate.gte = new Date(from);
-            if (to) where.matchDate.lte = new Date(to);
+            where.date = {};
+            if (from) where.date.gte = new Date(from);
+            if (to) where.date.lte = new Date(to);
         }
         if (tournamentId) where.tournamentId = tournamentId;
 
         return this.prisma.match.findMany({
             where,
-            include: {
-                homeTeam: { select: { id: true, name: true, code: true, flagUrl: true } },
-                awayTeam: { select: { id: true, name: true, code: true, flagUrl: true } },
+            select: {
+                id: true,
+                tournamentId: true,
+                homeTeamId: true,
+                awayTeamId: true,
+                date: true,
+                venue: true,
+                round: true,
+                stage: true,
+                homeScore: true,
+                awayScore: true,
+                status: true,
+                externalId: true,
             },
-            orderBy: { matchDate: 'asc' },
+            orderBy: { date: 'asc' },
             take: 500,
         });
     }
@@ -64,7 +74,7 @@ export class InternalController {
     async getTeams(@Headers('x-internal-api-key') apiKey: string) {
         this.assertApiKey(apiKey);
         return this.prisma.team.findMany({
-            select: { id: true, name: true, code: true, flagUrl: true },
+            select: { id: true, name: true, code: true, logo: true, country: true, externalId: true },
             orderBy: { name: 'asc' },
         });
     }

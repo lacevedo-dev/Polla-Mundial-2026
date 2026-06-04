@@ -13,6 +13,7 @@ import { CorporateTenantModule } from '@corp-api/corporate-tenant/corporate-tena
 // Módulos propios del backend corporativo
 import { FootballProxyModule } from './football-proxy/football-proxy.module';
 import { CorpHealthModule } from './health/corp-health.module';
+import { DataSyncModule } from './sync/data-sync.module';
 
 @Module({
     imports: [
@@ -31,6 +32,9 @@ import { CorpHealthModule } from './health/corp-health.module';
 
         // Módulo nuevo: proxy de datos de fútbol desde el VPS principal
         FootballProxyModule,
+
+        // Sincronización de datos desde API principal
+        DataSyncModule,
 
         // Health check propio
         CorpHealthModule,

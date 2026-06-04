@@ -32,9 +32,13 @@ COPY apps/api ./apps/api
 COPY apps/api-corp ./apps/api-corp
 COPY packages/shared ./packages/shared
 
-# Generar cliente Prisma (usa el schema del api principal)
+# Generar cliente Prisma del API principal (para módulos compartidos)
 WORKDIR /app/apps/api
 RUN mkdir -p /app/apps/api/node_modules
+RUN npx prisma generate
+
+# Generar cliente Prisma corporativo (BD independiente)
+WORKDIR /app/apps/api-corp
 RUN npx prisma generate
 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
