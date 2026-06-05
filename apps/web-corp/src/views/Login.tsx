@@ -124,19 +124,12 @@ export default function Login() {
                         </Link>
                     </div>
                     <div className="border-t border-slate-800 pt-4 text-center text-xs text-slate-300">
-                        Â¿No tienes cuenta?{' '}
+                        ¿No tienes cuenta?{' '}
                         <a href="https://zonapronosticos.com" className="font-bold text-amber-400 hover:underline">
-                            ContÃ¡ctanos
+                            Contáctanos
                         </a>
                     </div>
                 </form>
-
-                <p className="text-center text-slate-500 text-xs mt-6">
-                    ¿No tienes cuenta?{' '}
-                    <a href="https://zonapronosticos.com" className="text-amber-400 hover:underline">
-                        Contáctanos
-                    </a>
-                </p>
             </div>
         </div>
     );
