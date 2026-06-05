@@ -22,6 +22,17 @@ function getBaseUrl(): string {
 
 export const BASE_URL = getBaseUrl();
 
+export function resolveCorpBrandingAssetUrl(rawPath?: string | null): string | undefined {
+    const normalizedPath = rawPath?.trim();
+    if (!normalizedPath) return undefined;
+
+    if (!normalizedPath.startsWith('/uploads/branding/')) {
+        return normalizedPath;
+    }
+
+    return `${BASE_URL}${normalizedPath}`;
+}
+
 /**
  * Detecta el slug del tenant desde el hostname actual.
  * Se usa para inyectar X-Tenant-Slug en cada request a la API,

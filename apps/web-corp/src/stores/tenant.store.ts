@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { TenantContext } from '@polla-2026/shared';
-import { request, ApiError } from '../api';
+import { TenantBranding, TenantContext } from '@polla-2026/shared';
+import { request, ApiError, resolveCorpBrandingAssetUrl } from '../api';
 
 type TenantPhase = 'loading' | 'landing' | 'portal';
 
@@ -26,8 +26,9 @@ export const useTenantStore = create<TenantStoreState>((set) => ({
 
         try {
             const tenant = await request<TenantContext>(`/tenant/${slug}/context`);
-            set({ phase: 'portal', tenant });
-            applyTenantBranding(tenant);
+            const normalizedTenant = normalizeTenantBrandingAssets(tenant);
+            set({ phase: 'portal', tenant: normalizedTenant });
+            applyTenantBranding(normalizedTenant);
         } catch (err) {
             if (err instanceof ApiError && err.status === 404) {
                 set({ phase: 'landing', tenant: null });
@@ -77,4 +78,23 @@ function applyTenantBranding(tenant: TenantContext) {
     document.title = b.companyDisplayName
         ? `${b.companyDisplayName} — Pronósticos`
         : (tenant.name ?? 'Portal Corporativo');
+}
+
+function normalizeTenantBrandingAssets(tenant: TenantContext): TenantContext {
+    if (!tenant.branding) return tenant;
+
+    return {
+        ...tenant,
+        branding: normalizeBrandingAssets(tenant.branding),
+    };
+}
+
+function normalizeBrandingAssets(branding: TenantBranding): TenantBranding {
+    return {
+        ...branding,
+        logoUrl: resolveCorpBrandingAssetUrl(branding.logoUrl) ?? null,
+        faviconUrl: resolveCorpBrandingAssetUrl(branding.faviconUrl) ?? null,
+        heroImageUrl: resolveCorpBrandingAssetUrl(branding.heroImageUrl) ?? null,
+        sidebarImageUrl: resolveCorpBrandingAssetUrl(branding.sidebarImageUrl) ?? null,
+    };
 }
