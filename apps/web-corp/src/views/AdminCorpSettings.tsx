@@ -12,6 +12,7 @@ type BrandingDraft = {
     logoUrl: string;
     faviconUrl: string;
     heroImageUrl: string;
+    sidebarImageUrl: string;
     primaryColor: string;
     secondaryColor: string;
     accentColor: string;
@@ -27,7 +28,7 @@ function optionalTrimmed(value: string) {
     return trimmed.length > 0 ? trimmed : null;
 }
 
-type UploadingState = Record<'logoUrl' | 'faviconUrl' | 'heroImageUrl', boolean>;
+type UploadingState = Record<'logoUrl' | 'faviconUrl' | 'heroImageUrl' | 'sidebarImageUrl', boolean>;
 
 function resolveImageUrl(url: string): string {
     if (!url) return '';
@@ -120,7 +121,7 @@ export default function AdminCorpSettings() {
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [uploading, setUploading] = useState<UploadingState>({ logoUrl: false, faviconUrl: false, heroImageUrl: false });
+    const [uploading, setUploading] = useState<UploadingState>({ logoUrl: false, faviconUrl: false, heroImageUrl: false, sidebarImageUrl: false });
     const [uploadError, setUploadError] = useState<Partial<Record<keyof UploadingState, string>>>({});
     const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
 
@@ -144,6 +145,7 @@ export default function AdminCorpSettings() {
         logoUrl: '',
         faviconUrl: '',
         heroImageUrl: '',
+        sidebarImageUrl: '',
         primaryColor: '#f59e0b',
         secondaryColor: '#15803d',
         accentColor: '#bbf7d0',
@@ -157,6 +159,7 @@ export default function AdminCorpSettings() {
             logoUrl: tenant.branding.logoUrl ?? '',
             faviconUrl: tenant.branding.faviconUrl ?? '',
             heroImageUrl: tenant.branding.heroImageUrl ?? (tenant.slug === 'coopcanapro' ? COOPCANAPRO_LOGIN_BACKGROUND : ''),
+            sidebarImageUrl: tenant.branding.sidebarImageUrl ?? '',
             primaryColor: tenant.branding.primaryColor ?? '#f59e0b',
             secondaryColor: tenant.branding.secondaryColor ?? '#15803d',
             accentColor: tenant.branding.accentColor ?? '#bbf7d0',
@@ -181,6 +184,7 @@ export default function AdminCorpSettings() {
                     logoUrl: optionalTrimmed(draft.logoUrl),
                     faviconUrl: optionalTrimmed(draft.faviconUrl),
                     heroImageUrl: optionalTrimmed(draft.heroImageUrl),
+                    sidebarImageUrl: optionalTrimmed(draft.sidebarImageUrl),
                     primaryColor: draft.primaryColor,
                     secondaryColor: draft.secondaryColor,
                     accentColor: draft.accentColor,
@@ -272,6 +276,20 @@ export default function AdminCorpSettings() {
                         uploadError={uploadError.heroImageUrl}
                         placeholder={COOPCANAPRO_LOGIN_BACKGROUND}
                         hint="JPG, PNG o WebP — máx. 5 MB. También puedes pegar una URL pública."
+                        previewClass="h-16 w-full object-cover rounded-lg"
+                        wide
+                    />
+
+                    <ImageUploadField
+                        label="Imagen del sidebar"
+                        accept="image/jpeg,image/png,image/webp"
+                        value={draft.sidebarImageUrl}
+                        onChange={(v) => setField('sidebarImageUrl', v)}
+                        onUpload={(file) => uploadImage('sidebarImageUrl', file)}
+                        isUploading={uploading.sidebarImageUrl}
+                        uploadError={uploadError.sidebarImageUrl}
+                        placeholder="https://.../sidebar.png"
+                        hint="JPG, PNG o WebP — máx. 5 MB. Se muestra en la parte inferior del menú lateral."
                         previewClass="h-16 w-full object-cover rounded-lg"
                         wide
                     />

@@ -8,6 +8,7 @@ import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import NotificationBell from '../components/NotificationBell';
+import { BASE_URL } from '../api';
 
 const NAV_ITEMS = [
     { path: '/', label: 'Inicio', icon: Home },
@@ -152,6 +153,18 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                 aria-hidden="true"
                             />
                         </button>
+                    </div>
+                )}
+
+                {/* Sidebar branding image */}
+                {tenant?.branding?.sidebarImageUrl && (
+                    <div className="px-4 pb-4">
+                        <img
+                            src={tenant.branding.sidebarImageUrl.startsWith('http') || tenant.branding.sidebarImageUrl.startsWith('data:') ? tenant.branding.sidebarImageUrl : `${BASE_URL}${tenant.branding.sidebarImageUrl}`}
+                            alt="Branding"
+                            className="w-full rounded-xl object-cover"
+                            style={{ aspectRatio: '1 / 1', maxHeight: '160px' }}
+                        />
                     </div>
                 )}
 

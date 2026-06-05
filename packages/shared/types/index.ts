@@ -78,6 +78,7 @@ export interface TenantBranding {
   accentColor: string;
   fontFamily: string;
   heroImageUrl: string | null;
+  sidebarImageUrl: string | null;
   companyDisplayName: string | null;
   customCss: string | null;
   emailHeaderHtml: string | null;

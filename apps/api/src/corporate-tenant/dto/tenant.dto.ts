@@ -135,6 +135,10 @@ export class UpdateTenantBrandingDto {
 
     @IsOptional()
     @IsString()
+    sidebarImageUrl?: string;
+
+    @IsOptional()
+    @IsString()
     companyDisplayName?: string;
 
     @IsOptional()
