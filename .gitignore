@@ -28,3 +28,4 @@ apps/api/.env
 bash.exe.stackdump
 .claude/worktrees/
 docs/error.txt
+apps/api-corp/prisma/migrations/20260604_init_corp_db.sql
