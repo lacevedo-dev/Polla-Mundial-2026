@@ -15,6 +15,8 @@ En el panel de Dokploy, configurar las siguientes variables:
 # Base de datos corporativa
 # Usar el host real de la BD. `localhost` solo aplica si MySQL corre en el mismo host/contenedor.
 CORP_DATABASE_URL=mysql://usuario:password@host:3306/polla_corp?connectionLimit=1&minimumIdle=0
+# Activar temporalmente para diagnosticar conexión directa MariaDB en logs de arranque.
+CORP_DATABASE_STARTUP_PROBE=false
 
 # API Principal (ajustar URL segÃºn deployment)
 MAIN_API_URL=https://api.pollamundial.com

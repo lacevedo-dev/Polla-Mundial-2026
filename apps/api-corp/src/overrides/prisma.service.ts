@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client-corp';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { createConnection } from 'mariadb';
 
 const MARIADB_SCHEME_PREFIX = 'mariadb://';
 const MYSQL_SCHEME_PREFIX = 'mysql://';
@@ -74,6 +75,8 @@ function parsePositiveInteger(value: string | null): number | undefined {
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+    private readonly poolConfig: MariaDbPoolConfig;
+
     constructor() {
         const rawUrl = process.env.CORP_DATABASE_URL || process.env.DATABASE_URL;
         if (!rawUrl?.trim()) {
@@ -82,10 +85,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         const poolConfig = resolveMariaDbPoolConfig(rawUrl);
         const adapter = new PrismaMariaDb(poolConfig);
         super({ adapter: adapter as any });
+        this.poolConfig = poolConfig;
     }
 
     async onModuleInit() {
         console.log('[PrismaService] Conectando a BD corporativa...');
+        if (process.env.CORP_DATABASE_STARTUP_PROBE === 'true') {
+            await this.probeDirectMariaDbConnection();
+        }
     }
 
     async onModuleDestroy() {
@@ -101,6 +108,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
                 ok: false,
                 error: error instanceof Error ? error.message : 'Unknown error',
             };
+        }
+    }
+
+    private async probeDirectMariaDbConnection(): Promise<void> {
+        const { host, port, user, database } = this.poolConfig;
+        console.log(
+            `[PrismaService] Probando conexión MariaDB directa (host=${host}, port=${port}, user=${user}, database=${database})...`,
+        );
+
+        let connection: Awaited<ReturnType<typeof createConnection>> | undefined;
+        try {
+            connection = await createConnection({
+                ...(this.poolConfig as any),
+                connectTimeout: 10000,
+            });
+            await connection.query('SELECT 1');
+            console.log('[PrismaService] Conexión MariaDB directa OK.');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[PrismaService] Conexión MariaDB directa falló: ${message}`);
+        } finally {
+            await connection?.end().catch(() => undefined);
         }
     }
 }
