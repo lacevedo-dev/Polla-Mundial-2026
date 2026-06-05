@@ -5,7 +5,10 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CorpAppModule } from './corp-app.module';
 
-const DEFAULT_PRODUCTION_CORS_ORIGINS = ['https://coopcanapro.zonapronosticos.com'];
+const DEFAULT_PRODUCTION_CORS_ORIGINS = [
+    'https://coopcanapro.zonapronosticos.com',
+    'https://pollacoopcanapro.atencionesvirtuales.com.co',
+];
 
 function parseCorsOrigins(value: string | undefined): string[] {
     return (value ?? '')
@@ -20,12 +23,9 @@ function resolveAllowedCorsOrigins(nodeEnv: string): string[] {
         ...parseCorsOrigins(process.env.CORP_CORS_ORIGINS),
         ...parseCorsOrigins(process.env.CORP_FRONTEND_URL),
     ];
+    const defaultOrigins = nodeEnv === 'production' ? DEFAULT_PRODUCTION_CORS_ORIGINS : [];
 
-    return configuredOrigins.length > 0
-        ? Array.from(new Set(configuredOrigins))
-        : nodeEnv === 'production'
-            ? DEFAULT_PRODUCTION_CORS_ORIGINS
-            : [];
+    return Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
 }
 
 async function bootstrap(): Promise<void> {
