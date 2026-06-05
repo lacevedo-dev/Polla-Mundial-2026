@@ -31,6 +31,12 @@ JWT_SECRET=<MISMO_SECRET_QUE_API_PRINCIPAL>
 # Configuración del servidor
 PORT=3001
 NODE_ENV=production
+# CORS
+# Lista separada por comas de frontends autorizados para consumir api-corp.
+# En produccion NO usar "*"; agregar aqui cada dominio corporativo publicado.
+CORP_CORS_ORIGINS=https://coopcanapro.zonapronosticos.com
+# Compatibilidad con configuracion anterior de un solo frontend.
+CORP_FRONTEND_URL=https://coopcanapro.zonapronosticos.com
 
 # Scheduler de emails corporativo
 # Mantener en false salvo que api-corp deba despachar emails directamente.

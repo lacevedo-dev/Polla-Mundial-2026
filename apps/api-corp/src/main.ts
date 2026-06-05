@@ -5,6 +5,29 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CorpAppModule } from './corp-app.module';
 
+const DEFAULT_PRODUCTION_CORS_ORIGINS = ['https://coopcanapro.zonapronosticos.com'];
+
+function parseCorsOrigins(value: string | undefined): string[] {
+    return (value ?? '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+        .map((origin) => origin.replace(/\/+$/, ''));
+}
+
+function resolveAllowedCorsOrigins(nodeEnv: string): string[] {
+    const configuredOrigins = [
+        ...parseCorsOrigins(process.env.CORP_CORS_ORIGINS),
+        ...parseCorsOrigins(process.env.CORP_FRONTEND_URL),
+    ];
+
+    return configuredOrigins.length > 0
+        ? Array.from(new Set(configuredOrigins))
+        : nodeEnv === 'production'
+            ? DEFAULT_PRODUCTION_CORS_ORIGINS
+            : [];
+}
+
 async function bootstrap(): Promise<void> {
     const port = Number(process.env.PORT ?? 3001);
     const nodeEnv = process.env.NODE_ENV ?? 'development';
@@ -31,8 +54,24 @@ async function bootstrap(): Promise<void> {
         new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
 
+    const allowedCorsOrigins = resolveAllowedCorsOrigins(nodeEnv);
+    const allowAnyCorsOrigin = nodeEnv !== 'production' && allowedCorsOrigins.length === 0;
+
+    console.info(
+        `[corp-api] CORS ${allowAnyCorsOrigin ? 'permite cualquier origen en desarrollo' : `origins=${allowedCorsOrigins.join(',')}`}`,
+    );
+
     app.enableCors({
-        origin: (origin, callback) => callback(null, true),
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+
+            const normalizedOrigin = origin.replace(/\/+$/, '');
+            if (allowAnyCorsOrigin || allowedCorsOrigins.includes(normalizedOrigin)) {
+                return callback(null, true);
+            }
+
+            return callback(new Error(`Origen CORS no permitido: ${origin}`), false);
+        },
         credentials: true,
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With, Origin, X-Tenant-Slug',
