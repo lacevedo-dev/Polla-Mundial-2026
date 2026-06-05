@@ -77,9 +77,13 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
             <aside className="hidden md:flex flex-col w-64 bg-black text-white h-screen sticky top-0 shadow-xl z-20">
                 {/* Logo / Org name */}
                 <div className="p-6">
-                    <Link to="/" className="block mb-8">
+                    <Link to="/" className="mb-8 flex h-20 w-full items-center justify-center rounded-xl">
                         {tenant?.branding?.logoUrl ? (
-                            <img src={tenant.branding.logoUrl} alt={orgName} className="h-10 object-contain mx-auto" />
+                            <img
+                                src={tenant.branding.logoUrl}
+                                alt={orgName}
+                                className="max-h-16 w-full object-contain"
+                            />
                         ) : (
                             <div className="w-10 h-10 rounded-lg flex items-center justify-center mx-auto"
                                 style={{ backgroundColor: primaryColor }}>
