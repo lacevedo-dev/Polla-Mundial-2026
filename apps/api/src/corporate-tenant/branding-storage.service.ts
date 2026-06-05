@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export class BrandingUploadFile {
