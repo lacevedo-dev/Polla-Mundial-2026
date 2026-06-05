@@ -7,11 +7,19 @@ const { navigateMock, loginMock } = vi.hoisted(() => ({
     navigateMock: vi.fn(),
     loginMock: vi.fn(),
 }));
+const { getRecaptchaTokenMock } = vi.hoisted(() => ({
+    getRecaptchaTokenMock: vi.fn(),
+}));
 let isLoadingState = false;
 let userState = { emailVerified: true } as any;
 
 vi.mock('react-router-dom', () => ({
     useNavigate: () => navigateMock,
+    useSearchParams: () => [new URLSearchParams()],
+}));
+
+vi.mock('../recaptcha', () => ({
+    getRecaptchaToken: getRecaptchaTokenMock,
 }));
 
 vi.mock('../stores/auth.store', () => {
@@ -63,7 +71,7 @@ vi.mock('../components/ui/label', () => ({
 vi.mock('../components/UI', () => ({
     EmailAutocompleteInput: ({ value, onValueChange, ...props }: any) => (
         <input
-            data-testid="legacy-email-autocomplete"
+            data-testid="new-input"
             value={value ?? ''}
             onChange={(event) => onValueChange?.(event.target.value)}
             {...props}
@@ -76,13 +84,14 @@ describe('Login view', () => {
         vi.clearAllMocks();
         isLoadingState = false;
         loginMock.mockResolvedValue(undefined);
+        getRecaptchaTokenMock.mockResolvedValue('recaptcha-token');
     });
 
     it('submits credentials once and navigates to dashboard', async () => {
         const user = userEvent.setup();
         render(<Login />);
 
-        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'ana@mail.com');
+        await user.type(screen.getByTestId('new-input'), 'ana@mail.com');
         await user.type(screen.getByTestId('new-password-input'), '123456');
         await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
 
@@ -90,6 +99,7 @@ describe('Login view', () => {
             expect(loginMock).toHaveBeenCalledWith({
                 identifier: 'ana@mail.com',
                 password: '123456',
+                recaptchaToken: 'recaptcha-token',
             }),
         );
         expect(loginMock).toHaveBeenCalledTimes(1);
@@ -125,10 +135,10 @@ describe('Login view', () => {
         expect(rememberCheckbox.checked).toBe(false);
     });
 
-    it('keeps legacy email autocomplete while using new password primitive', () => {
+    it('renders document and password inputs', () => {
         render(<Login />);
 
-        expect(screen.getByTestId('legacy-email-autocomplete')).toBeInTheDocument();
+        expect(screen.getByTestId('new-input')).toBeInTheDocument();
         expect(screen.getByTestId('new-password-input')).toBeInTheDocument();
     });
 
@@ -153,6 +163,7 @@ describe('Login Email Verification Integration', () => {
         isLoadingState = false;
         userState = { emailVerified: false };
         sessionStorage.clear();
+        getRecaptchaTokenMock.mockResolvedValue('recaptcha-token');
     });
 
     it('redirects unverified user to verify-email instead of dashboard', async () => {
@@ -161,7 +172,7 @@ describe('Login Email Verification Integration', () => {
 
         render(<Login />);
 
-        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'unverified@mail.com');
+        await user.type(screen.getByTestId('new-input'), 'unverified@mail.com');
         await user.type(screen.getByTestId('new-password-input'), '123456');
         await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
 
@@ -178,7 +189,7 @@ describe('Login Email Verification Integration', () => {
 
         render(<Login />);
 
-        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'verified@mail.com');
+        await user.type(screen.getByTestId('new-input'), 'verified@mail.com');
         await user.type(screen.getByTestId('new-password-input'), '123456');
         await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
 
@@ -194,7 +205,7 @@ describe('Login Email Verification Integration', () => {
 
         render(<Login />);
 
-        await user.type(screen.getByTestId('legacy-email-autocomplete'), 'unverified@mail.com');
+        await user.type(screen.getByTestId('new-input'), 'unverified@mail.com');
         await user.type(screen.getByTestId('new-password-input'), '123456');
         await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
 

@@ -28,7 +28,12 @@ function loadRecaptcha(siteKey: string) {
 
 export async function getRecaptchaToken(action = 'login') {
     const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
-    if (!siteKey) return undefined;
+    if (!siteKey) {
+        if (import.meta.env.PROD) {
+            throw new Error('reCAPTCHA no está configurado. Contacta al administrador.');
+        }
+        return undefined;
+    }
 
     await loadRecaptcha(siteKey);
     return new Promise<string>((resolve, reject) => {
