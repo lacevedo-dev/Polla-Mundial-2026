@@ -94,7 +94,11 @@ export class DataSyncService implements OnModuleInit {
                         birthDate: user.birthDate ? new Date(user.birthDate) : null,
                         passwordHash: user.passwordHash,
                         mustChangePassword: Boolean(user.mustChangePassword),
+                        googleId: user.googleId ?? null,
+                        githubId: user.githubId ?? null,
+                        plan: user.plan ?? 'FREE',
                         emailVerified: Boolean(user.emailVerified),
+                        systemRole: user.systemRole ?? 'USER',
                         status: user.status,
                     } as any,
                     update: {
@@ -108,7 +112,11 @@ export class DataSyncService implements OnModuleInit {
                         birthDate: user.birthDate ? new Date(user.birthDate) : null,
                         passwordHash: user.passwordHash,
                         mustChangePassword: Boolean(user.mustChangePassword),
+                        googleId: user.googleId ?? null,
+                        githubId: user.githubId ?? null,
+                        plan: user.plan ?? 'FREE',
                         emailVerified: Boolean(user.emailVerified),
+                        systemRole: user.systemRole ?? 'USER',
                         status: user.status,
                     } as any,
                 });
@@ -277,8 +285,14 @@ export class DataSyncService implements OnModuleInit {
                             description: league.description ?? null,
                             code: league.code,
                             privacy: league.privacy,
-                            logo: league.logo ?? null,
+                            logo: league.logo ?? league.logoUrl ?? null,
                             maxParticipants: league.maxParticipants ?? 10,
+                            includeBaseFee: league.includeBaseFee ?? true,
+                            baseFee: league.baseFee ?? null,
+                            includeStageFees: Boolean(league.includeStageFees),
+                            currency: league.currency ?? 'COP',
+                            adminFeePercent: league.adminFeePercent ?? 10,
+                            plan: league.plan ?? 'FREE',
                             status: league.status,
                             closePredictionMinutes: league.closePredictionMinutes ?? 15,
                             primaryTournamentId,
@@ -289,8 +303,14 @@ export class DataSyncService implements OnModuleInit {
                             description: league.description ?? null,
                             code: league.code,
                             privacy: league.privacy,
-                            logo: league.logo ?? null,
+                            logo: league.logo ?? league.logoUrl ?? null,
                             maxParticipants: league.maxParticipants ?? 10,
+                            includeBaseFee: league.includeBaseFee ?? true,
+                            baseFee: league.baseFee ?? null,
+                            includeStageFees: Boolean(league.includeStageFees),
+                            currency: league.currency ?? 'COP',
+                            adminFeePercent: league.adminFeePercent ?? 10,
+                            plan: league.plan ?? 'FREE',
                             status: league.status,
                             closePredictionMinutes: league.closePredictionMinutes ?? 15,
                             primaryTournamentId,
@@ -308,11 +328,13 @@ export class DataSyncService implements OnModuleInit {
                                 id: leagueMember.id,
                                 leagueId: leagueMember.leagueId,
                                 userId: leagueMember.userId,
-                                role: leagueMember.role,
+                                role: leagueMember.role ?? 'PLAYER',
+                                status: leagueMember.status ?? 'ACTIVE',
                                 joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
                             } as any,
                             update: {
-                                role: leagueMember.role,
+                                role: leagueMember.role ?? 'PLAYER',
+                                status: leagueMember.status ?? 'ACTIVE',
                                 joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
                             } as any,
                         });
@@ -328,10 +350,12 @@ export class DataSyncService implements OnModuleInit {
                                 id: leagueTournament.id,
                                 leagueId: leagueTournament.leagueId,
                                 tournamentId: leagueTournament.tournamentId,
+                                addedAt: leagueTournament.addedAt ? new Date(leagueTournament.addedAt) : new Date(),
                             } as any,
                             update: {
                                 leagueId: leagueTournament.leagueId,
                                 tournamentId: leagueTournament.tournamentId,
+                                addedAt: leagueTournament.addedAt ? new Date(leagueTournament.addedAt) : new Date(),
                             } as any,
                         });
                         counts.leagueTournaments += 1;
@@ -346,10 +370,16 @@ export class DataSyncService implements OnModuleInit {
                                 id: leagueMatch.id,
                                 leagueId: leagueMatch.leagueId,
                                 matchId: leagueMatch.matchId,
+                                active: leagueMatch.active !== false,
+                                addedAt: leagueMatch.addedAt ? new Date(leagueMatch.addedAt) : new Date(),
+                                addedBy: leagueMatch.addedBy ?? null,
                             } as any,
                             update: {
                                 leagueId: leagueMatch.leagueId,
                                 matchId: leagueMatch.matchId,
+                                active: leagueMatch.active !== false,
+                                addedAt: leagueMatch.addedAt ? new Date(leagueMatch.addedAt) : new Date(),
+                                addedBy: leagueMatch.addedBy ?? null,
                             } as any,
                         });
                         counts.leagueMatches += 1;
@@ -400,23 +430,21 @@ export class DataSyncService implements OnModuleInit {
                     create: {
                         id: tournament.id,
                         name: tournament.name,
-                        season: tournament.season != null ? String(tournament.season) : null,
+                        season: normalizeInt(tournament.season, new Date().getFullYear()),
                         country: tournament.country,
-                        logo: tournament.logo ?? tournament.logoUrl ?? null,
-                        startDate: tournament.startDate ? new Date(tournament.startDate) : null,
-                        endDate: tournament.endDate ? new Date(tournament.endDate) : null,
+                        type: tournament.type ?? 'KNOCKOUT',
+                        logoUrl: tournament.logoUrl ?? tournament.logo ?? null,
                         active: tournament.active,
-                        externalId: stringifyNullable(tournament.externalId ?? tournament.apiFootballLeagueId),
+                        apiFootballLeagueId: normalizeInt(tournament.apiFootballLeagueId ?? tournament.externalId, 0),
                     } as any,
                     update: {
                         name: tournament.name,
-                        season: tournament.season != null ? String(tournament.season) : null,
+                        season: normalizeInt(tournament.season, new Date().getFullYear()),
                         country: tournament.country,
-                        logo: tournament.logo ?? tournament.logoUrl ?? null,
-                        startDate: tournament.startDate ? new Date(tournament.startDate) : null,
-                        endDate: tournament.endDate ? new Date(tournament.endDate) : null,
+                        type: tournament.type ?? 'KNOCKOUT',
+                        logoUrl: tournament.logoUrl ?? tournament.logo ?? null,
                         active: tournament.active,
-                        externalId: stringifyNullable(tournament.externalId ?? tournament.apiFootballLeagueId),
+                        apiFootballLeagueId: normalizeInt(tournament.apiFootballLeagueId ?? tournament.externalId, 0),
                     } as any,
                 });
             }
@@ -449,17 +477,19 @@ export class DataSyncService implements OnModuleInit {
                     create: {
                         id: team.id,
                         name: team.name,
-                        code: team.code,
-                        logo: team.logo ?? team.flagUrl ?? null,
-                        country: team.country,
-                        externalId: stringifyNullable(team.externalId ?? team.apiFootballTeamId),
+                        code: team.code ?? team.shortCode ?? team.name,
+                        group: team.group ?? null,
+                        flagUrl: team.flagUrl ?? team.logo ?? null,
+                        shortCode: team.shortCode ?? team.code ?? null,
+                        apiFootballTeamId: normalizeNullableInt(team.apiFootballTeamId ?? team.externalId),
                     } as any,
                     update: {
                         name: team.name,
-                        code: team.code,
-                        logo: team.logo ?? team.flagUrl ?? null,
-                        country: team.country,
-                        externalId: stringifyNullable(team.externalId ?? team.apiFootballTeamId),
+                        code: team.code ?? team.shortCode ?? team.name,
+                        group: team.group ?? null,
+                        flagUrl: team.flagUrl ?? team.logo ?? null,
+                        shortCode: team.shortCode ?? team.code ?? null,
+                        apiFootballTeamId: normalizeNullableInt(team.apiFootballTeamId ?? team.externalId),
                     } as any,
                 });
             }
@@ -498,7 +528,7 @@ export class DataSyncService implements OnModuleInit {
             let skipped = 0;
 
             for (const match of matches) {
-                const matchDate = match.date ?? match.matchDate;
+                const matchDate = match.matchDate ?? match.date;
                 if (!match.tournamentId || !match.homeTeamId || !match.awayTeamId || !matchDate) {
                     skipped += 1;
                     continue;
@@ -508,26 +538,49 @@ export class DataSyncService implements OnModuleInit {
                     where: { id: match.id },
                     create: {
                         id: match.id,
-                        tournamentId: match.tournamentId,
                         homeTeamId: match.homeTeamId,
                         awayTeamId: match.awayTeamId,
-                        date: new Date(matchDate),
-                        venue: match.venue,
-                        round: match.round,
-                        stage: match.stage,
                         homeScore: match.homeScore,
                         awayScore: match.awayScore,
+                        phase: match.phase ?? 'GROUP',
+                        group: match.group ?? null,
+                        matchNumber: match.matchNumber ?? null,
+                        venue: match.venue,
+                        matchDate: new Date(matchDate),
                         status: match.status,
                         externalId: match.externalId,
+                        lastSyncAt: match.lastSyncAt ? new Date(match.lastSyncAt) : new Date(),
+                        syncCount: normalizeInt(match.syncCount, 0),
+                        round: match.round,
+                        tournamentId: match.tournamentId,
+                        predictionReportSentAt: match.predictionReportSentAt ? new Date(match.predictionReportSentAt) : null,
+                        advancingTeamId: match.advancingTeamId ?? null,
+                        resultNotificationSentAt: match.resultNotificationSentAt ? new Date(match.resultNotificationSentAt) : null,
+                        elapsed: match.elapsed ?? null,
+                        statusShort: match.statusShort ?? null,
+                        eventsNoDataAt: match.eventsNoDataAt ? new Date(match.eventsNoDataAt) : null,
                     } as any,
                     update: {
-                        date: new Date(matchDate),
-                        venue: match.venue,
-                        round: match.round,
-                        stage: match.stage,
+                        homeTeamId: match.homeTeamId,
+                        awayTeamId: match.awayTeamId,
                         homeScore: match.homeScore,
                         awayScore: match.awayScore,
+                        phase: match.phase ?? 'GROUP',
+                        group: match.group ?? null,
+                        matchNumber: match.matchNumber ?? null,
+                        venue: match.venue,
+                        matchDate: new Date(matchDate),
                         status: match.status,
+                        round: match.round,
+                        tournamentId: match.tournamentId,
+                        lastSyncAt: match.lastSyncAt ? new Date(match.lastSyncAt) : new Date(),
+                        syncCount: normalizeInt(match.syncCount, 0),
+                        predictionReportSentAt: match.predictionReportSentAt ? new Date(match.predictionReportSentAt) : null,
+                        advancingTeamId: match.advancingTeamId ?? null,
+                        resultNotificationSentAt: match.resultNotificationSentAt ? new Date(match.resultNotificationSentAt) : null,
+                        elapsed: match.elapsed ?? null,
+                        statusShort: match.statusShort ?? null,
+                        eventsNoDataAt: match.eventsNoDataAt ? new Date(match.eventsNoDataAt) : null,
                     } as any,
                 });
                 synced += 1;
@@ -609,7 +662,11 @@ export class DataSyncService implements OnModuleInit {
                 birthDate: user.birthDate ? new Date(user.birthDate) : null,
                 passwordHash: user.passwordHash,
                 mustChangePassword: Boolean(user.mustChangePassword),
+                googleId: user.googleId ?? null,
+                githubId: user.githubId ?? null,
+                plan: user.plan ?? 'FREE',
                 emailVerified: Boolean(user.emailVerified),
+                systemRole: user.systemRole ?? 'USER',
                 status: user.status,
             } as any,
             update: {
@@ -623,7 +680,11 @@ export class DataSyncService implements OnModuleInit {
                 birthDate: user.birthDate ? new Date(user.birthDate) : null,
                 passwordHash: user.passwordHash,
                 mustChangePassword: Boolean(user.mustChangePassword),
+                googleId: user.googleId ?? null,
+                githubId: user.githubId ?? null,
+                plan: user.plan ?? 'FREE',
                 emailVerified: Boolean(user.emailVerified),
+                systemRole: user.systemRole ?? 'USER',
                 status: user.status,
             } as any,
         });
@@ -647,4 +708,14 @@ export class DataSyncService implements OnModuleInit {
 
 function stringifyNullable(value: unknown): string | null {
     return value === undefined || value === null ? null : String(value);
+}
+
+function normalizeNullableInt(value: unknown): number | null {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function normalizeInt(value: unknown, fallback: number): number {
+    return normalizeNullableInt(value) ?? fallback;
 }

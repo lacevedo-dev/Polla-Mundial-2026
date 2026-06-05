@@ -24,9 +24,13 @@ model User {
   birthDate          DateTime?
   passwordHash       String?
   mustChangePassword Boolean        @default(false)
+  googleId           String?        @unique
+  githubId           String?        @unique
+  plan               Plan           @default(FREE)
   emailVerified      Boolean        @default(false)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  systemRole         SystemRole     @default(USER)
   status             UserStatus     @default(ACTIVE)
   
   // Relaciones corporativas
@@ -44,6 +48,18 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
   BANNED
+}
+
+enum SystemRole {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum Plan {
+  FREE
+  GOLD
+  DIAMOND
 }
 
 // ─── Tenants Corporativos ───────────────────────────────────────────────────
@@ -172,17 +188,23 @@ model TenantInvitation {
 // ─── Pollas y Competencias ──────────────────────────────────────────────────
 
 model League {
-  id                     String         @id @default(cuid())
+  id                     String          @id @default(cuid())
   name                   String
-  description            String?        @db.Text
-  code                   String         @unique
-  privacy                Privacy        @default(PRIVATE)
+  description            String?         @db.Text
+  code                   String          @unique
+  privacy                Privacy         @default(PRIVATE)
   logo                   String?
-  maxParticipants        Int            @default(10)
-  status                 LeagueStatus   @default(SETUP)
-  closePredictionMinutes Int            @default(15)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  maxParticipants        Int             @default(10)
+  includeBaseFee         Boolean         @default(true)
+  baseFee                Int?
+  includeStageFees       Boolean         @default(false)
+  currency               Currency        @default(COP)
+  adminFeePercent        Int             @default(10)
+  plan                   Plan            @default(FREE)
+  status                 LeagueStatus    @default(SETUP)
+  closePredictionMinutes Int             @default(15)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
   primaryTournamentId    String?
   tenantId               String?
   
@@ -201,28 +223,32 @@ model League {
 }
 
 model LeagueMember {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   leagueId  String
   userId    String
-  role      String   @default("PLAYER")
-  joinedAt  DateTime @default(now())
-  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      MemberRole   @default(PLAYER)
+  status    MemberStatus @default(PENDING)
+  joinedAt  DateTime     @default(now())
+  league    League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([leagueId, userId])
+  @@unique([userId, leagueId])
   @@index([leagueId])
   @@index([userId])
 }
 
 model LeagueMatch {
-  id       String @id @default(cuid())
+  id       String   @id @default(cuid())
   leagueId String
   matchId  String
-  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  active   Boolean  @default(true)
+  addedAt  DateTime @default(now())
+  addedBy  String?
+  league   League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  match    Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, matchId])
-  @@index([leagueId])
+  @@index([leagueId, active])
   @@index([matchId])
 }
 
@@ -230,6 +256,7 @@ model LeagueTournament {
   id           String     @id @default(cuid())
   leagueId     String
   tournamentId String
+  addedAt      DateTime   @default(now())
   league       League     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
@@ -241,103 +268,122 @@ model LeagueTournament {
 model ScoringRule {
   id                    String  @id @default(cuid())
   leagueId              String
-  pointsExactScore      Int     @default(10)
-  pointsWinner          Int     @default(5)
-  pointsGoalDifference  Int     @default(3)
-  pointsParticipation   Int     @default(1)
+  ruleType              ScoringType
+  points                Int
+  multiplier            Float   @default(1)
+  appliesToPhase        Phase?
+  description           String?
+  active                Boolean @default(true)
   league                League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
-  @@unique([leagueId])
-  @@index([leagueId])
+  @@unique([leagueId, ruleType, appliesToPhase])
 }
 
 // ─── Pronósticos ─────────────────────────────────────────────────────────────
 
 model Prediction {
-  id           String    @id @default(cuid())
-  userId       String
-  matchId      String
-  leagueId     String
-  homeScore    Int
-  awayScore    Int
-  pointsEarned Int?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  match        Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  league       League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  userId        String
+  matchId       String
+  leagueId      String
+  homeScore     Int
+  awayScore     Int
+  points        Float?
+  pointDetail   String?  @db.LongText
+  submittedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  advanceTeamId String?
+  advanceTeam   Team?    @relation("AdvancePredictions", fields: [advanceTeamId], references: [id])
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@unique([userId, matchId, leagueId])
-  @@index([userId])
+  @@index([leagueId, matchId])
+  @@index([userId, leagueId])
+  @@index([userId, submittedAt(sort: Desc)])
   @@index([matchId])
-  @@index([leagueId])
+  @@index([advanceTeamId])
 }
 
 // ─── Datos de Fútbol (sincronizados desde API principal) ────────────────────
 
 model Tournament {
-  id                String             @id @default(cuid())
-  name              String
-  season            String?
-  country           String?
-  logo              String?
-  startDate         DateTime?
-  endDate           DateTime?
-  active            Boolean            @default(true)
-  externalId        String?            @unique
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                  String             @id @default(cuid())
+  name                String
+  country             String?
+  type                String             @default("KNOCKOUT")
+  logoUrl             String?
+  apiFootballLeagueId Int                @unique
+  season              Int
+  active              Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
   
-  matches           Match[]
-  leagueTournaments LeagueTournament[]
-  primaryLeagues    League[]           @relation("LeaguePrimaryTournament")
+  matches             Match[]
+  leagueTournaments   LeagueTournament[]
+  primaryLeagues      League[]           @relation("LeaguePrimaryTournament")
 
-  @@index([active])
-  @@index([externalId])
+  @@index([apiFootballLeagueId])
+  @@index([season])
 }
 
 model Team {
-  id         String   @id @default(cuid())
-  name       String
-  code       String?
-  logo       String?
-  country    String?
-  externalId String?  @unique
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                 String       @id @default(cuid())
+  name               String       @unique
+  code               String       @unique
+  group              String?
+  flagUrl            String?
+  shortCode          String?      @db.VarChar(8)
+  apiFootballTeamId  Int?         @unique
   
-  homeMatches Match[] @relation("HomeTeam")
-  awayMatches Match[] @relation("AwayTeam")
+  homeMatches        Match[]      @relation("HomeTeam")
+  awayMatches        Match[]      @relation("AwayTeam")
+  advancingInMatches Match[]      @relation("AdvancingTeam")
+  advancePredictions Prediction[] @relation("AdvancePredictions")
 
-  @@index([externalId])
+  @@index([shortCode])
 }
 
 model Match {
-  id           String        @id @default(cuid())
-  tournamentId String
-  homeTeamId   String
-  awayTeamId   String
-  date         DateTime
-  venue        String?
-  round        String?
-  stage        String?
-  homeScore    Int?
-  awayScore    Int?
-  status       MatchStatus   @default(SCHEDULED)
-  externalId   String?       @unique
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                       String        @id @default(cuid())
+  homeTeamId               String
+  awayTeamId               String
+  homeScore                Int?
+  awayScore                Int?
+  phase                    Phase
+  group                    String?
+  matchNumber              Int?
+  venue                    String?
+  matchDate                DateTime
+  status                   MatchStatus   @default(SCHEDULED)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  externalId               String?       @unique
+  lastSyncAt               DateTime?
+  syncCount                Int           @default(0)
+  round                    String?
+  tournamentId             String?
+  predictionReportSentAt   DateTime?
+  advancingTeamId          String?
+  resultNotificationSentAt DateTime?
+  elapsed                  Int?
+  statusShort              String?       @db.VarChar(8)
+  eventsNoDataAt           DateTime?
   
-  tournament   Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  homeTeam     Team          @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam     Team          @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  leagueMatches LeagueMatch[]
-  predictions   Prediction[]
+  tournament               Tournament?   @relation(fields: [tournamentId], references: [id])
+  homeTeam                 Team          @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam                 Team          @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  advancingTeam            Team?         @relation("AdvancingTeam", fields: [advancingTeamId], references: [id])
+  leagueMatches            LeagueMatch[]
+  predictions              Prediction[]
 
   @@index([tournamentId])
-  @@index([date])
+  @@index([matchDate])
   @@index([status])
+  @@index([phase])
   @@index([externalId])
+  @@index([advancingTeamId])
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -387,6 +433,19 @@ enum Privacy {
   PRIVATE
 }
 
+enum MemberRole {
+  ADMIN
+  PLAYER
+}
+
+enum MemberStatus {
+  PENDING
+  PENDING_PAYMENT
+  ACTIVE
+  REJECTED
+  BANNED
+}
+
 enum LeagueStatus {
   SETUP
   ACTIVE
@@ -401,6 +460,29 @@ enum MatchStatus {
   FINISHED
   POSTPONED
   CANCELLED
+}
+
+enum Phase {
+  GROUP
+  ROUND_OF_32
+  ROUND_OF_16
+  QUARTER
+  SEMI
+  THIRD_PLACE
+  FINAL
+}
+
+enum ScoringType {
+  EXACT_SCORE
+  CORRECT_DIFF
+  CORRECT_WINNER
+  UNIQUE_PREDICTION
+  TEAM_GOALS
+  PHASE_BONUS_R32
+  PHASE_BONUS_R16
+  PHASE_BONUS_QF
+  PHASE_BONUS_SF
+  PHASE_BONUS_FINAL
 }
 
 enum Currency {

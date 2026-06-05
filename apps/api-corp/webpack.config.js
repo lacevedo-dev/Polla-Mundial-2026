@@ -42,6 +42,14 @@ module.exports = (options) => {
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]branding-storage\.service/,
             path.resolve(__dirname, 'src/overrides/branding-storage.service.ts'),
         ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]prisma[\\/]prisma\.service/,
+            path.resolve(__dirname, 'src/overrides/prisma.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]prisma[\\/]prisma\.module/,
+            path.resolve(__dirname, 'src/overrides/prisma.module.ts'),
+        ),
     ];
 
     return {
