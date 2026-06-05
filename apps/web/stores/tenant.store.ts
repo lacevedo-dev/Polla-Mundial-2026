@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { TenantContext } from '@polla-2026/shared';
-import { request } from '../api';
+import { TenantBranding, TenantContext } from '@polla-2026/shared';
+import { request, resolveApiAssetUrl } from '../api';
 
 interface TenantStoreState {
     activeTenant: TenantContext | null;
@@ -24,7 +24,7 @@ export const useTenantStore = create<TenantStoreState>((set, get) => ({
         set({ isLoading: true, error: null });
         try {
             const tenant = await request<TenantContext>(`/tenant/${slug}/context`);
-            set({ activeTenant: tenant, resolvedSlug: slug, isLoading: false });
+            set({ activeTenant: normalizeTenantAssetUrls(tenant), resolvedSlug: slug, isLoading: false });
         } catch (err: any) {
             set({ error: err?.message ?? 'Error al cargar el tenant', isLoading: false });
         }
@@ -56,4 +56,23 @@ export function detectTenantSlug(): string | null {
     if (isCorporateDomain(hostname)) return hostname;
     const devSlug = import.meta.env.VITE_TENANT_SLUG as string | undefined;
     return devSlug ?? null;
+}
+
+function normalizeTenantAssetUrls(tenant: TenantContext): TenantContext {
+    if (!tenant.branding) return tenant;
+
+    return {
+        ...tenant,
+        branding: normalizeBrandingAssetUrls(tenant.branding),
+    };
+}
+
+function normalizeBrandingAssetUrls(branding: TenantBranding): TenantBranding {
+    return {
+        ...branding,
+        logoUrl: resolveApiAssetUrl(branding.logoUrl) ?? null,
+        faviconUrl: resolveApiAssetUrl(branding.faviconUrl) ?? null,
+        heroImageUrl: resolveApiAssetUrl(branding.heroImageUrl) ?? null,
+        sidebarImageUrl: resolveApiAssetUrl(branding.sidebarImageUrl) ?? null,
+    };
 }

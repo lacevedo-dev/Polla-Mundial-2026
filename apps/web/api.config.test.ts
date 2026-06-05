@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEV_FALLBACK_API_URL, resolveBaseUrl } from './api';
+import { DEV_FALLBACK_API_URL, resolveApiAssetUrl, resolveBaseUrl } from './api';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const dockerfilePath = path.resolve(currentDir, 'Dockerfile');
@@ -22,6 +22,14 @@ describe('Spec scenarios: web/api-runtime-config', () => {
 
     it('Production uses configured API URL', () => {
         expect(resolveBaseUrl('production', 'https://api.example.com/')).toBe('https://api.example.com');
+    });
+
+    it('Relative uploaded assets resolve against the API URL', () => {
+        expect(resolveApiAssetUrl('/uploads/branding/logo.png')).toBe(`${DEV_FALLBACK_API_URL}/uploads/branding/logo.png`);
+    });
+
+    it('Absolute asset URLs are preserved', () => {
+        expect(resolveApiAssetUrl('https://cdn.example.com/logo.png')).toBe('https://cdn.example.com/logo.png');
     });
 
     it('Missing production variable triggers explicit error', () => {

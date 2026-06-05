@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { TenantContext } from '@polla-2026/shared';
 import { useTenantStore, detectTenantSlug } from '../stores/tenant.store';
+import { resolveApiAssetUrl } from '../api';
 
 interface TenantThemeContextValue {
     tenant: TenantContext | null;
@@ -63,7 +64,7 @@ export function TenantThemeProvider({ children }: TenantThemeProviderProps) {
                 link.rel = 'icon';
                 document.head.appendChild(link);
             }
-            link.href = branding.faviconUrl;
+            link.href = resolveApiAssetUrl(branding.faviconUrl) ?? branding.faviconUrl;
         }
 
         if (branding.customCss) {
