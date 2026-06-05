@@ -9,13 +9,14 @@ async function bootstrap(): Promise<void> {
     const port = Number(process.env.PORT ?? 3001);
     const nodeEnv = process.env.NODE_ENV ?? 'development';
     const databaseUrlConfigured = Boolean(
-        process.env.CORP_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim(),
+        process.env.CORP_DATABASE_URL?.trim()
+        || (nodeEnv !== 'production' && process.env.DATABASE_URL?.trim()),
     );
 
     if (!databaseUrlConfigured) throw new Error('CORP_DATABASE_URL es requerido');
     if (!process.env.JWT_SECRET?.trim()) throw new Error('JWT_SECRET es requerido');
     if (!process.env.CORP_DATABASE_URL?.trim() && process.env.DATABASE_URL?.trim()) {
-        console.warn('[corp-api] CORP_DATABASE_URL no está configurado; usando DATABASE_URL como fallback.');
+        console.warn('[corp-api] CORP_DATABASE_URL no está configurado; usando DATABASE_URL como fallback solo fuera de producción.');
     }
 
     console.info(`[corp-api] Iniciando (env=${nodeEnv}, port=${port}, corpDatabaseUrlConfigured=${databaseUrlConfigured ? 'yes' : 'no'})`);

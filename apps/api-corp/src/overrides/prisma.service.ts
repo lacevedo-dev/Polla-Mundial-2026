@@ -78,12 +78,28 @@ function hashSensitiveValue(value: unknown): string {
     return createHash('sha256').update(String(value ?? '')).digest('hex');
 }
 
+function resolveCorporateDatabaseUrl(): string | undefined {
+    const corporateUrl = process.env.CORP_DATABASE_URL?.trim();
+    if (corporateUrl) {
+        return corporateUrl;
+    }
+
+    const fallbackUrl = process.env.DATABASE_URL?.trim();
+    if (fallbackUrl && process.env.NODE_ENV !== 'production') {
+        console.warn('[PrismaService] CORP_DATABASE_URL no está configurado; usando DATABASE_URL como fallback solo en entorno no productivo.');
+        return fallbackUrl;
+    }
+
+    return undefined;
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
     private readonly poolConfig: MariaDbPoolConfig;
+    private readonly databaseUrlSource: 'CORP_DATABASE_URL' | 'DATABASE_URL';
 
     constructor() {
-        const rawUrl = process.env.CORP_DATABASE_URL || process.env.DATABASE_URL;
+        const rawUrl = resolveCorporateDatabaseUrl();
         if (!rawUrl?.trim()) {
             throw new Error('CORP_DATABASE_URL is required for Prisma corporate runtime initialization.');
         }
@@ -91,6 +107,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         const adapter = new PrismaMariaDb(poolConfig);
         super({ adapter: adapter as any });
         this.poolConfig = poolConfig;
+        this.databaseUrlSource = process.env.CORP_DATABASE_URL?.trim() ? 'CORP_DATABASE_URL' : 'DATABASE_URL';
     }
 
     async onModuleInit() {
@@ -121,7 +138,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         const { host, port, user, password, database, connectionLimit, minimumIdle, acquireTimeout } = this.poolConfig;
         console.log(
             `[PrismaService] Config BD corporativa ` +
-            `(host=${host}, port=${port}, user=${user}, database=${database}, ` +
+            `(source=${this.databaseUrlSource}, host=${host}, port=${port}, user=${user}, database=${database}, ` +
             `passwordLength=${String(password ?? '').length}, passwordSha256=${hashSensitiveValue(password)}, ` +
             `connectionLimit=${connectionLimit ?? 'default'}, minimumIdle=${minimumIdle ?? 'default'}, acquireTimeout=${acquireTimeout ?? 'default'})`,
         );
