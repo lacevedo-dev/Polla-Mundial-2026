@@ -1,7 +1,7 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Image, Loader2, Palette, Save, ShieldAlert } from 'lucide-react';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { Image, Loader2, Palette, Save, ShieldAlert, Upload, X } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { request } from '../api';
+import { request, uploadFile, BASE_URL } from '../api';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenantStore } from '../stores/tenant.store';
 
@@ -27,6 +27,92 @@ function optionalTrimmed(value: string) {
     return trimmed.length > 0 ? trimmed : null;
 }
 
+type UploadingState = Record<'logoUrl' | 'faviconUrl' | 'heroImageUrl', boolean>;
+
+function resolveImageUrl(url: string): string {
+    if (!url) return '';
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    return `${BASE_URL}${url}`;
+}
+
+type ImageUploadFieldProps = {
+    label: string;
+    accept: string;
+    value: string;
+    onChange: (v: string) => void;
+    onUpload: (file: File) => void;
+    isUploading: boolean;
+    uploadError?: string;
+    placeholder?: string;
+    hint?: string;
+    previewClass?: string;
+    wide?: boolean;
+};
+
+function ImageUploadField({ label, accept, value, onChange, onUpload, isUploading, uploadError, placeholder, hint, previewClass, wide }: ImageUploadFieldProps) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const resolvedUrl = resolveImageUrl(value);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) onUpload(file);
+        e.target.value = '';
+    };
+
+    return (
+        <div className="space-y-1.5">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Image size={13} />
+                {label}
+            </span>
+            <div className={`flex ${wide ? 'flex-col' : 'items-start'} gap-3`}>
+                {resolvedUrl && (
+                    <div className="relative shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1.5 flex items-center justify-center overflow-hidden" style={{ minWidth: wide ? undefined : '56px', minHeight: '48px' }}>
+                        <img
+                            src={resolvedUrl}
+                            alt={label}
+                            className={previewClass ?? 'h-10 object-contain'}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                    </div>
+                )}
+                <div className="flex-1 space-y-1.5 min-w-0 w-full">
+                    <div className="flex gap-2">
+                        <input
+                            value={value}
+                            onChange={(e) => onChange(e.target.value)}
+                            className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:border-amber-400 truncate"
+                            placeholder={placeholder}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => inputRef.current?.click()}
+                            disabled={isUploading}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-black text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition"
+                        >
+                            {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                            {isUploading ? 'Subiendo...' : 'Subir'}
+                        </button>
+                        {value && (
+                            <button
+                                type="button"
+                                onClick={() => onChange('')}
+                                className="inline-flex shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-400 hover:text-rose-500 hover:border-rose-200 transition"
+                                title="Eliminar imagen"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+                    {hint && !uploadError && <p className="text-xs text-slate-400">{hint}</p>}
+                    {uploadError && <p className="text-xs text-rose-600 font-semibold">{uploadError}</p>}
+                </div>
+            </div>
+            <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={handleFileChange} />
+        </div>
+    );
+}
+
 export default function AdminCorpSettings() {
     const user = useAuthStore((s) => s.user);
     const tenant = useTenantStore((s) => s.tenant);
@@ -34,7 +120,24 @@ export default function AdminCorpSettings() {
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [uploading, setUploading] = useState<UploadingState>({ logoUrl: false, faviconUrl: false, heroImageUrl: false });
+    const [uploadError, setUploadError] = useState<Partial<Record<keyof UploadingState, string>>>({});
     const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
+
+    const uploadImage = async (field: keyof UploadingState, file: File) => {
+        setUploading((s) => ({ ...s, [field]: true }));
+        setUploadError((s) => ({ ...s, [field]: undefined }));
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const { url } = await uploadFile<{ url: string }>('/corp/branding/upload-image', formData);
+            setDraft((current) => ({ ...current, [field]: url }));
+        } catch (err: any) {
+            setUploadError((s) => ({ ...s, [field]: err?.message ?? 'Error al subir la imagen.' }));
+        } finally {
+            setUploading((s) => ({ ...s, [field]: false }));
+        }
+    };
 
     const [draft, setDraft] = useState<BrandingDraft>({
         companyDisplayName: '',
@@ -131,21 +234,47 @@ export default function AdminCorpSettings() {
                             <span className="text-xs font-black uppercase tracking-widest text-slate-400">Fuente</span>
                             <input value={draft.fontFamily} onChange={(e) => setField('fontFamily', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:border-amber-400" placeholder="Inter" />
                         </label>
-                        <label className="space-y-1.5">
-                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Logo URL</span>
-                            <input value={draft.logoUrl} onChange={(e) => setField('logoUrl', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:border-amber-400" placeholder="https://.../logo.png" />
-                        </label>
-                        <label className="space-y-1.5">
-                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Favicon URL</span>
-                            <input value={draft.faviconUrl} onChange={(e) => setField('faviconUrl', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:border-amber-400" placeholder="https://.../favicon.ico" />
-                        </label>
                     </div>
 
-                    <label className="block space-y-1.5">
-                        <span className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2"><Image size={14} /> Fondo del login</span>
-                        <input value={draft.heroImageUrl} onChange={(e) => setField('heroImageUrl', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:border-amber-400" placeholder={COOPCANAPRO_LOGIN_BACKGROUND} />
-                        <span className="text-xs text-slate-400">Para Coopcanapro se prellenó la imagen solicitada; puedes reemplazarla por otra URL pública cuando sea necesario.</span>
-                    </label>
+                    <ImageUploadField
+                        label="Logo"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        value={draft.logoUrl}
+                        onChange={(v) => setField('logoUrl', v)}
+                        onUpload={(file) => uploadImage('logoUrl', file)}
+                        isUploading={uploading.logoUrl}
+                        uploadError={uploadError.logoUrl}
+                        placeholder="https://.../logo.png"
+                        hint="JPG, PNG, WebP o SVG — máx. 5 MB"
+                        previewClass="h-10 object-contain"
+                    />
+
+                    <ImageUploadField
+                        label="Favicon"
+                        accept="image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml"
+                        value={draft.faviconUrl}
+                        onChange={(v) => setField('faviconUrl', v)}
+                        onUpload={(file) => uploadImage('faviconUrl', file)}
+                        isUploading={uploading.faviconUrl}
+                        uploadError={uploadError.faviconUrl}
+                        placeholder="https://.../favicon.ico"
+                        hint="ICO, PNG o SVG — máx. 5 MB"
+                        previewClass="h-8 w-8 object-contain"
+                    />
+
+                    <ImageUploadField
+                        label="Fondo del login"
+                        accept="image/jpeg,image/png,image/webp"
+                        value={draft.heroImageUrl}
+                        onChange={(v) => setField('heroImageUrl', v)}
+                        onUpload={(file) => uploadImage('heroImageUrl', file)}
+                        isUploading={uploading.heroImageUrl}
+                        uploadError={uploadError.heroImageUrl}
+                        placeholder={COOPCANAPRO_LOGIN_BACKGROUND}
+                        hint="JPG, PNG o WebP — máx. 5 MB. También puedes pegar una URL pública."
+                        previewClass="h-16 w-full object-cover rounded-lg"
+                        wide
+                    />
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {([
@@ -171,9 +300,9 @@ export default function AdminCorpSettings() {
 
                 <aside className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 h-fit">
                     <h2 className="font-black text-slate-900 mb-3">Vista previa del login</h2>
-                    <div className="rounded-2xl overflow-hidden min-h-[420px] bg-slate-950 p-5 flex items-center justify-center" style={draft.heroImageUrl.trim() ? { backgroundImage: `linear-gradient(rgba(2,6,23,0.50), rgba(2,6,23,0.75)), url(${draft.heroImageUrl.trim()})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                    <div className="rounded-2xl overflow-hidden min-h-[420px] bg-slate-950 p-5 flex items-center justify-center" style={draft.heroImageUrl.trim() ? { backgroundImage: `linear-gradient(rgba(2,6,23,0.50), rgba(2,6,23,0.75)), url(${resolveImageUrl(draft.heroImageUrl.trim())})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                         <div className="w-full max-w-[260px] text-center">
-                            {draft.logoUrl.trim() ? <img src={draft.logoUrl.trim()} alt="Logo" className="h-12 mx-auto object-contain mb-3" /> : <div className="w-12 h-12 mx-auto mb-3 rounded-2xl" style={{ backgroundColor: draft.primaryColor }} />}
+                            {draft.logoUrl.trim() ? <img src={resolveImageUrl(draft.logoUrl.trim())} alt="Logo" className="h-12 mx-auto object-contain mb-3" /> : <div className="w-12 h-12 mx-auto mb-3 rounded-2xl" style={{ backgroundColor: draft.primaryColor }} />}
                             <p className="font-black text-white text-lg">{draft.companyDisplayName || tenant?.name || 'Tu empresa'}</p>
                             <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/95 p-4 text-left space-y-3">
                                 <div className="h-10 rounded-xl bg-slate-800" />

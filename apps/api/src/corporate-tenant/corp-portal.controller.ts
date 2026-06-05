@@ -1,4 +1,6 @@
-﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query } from '@nestjs/common';
+﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
@@ -7,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantProvisioningService } from './tenant-provisioning.service';
 import { TenantService } from './tenant.service';
 import { UpdateTenantBrandingDto } from './dto/tenant.dto';
+import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus } from '@prisma/client';
@@ -75,6 +78,7 @@ export class CorpPortalController {
         private readonly prisma: PrismaService,
         private readonly provisioning: TenantProvisioningService,
         private readonly tenantService: TenantService,
+        private readonly brandingStorage: BrandingStorageService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -82,6 +86,32 @@ export class CorpPortalController {
     async updateBranding(@Req() req: any, @Body() dto: UpdateTenantBrandingDto) {
         const tenantId: string = req.tenantId;
         return this.tenantService.updateBranding(tenantId, dto);
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Post('branding/upload-image')
+    @UseInterceptors(
+        FileInterceptor('file', {
+            storage: memoryStorage(),
+            fileFilter: (_req, file, cb) => {
+                const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'];
+                if (!allowed.includes(file.mimetype)) {
+                    return cb(new BadRequestException('Solo se permiten imágenes (JPG, PNG, WebP, GIF, SVG, ICO).'), false);
+                }
+                return cb(null, true);
+            },
+            limits: { fileSize: 5 * 1024 * 1024 },
+        }),
+    )
+    async uploadBrandingImage(
+        @Req() _req: any,
+        @UploadedFile() file?: BrandingUploadFile,
+    ) {
+        if (!file) {
+            throw new BadRequestException('No se recibió ningún archivo.');
+        }
+        const url = await this.brandingStorage.save(file);
+        return { url };
     }
 
     @Get('dashboard')

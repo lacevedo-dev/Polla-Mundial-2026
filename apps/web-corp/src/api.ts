@@ -54,6 +54,25 @@ function getHeaders(extra?: HeadersInit): Headers {
     return headers;
 }
 
+export async function uploadFile<T = unknown>(path: string, formData: FormData): Promise<T> {
+    const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+    const headers = new Headers();
+    const token = localStorage.getItem('corp_token');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const slug = resolveTenantSlug();
+    if (slug) headers.set('X-Tenant-Slug', slug);
+    const res = await fetch(url, { method: 'POST', body: formData, headers });
+    if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+            const body = await res.json();
+            msg = body?.message ?? body?.error ?? msg;
+        } catch { /* ignore */ }
+        throw new ApiError(msg, { status: res.status });
+    }
+    return res.json() as Promise<T>;
+}
+
 export async function request<T = unknown>(
     path: string,
     init: RequestInit = {},
