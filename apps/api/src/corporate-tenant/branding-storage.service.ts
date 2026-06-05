@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export interface BrandingUploadFile {
+export class BrandingUploadFile {
     originalname: string;
     mimetype: string;
     buffer: Buffer;
