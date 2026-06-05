@@ -143,6 +143,226 @@ export class DataSyncService implements OnModuleInit {
         }
     }
 
+    /** Sincroniza datos corporativos base para operar con BD propia. */
+    async syncCorporateBootstrap(): Promise<{ tenants: number; users: number; tenantMembers: number; leagues: number; leagueMembers: number; leagueTournaments: number; leagueMatches: number }> {
+        if (!this.internalApiKey) {
+            return { tenants: 0, users: 0, tenantMembers: 0, leagues: 0, leagueMembers: 0, leagueTournaments: 0, leagueMatches: 0 };
+        }
+
+        try {
+            this.logger.log('Sincronizando bootstrap corporativo completo...');
+
+            const response = await axios.get(`${this.mainApiUrl}/internal/corp-bootstrap`, {
+                headers: { 'x-internal-api-key': this.internalApiKey },
+            });
+
+            const tenants = Array.isArray(response.data) ? response.data : [];
+            const counts = {
+                tenants: 0,
+                users: 0,
+                tenantMembers: 0,
+                leagues: 0,
+                leagueMembers: 0,
+                leagueTournaments: 0,
+                leagueMatches: 0,
+            };
+
+            for (const tenant of tenants) {
+                if (!tenant?.id) continue;
+
+                await this.upsertCorporateTenant(tenant);
+                counts.tenants += 1;
+
+                if (tenant.branding?.tenantId) {
+                    await this.prisma.tenantBranding.upsert({
+                        where: { tenantId: tenant.branding.tenantId },
+                        create: {
+                            id: tenant.branding.id,
+                            tenantId: tenant.branding.tenantId,
+                            logoUrl: tenant.branding.logoUrl ?? null,
+                            faviconUrl: tenant.branding.faviconUrl ?? null,
+                            primaryColor: tenant.branding.primaryColor ?? '#16a34a',
+                            secondaryColor: tenant.branding.secondaryColor ?? '#15803d',
+                            accentColor: tenant.branding.accentColor ?? '#bbf7d0',
+                            fontFamily: tenant.branding.fontFamily ?? 'Inter',
+                            heroImageUrl: tenant.branding.heroImageUrl ?? null,
+                            companyDisplayName: tenant.branding.companyDisplayName ?? null,
+                            customCss: tenant.branding.customCss ?? null,
+                            emailHeaderHtml: tenant.branding.emailHeaderHtml ?? null,
+                            emailFooterHtml: tenant.branding.emailFooterHtml ?? null,
+                            emailInviteTemplate: tenant.branding.emailInviteTemplate ?? null,
+                        } as any,
+                        update: {
+                            logoUrl: tenant.branding.logoUrl ?? null,
+                            faviconUrl: tenant.branding.faviconUrl ?? null,
+                            primaryColor: tenant.branding.primaryColor ?? '#16a34a',
+                            secondaryColor: tenant.branding.secondaryColor ?? '#15803d',
+                            accentColor: tenant.branding.accentColor ?? '#bbf7d0',
+                            fontFamily: tenant.branding.fontFamily ?? 'Inter',
+                            heroImageUrl: tenant.branding.heroImageUrl ?? null,
+                            companyDisplayName: tenant.branding.companyDisplayName ?? null,
+                            customCss: tenant.branding.customCss ?? null,
+                            emailHeaderHtml: tenant.branding.emailHeaderHtml ?? null,
+                            emailFooterHtml: tenant.branding.emailFooterHtml ?? null,
+                            emailInviteTemplate: tenant.branding.emailInviteTemplate ?? null,
+                        } as any,
+                    });
+                }
+
+                if (tenant.config?.tenantId) {
+                    await this.prisma.tenantConfig.upsert({
+                        where: { tenantId: tenant.config.tenantId },
+                        create: {
+                            id: tenant.config.id,
+                            tenantId: tenant.config.tenantId,
+                            enablePayments: Boolean(tenant.config.enablePayments),
+                            enableAiInsights: Boolean(tenant.config.enableAiInsights),
+                            enablePublicLeagues: Boolean(tenant.config.enablePublicLeagues),
+                            enableUserSelfRegister: Boolean(tenant.config.enableUserSelfRegister),
+                            requireInvitation: tenant.config.requireInvitation !== false,
+                            enableEmailNotif: tenant.config.enableEmailNotif !== false,
+                            enablePushNotif: tenant.config.enablePushNotif !== false,
+                            enableStageFees: tenant.config.enableStageFees !== false,
+                        } as any,
+                        update: {
+                            enablePayments: Boolean(tenant.config.enablePayments),
+                            enableAiInsights: Boolean(tenant.config.enableAiInsights),
+                            enablePublicLeagues: Boolean(tenant.config.enablePublicLeagues),
+                            enableUserSelfRegister: Boolean(tenant.config.enableUserSelfRegister),
+                            requireInvitation: tenant.config.requireInvitation !== false,
+                            enableEmailNotif: tenant.config.enableEmailNotif !== false,
+                            enablePushNotif: tenant.config.enablePushNotif !== false,
+                            enableStageFees: tenant.config.enableStageFees !== false,
+                        } as any,
+                    });
+                }
+
+                for (const member of tenant.members ?? []) {
+                    if (!member?.id || !member?.user?.id) continue;
+                    await this.upsertCorporateUser(member.user);
+                    counts.users += 1;
+                    await this.prisma.tenantMember.upsert({
+                        where: { id: member.id },
+                        create: {
+                            id: member.id,
+                            tenantId: member.tenantId,
+                            userId: member.userId,
+                            role: member.role,
+                            status: member.status,
+                            invitedAt: member.invitedAt ? new Date(member.invitedAt) : null,
+                            joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
+                        } as any,
+                        update: {
+                            role: member.role,
+                            status: member.status,
+                            invitedAt: member.invitedAt ? new Date(member.invitedAt) : null,
+                            joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
+                        } as any,
+                    });
+                    counts.tenantMembers += 1;
+                }
+
+                for (const league of tenant.leagues ?? []) {
+                    if (!league?.id) continue;
+                    const primaryTournamentId = league.primaryTournamentId && await this.existsById('tournament', league.primaryTournamentId)
+                        ? league.primaryTournamentId
+                        : null;
+                    await this.prisma.league.upsert({
+                        where: { id: league.id },
+                        create: {
+                            id: league.id,
+                            name: league.name,
+                            description: league.description ?? null,
+                            code: league.code,
+                            privacy: league.privacy,
+                            logo: league.logo ?? null,
+                            maxParticipants: league.maxParticipants ?? 10,
+                            status: league.status,
+                            closePredictionMinutes: league.closePredictionMinutes ?? 15,
+                            primaryTournamentId,
+                            tenantId: league.tenantId ?? tenant.id,
+                        } as any,
+                        update: {
+                            name: league.name,
+                            description: league.description ?? null,
+                            code: league.code,
+                            privacy: league.privacy,
+                            logo: league.logo ?? null,
+                            maxParticipants: league.maxParticipants ?? 10,
+                            status: league.status,
+                            closePredictionMinutes: league.closePredictionMinutes ?? 15,
+                            primaryTournamentId,
+                            tenantId: league.tenantId ?? tenant.id,
+                        } as any,
+                    });
+                    counts.leagues += 1;
+
+                    for (const leagueMember of league.members ?? []) {
+                        if (!leagueMember?.id || !leagueMember?.user?.id) continue;
+                        await this.upsertCorporateUser(leagueMember.user);
+                        await this.prisma.leagueMember.upsert({
+                            where: { id: leagueMember.id },
+                            create: {
+                                id: leagueMember.id,
+                                leagueId: leagueMember.leagueId,
+                                userId: leagueMember.userId,
+                                role: leagueMember.role,
+                                joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
+                            } as any,
+                            update: {
+                                role: leagueMember.role,
+                                joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
+                            } as any,
+                        });
+                        counts.leagueMembers += 1;
+                    }
+
+                    for (const leagueTournament of league.leagueTournaments ?? []) {
+                        if (!leagueTournament?.id || !leagueTournament?.leagueId || !leagueTournament?.tournamentId) continue;
+                        if (!await this.existsById('tournament', leagueTournament.tournamentId)) continue;
+                        await this.prisma.leagueTournament.upsert({
+                            where: { id: leagueTournament.id },
+                            create: {
+                                id: leagueTournament.id,
+                                leagueId: leagueTournament.leagueId,
+                                tournamentId: leagueTournament.tournamentId,
+                            } as any,
+                            update: {
+                                leagueId: leagueTournament.leagueId,
+                                tournamentId: leagueTournament.tournamentId,
+                            } as any,
+                        });
+                        counts.leagueTournaments += 1;
+                    }
+
+                    for (const leagueMatch of league.leagueMatches ?? []) {
+                        if (!leagueMatch?.id || !leagueMatch?.leagueId || !leagueMatch?.matchId) continue;
+                        if (!await this.existsById('match', leagueMatch.matchId)) continue;
+                        await this.prisma.leagueMatch.upsert({
+                            where: { id: leagueMatch.id },
+                            create: {
+                                id: leagueMatch.id,
+                                leagueId: leagueMatch.leagueId,
+                                matchId: leagueMatch.matchId,
+                            } as any,
+                            update: {
+                                leagueId: leagueMatch.leagueId,
+                                matchId: leagueMatch.matchId,
+                            } as any,
+                        });
+                        counts.leagueMatches += 1;
+                    }
+                }
+            }
+
+            this.logger.log(`Bootstrap corporativo sincronizado: ${JSON.stringify(counts)}`);
+            return counts;
+        } catch (error) {
+            this.logger.error('Error sincronizando bootstrap corporativo:', this.formatError(error));
+            return { tenants: 0, users: 0, tenantMembers: 0, leagues: 0, leagueMembers: 0, leagueTournaments: 0, leagueMatches: 0 };
+        }
+    }
+
     onModuleInit(): void {
         const syncOnStartup = process.env.CORP_SYNC_ON_STARTUP !== 'false';
         this.logger.log(
@@ -319,20 +539,98 @@ export class DataSyncService implements OnModuleInit {
         }
     }
 
-    /** Sincronizacion manual completa. */
-    async syncAll(): Promise<{ ok: boolean; adminUsers?: number; tournaments?: number; teams?: number; matches?: { synced: number; skipped: number }; skipped?: boolean; reason?: string }> {
+    /** Sincronizacion inicial/manual completa. La data corporativa solo se sincroniza aqui, no por cron. */
+    async syncAll(): Promise<{ ok: boolean; bootstrap?: Awaited<ReturnType<DataSyncService['syncCorporateBootstrap']>>; tournaments?: number; teams?: number; matches?: { synced: number; skipped: number }; skipped?: boolean; reason?: string }> {
         if (!this.internalApiKey) {
             this.logger.warn('Sincronizacion omitida: INTERNAL_API_KEY no configurado');
             return { ok: false, skipped: true, reason: 'INTERNAL_API_KEY no configurado' };
         }
 
         this.logger.log('Iniciando sincronizacion completa...');
-        const adminUsers = await this.syncAdminUsers();
         const tournaments = await this.syncTournaments();
         const teams = await this.syncTeams();
         const matches = await this.syncMatches();
+        const bootstrap = await this.syncCorporateBootstrap();
         this.logger.log('Sincronizacion completa finalizada');
-        return { ok: true, adminUsers, tournaments, teams, matches };
+        return { ok: true, bootstrap, tournaments, teams, matches };
+    }
+
+    private async upsertCorporateTenant(tenant: any): Promise<void> {
+        await this.prisma.corporateTenant.upsert({
+            where: { id: tenant.id },
+            create: {
+                id: tenant.id,
+                slug: tenant.slug,
+                name: tenant.name,
+                legalName: tenant.legalName ?? null,
+                contactEmail: tenant.contactEmail ?? '',
+                status: tenant.status,
+                planTier: tenant.planTier,
+                allowedDomains: stringifyNullable(tenant.allowedDomains),
+                customDomain: tenant.customDomain ?? null,
+                ssoEnabled: Boolean(tenant.ssoEnabled),
+                ssoProvider: tenant.ssoProvider ?? null,
+                ssoConfig: stringifyNullable(tenant.ssoConfig),
+                maxUsers: tenant.maxUsers ?? 50,
+                maxLeagues: tenant.maxLeagues ?? 3,
+            } as any,
+            update: {
+                slug: tenant.slug,
+                name: tenant.name,
+                legalName: tenant.legalName ?? null,
+                contactEmail: tenant.contactEmail ?? '',
+                status: tenant.status,
+                planTier: tenant.planTier,
+                allowedDomains: stringifyNullable(tenant.allowedDomains),
+                customDomain: tenant.customDomain ?? null,
+                ssoEnabled: Boolean(tenant.ssoEnabled),
+                ssoProvider: tenant.ssoProvider ?? null,
+                ssoConfig: stringifyNullable(tenant.ssoConfig),
+                maxUsers: tenant.maxUsers ?? 50,
+                maxLeagues: tenant.maxLeagues ?? 3,
+            } as any,
+        });
+    }
+
+    private async upsertCorporateUser(user: any): Promise<void> {
+        await this.prisma.user.upsert({
+            where: { id: user.id },
+            create: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                username: user.username,
+                documentNumber: user.documentNumber ?? null,
+                phone: user.phone ?? null,
+                countryCode: user.countryCode ?? '+57',
+                avatar: user.avatar ?? null,
+                birthDate: user.birthDate ? new Date(user.birthDate) : null,
+                passwordHash: user.passwordHash,
+                mustChangePassword: Boolean(user.mustChangePassword),
+                emailVerified: Boolean(user.emailVerified),
+                status: user.status,
+            } as any,
+            update: {
+                name: user.name,
+                email: user.email,
+                username: user.username,
+                documentNumber: user.documentNumber ?? null,
+                phone: user.phone ?? null,
+                countryCode: user.countryCode ?? '+57',
+                avatar: user.avatar ?? null,
+                birthDate: user.birthDate ? new Date(user.birthDate) : null,
+                passwordHash: user.passwordHash,
+                mustChangePassword: Boolean(user.mustChangePassword),
+                emailVerified: Boolean(user.emailVerified),
+                status: user.status,
+            } as any,
+        });
+    }
+
+    private async existsById(modelName: 'tournament' | 'match', id: string): Promise<boolean> {
+        const model = (this.prisma as any)[modelName];
+        const record = await model.findUnique({ where: { id }, select: { id: true } });
+        return Boolean(record);
     }
 
     private formatError(error: unknown): string {

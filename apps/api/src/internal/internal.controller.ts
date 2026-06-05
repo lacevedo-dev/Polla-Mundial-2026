@@ -72,6 +72,51 @@ export class InternalController {
     // ── Sincronización de usuarios ────────────────────────────────────────────
 
 
+    @Get('corp-bootstrap')
+    async getCorpBootstrap(@Headers('x-internal-api-key') apiKey: string) {
+        this.assertApiKey(apiKey);
+
+        const userSelect = {
+            id: true,
+            name: true,
+            email: true,
+            username: true,
+            documentNumber: true,
+            phone: true,
+            countryCode: true,
+            avatar: true,
+            birthDate: true,
+            passwordHash: true,
+            mustChangePassword: true,
+            emailVerified: true,
+            status: true,
+        };
+
+        return this.prisma.corporateTenant.findMany({
+            include: {
+                branding: true,
+                config: true,
+                members: {
+                    include: {
+                        user: { select: userSelect },
+                    },
+                },
+                leagues: {
+                    include: {
+                        members: {
+                            include: {
+                                user: { select: userSelect },
+                            },
+                        },
+                        leagueTournaments: true,
+                        leagueMatches: true,
+                    },
+                },
+            },
+            orderBy: { name: 'asc' },
+        } as any);
+    }
+
     @Get('corp-admin-users')
     async getCorpAdminUsers(@Headers('x-internal-api-key') apiKey: string) {
         this.assertApiKey(apiKey);
