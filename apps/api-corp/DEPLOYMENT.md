@@ -17,6 +17,9 @@ En el panel de Dokploy, configurar las siguientes variables:
 CORP_DATABASE_URL=mysql://usuario:password@host:3306/polla_corp?connectionLimit=1&minimumIdle=0
 # Activar temporalmente para diagnosticar conexión directa MariaDB en logs de arranque.
 CORP_DATABASE_STARTUP_PROBE=false
+# Fallback de emergencia: permite usar DATABASE_URL si Dokploy no inyecta CORP_DATABASE_URL.
+# Mantener false salvo diagnóstico temporal.
+CORP_ALLOW_DATABASE_URL_FALLBACK=false
 
 # API Principal (ajustar URL segÃºn deployment)
 MAIN_API_URL=https://api.pollamundial.com

@@ -85,8 +85,12 @@ function resolveCorporateDatabaseUrl(): string | undefined {
     }
 
     const fallbackUrl = process.env.DATABASE_URL?.trim();
-    if (fallbackUrl && process.env.NODE_ENV !== 'production') {
-        console.warn('[PrismaService] CORP_DATABASE_URL no está configurado; usando DATABASE_URL como fallback solo en entorno no productivo.');
+    const allowDatabaseUrlFallback = process.env.CORP_ALLOW_DATABASE_URL_FALLBACK === 'true';
+    if (fallbackUrl && (process.env.NODE_ENV !== 'production' || allowDatabaseUrlFallback)) {
+        console.warn(
+            `[PrismaService] CORP_DATABASE_URL no está configurado; usando DATABASE_URL como fallback ` +
+            `(env=${process.env.NODE_ENV ?? 'development'}, explicitFallback=${allowDatabaseUrlFallback ? 'yes' : 'no'}).`,
+        );
         return fallbackUrl;
     }
 
