@@ -4,7 +4,9 @@ import { PrismaClient } from '@prisma/client-corp';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
     constructor() {
+        const databaseUrl = process.env.CORP_DATABASE_URL || process.env.DATABASE_URL;
         super({
+            datasourceUrl: databaseUrl,
             log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
         });
     }
