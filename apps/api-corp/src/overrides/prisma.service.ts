@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client-corp';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { createHash } from 'crypto';
 import { createConnection } from 'mariadb';
 
 const MARIADB_SCHEME_PREFIX = 'mariadb://';
@@ -73,6 +74,10 @@ function parsePositiveInteger(value: string | null): number | undefined {
     return Math.trunc(parsed);
 }
 
+function hashSensitiveValue(value: unknown): string {
+    return createHash('sha256').update(String(value ?? '')).digest('hex');
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
     private readonly poolConfig: MariaDbPoolConfig;
@@ -90,6 +95,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     async onModuleInit() {
         console.log('[PrismaService] Conectando a BD corporativa...');
+        this.logSafeConnectionFingerprint();
         if (process.env.CORP_DATABASE_STARTUP_PROBE === 'true') {
             await this.probeDirectMariaDbConnection();
         }
@@ -109,6 +115,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
                 error: error instanceof Error ? error.message : 'Unknown error',
             };
         }
+    }
+
+    private logSafeConnectionFingerprint(): void {
+        const { host, port, user, password, database, connectionLimit, minimumIdle, acquireTimeout } = this.poolConfig;
+        console.log(
+            `[PrismaService] Config BD corporativa ` +
+            `(host=${host}, port=${port}, user=${user}, database=${database}, ` +
+            `passwordLength=${String(password ?? '').length}, passwordSha256=${hashSensitiveValue(password)}, ` +
+            `connectionLimit=${connectionLimit ?? 'default'}, minimumIdle=${minimumIdle ?? 'default'}, acquireTimeout=${acquireTimeout ?? 'default'})`,
+        );
     }
 
     private async probeDirectMariaDbConnection(): Promise<void> {
