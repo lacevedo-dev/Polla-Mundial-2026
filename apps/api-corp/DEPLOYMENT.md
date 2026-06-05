@@ -35,6 +35,8 @@ NODE_ENV=production
 # Scheduler de emails corporativo
 # Mantener en false salvo que api-corp deba despachar emails directamente.
 CORP_EMAIL_DISPATCHER_ENABLED=false
+# Ejecuta sincronizacion completa unos segundos despues del arranque.
+CORP_SYNC_ON_STARTUP=true
 ```
 
 ### üîë Generar INTERNAL_API_KEY
@@ -161,7 +163,9 @@ docker logs <container-name> -f --tail 100
 docker logs <container-name> 2>&1 | grep "Sincronizando"
 ```
 
-No deberÌan aparecer errores recurrentes de `EmailDispatcherScheduler` si `CORP_EMAIL_DISPATCHER_ENABLED=false`.
+No deberÌan aparecer errores recurrentes de `EmailDispatcherScheduler` si `CORP_EMAIL_DISPATCHER_ENABLED=false
+# Ejecuta sincronizacion completa unos segundos despues del arranque.
+CORP_SYNC_ON_STARTUP=true`.
 
 ## üîê Paso 6: Configurar INTERNAL_API_KEY en API Principal
 
