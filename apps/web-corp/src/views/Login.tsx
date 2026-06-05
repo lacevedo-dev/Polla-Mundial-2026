@@ -48,7 +48,16 @@ export default function Login() {
                 {/* Logo / Brand */}
                 <div className="text-center mb-8">
                     {tenant?.branding?.logoUrl ? (
-                        <img src={tenant.branding.logoUrl} alt={orgName} className="h-14 mx-auto object-contain mb-3" />
+                        <div
+                            className="mx-auto mb-3 flex h-28 w-full max-w-xs items-center justify-center rounded-2xl border border-white/10 bg-[#0057A8]/95 px-8 py-5 shadow-2xl shadow-black/30 backdrop-blur-sm"
+                            style={{ backgroundColor: tenant.branding.secondaryColor || '#0057A8' }}
+                        >
+                            <img
+                                src={tenant.branding.logoUrl}
+                                alt={orgName}
+                                className="max-h-20 w-full object-contain"
+                            />
+                        </div>
                     ) : (
                         <div
                             className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
