@@ -38,8 +38,9 @@ RUN mkdir -p /app/apps/api/node_modules
 RUN npx prisma generate
 
 # Generar cliente Prisma corporativo (BD independiente)
+# DATABASE_URL es un placeholder solo para satisfacer Prisma 7.x en build time
 WORKDIR /app/apps/api-corp
-RUN npx prisma generate --schema=./prisma/schema.prisma
+RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate --schema=./prisma/schema.prisma
 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
