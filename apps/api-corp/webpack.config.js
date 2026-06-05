@@ -38,6 +38,10 @@ module.exports = (options) => {
             /apps[\\/]api[\\/]src[\\/]email[\\/]email-dispatcher\.scheduler/,
             path.resolve(__dirname, 'src/overrides/email-dispatcher.scheduler.ts'),
         ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]branding-storage\.service/,
+            path.resolve(__dirname, 'src/overrides/branding-storage.service.ts'),
+        ),
     ];
 
     return {

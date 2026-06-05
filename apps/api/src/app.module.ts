@@ -36,7 +36,7 @@ import { InternalModule } from './internal/internal.module';
       envFilePath: '.env',
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
+      rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
     ScheduleModule.forRoot(),

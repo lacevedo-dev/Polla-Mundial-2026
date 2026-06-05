@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule } from '@nestjs/config';
+import { join } from 'path';
 
 // Módulos del API principal (vía alias @corp-api → apps/api/src)
 import { PrismaModule } from '@corp-api/prisma/prisma.module';
@@ -18,6 +20,10 @@ import { DataSyncModule } from './sync/data-sync.module';
 @Module({
     imports: [
         ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+        ServeStaticModule.forRoot({
+            rootPath: join(process.cwd(), 'uploads'),
+            serveRoot: '/uploads',
+        }),
         ScheduleModule.forRoot(),
 
         // Infraestructura compartida (mismos módulos del api principal)
