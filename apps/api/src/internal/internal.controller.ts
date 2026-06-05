@@ -71,6 +71,70 @@ export class InternalController {
 
     // ── Sincronización de usuarios ────────────────────────────────────────────
 
+
+    @Get('corp-admin-users')
+    async getCorpAdminUsers(@Headers('x-internal-api-key') apiKey: string) {
+        this.assertApiKey(apiKey);
+        const members = await this.prisma.tenantMember.findMany({
+            where: {
+                role: { in: ['OWNER', 'ADMIN', 'STAFF'] },
+                status: 'ACTIVE',
+                user: { status: 'ACTIVE' },
+            } as any,
+            include: {
+                tenant: {
+                    select: {
+                        id: true,
+                        slug: true,
+                        name: true,
+                        legalName: true,
+                        contactEmail: true,
+                        status: true,
+                        planTier: true,
+                        allowedDomains: true,
+                        customDomain: true,
+                        ssoEnabled: true,
+                        ssoProvider: true,
+                        ssoConfig: true,
+                        maxUsers: true,
+                        maxLeagues: true,
+                    },
+                },
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        username: true,
+                        documentNumber: true,
+                        phone: true,
+                        countryCode: true,
+                        avatar: true,
+                        birthDate: true,
+                        passwordHash: true,
+                        mustChangePassword: true,
+                        emailVerified: true,
+                        status: true,
+                    },
+                },
+            },
+        });
+
+        return members.map((member) => ({
+            tenant: member.tenant,
+            membership: {
+                id: member.id,
+                tenantId: member.tenantId,
+                userId: member.userId,
+                role: member.role,
+                status: member.status,
+                invitedAt: member.invitedAt,
+                joinedAt: member.joinedAt,
+            },
+            user: member.user,
+        }));
+    }
+
     @Post('users/sync')
     async syncUser(
         @Headers('x-internal-api-key') apiKey: string,
