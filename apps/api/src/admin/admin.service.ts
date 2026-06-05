@@ -58,4 +58,11 @@ export class AdminService {
         const configs = await this.prisma.systemConfig.findMany();
         return configs.map((config) => normalizeSystemConfigRecord(config)!);
     }
+
+    async getLeagueByCode(code: string) {
+        return this.prisma.league.findUnique({
+            where: { code: code.trim().toUpperCase() },
+            select: { id: true, name: true, code: true, status: true },
+        });
+    }
 }

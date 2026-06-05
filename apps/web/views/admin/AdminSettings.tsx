@@ -68,6 +68,18 @@ interface AiConfigForm {
     systemPrompt: string;
 }
 
+interface PublicRegistrationConfigForm {
+    requireParticipationCode: boolean;
+    defaultLeagueCode: string;
+    defaultLeagueName: string;
+}
+
+const DEFAULT_PUBLIC_REGISTRATION_CONFIG: PublicRegistrationConfigForm = {
+    requireParticipationCode: true,
+    defaultLeagueCode: '',
+    defaultLeagueName: 'Polla Mundialista 2026',
+};
+
 const AdminSettings: React.FC = () => {
     const { user } = useAuthStore();
     const [aiConfig, setAiConfig] = React.useState<AiConfigForm>({
@@ -83,6 +95,26 @@ const AdminSettings: React.FC = () => {
     const [showNewKey, setShowNewKey] = React.useState(false);
     const [newKeyInput, setNewKeyInput] = React.useState('');
     const [addingKey, setAddingKey] = React.useState(false);
+    const [publicRegistrationConfig, setPublicRegistrationConfig] = React.useState<PublicRegistrationConfigForm>(DEFAULT_PUBLIC_REGISTRATION_CONFIG);
+    const [publicRegistrationLoading, setPublicRegistrationLoading] = React.useState(false);
+    const [publicRegistrationSaving, setPublicRegistrationSaving] = React.useState(false);
+    const [publicRegistrationStatus, setPublicRegistrationStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
+    const [publicRegistrationError, setPublicRegistrationError] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        setPublicRegistrationLoading(true);
+        request<any>('/admin/settings/public-registration')
+            .then((data) => {
+                setPublicRegistrationConfig({
+                    requireParticipationCode: data.requireParticipationCode !== false,
+                    defaultLeagueCode: data.defaultLeagueCode ?? '',
+                    defaultLeagueName: data.defaultLeagueName || DEFAULT_PUBLIC_REGISTRATION_CONFIG.defaultLeagueName,
+                });
+            })
+            .catch(() => {})
+            .finally(() => setPublicRegistrationLoading(false));
+    }, []);
+
     React.useEffect(() => {
         setAiLoading(true);
         request<any>('/admin/settings/ai')
@@ -102,6 +134,36 @@ const AdminSettings: React.FC = () => {
 
 
     const [aiSaveError, setAiSaveError] = React.useState<string | null>(null);
+
+    const handleSavePublicRegistration = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setPublicRegistrationSaving(true);
+        setPublicRegistrationStatus('idle');
+        setPublicRegistrationError(null);
+        try {
+            const saved = await request<any>('/admin/settings/public-registration', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    requireParticipationCode: publicRegistrationConfig.requireParticipationCode,
+                    defaultLeagueCode: publicRegistrationConfig.defaultLeagueCode,
+                }),
+            });
+            setPublicRegistrationConfig({
+                requireParticipationCode: saved.requireParticipationCode !== false,
+                defaultLeagueCode: saved.defaultLeagueCode ?? '',
+                defaultLeagueName: saved.defaultLeagueName || DEFAULT_PUBLIC_REGISTRATION_CONFIG.defaultLeagueName,
+            });
+            setPublicRegistrationStatus('saved');
+            setTimeout(() => setPublicRegistrationStatus('idle'), 3000);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al guardar la configuración de registro';
+            setPublicRegistrationError(msg);
+            setPublicRegistrationStatus('error');
+            setTimeout(() => { setPublicRegistrationStatus('idle'); setPublicRegistrationError(null); }, 5000);
+        } finally {
+            setPublicRegistrationSaving(false);
+        }
+    };
 
     const handleSaveAi = async (event?: React.FormEvent<HTMLFormElement>) => {
         event?.preventDefault();
@@ -240,6 +302,95 @@ const AdminSettings: React.FC = () => {
                         <p>• Para resetear los créditos de un usuario específico, ve a <span className="font-bold">Admin → Usuarios</span> y usa el botón <span className="font-bold">⟳</span> en la fila del usuario.</p>
                     </div>
                 </div>
+            </div>
+
+            {/* Public Registration Configuration */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-100">
+                            <Trophy size={18} className="text-lime-700" />
+                        </div>
+                        <div>
+                            <p className="font-black text-slate-900">Registro público</p>
+                            <p className="text-xs text-slate-400">Define si el usuario debe digitar código de participación</p>
+                        </div>
+                    </div>
+                    {publicRegistrationStatus === 'saved' && (
+                        <span className="flex items-center gap-1.5 text-xs font-black text-lime-600">
+                            <CheckCircle2 size={14} /> Guardado
+                        </span>
+                    )}
+                    {publicRegistrationStatus === 'error' && (
+                        <span className="flex items-center gap-1.5 text-xs font-black text-rose-600">
+                            <AlertCircle size={14} /> {publicRegistrationError ?? 'Error al guardar'}
+                        </span>
+                    )}
+                </div>
+
+                {publicRegistrationLoading ? (
+                    <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
+                ) : (
+                    <form className="space-y-4" onSubmit={handleSavePublicRegistration}>
+                        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <input
+                                type="checkbox"
+                                checked={publicRegistrationConfig.requireParticipationCode}
+                                onChange={(event) => setPublicRegistrationConfig((prev) => ({
+                                    ...prev,
+                                    requireParticipationCode: event.target.checked,
+                                }))}
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+                            />
+                            <span>
+                                <span className="block text-sm font-black text-slate-900">Solicitar código de participación en registro</span>
+                                <span className="block text-xs font-medium text-slate-500">
+                                    Si está desactivado, /register mostrará la polla predeterminada y no pedirá que el usuario ingrese un código.
+                                </span>
+                            </span>
+                        </label>
+
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Código de polla predeterminada
+                                </label>
+                                <input
+                                    value={publicRegistrationConfig.defaultLeagueCode}
+                                    onChange={(event) => setPublicRegistrationConfig((prev) => ({
+                                        ...prev,
+                                        defaultLeagueCode: event.target.value.toUpperCase(),
+                                    }))}
+                                    placeholder="Ej: MUNDIAL2026"
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold uppercase focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                />
+                                <p className="mt-1 text-[9px] text-slate-400">
+                                    Obligatorio cuando no se solicita código. El backend valida que exista.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Polla seleccionada
+                                </label>
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
+                                    {publicRegistrationConfig.defaultLeagueName || '—'}
+                                </div>
+                                <p className="mt-1 text-[9px] text-slate-400">
+                                    Actualmente esperada: Polla Mundialista 2026.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={publicRegistrationSaving}
+                            className="flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-amber-300 disabled:opacity-50"
+                        >
+                            <Save size={14} />
+                            {publicRegistrationSaving ? 'Guardando...' : 'Guardar configuración de registro'}
+                        </button>
+                    </form>
+                )}
             </div>
 
             {/* AI Configuration */}

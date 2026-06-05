@@ -1,9 +1,18 @@
-import { Controller, Get, Patch, Post, Body, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AdminService } from './admin.service';
+
+const PUBLIC_REGISTRATION_CONFIG_KEY = 'public_registration';
+
+function normalizePublicRegistrationConfig(value: any) {
+    return {
+        requireParticipationCode: value?.requireParticipationCode !== false,
+        defaultLeagueCode: typeof value?.defaultLeagueCode === 'string' ? value.defaultLeagueCode.trim().toUpperCase() : '',
+    };
+}
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -57,6 +66,51 @@ export class AdminSettingsController {
         const resetAt = new Date().toISOString();
         await this.adminService.setSystemConfig('si_credits_reset', { resetAt });
         return { ok: true, resetAt };
+    }
+
+    @Get('public-registration')
+    @ApiOperation({ summary: 'Get public registration configuration' })
+    async getPublicRegistrationConfig() {
+        const record = await this.adminService.getSystemConfig(PUBLIC_REGISTRATION_CONFIG_KEY);
+        const config = normalizePublicRegistrationConfig(record?.value);
+        const defaultLeague = config.defaultLeagueCode
+            ? await this.adminService.getLeagueByCode(config.defaultLeagueCode)
+            : null;
+
+        return {
+            ...config,
+            defaultLeagueName: defaultLeague?.name ?? 'Polla Mundialista 2026',
+            defaultLeague,
+        };
+    }
+
+    @Patch('public-registration')
+    @ApiOperation({ summary: 'Save public registration configuration' })
+    async savePublicRegistrationConfig(@Body() dto: {
+        requireParticipationCode?: boolean;
+        defaultLeagueCode?: string;
+    }) {
+        const requireParticipationCode = dto.requireParticipationCode !== false;
+        const defaultLeagueCode = typeof dto.defaultLeagueCode === 'string' ? dto.defaultLeagueCode.trim().toUpperCase() : '';
+        const defaultLeague = defaultLeagueCode ? await this.adminService.getLeagueByCode(defaultLeagueCode) : null;
+
+        if (!requireParticipationCode && !defaultLeague) {
+            throw new BadRequestException('Debes configurar un código de polla válido cuando el registro no solicita código.');
+        }
+
+        const value = {
+            requireParticipationCode,
+            defaultLeagueCode: defaultLeague?.code ?? defaultLeagueCode,
+        };
+
+        await this.adminService.setSystemConfig(PUBLIC_REGISTRATION_CONFIG_KEY, value);
+
+        return {
+            ok: true,
+            ...value,
+            defaultLeagueName: defaultLeague?.name ?? 'Polla Mundialista 2026',
+            defaultLeague,
+        };
     }
 
     @Patch('ai')

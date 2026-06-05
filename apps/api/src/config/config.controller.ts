@@ -9,6 +9,15 @@ const PLAN_DEFAULTS: Record<string, { siCredits: number; price: number; features
     DIAMOND: { siCredits: 100, price: 89000, features: ['Jugadores Ilimitados', 'Whitelabel (Tu Logo)', 'Analytics Avanzados', 'Gestor de Pagos', 'Soporte VIP 24/7'], maxParticipants: -1 },
 };
 
+const PUBLIC_REGISTRATION_CONFIG_KEY = 'public_registration';
+
+function normalizePublicRegistrationConfig(value: any) {
+    return {
+        requireParticipationCode: value?.requireParticipationCode !== false,
+        defaultLeagueCode: typeof value?.defaultLeagueCode === 'string' ? value.defaultLeagueCode.trim().toUpperCase() : '',
+    };
+}
+
 @ApiTags('config')
 @Controller('config')
 export class ConfigController {
@@ -44,5 +53,34 @@ export class ConfigController {
         const creditsResetAt = (parseSystemConfigValue<any>(resetRecord?.value)?.resetAt as string | null | undefined) ?? null;
 
         return { ...result, _meta: { creditsResetAt } };
+    }
+
+    @Get('public-registration')
+    @ApiOperation({ summary: 'Get public registration configuration' })
+    async getPublicRegistrationConfig() {
+        const record = await this.prisma.systemConfig.findUnique({
+            where: { key: PUBLIC_REGISTRATION_CONFIG_KEY },
+        });
+        const config = normalizePublicRegistrationConfig(parseSystemConfigValue<any>(record?.value));
+        const defaultLeague = config.defaultLeagueCode
+            ? await this.prisma.league.findUnique({
+                where: { code: config.defaultLeagueCode },
+                select: { id: true, name: true, code: true, status: true },
+            })
+            : null;
+
+        return {
+            requireParticipationCode: config.requireParticipationCode,
+            defaultLeagueCode: defaultLeague?.code ?? config.defaultLeagueCode,
+            defaultLeagueName: defaultLeague?.name ?? 'Polla Mundialista 2026',
+            defaultLeague: defaultLeague
+                ? {
+                    id: defaultLeague.id,
+                    name: defaultLeague.name,
+                    code: defaultLeague.code,
+                    status: defaultLeague.status,
+                }
+                : null,
+        };
     }
 }

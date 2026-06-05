@@ -26,6 +26,7 @@ import {
 import { useAuthStore } from '../stores/auth.store';
 import { LegalDialog } from '../components/legal/LegalDialog';
 import type { LegalDocumentKey } from '../components/legal/legal-documents';
+import { request } from '../api';
 
 // Props eliminadas — navegación vía useNavigate
 
@@ -39,6 +40,18 @@ interface Country {
   placeholder: string;
   regex?: RegExp;
 }
+
+interface PublicRegistrationConfig {
+  requireParticipationCode: boolean;
+  defaultLeagueCode: string;
+  defaultLeagueName: string;
+}
+
+const DEFAULT_PUBLIC_REGISTRATION_CONFIG: PublicRegistrationConfig = {
+  requireParticipationCode: true,
+  defaultLeagueCode: '',
+  defaultLeagueName: 'Polla Mundialista 2026',
+};
 
 const COUNTRY_CODES: Country[] = [
   { code: '+57', name: 'Colombia', iso: 'co', length: 10, placeholder: '310 123 4567', regex: /^3\d{9}$/ },
@@ -65,6 +78,17 @@ const Register: React.FC = () => {
   const joinCode = searchParams.get('joinCode');
   const [step, setStep] = React.useState<RegisterStep>(1);
   const { register, isLoading } = useAuthStore();
+  const [publicRegistrationConfig, setPublicRegistrationConfig] = React.useState<PublicRegistrationConfig>(DEFAULT_PUBLIC_REGISTRATION_CONFIG);
+  const [publicRegistrationConfigLoaded, setPublicRegistrationConfigLoaded] = React.useState(false);
+  const defaultLeagueSelected =
+    publicRegistrationConfigLoaded &&
+    !publicRegistrationConfig.requireParticipationCode &&
+    !joinCode &&
+    Boolean(publicRegistrationConfig.defaultLeagueName);
+  const missingDefaultLeagueCode =
+    publicRegistrationConfigLoaded &&
+    !publicRegistrationConfig.requireParticipationCode &&
+    !publicRegistrationConfig.defaultLeagueCode;
   const [isNavigating, setIsNavigating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [activeLegalDocument, setActiveLegalDocument] = React.useState<LegalDocumentKey | null>(null);
@@ -108,6 +132,34 @@ const Register: React.FC = () => {
   });
 
   const [dragActive, setDragActive] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    request<PublicRegistrationConfig>('/config/public-registration')
+      .then((config) => {
+        if (cancelled) return;
+        setPublicRegistrationConfig({
+          requireParticipationCode: config.requireParticipationCode !== false,
+          defaultLeagueCode: config.defaultLeagueCode?.trim().toUpperCase() ?? '',
+          defaultLeagueName: config.defaultLeagueName?.trim() || DEFAULT_PUBLIC_REGISTRATION_CONFIG.defaultLeagueName,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPublicRegistrationConfig(DEFAULT_PUBLIC_REGISTRATION_CONFIG);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPublicRegistrationConfigLoaded(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Helper for Title Case formatting
   const formatToTitleCase = (str: string) => {
@@ -350,11 +402,14 @@ const Register: React.FC = () => {
       // Store email in sessionStorage for EmailVerification view
       sessionStorage.setItem('registrationEmail', formData.email);
 
-      // ✅ NUEVO: Verificar si hay código pendiente de invitación
-      const pendingCode = localStorage.getItem('pending_league_code');
+      // Verificar si hay código pendiente de invitación o usar la liga pública por defecto.
+      const pendingCode =
+        localStorage.getItem('pending_league_code') ||
+        (!publicRegistrationConfig.requireParticipationCode ? publicRegistrationConfig.defaultLeagueCode : '');
 
       if (pendingCode) {
         // Usuario fue invitado a una liga → ir a confirmar invitación
+        localStorage.setItem('pending_league_code', pendingCode);
         navigate(`/confirm-invitation?code=${pendingCode}`, { replace: true });
       } else {
         // Flujo normal → mostrar paso de verificación
@@ -481,6 +536,26 @@ const Register: React.FC = () => {
                 <Sparkles size={16} className="mt-0.5 shrink-0 text-lime-600" />
                 <p className="text-xs font-bold text-lime-800">
                   Te estás uniendo a una liga — termina el registro para ver tus pronósticos.
+                </p>
+              </div>
+            )}
+            {defaultLeagueSelected && (
+              <div className="mb-4 flex items-start gap-3 rounded-2xl border border-lime-300 bg-lime-50 px-4 py-3">
+                <Sparkles size={16} className="mt-0.5 shrink-0 text-lime-600" />
+                <div className="text-xs font-bold text-lime-800">
+                  <p className="uppercase tracking-[0.12em]">Polla seleccionada</p>
+                  <p className="mt-0.5 text-sm text-lime-900">{publicRegistrationConfig.defaultLeagueName}</p>
+                  <p className="mt-1 font-semibold text-lime-700">
+                    Termina el registro para confirmar tu participación. No necesitas ingresar código.
+                  </p>
+                </div>
+              </div>
+            )}
+            {missingDefaultLeagueCode && (
+              <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
+                <AlertIcon size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                <p className="text-xs font-bold text-amber-800">
+                  Falta configurar el código de la polla pública por defecto.
                 </p>
               </div>
             )}
