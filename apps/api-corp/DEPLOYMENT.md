@@ -13,7 +13,8 @@ En el panel de Dokploy, configurar las siguientes variables:
 
 ```env
 # Base de datos corporativa
-CORP_DATABASE_URL=mysql://u875522599_polla_corp:S0p0rt3**26@localhost:3306/u875522599_polla_corp
+# Usar el host real de la BD. `localhost` solo aplica si MySQL corre en el mismo host/contenedor.
+CORP_DATABASE_URL=mysql://usuario:password@host:3306/polla_corp?connectionLimit=1&minimumIdle=0
 
 # API Principal (ajustar URL seg√∫n deployment)
 MAIN_API_URL=https://api.pollamundial.com
@@ -25,6 +26,10 @@ JWT_SECRET=<MISMO_SECRET_QUE_API_PRINCIPAL>
 # Configuraci√≥n del servidor
 PORT=3001
 NODE_ENV=production
+
+# Scheduler de emails corporativo
+# Mantener en false salvo que api-corp deba despachar emails directamente.
+CORP_EMAIL_DISPATCHER_ENABLED=false
 ```
 
 ### üîë Generar INTERNAL_API_KEY
@@ -151,6 +156,8 @@ docker logs <container-name> -f --tail 100
 docker logs <container-name> 2>&1 | grep "Sincronizando"
 ```
 
+No deberÌan aparecer errores recurrentes de `EmailDispatcherScheduler` si `CORP_EMAIL_DISPATCHER_ENABLED=false`.
+
 ## üîê Paso 6: Configurar INTERNAL_API_KEY en API Principal
 
 En el API principal (puerto 3000), agregar la misma clave:
@@ -203,6 +210,19 @@ curl http://localhost:3001/health
 
 ## üêõ Troubleshooting
 
+
+#### Hostinger / MySQL remoto
+
+Para una base corporativa alojada en Hostinger, usa el host remoto de MySQL, por ejemplo `srv1849.hstgr.io`, no `localhost`, si `api-corp` corre en Dokploy/VPS externo.
+
+Ejemplo sin exponer la contraseÒa real:
+
+```env
+CORP_DATABASE_URL=mysql://u875522599_polla_corp:<PASSWORD_URL_ENCODED>@srv1849.hstgr.io:3306/u875522599_polla_corp?connectionLimit=1&minimumIdle=1&acquireTimeout=30000
+```
+
+Si el log dice `Access denied for user 'u875522599_polla_corp'@'187.77.222.75'`, Hostinger/MySQL est· rechazando la conexiÛn desde esa IP p˙blica. Debes autorizar `187.77.222.75` en Remote MySQL / Allow remote connections, o crear un usuario con permisos para esa IP/`%`.
+
 ### Error: "Cannot connect to database"
 
 ```bash
@@ -215,6 +235,8 @@ mysql -u u875522599_polla_corp -p -h localhost
 # Verificar permisos
 SHOW GRANTS FOR 'u875522599_polla_corp'@'%';
 ```
+
+Si los logs muestran algo como `Access denied for user '...'@'<IP>'`, el problema no es de pool de Prisma: MySQL rechazÛ la conexiÛn desde la IP del servidor/contenedor. Autoriza esa IP en el hosting/servidor MySQL o configura `CORP_DATABASE_URL` con un host/usuario que tenga permisos remotos. En Dokploy, evita copiar una URL con `localhost` salvo que la base de datos estÈ en el mismo host accesible desde el contenedor.
 
 ### Error: "INTERNAL_API_KEY no configurada"
 

@@ -31,8 +31,12 @@ module.exports = (options) => {
             (p) => p && p.constructor && p.constructor.name !== 'ForkTsCheckerWebpackPlugin',
         ),
         new webpack.NormalModuleReplacementPlugin(
-            /apps\/api\/src\/auth\/avatar-storage\.service/,
+            /apps[\\/]api[\\/]src[\\/]auth[\\/]avatar-storage\.service/,
             path.resolve(__dirname, 'src/overrides/avatar-storage.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-dispatcher\.scheduler/,
+            path.resolve(__dirname, 'src/overrides/email-dispatcher.scheduler.ts'),
         ),
     ];
 

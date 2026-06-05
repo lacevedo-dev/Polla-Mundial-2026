@@ -4,8 +4,10 @@ import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
 const MARIADB_SCHEME_PREFIX = 'mariadb://';
 const MYSQL_SCHEME_PREFIX = 'mysql://';
+const DEFAULT_MYSQL_PORT = 3306;
+type MariaDbPoolConfig = Exclude<ConstructorParameters<typeof PrismaMariaDb>[0], string>;
 
-function resolveMariaDbUrl(raw: string): string {
+function resolveMariaDbUrl(raw: string): URL {
     const trimmed = raw.trim();
     let url: string;
     if (trimmed.startsWith(MARIADB_SCHEME_PREFIX)) {
@@ -19,7 +21,55 @@ function resolveMariaDbUrl(raw: string): string {
         const sep = url.includes('?') ? '&' : '?';
         url = `${url}${sep}timezone=Z`;
     }
-    return url;
+    try {
+        return new URL(url);
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error);
+        throw new Error(`CORP_DATABASE_URL has an invalid MariaDB URL format. Details: ${details}`);
+    }
+}
+
+function resolveMariaDbPoolConfig(raw: string): MariaDbPoolConfig {
+    const url = resolveMariaDbUrl(raw);
+    const searchParams = url.searchParams;
+
+    const config: MariaDbPoolConfig = {
+        host: url.hostname,
+        port: url.port ? Number(url.port) : DEFAULT_MYSQL_PORT,
+        user: decodeURIComponent(url.username),
+        password: decodeURIComponent(url.password),
+        database: decodeURIComponent(url.pathname.replace(/^\//, '')),
+    };
+
+    const connectionLimit = parsePositiveInteger(searchParams.get('connectionLimit'));
+    if (connectionLimit !== undefined) {
+        config.connectionLimit = connectionLimit;
+    }
+
+    const minimumIdle = parsePositiveInteger(searchParams.get('minimumIdle'));
+    if (minimumIdle !== undefined) {
+        config.minimumIdle = minimumIdle;
+    }
+
+    const acquireTimeout = parsePositiveInteger(searchParams.get('acquireTimeout'));
+    if (acquireTimeout !== undefined) {
+        config.acquireTimeout = acquireTimeout;
+    }
+
+    return config;
+}
+
+function parsePositiveInteger(value: string | null): number | undefined {
+    if (!value?.trim()) {
+        return undefined;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return undefined;
+    }
+
+    return Math.trunc(parsed);
 }
 
 @Injectable()
@@ -29,8 +79,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         if (!rawUrl?.trim()) {
             throw new Error('CORP_DATABASE_URL is required for Prisma corporate runtime initialization.');
         }
-        const connectionUrl = resolveMariaDbUrl(rawUrl);
-        const adapter = new PrismaMariaDb(connectionUrl);
+        const poolConfig = resolveMariaDbPoolConfig(rawUrl);
+        const adapter = new PrismaMariaDb(poolConfig);
         super({ adapter: adapter as any });
     }
 

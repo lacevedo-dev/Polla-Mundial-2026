@@ -14,6 +14,8 @@ import { MatchEmailTemplateService } from '@corp-api/email/match-email-template.
 import { EmailTestingController } from '@corp-api/email/email-testing.controller';
 import { EmailTestingService } from '@corp-api/email/email-testing.service';
 
+const enableEmailDispatcher = process.env.CORP_EMAIL_DISPATCHER_ENABLED === 'true';
+
 @Global()
 @Module({
     imports: [ScheduleModule, PrismaModule],
@@ -27,7 +29,7 @@ import { EmailTestingService } from '@corp-api/email/email-testing.service';
         EmailProviderConfigService,
         EmailQueueService,
         MatchEmailTemplateService,
-        EmailDispatcherScheduler,
+        ...(enableEmailDispatcher ? [EmailDispatcherScheduler] : []),
         EmailTestingService,
     ],
     exports: [
