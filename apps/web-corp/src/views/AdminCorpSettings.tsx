@@ -126,17 +126,21 @@ export default function AdminCorpSettings() {
     const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
 
     const uploadImage = async (field: keyof UploadingState, file: File) => {
+        console.log('[uploadImage] start', field, file.name, file.size, file.type);
         setUploading((s) => ({ ...s, [field]: true }));
         setUploadError((s) => ({ ...s, [field]: undefined }));
         try {
             const formData = new FormData();
             formData.append('file', file);
             const { url } = await uploadFile<{ url: string }>('/corp/branding/upload-image', formData);
+            console.log('[uploadImage] success', field, url);
             setDraft((current) => ({ ...current, [field]: url }));
         } catch (err: any) {
+            console.error('[uploadImage] error', field, err);
             setUploadError((s) => ({ ...s, [field]: err?.message ?? 'Error al subir la imagen.' }));
         } finally {
             setUploading((s) => ({ ...s, [field]: false }));
+            console.log('[uploadImage] finally', field);
         }
     };
 

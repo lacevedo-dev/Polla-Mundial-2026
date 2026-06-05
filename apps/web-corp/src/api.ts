@@ -61,16 +61,38 @@ export async function uploadFile<T = unknown>(path: string, formData: FormData):
     if (token) headers.set('Authorization', `Bearer ${token}`);
     const slug = resolveTenantSlug();
     if (slug) headers.set('X-Tenant-Slug', slug);
-    const res = await fetch(url, { method: 'POST', body: formData, headers });
-    if (!res.ok) {
-        let msg = `HTTP ${res.status}`;
-        try {
-            const body = await res.json();
-            msg = body?.message ?? body?.error ?? msg;
-        } catch { /* ignore */ }
-        throw new ApiError(msg, { status: res.status });
+
+    console.log('[uploadFile] POST', url, 'token?', !!token, 'slug?', slug);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+        console.warn('[uploadFile] Timeout after 30s, aborting');
+        controller.abort();
+    }, 30000);
+
+    try {
+        const res = await fetch(url, { method: 'POST', body: formData, headers, signal: controller.signal });
+        clearTimeout(timeout);
+        console.log('[uploadFile] Response status:', res.status);
+        if (!res.ok) {
+            let msg = `HTTP ${res.status}`;
+            try {
+                const body = await res.json();
+                msg = body?.message ?? body?.error ?? msg;
+            } catch (e) {
+                console.warn('[uploadFile] Could not parse error JSON:', e);
+            }
+            throw new ApiError(msg, { status: res.status });
+        }
+        return res.json() as Promise<T>;
+    } catch (err: any) {
+        clearTimeout(timeout);
+        if (err.name === 'AbortError') {
+            throw new ApiError('La subida tardó demasiado. Verifica tu conexión o que el endpoint esté activo.', { status: 0 });
+        }
+        console.error('[uploadFile] Fetch error:', err);
+        throw err;
     }
-    return res.json() as Promise<T>;
 }
 
 export async function request<T = unknown>(

@@ -57,8 +57,6 @@ export default function Login() {
                             <Building2 size={28} className="text-white" />
                         </div>
                     )}
-                    <h1 className="text-2xl font-black text-white">{orgName}</h1>
-                    <p className="text-slate-400 text-sm mt-1">Ingresa a tu portal corporativo</p>
                 </div>
 
                 {/* Form */}

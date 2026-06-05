@@ -77,19 +77,15 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
             <aside className="hidden md:flex flex-col w-64 bg-black text-white h-screen sticky top-0 shadow-xl z-20">
                 {/* Logo / Org name */}
                 <div className="p-6">
-                    <Link to="/" className="flex items-center gap-3 mb-8">
+                    <Link to="/" className="block mb-8">
                         {tenant?.branding?.logoUrl ? (
-                            <img src={tenant.branding.logoUrl} alt={orgName} className="h-9 w-9 object-contain rounded-lg shrink-0" />
+                            <img src={tenant.branding.logoUrl} alt={orgName} className="h-10 object-contain mx-auto" />
                         ) : (
-                            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center mx-auto"
                                 style={{ backgroundColor: primaryColor }}>
                                 <Building2 size={20} className="text-white" />
                             </div>
                         )}
-                        <div className="min-w-0">
-                            <h1 className="font-black text-white text-sm leading-tight truncate">{orgName}</h1>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Portal Corporativo</p>
-                        </div>
                     </Link>
 
                     {/* Primary nav */}
@@ -200,16 +196,15 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
             {/* ── Mobile Header ── */}
             <header className="md:hidden flex items-center justify-between px-4 py-3 bg-black text-white sticky top-0 z-30 shadow-md">
-                <Link to="/" className="flex items-center gap-2.5">
+                <Link to="/" className="flex items-center">
                     {tenant?.branding?.logoUrl ? (
-                        <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 w-8 object-contain rounded" />
+                        <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 object-contain" />
                     ) : (
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center"
                             style={{ backgroundColor: primaryColor }}>
                             <Building2 size={16} className="text-white" />
                         </div>
                     )}
-                    <span className="font-black text-white text-sm truncate max-w-[160px]">{orgName}</span>
                 </Link>
                 <button
                     onClick={() => setMobileOpen(!mobileOpen)}
@@ -224,16 +219,15 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                 <div className="fixed inset-0 bg-slate-950 z-50 md:hidden flex flex-col">
                     {/* Top bar */}
                     <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
-                        <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2.5">
+                        <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center">
                             {tenant?.branding?.logoUrl ? (
-                                <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 w-8 object-contain rounded" />
+                                <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 object-contain" />
                             ) : (
                                 <div className="w-8 h-8 rounded-lg flex items-center justify-center"
                                     style={{ backgroundColor: primaryColor }}>
                                     <Building2 size={16} className="text-white" />
                                 </div>
                             )}
-                            <span className="font-black text-white text-sm">{orgName}</span>
                         </Link>
                         <button
                             onClick={() => setMobileOpen(false)}
