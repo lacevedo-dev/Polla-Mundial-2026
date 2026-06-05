@@ -181,72 +181,9 @@ export class DataSyncService implements OnModuleInit {
                 await this.upsertCorporateTenant(tenant);
                 counts.tenants += 1;
 
-                if (tenant.branding?.tenantId) {
-                    await this.prisma.tenantBranding.upsert({
-                        where: { tenantId: tenant.branding.tenantId },
-                        create: {
-                            id: tenant.branding.id,
-                            tenantId: tenant.branding.tenantId,
-                            logoUrl: tenant.branding.logoUrl ?? null,
-                            faviconUrl: tenant.branding.faviconUrl ?? null,
-                            primaryColor: tenant.branding.primaryColor ?? '#16a34a',
-                            secondaryColor: tenant.branding.secondaryColor ?? '#15803d',
-                            accentColor: tenant.branding.accentColor ?? '#bbf7d0',
-                            fontFamily: tenant.branding.fontFamily ?? 'Inter',
-                            heroImageUrl: tenant.branding.heroImageUrl ?? null,
-                            sidebarImageUrl: tenant.branding.sidebarImageUrl ?? null,
-                            companyDisplayName: tenant.branding.companyDisplayName ?? null,
-                            customCss: tenant.branding.customCss ?? null,
-                            emailHeaderHtml: tenant.branding.emailHeaderHtml ?? null,
-                            emailFooterHtml: tenant.branding.emailFooterHtml ?? null,
-                            emailInviteTemplate: tenant.branding.emailInviteTemplate ?? null,
-                        } as any,
-                        update: {
-                            logoUrl: tenant.branding.logoUrl ?? null,
-                            faviconUrl: tenant.branding.faviconUrl ?? null,
-                            primaryColor: tenant.branding.primaryColor ?? '#16a34a',
-                            secondaryColor: tenant.branding.secondaryColor ?? '#15803d',
-                            accentColor: tenant.branding.accentColor ?? '#bbf7d0',
-                            fontFamily: tenant.branding.fontFamily ?? 'Inter',
-                            heroImageUrl: tenant.branding.heroImageUrl ?? null,
-                            sidebarImageUrl: tenant.branding.sidebarImageUrl ?? null,
-                            companyDisplayName: tenant.branding.companyDisplayName ?? null,
-                            customCss: tenant.branding.customCss ?? null,
-                            emailHeaderHtml: tenant.branding.emailHeaderHtml ?? null,
-                            emailFooterHtml: tenant.branding.emailFooterHtml ?? null,
-                            emailInviteTemplate: tenant.branding.emailInviteTemplate ?? null,
-                        } as any,
-                    });
-                }
-
-                if (tenant.config?.tenantId) {
-                    await this.prisma.tenantConfig.upsert({
-                        where: { tenantId: tenant.config.tenantId },
-                        create: {
-                            id: tenant.config.id,
-                            tenantId: tenant.config.tenantId,
-                            enablePayments: Boolean(tenant.config.enablePayments),
-                            enableAiInsights: Boolean(tenant.config.enableAiInsights),
-                            enablePublicLeagues: Boolean(tenant.config.enablePublicLeagues),
-                            enableUserSelfRegister: Boolean(tenant.config.enableUserSelfRegister),
-                            requireInvitation: tenant.config.requireInvitation !== false,
-                            enableEmailNotif: tenant.config.enableEmailNotif !== false,
-                            enablePushNotif: tenant.config.enablePushNotif !== false,
-                            enableStageFees: tenant.config.enableStageFees !== false,
-                        } as any,
-                        update: {
-                            enablePayments: Boolean(tenant.config.enablePayments),
-                            enableAiInsights: Boolean(tenant.config.enableAiInsights),
-                            enablePublicLeagues: Boolean(tenant.config.enablePublicLeagues),
-                            enableUserSelfRegister: Boolean(tenant.config.enableUserSelfRegister),
-                            requireInvitation: tenant.config.requireInvitation !== false,
-                            enableEmailNotif: tenant.config.enableEmailNotif !== false,
-                            enablePushNotif: tenant.config.enablePushNotif !== false,
-                            enableStageFees: tenant.config.enableStageFees !== false,
-                        } as any,
-                    });
-                }
-
+                // Branding y configuración del portal son datos locales de api-corp.
+                // No se sincronizan desde el API principal para no sobrescribir
+                // cambios hechos por el administrador en /admin/settings.
                 for (const member of tenant.members ?? []) {
                     if (!member?.id || !member?.user?.id) continue;
                     await this.upsertCorporateUser(member.user);
