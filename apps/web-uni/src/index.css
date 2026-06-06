@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+    --color-lime-400: #3EE93E;
+    --color-lime-500: #32D832;
+    --font-sans: 'Inter', sans-serif;
+    --font-brand: 'Montserrat', sans-serif;
+}
+
+/* Importante: NO usar `* { margin: 0; padding: 0 }` aquí.
+   Tailwind v4 envuelve sus utilidades en @layer utilities, y un reset
+   universal fuera de layers sobreescribe cualquier px-*, py-*, mx-*, my-*.
+   El preflight de Tailwind ya hace los resets necesarios. */
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #ffffff;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.font-brand {
+    font-family: 'Montserrat', sans-serif;
+}
+
+/* Branding tokens (sobreescritos en runtime por tenant.store cuando hay tenant) */
+:root {
+    --color-primary: #f59e0b;
+    --color-secondary: #d97706;
+    --color-accent: #fef3c7;
+    --font-family: 'Inter', sans-serif;
+}
+
+/* Smooth scrolling for anchor links */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Custom shadow extra-large */
+.shadow-3xl {
+    box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.3);
+}
