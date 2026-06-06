@@ -106,6 +106,23 @@ describe('Login view', () => {
         expect(navigateMock).toHaveBeenCalledWith('/dashboard');
     }, 15000);
 
+    it('omits recaptchaToken from the login payload when the frontend has no token', async () => {
+        const user = userEvent.setup();
+        getRecaptchaTokenMock.mockResolvedValue(undefined);
+        render(<Login />);
+
+        await user.type(screen.getByTestId('new-input'), 'ana@mail.com');
+        await user.type(screen.getByTestId('new-password-input'), '123456');
+        await user.click(screen.getByRole('button', { name: /Entrar al Estadio/i }));
+
+        await waitFor(() =>
+            expect(loginMock).toHaveBeenCalledWith({
+                identifier: 'ana@mail.com',
+                password: '123456',
+            }),
+        );
+    }, 15000);
+
     it('disables interactive controls while loading to avoid duplicate submit', async () => {
         const user = userEvent.setup();
         isLoadingState = true;

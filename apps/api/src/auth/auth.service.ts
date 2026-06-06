@@ -429,6 +429,7 @@ export class AuthService {
         const isRequired = process.env.RECAPTCHA_REQUIRED === 'true';
         if (!secret) {
             if (isRequired) {
+                this.logger.error('RECAPTCHA_REQUIRED=true pero RECAPTCHA_SECRET_KEY no está configurado en la API');
                 throw new UnauthorizedException('reCAPTCHA no está configurado');
             }
             this.logger.warn('reCAPTCHA omitido porque RECAPTCHA_SECRET_KEY no está configurado');
@@ -436,6 +437,7 @@ export class AuthService {
         }
         if (!token) {
             if (isRequired) {
+                this.logger.warn('RECAPTCHA_REQUIRED=true pero el cliente no envió recaptchaToken; verifica que VITE_RECAPTCHA_SITE_KEY se haya pasado como build arg del frontend y que el bundle cargue reCAPTCHA v3');
                 throw new UnauthorizedException('Verificación reCAPTCHA requerida');
             }
             this.logger.warn('reCAPTCHA omitido porque el cliente no envió token');

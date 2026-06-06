@@ -34,7 +34,11 @@ const Login: React.FC = () => {
     setError(null);
     try {
       const recaptchaToken = await getRecaptchaToken('login');
-      await login({ identifier: documentNumber, password, recaptchaToken });
+      await login({
+        identifier: documentNumber,
+        password,
+        ...(recaptchaToken ? { recaptchaToken } : {}),
+      });
       // Check if email is verified
       const { user } = useAuthStore.getState();
       if (user && user.emailVerified === false) {
