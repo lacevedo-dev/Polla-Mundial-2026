@@ -52,7 +52,8 @@ export function AppRouter() {
             {phase === 'landing' ? (
                 /* ── Sin tenant: dominio raíz zonapronosticos.com ── */
                 <Routes>
-                    <Route path="/" element={<Login />} />`r`n                    <Route path="/landing" element={<LandingB2B />} />
+                    <Route path="/" element={<Login />} />
+                    <Route path="/landing" element={<LandingB2B />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
