@@ -6,7 +6,7 @@ export class TenantController {
     constructor(private readonly tenantService: TenantService) {}
 
     @Get(':slug/context')
-    async getPublicContext(@Param('slug') slug: string) {
-        return this.tenantService.getPublicContext(slug);
+    async getPublicContext(@Param('slug') slugOrDomain: string) {
+        return this.tenantService.getPublicContext(slugOrDomain);
     }
 }

@@ -34,9 +34,9 @@ NODE_ENV=production
 # CORS
 # Lista separada por comas de frontends autorizados para consumir api-corp.
 # En produccion NO usar "*"; agregar aqui cada dominio corporativo publicado.
-CORP_CORS_ORIGINS=https://coopcanapro.zonapronosticos.com
+CORP_CORS_ORIGINS=https://coopcanapro.zonapronosticos.com,https://pollacoopcanapro.atencionesvirtuales.com.co
 # Compatibilidad con configuracion anterior de un solo frontend.
-CORP_FRONTEND_URL=https://coopcanapro.zonapronosticos.com
+CORP_FRONTEND_URL=https://pollacoopcanapro.atencionesvirtuales.com.co
 
 # Scheduler de emails corporativo
 # Mantener en false salvo que api-corp deba despachar emails directamente.
@@ -295,6 +295,26 @@ Si algo falla, hacer rollback al deployment anterior:
 # Click en "Rollback"
 ```
 
+## Publicar web-corp en pollacoopcanapro.atencionesvirtuales.com.co
+
+Para que `https://pollacoopcanapro.atencionesvirtuales.com.co` cargue el portal corporativo del Mundial 2026 y solicite login:
+
+1. En Dokploy crear/seleccionar la app frontend corporativa, no la app `web` principal.
+2. Configurar el build con:
+   - **Dockerfile**: `apps/web-corp/Dockerfile`
+   - **Puerto interno**: `80`
+   - **Dominio**: `pollacoopcanapro.atencionesvirtuales.com.co`
+   - **Build arg** `VITE_API_URL`: URL publica de `api-corp`, por ejemplo `https://api-corp.agildesarrollo.com.co` o el dominio real publicado para esta API.
+   - **Build arg opcional** `VITE_RECAPTCHA_SITE_KEY`: site key del dominio si reCAPTCHA esta habilitado.
+3. Verificar DNS/Proxy para que `pollacoopcanapro.atencionesvirtuales.com.co` apunte a esa app `web-corp` en Dokploy.
+4. En `api-corp`, mantener el dominio autorizado en CORS:
+   - `CORP_CORS_ORIGINS=https://coopcanapro.zonapronosticos.com,https://pollacoopcanapro.atencionesvirtuales.com.co`
+   - `CORP_FRONTEND_URL=https://pollacoopcanapro.atencionesvirtuales.com.co`
+5. En la base de datos corporativa, el tenant de Coopcanapro debe estar activo y tener:
+   - `slug=coopcanapro` para el subdominio estandar, y/o
+   - `customDomain=pollacoopcanapro.atencionesvirtuales.com.co` para el dominio personalizado.
+
+`web-corp` ya trae flujo de login. En dominios personalizados detecta el hostname y consulta `/tenant/{hostname}/context`; el backend resuelve ese valor contra `slug` o `customDomain`.
 ## 📝 Checklist Final
 
 - [ ] Variables de entorno configuradas en Dokploy

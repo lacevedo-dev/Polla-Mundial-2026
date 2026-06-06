@@ -45,9 +45,14 @@ export class TenantService {
         if (domain) this.domainCache.delete(domain);
     }
 
-    async getPublicContext(slug: string) {
-        const tenant = await this.prisma.corporateTenant.findUnique({
-            where: { slug },
+    async getPublicContext(slugOrDomain: string) {
+        const tenant = await this.prisma.corporateTenant.findFirst({
+            where: {
+                OR: [
+                    { slug: slugOrDomain },
+                    { customDomain: slugOrDomain },
+                ],
+            },
             select: {
                 id: true,
                 slug: true,
