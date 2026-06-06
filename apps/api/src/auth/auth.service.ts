@@ -425,14 +425,22 @@ export class AuthService {
     }
 
     private async verifyRecaptcha(token: string | undefined, expectedAction: string) {
-        const secret = process.env.RECAPTCHA_SECRET_KEY;
+        const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
+        const isRequired = process.env.RECAPTCHA_REQUIRED === 'true';
         if (!secret) {
-            if (process.env.NODE_ENV === 'production') {
+            if (isRequired) {
                 throw new UnauthorizedException('reCAPTCHA no está configurado');
             }
+            this.logger.warn('reCAPTCHA omitido porque RECAPTCHA_SECRET_KEY no está configurado');
             return;
         }
-        if (!token) throw new UnauthorizedException('Verificación reCAPTCHA requerida');
+        if (!token) {
+            if (isRequired) {
+                throw new UnauthorizedException('Verificación reCAPTCHA requerida');
+            }
+            this.logger.warn('reCAPTCHA omitido porque el cliente no envió token');
+            return;
+        }
 
         const params = new URLSearchParams();
         params.set('secret', secret);

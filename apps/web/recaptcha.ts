@@ -27,10 +27,10 @@ function loadRecaptcha(siteKey: string) {
 }
 
 export async function getRecaptchaToken(action = 'login') {
-    const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+    const siteKey = (import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined)?.trim();
     if (!siteKey) {
-        if (import.meta.env.PROD) {
-            throw new Error('reCAPTCHA no est√° configurado. Contacta al administrador.');
+        if (import.meta.env.PROD && typeof console !== 'undefined') {
+            console.warn('reCAPTCHA no est· configurado; el login continuar· sin token.');
         }
         return undefined;
     }

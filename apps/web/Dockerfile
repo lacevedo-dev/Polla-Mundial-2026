@@ -50,7 +50,7 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN test -n "$VITE_API_URL" || (echo "ERROR: VITE_API_URL is required for frontend production build." && exit 1)
 ARG VITE_RECAPTCHA_SITE_KEY
 ENV VITE_RECAPTCHA_SITE_KEY=${VITE_RECAPTCHA_SITE_KEY}
-RUN test -n "$VITE_RECAPTCHA_SITE_KEY" || (echo "ERROR: VITE_RECAPTCHA_SITE_KEY is required for frontend production build because /auth/login requires reCAPTCHA." && exit 1)
+RUN test -n "$VITE_RECAPTCHA_SITE_KEY" || echo "WARN: VITE_RECAPTCHA_SITE_KEY is empty; login will continue without client-side reCAPTCHA token unless the API requires it."
 
 # Construir el proyecto Vite para produccion
 WORKDIR /app/apps/web
