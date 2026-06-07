@@ -47,10 +47,6 @@ module.exports = (options) => {
             path.resolve(__dirname, 'src/overrides/prisma.service.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
-            /apps[\\/]api[\\/]src[\\/]auth[\\/]auth\.module/,
-            path.resolve(__dirname, 'src/overrides/auth.module.ts'),
-        ),
-        new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]prisma[\\/]prisma\.module/,
             path.resolve(__dirname, 'src/overrides/prisma.module.ts'),
         ),

@@ -293,7 +293,8 @@ export class AuthService {
         });
 
         const resetBaseUrl = appUrl || process.env.CORP_APP_URL || process.env.APP_URL || 'https://polla2026.com';
-        await this.emailService.sendPasswordResetEmail(user.email, token, user.name.split(' ')[0], resetBaseUrl);
+        const firstName = user.name?.split(' ')[0] ?? user.username ?? 'Usuario';
+        await this.emailService.sendPasswordResetEmail(user.email, token, firstName, resetBaseUrl);
 
         return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
     }

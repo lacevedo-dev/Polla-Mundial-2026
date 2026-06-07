@@ -20,7 +20,6 @@
     "paths": {
       "@corp-api/prisma/prisma.module": ["apps/api-corp/src/overrides/prisma.module"],
       "@corp-api/prisma/prisma.service": ["apps/api-corp/src/overrides/prisma.service"],
-      "@corp-api/auth/auth.module": ["apps/api-corp/src/overrides/auth.module"],
       "@corp-api/email/email.module": ["apps/api-corp/src/overrides/email.module"],
       "@corp-api/*": ["apps/api/src/*"]
     }
