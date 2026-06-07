@@ -66,15 +66,15 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
 COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
 
-# Seed de archivos de branding — se copia a un directorio de respaldo dentro de la imagen.
-# El entrypoint restaura estos archivos al volumen persistente solo si está vacío.
-COPY --from=builder /app/apps/api-corp/uploads/branding ./.seed/branding
-
 WORKDIR /app/apps/api-corp
 
 EXPOSE 3001
 
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
+# Seed de archivos de branding — se copia a un directorio de respaldo dentro de la imagen.
+# El entrypoint restaura estos archivos al volumen persistente solo si está vacío.
+COPY --from=builder /app/apps/api-corp/uploads/branding ./.seed/branding
+
+COPY apps/api-corp/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
