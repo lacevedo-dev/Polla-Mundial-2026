@@ -52,17 +52,17 @@ export function AppRouter() {
             {phase === 'landing' ? (
                 /* ── Sin tenant: dominio raíz atencionesvirtuales.com.co ── */
                 <Routes>
-                    <Route path="/" element={<Login />} />
-                    <Route path="/login" element={<Login />} />
+                    <Route path="/" element={<Navigate to="/login" replace />} />
+                    <Route path="/login" element={<Navigate to="/login" replace />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
-                    <Route path="*" element={<Login />} />
+                    <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
             ) : (
                 /* ── Con tenant: empresa.atencionesvirtuales.com.co ── */
                 <Routes>
-                    <Route path="/login" element={<Login />} />
+                    <Route path="/login" element={<Navigate to="/login" replace />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
@@ -155,7 +155,7 @@ export function AppRouter() {
                             </RequireAuth>
                         }
                     />
-                    <Route path="*" element={<Login />} />
+                    <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
             )}
         </Suspense>
