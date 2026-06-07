@@ -14,7 +14,7 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
 
-    const orgName = tenant?.branding?.companyDisplayName?.trim() || tenant?.name || 'ZonaPronosticos';
+    const orgName = tenant?.branding?.companyDisplayName?.trim() || tenant?.name || 'Polla Coopcanapro';
     const primaryColor = tenant?.branding?.primaryColor ?? '#f59e0b';
     const configuredBackground = tenant?.branding?.heroImageUrl?.trim();
     const loginBackgroundUrl = configuredBackground || (tenant?.slug === 'coopcanapro'
@@ -125,7 +125,7 @@ export default function Login() {
                     </div>
                     <div className="border-t border-slate-800 pt-4 text-center text-xs text-slate-300">
                         ¿No tienes cuenta?{' '}
-                        <a href="https://pollacoopcanaparo.atencionesvirtuales.com" className="font-bold text-amber-400 hover:underline">
+                        <a href="https://pollacoopcanapro.atencionesvirtuales.com" className="font-bold text-amber-400 hover:underline">
                             Contáctanos
                         </a>
                     </div>

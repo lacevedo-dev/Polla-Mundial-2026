@@ -17,7 +17,7 @@ export const useTenantStore = create<TenantStoreState>((set) => ({
     error: null,
 
     bootstrap: async () => {
-        const slug = detectTenantSlug();
+        const slug = 'coopcanapro';
 
         if (!slug) {
             set({ phase: 'landing', tenant: null });
