@@ -113,8 +113,8 @@ export function PredictionRow({
                 value={value}
                 onChange={e => onChange(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-                placeholder="0"
-                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden"
+                placeholder="—"
+                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden"
                 style={{ borderColor: canPredict && value !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }}
             />
             <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm sm:flex">
@@ -122,9 +122,10 @@ export function PredictionRow({
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-400 transition hover:bg-slate-100 disabled:opacity-40">−</button>
                 <input ref={inputRef} type="number" min={0} max={99} inputMode="numeric" pattern="[0-9]*"
                     disabled={!canPredict} value={value}
+                    placeholder="—"
                     onChange={e => onChange(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-slate-300 focus:bg-white disabled:opacity-60"
                     style={{ borderColor: canPredict && value !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }}
                 />
                 <button type="button" onClick={() => onAdjust(1)} disabled={!canPredict}
