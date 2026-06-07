@@ -18,6 +18,10 @@ COPY apps/web-uni/   ./apps/web-uni/
 ARG VITE_API_URL=https://api-polla-coop.atencionesvirtuales.com.co
 ENV VITE_API_URL=$VITE_API_URL
 
+# Slug del tenant corporativo (para enviar X-Tenant-Slug en cada request)
+ARG VITE_TENANT_SLUG=coopcanapro
+ENV VITE_TENANT_SLUG=$VITE_TENANT_SLUG
+
 RUN npm run build --workspace=@polla-2026/web-uni
 
 # ── Stage 2: Serve con nginx ─────────────────────────────────

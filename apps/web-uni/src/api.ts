@@ -40,6 +40,11 @@ export function resolveCorpBrandingAssetUrl(rawPath?: string | null): string | u
  * y el backend no puede saber el tenant de origen sin este header.
  */
 function resolveTenantSlug(): string | null {
+    // Prioridad 1: variable de entorno explícita (producción)
+    const envSlug = (import.meta.env.VITE_TENANT_SLUG as string)?.trim();
+    if (envSlug) return envSlug;
+
+    // Prioridad 2: detección automática desde hostname
     const hostname = window.location.hostname;
     const subdomainMatch = hostname.match(/^([^.]+)\.atencionesvirtuales\.com.co$/);
     if (subdomainMatch && subdomainMatch[1] !== 'www') return subdomainMatch[1];
@@ -49,7 +54,7 @@ function resolveTenantSlug(): string | null {
         !hostname.includes('localhost') &&
         !hostname.includes('127.0.0.1');
     if (isCustomDomain) return hostname;
-    return (import.meta.env.VITE_TENANT_SLUG as string) || null;
+    return null;
 }
 
 function getHeaders(extra?: HeadersInit): Headers {
