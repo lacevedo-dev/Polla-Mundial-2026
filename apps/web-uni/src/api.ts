@@ -1,4 +1,4 @@
-const DEV_API_URL = 'http://localhost:3004';
+const DEV_API_URL = 'http://localhost:3001';
 
 export class ApiError extends Error {
     status?: number;

@@ -10,7 +10,7 @@ export class TenantMemberGuard implements CanActivate {
         const tenantId: string | null = req.tenantId ?? req.params?.tenantId ?? null;
         const userId: string | undefined = req.user?.userId;
 
-        if (!tenantId) return true;
+        if (!tenantId) throw new ForbiddenException('Contexto de tenant requerido');
         if (!userId) throw new ForbiddenException('Autenticación requerida');
 
         const member = await this.prisma.tenantMember.findUnique({
