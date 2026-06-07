@@ -66,6 +66,10 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
 COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
 
+# Archivos de branding (logos, favicon, imágenes de tenant) — se incluyen en la imagen
+# y en producción se monta un volumen persistente encima para que los nuevos uploads persistan
+COPY --from=builder /app/apps/api-corp/uploads/branding ./uploads/branding
+
 WORKDIR /app/apps/api-corp
 
 EXPOSE 3001
