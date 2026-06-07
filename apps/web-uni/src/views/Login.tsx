@@ -18,7 +18,7 @@ export default function Login() {
     const primaryColor = tenant?.branding?.primaryColor ?? '#f59e0b';
     const configuredBackground = tenant?.branding?.heroImageUrl?.trim();
     const loginBackgroundUrl = configuredBackground || (tenant?.slug === 'coopcanapro'
-        ? 'https://coopcanapro.coop/wp-content/uploads/2026/05/Pagina-web.jpg'
+        ? tenant?.branding?.logoUrl
         : null);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -125,7 +125,7 @@ export default function Login() {
                     </div>
                     <div className="border-t border-slate-800 pt-4 text-center text-xs text-slate-300">
                         ¿No tienes cuenta?{' '}
-                        <a href="https://zonapronosticos.com" className="font-bold text-amber-400 hover:underline">
+                        <a href="https://pollacoopcanaparo.atencionesvirtuales.com" className="font-bold text-amber-400 hover:underline">
                             Contáctanos
                         </a>
                     </div>
