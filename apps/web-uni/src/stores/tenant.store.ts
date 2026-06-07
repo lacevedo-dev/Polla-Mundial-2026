@@ -76,7 +76,7 @@ function applyTenantBranding(tenant: TenantContext) {
     }
 
     document.title = b.companyDisplayName
-        ? `${b.companyDisplayName} — Pronósticos`
+        ? `Polla ${b.companyDisplayName} — Pronósticos`
         : (tenant.name ?? 'Polla Coopcanapro');
 }
 

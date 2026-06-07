@@ -66,13 +66,15 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
 COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
 
-# Archivos de branding (logos, favicon, imágenes de tenant) — se incluyen en la imagen
-# y en producción se monta un volumen persistente encima para que los nuevos uploads persistan
-COPY --from=builder /app/apps/api-corp/uploads/branding ./uploads/branding
+# Seed de archivos de branding — se copia a un directorio de respaldo dentro de la imagen.
+# El entrypoint restaura estos archivos al volumen persistente solo si está vacío.
+COPY --from=builder /app/apps/api-corp/uploads/branding ./.seed/branding
 
 WORKDIR /app/apps/api-corp
 
 EXPOSE 3001
 
-# Arrancar servidor (las migraciones las gestiona el api principal)
-CMD ["node", "dist/main.js"]
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
+ENTRYPOINT ["./docker-entrypoint.sh"]
