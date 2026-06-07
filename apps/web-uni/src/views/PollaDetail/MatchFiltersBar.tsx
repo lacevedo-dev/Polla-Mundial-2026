@@ -1,23 +1,23 @@
 import React from 'react';
-import { LayoutGrid, AlignJustify, Search } from 'lucide-react';
+import { LayoutGrid, CalendarDays, Search } from 'lucide-react';
 
 interface Props {
     phaseFilter: 'ALL' | 'GROUP' | 'KNOCKOUT';
     groupFilter: string;
-    viewMode: 'expanded' | 'compact';
+    groupBy: 'smart' | 'date';
     search: string;
     availableGroups: string[];
     showGroupFilter: boolean;
     onPhaseChange: (phase: 'ALL' | 'GROUP' | 'KNOCKOUT') => void;
     onGroupChange: (group: string) => void;
-    onViewModeChange: (mode: 'expanded' | 'compact') => void;
+    onGroupByChange: (mode: 'smart' | 'date') => void;
     onSearchChange: (s: string) => void;
 }
 
 export function MatchFiltersBar({
-    phaseFilter, groupFilter, viewMode, search,
+    phaseFilter, groupFilter, groupBy, search,
     availableGroups, showGroupFilter,
-    onPhaseChange, onGroupChange, onViewModeChange, onSearchChange,
+    onPhaseChange, onGroupChange, onGroupByChange, onSearchChange,
 }: Props) {
     return (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 space-y-2.5">
@@ -36,15 +36,15 @@ export function MatchFiltersBar({
                         </button>
                     ))}
                 </div>
-                {/* Vista normal / compacto */}
+                {/* Smart / Date toggle */}
                 <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg ml-auto">
-                    <button onClick={() => onViewModeChange('expanded')}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${viewMode === 'expanded' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
-                        <LayoutGrid size={11} /> Normal
+                    <button onClick={() => onGroupByChange('smart')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${groupBy === 'smart' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
+                        <LayoutGrid size={11} /> Inteligente
                     </button>
-                    <button onClick={() => onViewModeChange('compact')}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${viewMode === 'compact' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
-                        <AlignJustify size={11} /> Compacto
+                    <button onClick={() => onGroupByChange('date')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${groupBy === 'date' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
+                        <CalendarDays size={11} /> Fecha
                     </button>
                 </div>
             </div>

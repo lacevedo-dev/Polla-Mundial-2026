@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertTriangle, Clock, Zap } from 'lucide-react';
+import React, { useRef, useCallback } from 'react';
+import { AlertTriangle, Clock, Zap, Trophy, CheckCircle2 } from 'lucide-react';
 import { UpcomingMatch } from './types';
 import { PredictionRow } from './PredictionRow';
 import {
@@ -11,27 +11,72 @@ interface Props {
     filtered: UpcomingMatch[];
     leagueId: string;
     closeMin: number;
-    viewMode: 'expanded' | 'compact';
+    groupBy: 'smart' | 'date';
     search: string;
     onSaved: (matchId: string, home: number, away: number) => void;
-    onGroupSelect: (group: string) => void;
 }
 
 export function MatchSections({
-    filtered, leagueId, closeMin, viewMode, search, onSaved, onGroupSelect,
+    filtered, leagueId, closeMin, groupBy, search, onSaved,
 }: Props) {
-    const nextMatch = filtered.find(m => !isFinishedStatus(m.status) && !isLiveStatus(m.status));
+    const homeRefs = useRef<Record<string, HTMLInputElement | null>>({});
+    const awayRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-    const withoutPrediction = filtered.filter(m => {
-        const cl = isPredictionClosed(m.matchDate, closeMin);
-        return !cl && !isFinishedStatus(m.status) && !isLiveStatus(m.status) && !m.myPrediction && m.id !== nextMatch?.id;
-    });
+    const focusNext = useCallback((currentId: string, side: 'home' | 'away') => {
+        const ids = filtered.map(m => m.id);
+        const idx = ids.indexOf(currentId);
+        if (idx < 0) return;
+        if (side === 'home') {
+            awayRefs.current[currentId]?.focus();
+            return;
+        }
+        const nextId = ids[idx + 1];
+        if (nextId) homeRefs.current[nextId]?.focus();
+    }, [filtered]);
 
-    const rest = filtered.filter(m =>
-        m.id !== nextMatch?.id && !withoutPrediction.find(x => x.id === m.id)
+    const makeRow = (m: UpcomingMatch, opts?: { isNext?: boolean; isWithoutPrediction?: boolean }) => (
+        <PredictionRow
+            key={m.id} match={m}
+            leagueId={leagueId}
+            closeMin={closeMin}
+            onSaved={onSaved}
+            isNext={opts?.isNext}
+            isWithoutPrediction={opts?.isWithoutPrediction}
+            onHomeEnter={() => focusNext(m.id, 'home')}
+            onAwayEnter={() => focusNext(m.id, 'away')}
+            homeInputRef={el => { homeRefs.current[m.id] = el; }}
+            awayInputRef={el => { awayRefs.current[m.id] = el; }}
+        />
     );
 
-    /* Agrupar por fecha */
+    /* ── Smart grouping ── */
+    const smartSorted = [...filtered].sort((a, b) => new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime());
+
+    const live = smartSorted.filter(m => isLiveStatus(m.status));
+    const next = smartSorted.find(m => !isFinishedStatus(m.status) && !isLiveStatus(m.status) && !isPredictionClosed(m.matchDate, closeMin));
+    const unsaved = smartSorted.filter(m => {
+        const cl = isPredictionClosed(m.matchDate, closeMin);
+        return !cl && !isFinishedStatus(m.status) && !isLiveStatus(m.status) && !m.myPrediction && m.id !== next?.id;
+    });
+    const saved = smartSorted.filter(m => {
+        const cl = isPredictionClosed(m.matchDate, closeMin);
+        return !cl && !isFinishedStatus(m.status) && !isLiveStatus(m.status) && !!m.myPrediction && m.id !== next?.id;
+    });
+    const closedOrFinished = smartSorted.filter(m => {
+        const cl = isPredictionClosed(m.matchDate, closeMin);
+        return (cl || isFinishedStatus(m.status)) && !isLiveStatus(m.status) && m.id !== next?.id;
+    });
+
+    type SmartGroup = { id: string; title: string; icon: React.ReactNode; color: string; bg: string; border: string; matches: UpcomingMatch[]; isNext?: boolean };
+    const smartGroups: SmartGroup[] = [
+        { id: 'live', title: 'En vivo', icon: <Zap size={12} />, color: '#e11d48', bg: '#fff1f2', border: '#fecdd3', matches: live },
+        ...(next ? [{ id: 'next', title: 'Próximo', icon: <Clock size={12} />, color: 'var(--color-primary,#f59e0b)', bg: '#fffbeb', border: '#fcd34d', matches: [next], isNext: true }] : []),
+        { id: 'unsaved', title: 'Sin pronóstico', icon: <AlertTriangle size={12} />, color: '#f97316', bg: '#fff7ed', border: '#fed7aa', matches: unsaved },
+        { id: 'saved', title: 'Con pronóstico', icon: <CheckCircle2 size={12} />, color: '#059669', bg: '#f0fdf4', border: '#bbf7d0', matches: saved },
+        { id: 'closed', title: 'Cerrados / Finalizados', icon: <Trophy size={12} />, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', matches: closedOrFinished },
+    ].filter(g => g.matches.length > 0);
+
+    /* ── Date grouping ── */
     const groupByDate = (list: UpcomingMatch[]) => {
         const map: Record<string, UpcomingMatch[]> = {};
         for (const m of list) {
@@ -41,23 +86,8 @@ export function MatchSections({
         }
         return map;
     };
-
-    const restByDate = groupByDate(rest);
-    const restDates = Object.keys(restByDate).sort();
-    const noPredByDate = groupByDate(withoutPrediction);
-    const noPredDates = Object.keys(noPredByDate).sort();
-
-    const makeRow = (m: UpcomingMatch, opts?: { isNext?: boolean; isWithoutPrediction?: boolean }) => (
-        <PredictionRow
-            key={m.id} match={m}
-            leagueId={leagueId}
-            closeMin={closeMin}
-            onSaved={onSaved}
-            compact={viewMode === 'compact'}
-            isNext={opts?.isNext}
-            isWithoutPrediction={opts?.isWithoutPrediction}
-        />
-    );
+    const dateMap = groupByDate(smartSorted);
+    const dateKeys = Object.keys(dateMap).sort();
 
     if (filtered.length === 0) {
         return (
@@ -68,77 +98,35 @@ export function MatchSections({
     }
 
     return (
-        <>
-            {/* Próximo partido */}
-            {nextMatch && (
-                <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: 'var(--color-primary,#f59e0b)' }}>
-                    <div className="px-4 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--color-primary,#f59e0b)' }}>
-                        <Zap size={12} className="text-white" />
-                        <span className="text-[11px] font-black text-white uppercase tracking-wider">
-                            {isLiveStatus(nextMatch.status) ? 'En vivo' : 'Próximo partido'}
-                        </span>
-                    </div>
-                    <div className="bg-white">
-                        {makeRow(nextMatch, { isNext: true })}
-                    </div>
-                </div>
-            )}
-
-            {/* Sin pronóstico — agrupado por fecha */}
-            {withoutPrediction.length > 0 && (
-                <div className="rounded-2xl border border-amber-200 overflow-hidden" style={{ backgroundColor: '#fffbeb' }}>
-                    <div className="px-4 py-2.5 border-b border-amber-200 flex items-center gap-2">
-                        <AlertTriangle size={12} className="text-amber-500" />
-                        <span className="text-[11px] font-black text-amber-700 uppercase tracking-wider">
-                            Sin pronóstico ({withoutPrediction.length})
-                        </span>
-                    </div>
-                    {noPredDates.map(dateKey => {
-                        const dayMatches = noPredByDate[dateKey];
-                        const firstDate = dayMatches[0].matchDate;
-                        return (
-                            <div key={dateKey}>
-                                <div className="px-4 py-1.5 border-b border-amber-100 flex items-center justify-between">
-                                    <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-primary,#f59e0b)' }}>
-                                        ↑ Ingresa tu pronóstico
-                                    </span>
-                                    <span className="text-[10px] font-bold text-slate-400">{formatDateHeader(firstDate)}</span>
-                                </div>
-                                <div className={`bg-white ${viewMode === 'compact' ? '' : 'divide-y divide-slate-100'}`}>
-                                    {dayMatches.map(m => makeRow(m, { isWithoutPrediction: true }))}
-                                </div>
+        <div className="space-y-3">
+            {groupBy === 'smart' ? (
+                <>
+                    {smartGroups.map(g => (
+                        <div key={g.id} className="rounded-2xl border overflow-hidden" style={{ borderColor: g.border, backgroundColor: g.bg }}>
+                            <div className="px-4 py-2 flex items-center gap-2" style={{ color: g.color }}>
+                                {g.icon}
+                                <span className="text-[11px] font-black uppercase tracking-wider">{g.title}</span>
+                                <span className="ml-auto text-[10px] font-bold opacity-60">{g.matches.length}</span>
                             </div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Resto de partidos — agrupado por fecha */}
-            {rest.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    {restDates.map(dateKey => {
-                        const dayMatches = restByDate[dateKey];
+                            <div className="divide-y divide-slate-100 bg-white">
+                                {g.matches.map(m => makeRow(m, { isNext: g.isNext, isWithoutPrediction: g.id === 'unsaved' }))}
+                            </div>
+                        </div>
+                    ))}
+                </>
+            ) : (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden divide-y divide-slate-100">
+                    {dateKeys.map(dateKey => {
+                        const dayMatches = dateMap[dateKey];
                         const firstDate = dayMatches[0].matchDate;
-                        const primaryGroup = dayMatches.find(m => m.group)?.group;
                         return (
                             <div key={dateKey}>
-                                <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                                    <div className="flex items-center gap-1.5">
-                                        <Clock size={10} className="text-slate-400" />
-                                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-600">
-                                            {formatDateHeader(firstDate)}
-                                        </span>
-                                    </div>
-                                    {primaryGroup && (
-                                        <button
-                                            onClick={() => onGroupSelect(primaryGroup)}
-                                            className="text-[10px] font-black hover:opacity-70 transition-opacity"
-                                            style={{ color: 'var(--color-primary,#f59e0b)' }}>
-                                            Ver Grupo {primaryGroup} ›
-                                        </button>
-                                    )}
+                                <div className="px-4 py-2 bg-slate-50 flex items-center gap-1.5">
+                                    <Clock size={10} className="text-slate-400" />
+                                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-600">{formatDateHeader(firstDate)}</span>
+                                    <span className="ml-auto text-[10px] font-bold text-slate-400">{dayMatches.length}</span>
                                 </div>
-                                <div className={viewMode === 'compact' ? '' : 'divide-y divide-slate-100'}>
+                                <div>
                                     {dayMatches.map(m => makeRow(m))}
                                 </div>
                             </div>
@@ -146,6 +134,6 @@ export function MatchSections({
                     })}
                 </div>
             )}
-        </>
+        </div>
     );
 }

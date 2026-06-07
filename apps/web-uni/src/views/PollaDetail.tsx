@@ -17,7 +17,7 @@ export default function PollaDetail() {
     const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<'partidos' | 'ranking' | 'reglas'>('partidos');
-    const [viewMode, setViewMode] = useState<'expanded' | 'compact'>('expanded');
+    const [groupBy, setGroupBy] = useState<'smart' | 'date'>('smart');
     const [phaseFilter, setPhaseFilter] = useState<'ALL' | 'GROUP' | 'KNOCKOUT'>('ALL');
     const [groupFilter, setGroupFilter] = useState<string>('ALL');
     const [search, setSearch] = useState('');
@@ -106,23 +106,22 @@ export default function PollaDetail() {
                             <MatchFiltersBar
                                 phaseFilter={phaseFilter}
                                 groupFilter={groupFilter}
-                                viewMode={viewMode}
+                                groupBy={groupBy}
                                 search={search}
                                 availableGroups={availableGroups}
                                 showGroupFilter={showGroupFilter}
                                 onPhaseChange={setPhaseFilter}
                                 onGroupChange={setGroupFilter}
-                                onViewModeChange={setViewMode}
+                                onGroupByChange={setGroupBy}
                                 onSearchChange={setSearch}
                             />
                             <MatchSections
                                 filtered={filtered}
                                 leagueId={league.id}
                                 closeMin={league.closePredictionMinutes}
-                                viewMode={viewMode}
+                                groupBy={groupBy}
                                 search={search}
                                 onSaved={handlePredictionSaved}
-                                onGroupSelect={(g) => { setPhaseFilter('GROUP'); setGroupFilter(g); }}
                             />
                         </div>
                     )}
