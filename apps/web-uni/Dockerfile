@@ -5,7 +5,7 @@ WORKDIR /app
 # Copiar manifiestos del workspace para aprovechar caché de Docker
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
-COPY apps/web-corp/package.json    ./apps/web-corp/
+COPY apps/web-uni/package.json    ./apps/web-uni/
 
 # Instalar deps del monorepo
 RUN npm install --ignore-scripts
@@ -18,10 +18,10 @@ COPY apps/web-uni/   ./apps/web-uni/
 ARG VITE_API_URL=https://api-polla-coop.atencionesvirtuales.com.co
 ENV VITE_API_URL=$VITE_API_URL
 
-RUN npm run corp:build
+RUN npm run build --workspace=@polla-2026/web-uni
 
 # ── Stage 2: Serve con nginx ─────────────────────────────────
 FROM nginx:alpine
-COPY --from=builder /app/apps/web-corp/dist /usr/share/nginx/html
-COPY apps/web-corp/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/apps/web-uni/dist /usr/share/nginx/html
+COPY apps/web-uni/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
