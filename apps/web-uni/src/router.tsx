@@ -50,19 +50,20 @@ export function AppRouter() {
     return (
         <Suspense fallback={<Loader />}>
             {phase === 'landing' ? (
-                /* ── Sin tenant: dominio raíz atencionesvirtuales.com.co ── */
+                /* ── Sin tenant: dominio raíz zonapronosticos.com ── */
                 <Routes>
                     <Route path="/" element={<Navigate to="/login" replace />} />
-                    <Route path="/login" element={<Navigate to="/login" replace />} />
+                    <Route path="/landing" element={<LandingB2B />} />
+                    <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
                     <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
             ) : (
-                /* ── Con tenant: empresa.atencionesvirtuales.com.co ── */
+                /* ── Con tenant: empresa.zonapronosticos.com ── */
                 <Routes>
-                    <Route path="/login" element={<Navigate to="/login" replace />} />
+                    <Route path="/login" element={<Login />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/join-org" element={<JoinOrg />} />
