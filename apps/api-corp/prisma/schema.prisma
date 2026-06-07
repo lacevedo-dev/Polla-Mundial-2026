@@ -490,3 +490,102 @@ enum Currency {
   USD
   EUR
 }
+
+// ─── Email Queue (compartido con API principal) ─────────────────────────────
+
+model EmailJob {
+  id             String           @id @default(cuid())
+  type           EmailJobType
+  priority       EmailJobPriority
+  status         EmailJobStatus   @default(PENDING)
+  required       Boolean          @default(false)
+  recipientEmail String           @db.VarChar(320)
+  subject        String           @db.VarChar(255)
+  html           String           @db.LongText
+  text           String           @db.LongText
+  dedupeKey      String           @unique
+  matchId        String?
+  leagueId       String?
+  providerKey    String?
+  scheduledAt    DateTime         @default(now())
+  availableAt    DateTime         @default(now())
+  lastAttemptAt  DateTime?
+  attemptCount   Int              @default(0)
+  sentAt         DateTime?
+  lastError        String?          @db.Text
+  attachmentsJson  String?          @db.LongText
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([status, availableAt])
+  @@index([priority, scheduledAt])
+  @@index([matchId])
+  @@index([leagueId])
+  @@index([providerKey])
+}
+
+model EmailBacklogAuditRun {
+  id                         String                   @id @default(cuid())
+  trigger                    EmailBacklogAuditTrigger
+  mode                       EmailBacklogAuditMode
+  status                     EmailBacklogAuditStatus  @default(RUNNING)
+  startedAt                  DateTime                 @default(now())
+  completedAt                DateTime?
+  durationMs                 Int?
+  inspectedCount             Int                      @default(0)
+  actionableCount            Int                      @default(0)
+  staleSendingCount          Int                      @default(0)
+  exhaustedRetryCount        Int                      @default(0)
+  transientWithinBudgetCount Int                      @default(0)
+  sanitizedCount             Int                      @default(0)
+  deferredCount              Int                      @default(0)
+  failedCount                Int                      @default(0)
+  droppedCount               Int                      @default(0)
+  notActionedCount           Int                      @default(0)
+  errorCount                 Int                      @default(0)
+  summary                    String?                  @db.LongText
+  errorMessage               String?                  @db.Text
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+}
+
+enum EmailJobType {
+  VERIFICATION
+  MATCH_REMINDER
+  PREDICTION_CLOSING
+  PREDICTIONS_REPORT
+  MATCH_RESULTS_REPORT
+}
+
+enum EmailJobPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum EmailJobStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  DEFERRED
+  DROPPED
+}
+
+enum EmailBacklogAuditTrigger {
+  SCHEDULER
+  MANUAL
+  CLI
+}
+
+enum EmailBacklogAuditMode {
+  AUDIT
+  SANITIZE
+}
+
+enum EmailBacklogAuditStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
