@@ -17,7 +17,7 @@ export default function PollaDetail() {
     const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<'partidos' | 'ranking' | 'reglas'>('partidos');
-    const [groupBy, setGroupBy] = useState<'smart' | 'date'>('smart');
+    const [groupBy, setGroupBy] = useState<'smart' | 'date'>('date');
     const [phaseFilter, setPhaseFilter] = useState<'ALL' | 'GROUP' | 'KNOCKOUT'>('ALL');
     const [groupFilter, setGroupFilter] = useState<string>('ALL');
     const [search, setSearch] = useState('');

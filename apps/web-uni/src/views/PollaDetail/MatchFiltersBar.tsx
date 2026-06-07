@@ -38,13 +38,13 @@ export function MatchFiltersBar({
                 </div>
                 {/* Smart / Date toggle */}
                 <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg ml-auto">
-                    <button onClick={() => onGroupByChange('smart')}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${groupBy === 'smart' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
-                        <LayoutGrid size={11} /> Inteligente
-                    </button>
                     <button onClick={() => onGroupByChange('date')}
                         className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${groupBy === 'date' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
                         <CalendarDays size={11} /> Fecha
+                    </button>
+                    <button onClick={() => onGroupByChange('smart')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-black transition-all ${groupBy === 'smart' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>
+                        <LayoutGrid size={11} /> Inteligente
                     </button>
                 </div>
             </div>
