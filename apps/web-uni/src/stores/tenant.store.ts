@@ -42,7 +42,7 @@ export const useTenantStore = create<TenantStoreState>((set) => ({
 export function detectTenantSlug(): string | null {
     const hostname = window.location.hostname;
 
-    const subdomainMatch = hostname.match(/^([^.]+)\.atencionesvirtuales\.com.co$/);
+    const subdomainMatch = hostname.match(/^([^.]+)\.zonapronosticos\.com$/);
     if (subdomainMatch && subdomainMatch[1] !== 'www') {
         return subdomainMatch[1];
     }
