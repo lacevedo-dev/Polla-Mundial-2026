@@ -35,8 +35,18 @@ module.exports = (options) => {
             path.resolve(__dirname, 'src/overrides/avatar-storage.service.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
-            /apps[\\/]api[\\/]src[\\/]email[\\/]email-dispatcher\.scheduler/,
-            path.resolve(__dirname, 'src/overrides/email-dispatcher.scheduler.ts'),
+            /apps[\\/]api[\\/]src[\\/]email[\\/]/,
+            (result) => {
+                const resource = (result.createData && result.createData.resource) || result.request || '';
+                const match = resource.match(/apps[\\/\\\\]api[\\/\\\\]src[\\/\\\\]email[\\/\\\\](.+)$/);
+                if (!match) return;
+                const localPath = path.resolve(__dirname, 'src/email', match[1]);
+                if (result.createData) {
+                    result.createData.resource = localPath;
+                } else {
+                    result.request = localPath;
+                }
+            },
         ),
         new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]branding-storage\.service/,
