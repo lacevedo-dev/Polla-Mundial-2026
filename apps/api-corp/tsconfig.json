@@ -20,13 +20,9 @@
     "paths": {
       "@corp-api/prisma/prisma.module": ["apps/api-corp/src/overrides/prisma.module"],
       "@corp-api/prisma/prisma.service": ["apps/api-corp/src/overrides/prisma.service"],
-      "@corp-api/email/email.module": ["apps/api-corp/src/overrides/email.module"],
-      "@corp-api/auth/auth.module": ["apps/api-corp/src/auth/auth.module"],
-      "@corp-api/auth/auth.service": ["apps/api-corp/src/auth/auth.service"],
-      "@corp-api/auth/auth.controller": ["apps/api-corp/src/auth/auth.controller"],
-      "@corp-api/users/users.module": ["apps/api-corp/src/users/users.module"],
-      "@corp-api/users/users.service": ["apps/api-corp/src/users/users.service"],
-      "@corp-api/users/user-status.constants": ["apps/api-corp/src/users/user-status.constants"],
+      "@corp-api/email/*": ["apps/api-corp/src/email/*"],
+      "@corp-api/auth/*": ["apps/api-corp/src/auth/*"],
+      "@corp-api/users/*": ["apps/api-corp/src/users/*"],
       "@corp-api/*": ["apps/api/src/*"]
     }
   }

@@ -1,0 +1,193 @@
+﻿import { Injectable, Logger } from '@nestjs/common';
+import { EmailJobPriority, EmailJobType } from '@prisma/client';
+import { EmailQueueService } from './email-queue.service';
+
+@Injectable()
+export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+
+  constructor(private readonly emailQueue: EmailQueueService) {}
+
+  async sendVerificationEmail(
+    email: string,
+    token: string,
+    userName: string,
+    appUrl: string = process.env.APP_URL || 'https://polla2026.com',
+  ): Promise<void> {
+    try {
+      const verificationLink = `${appUrl}/verify-email?token=${token}`;
+      const html = this.getEmailTemplate(userName, verificationLink, token);
+      const text = this.getPlainTextTemplate(userName, verificationLink, token);
+
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.VERIFICATION,
+        priority: EmailJobPriority.HIGH,
+        required: true,
+        recipientEmail: email,
+        subject: 'Verifica tu correo para Polla 2026',
+        html,
+        text,
+        dedupeKey: `verification:${email}:${token}`,
+      });
+
+      if (queued) {
+        this.logger.log(`Verification email queued for ${email} with token ${token}`);
+      } else {
+        this.logger.warn(`Verification email for ${email} was not queued (possible duplicate or blacklisted)`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue verification email for ${email}: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  async sendResendVerificationEmail(
+    email: string,
+    token: string,
+    userName: string,
+    appUrl: string = process.env.APP_URL || 'https://polla2026.com',
+  ): Promise<void> {
+    try {
+      const verificationLink = `${appUrl}/verify-email?token=${token}`;
+      const html = this.getEmailTemplate(userName, verificationLink, token, 'Nuevo código de verificación');
+      const text = this.getPlainTextTemplate(userName, verificationLink, token, 'Nuevo código de verificación');
+
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.VERIFICATION,
+        priority: EmailJobPriority.HIGH,
+        required: true,
+        recipientEmail: email,
+        subject: 'Nuevo código de verificación para Polla 2026',
+        html,
+        text,
+        dedupeKey: `verification-resend:${email}:${token}`,
+      });
+
+      if (queued) {
+        this.logger.log(`Resend verification email queued for ${email} with token ${token}`);
+      } else {
+        this.logger.warn(`Resend verification email for ${email} was not queued (possible duplicate or blacklisted)`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue resend verification email for ${email}: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    userName: string,
+    appUrl: string = process.env.APP_URL || 'https://polla2026.com',
+  ): Promise<void> {
+    try {
+      const resetLink = `${appUrl}/reset-password?token=${token}`;
+      const html = this.getPasswordResetTemplate(userName, resetLink, token);
+      const text = `Restablece tu contraseña\n\nHola ${userName},\n\nRecibimos una solicitud para restablecer tu contraseña.\n\nEnlace: ${resetLink}\n\nO usa este código: ${token}\n\nEste enlace expira en 1 hora. Si no solicitaste esto, ignora este correo.`;
+
+      const queued = await this.emailQueue.enqueueEmail({
+        type: EmailJobType.VERIFICATION,
+        priority: EmailJobPriority.HIGH,
+        required: true,
+        recipientEmail: email,
+        subject: 'Restablece tu contraseña - Polla 2026',
+        html,
+        text,
+        dedupeKey: `password-reset:${email}:${token}`,
+      });
+
+      if (queued) {
+        this.logger.log(`Password reset email queued for ${email}`);
+      } else {
+        this.logger.warn(`Password reset email for ${email} was not queued`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue password reset email for ${email}: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  private getPasswordResetTemplate(userName: string, resetLink: string, token: string): string {
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restablecer contraseña</title>
+</head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 30px rgba(15,23,42,.12)">
+    <div style="background:#111827;color:#ffffff;padding:24px 28px;">
+      <h1 style="margin:0;font-size:24px;">Polla 2026</h1>
+      <p style="margin:8px 0 0;font-size:14px;opacity:.9">Restablecer contraseña</p>
+    </div>
+    <div style="padding:28px;line-height:1.7;">
+      <p>Hola ${userName},</p>
+      <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el siguiente botón para crear una nueva contraseña:</p>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${resetLink}" style="display:inline-block;background:#a3e635;color:#0f172a;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;">Restablecer contraseña</a>
+      </p>
+      <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+      <p><a href="${resetLink}">${resetLink}</a></p>
+      <p>También puedes usar este código:</p>
+      <div style="padding:14px 16px;background:#f0fdf4;border-radius:12px;font-family:monospace;font-size:16px;font-weight:700;letter-spacing:.06em;">${token}</div>
+      <p style="margin-top:20px;color:#475569;font-size:13px;">Este enlace expira en <strong>1 hora</strong>. Si no solicitaste restablecer tu contraseña, puedes ignorar este correo de forma segura.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  private getEmailTemplate(userName: string, verificationLink: string, token: string, title = 'Verifica tu correo'): string {
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 30px rgba(15,23,42,.12)">
+    <div style="background:#111827;color:#ffffff;padding:24px 28px;">
+      <h1 style="margin:0;font-size:24px;">Polla 2026</h1>
+      <p style="margin:8px 0 0;font-size:14px;opacity:.9">${title}</p>
+    </div>
+    <div style="padding:28px;line-height:1.7;">
+      <p>Hola ${userName},</p>
+      <p>Gracias por registrarte. Para activar tu cuenta, verifica tu correo con el siguiente enlace:</p>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${verificationLink}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;">Verificar correo</a>
+      </p>
+      <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+      <p><a href="${verificationLink}">${verificationLink}</a></p>
+      <p>También puedes usar este código:</p>
+      <div style="padding:14px 16px;background:#eef2ff;border-radius:12px;font-family:monospace;font-size:16px;font-weight:700;letter-spacing:.06em;">${token}</div>
+      <p style="margin-top:20px;color:#475569;font-size:13px;">Este código expira en 72 horas.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  private getPlainTextTemplate(userName: string, verificationLink: string, token: string, title = 'Verifica tu correo'): string {
+    return [
+      `${title}`,
+      '',
+      `Hola ${userName},`,
+      '',
+      'Gracias por registrarte. Para activar tu cuenta, verifica tu correo con este enlace:',
+      verificationLink,
+      '',
+      'También puedes usar este código:',
+      token,
+      '',
+      'Este código expira en 72 horas.',
+    ].join('\n');
+  }
+}
