@@ -35,18 +35,52 @@ module.exports = (options) => {
             path.resolve(__dirname, 'src/overrides/avatar-storage.service.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
-            /apps[\\/]api[\\/]src[\\/]email[\\/]/,
-            (result) => {
-                const resource = (result.createData && result.createData.resource) || result.request || '';
-                const match = resource.match(/apps[\\/\\\\]api[\\/\\\\]src[\\/\\\\]email[\\/\\\\](.+)$/);
-                if (!match) return;
-                const localPath = path.resolve(__dirname, 'src/email', match[1]);
-                if (result.createData) {
-                    result.createData.resource = localPath;
-                } else {
-                    result.request = localPath;
-                }
-            },
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-queue\.service/,
+            path.resolve(__dirname, 'src/email/email-queue.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email\.service/,
+            path.resolve(__dirname, 'src/email/email.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-blacklist\.service/,
+            path.resolve(__dirname, 'src/email/email-blacklist.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-provider-accounts\.service/,
+            path.resolve(__dirname, 'src/email/email-provider-accounts.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-provider-config\.service/,
+            path.resolve(__dirname, 'src/email/email-provider-config.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-provider-crypto\.service/,
+            path.resolve(__dirname, 'src/email/email-provider-crypto.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-backlog-audit\.service/,
+            path.resolve(__dirname, 'src/email/email-backlog-audit.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-backlog-audit\.shared/,
+            path.resolve(__dirname, 'src/email/email-backlog-audit.shared.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-backlog-audit\.scheduler/,
+            path.resolve(__dirname, 'src/email/email-backlog-audit.scheduler.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email-testing\.service/,
+            path.resolve(__dirname, 'src/email/email-testing.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]match-email-template\.service/,
+            path.resolve(__dirname, 'src/email/match-email-template.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]email[\\/]email\.module/,
+            path.resolve(__dirname, 'src/email/email.module.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]branding-storage\.service/,
