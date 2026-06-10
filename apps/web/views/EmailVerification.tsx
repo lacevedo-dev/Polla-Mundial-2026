@@ -65,10 +65,10 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({ email: propEmail 
 
       const defaultLeagueId = response?.defaultLeagueId;
       if (defaultLeagueId) {
-        const { fetchLeagueDetails, setActiveLeague } = useLeagueStore.getState();
-        await fetchLeagueDetails(defaultLeagueId);
+        const { setActiveLeague, fetchLeagueDetails } = useLeagueStore.getState();
+        const league = await fetchLeagueDetails(defaultLeagueId);
         setActiveLeague(defaultLeagueId);
-        navigate('/predictions');
+        navigate('/my-leagues', { state: { justJoined: true, leagueName: league.name } });
       } else {
         // Redirect to dashboard after 2 seconds
         setTimeout(() => {
