@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Ban, Check, Star, Trash2, Trophy } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Ban, Check, CheckCircle2, CreditCard, RefreshCw, Star, Trash2, Trophy } from 'lucide-react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { useAdminLeaguesStore } from '../../stores/admin.leagues.store';
 import StatusBadge from '../../components/admin/StatusBadge';
@@ -77,6 +77,10 @@ const AdminLeagueDetail: React.FC = () => {
     const [rulesEdited, setRulesEdited] = React.useState<Record<string, number>>({});
     const [savingRules, setSavingRules] = React.useState(false);
 
+    const [backfillLoading, setBackfillLoading] = React.useState(false);
+    const [backfillResult, setBackfillResult] = React.useState<{ created: number; skipped: number } | null>(null);
+    const [backfillError, setBackfillError] = React.useState<string | null>(null);
+
     React.useEffect(() => {
         if (id) {
             fetchLeague(id);
@@ -113,6 +117,24 @@ const AdminLeagueDetail: React.FC = () => {
         setIsDirty(false);
     };
 
+    const handleBackfill = async () => {
+        if (!id) return;
+        setBackfillLoading(true);
+        setBackfillResult(null);
+        setBackfillError(null);
+        try {
+            const result = await request<{ created: number; skipped: number; reason?: string }>(
+                `/admin/payments/obligations/backfill-principal?leagueId=${id}`,
+                { method: 'POST' },
+            );
+            setBackfillResult({ created: result.created, skipped: result.skipped });
+        } catch (e: any) {
+            setBackfillError(e?.message ?? 'Error al ejecutar backfill');
+        } finally {
+            setBackfillLoading(false);
+        }
+    };
+
     const handleSaveRules = async () => {
         if (!id || Object.keys(rulesEdited).length === 0) return;
         setSavingRules(true);
@@ -141,6 +163,7 @@ const AdminLeagueDetail: React.FC = () => {
         { value: 'matches', label: 'Partidos' },
         { value: 'members', label: 'Miembros', count: members.length || undefined },
         { value: 'rules', label: 'Reglas' },
+        { value: 'pagos', label: 'Pagos' },
     ];
 
     return (
@@ -408,6 +431,66 @@ const AdminLeagueDetail: React.FC = () => {
                         {scoringRules.length === 0 && (
                             <p className="text-sm text-slate-400 text-center py-4">Cargando reglas...</p>
                         )}
+                    </div>
+                </TabsPrimitive.Content>
+
+                {/* PAGOS TAB */}
+                <TabsPrimitive.Content value="pagos">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-6">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                                <CreditCard size={18} className="text-amber-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-black text-slate-800">Crear cobros pendientes</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Genera obligaciones de pago <span className="font-bold">PENDING_PAYMENT</span> para todos los miembros
+                                    que ya tienen pronósticos registrados pero no tienen cobro pendiente asignado.
+                                    También actualiza el estado del miembro de ACTIVE → PENDING_PAYMENT.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-1.5 text-xs text-slate-500">
+                            <p className="font-black text-slate-700 text-[11px] uppercase tracking-[0.15em] mb-2">¿Qué hace este proceso?</p>
+                            <p>✔ Busca miembros con estado ACTIVE, PENDING_PAYMENT o PENDING</p>
+                            <p>✔ Filtra los que tienen al menos 1 pronóstico en esta polla</p>
+                            <p>✔ Omite los que ya tienen obligación PAID o PENDING_PAYMENT</p>
+                            <p>✔ Crea una obligación por la cuota base de la polla (deadline: 7 días)</p>
+                            <p>✔ Cambia el estado del miembro de ACTIVE → PENDING_PAYMENT</p>
+                        </div>
+
+                        {backfillResult && (
+                            <div className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 p-4">
+                                <CheckCircle2 size={18} className="text-green-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-sm font-black text-green-800">Proceso completado</p>
+                                    <p className="text-xs text-green-700 mt-1">
+                                        <span className="font-bold">{backfillResult.created}</span> obligación(es) creadas ·{' '}
+                                        <span className="font-bold">{backfillResult.skipped}</span> omitida(s) (ya pagadas o sin pronósticos)
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {backfillError && (
+                            <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                                <AlertCircle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-sm font-black text-rose-800">Error al ejecutar</p>
+                                    <p className="text-xs text-rose-700 mt-1">{backfillError}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => void handleBackfill()}
+                            disabled={backfillLoading}
+                            className="flex items-center gap-2 px-5 py-3 bg-amber-400 text-slate-950 font-black text-sm rounded-2xl hover:bg-amber-500 disabled:opacity-50 transition-all"
+                        >
+                            <RefreshCw size={15} className={backfillLoading ? 'animate-spin' : ''} />
+                            {backfillLoading ? 'Procesando...' : 'Crear cobros pendientes'}
+                        </button>
                     </div>
                 </TabsPrimitive.Content>
 
