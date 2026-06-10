@@ -690,16 +690,24 @@ export class CorpPortalController {
     @Post('members')
     async createMember(@Req() req: any, @Body() dto: ProvisionMemberDto) {
         const tenantId: string = req.tenantId;
-        return this.provisioning.provisionOwner(tenantId, {
-            name: dto.name,
-            email: dto.email,
-            documentNumber: dto.documentNumber,
-            username: dto.documentNumber ?? dto.username,
-            phone: dto.phone,
-            tempPassword: dto.tempPassword,
-            role: dto.role ?? TenantRole.PLAYER,
-            sendEmail: dto.sendEmail !== false,
-        });
+        try {
+            return await this.provisioning.provisionOwner(tenantId, {
+                name: dto.name,
+                email: dto.email,
+                documentNumber: dto.documentNumber,
+                username: dto.documentNumber ?? dto.username,
+                phone: dto.phone,
+                tempPassword: dto.tempPassword,
+                role: dto.role ?? TenantRole.PLAYER,
+                sendEmail: dto.sendEmail !== false,
+            });
+        } catch (err: any) {
+            const msg: string = err?.message ?? 'Error desconocido';
+            const isHttp = err?.status && err?.response;
+            if (isHttp) throw err;
+            console.error('[createMember] Error no manejado:', err);
+            throw new BadRequestException(`Error al crear usuario: ${msg}`);
+        }
     }
 
     @UseGuards(TenantStaffGuard)

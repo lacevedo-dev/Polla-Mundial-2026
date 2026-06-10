@@ -119,7 +119,7 @@ export class TenantProvisioningService {
 
         // Marcar invitación previa como ACEPTADA si existe
         await this.prisma.tenantInvitation.updateMany({
-            where: { tenantId, email, status: { in: ['SENT', 'CLICKED'] } },
+            where: { tenantId, email, status: { in: ['SENT'] } },
             data: { status: 'ACCEPTED' },
         });
 
