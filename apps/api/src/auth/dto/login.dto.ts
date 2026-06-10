@@ -1,7 +1,7 @@
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
-    @IsNotEmpty({ message: 'El documento de identidad es requerido' })
+    @IsNotEmpty({ message: 'El correo, usuario o documento es requerido' })
     @IsString()
     identifier: string;
 

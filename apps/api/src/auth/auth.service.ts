@@ -278,7 +278,7 @@ export class AuthService {
     }
 
     async forgotPassword(identifier: string, appUrl?: string) {
-        const user = await this.usersService.findByDocumentNumber(identifier);
+        const user = await this.usersService.findByEmailOrUsername(identifier);
         if (!user) {
             return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
         }

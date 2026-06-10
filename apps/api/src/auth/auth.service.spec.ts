@@ -206,7 +206,7 @@ describe('AuthService.login reCAPTCHA', () => {
     const bcryptMock = jest.requireMock('bcrypt') as { compare: jest.Mock };
     const originalEnv = process.env;
     const usersServiceMock = {
-        findByDocumentNumber: jest.fn(),
+        findByEmailOrUsername: jest.fn(),
     };
 
     const jwtServiceMock = {
@@ -245,7 +245,7 @@ describe('AuthService.login reCAPTCHA', () => {
         delete process.env.RECAPTCHA_SECRET_KEY;
         delete process.env.RECAPTCHA_REQUIRED;
         delete process.env.RECAPTCHA_MIN_SCORE;
-        usersServiceMock.findByDocumentNumber.mockResolvedValue(validUser);
+        usersServiceMock.findByEmailOrUsername.mockResolvedValue(validUser);
         bcryptMock.compare.mockResolvedValue(true);
         fetchMock = jest.fn();
         globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -277,7 +277,7 @@ describe('AuthService.login reCAPTCHA', () => {
         });
 
         expect(fetchMock).not.toHaveBeenCalled();
-        expect(usersServiceMock.findByDocumentNumber).toHaveBeenCalledWith('123');
+        expect(usersServiceMock.findByEmailOrUsername).toHaveBeenCalledWith('123');
     });
 
     it('allows login without a token when a secret exists but reCAPTCHA is not required', async () => {
@@ -301,7 +301,7 @@ describe('AuthService.login reCAPTCHA', () => {
             password: 'secret',
         })).rejects.toThrow(UnauthorizedException);
 
-        expect(usersServiceMock.findByDocumentNumber).not.toHaveBeenCalled();
+        expect(usersServiceMock.findByEmailOrUsername).not.toHaveBeenCalled();
     });
 
     it('rejects login when reCAPTCHA is required but the token is missing', async () => {
@@ -314,7 +314,7 @@ describe('AuthService.login reCAPTCHA', () => {
         })).rejects.toThrow(UnauthorizedException);
 
         expect(fetchMock).not.toHaveBeenCalled();
-        expect(usersServiceMock.findByDocumentNumber).not.toHaveBeenCalled();
+        expect(usersServiceMock.findByEmailOrUsername).not.toHaveBeenCalled();
     });
 
     it('validates the token before logging in when reCAPTCHA is required', async () => {
@@ -342,6 +342,6 @@ describe('AuthService.login reCAPTCHA', () => {
                 method: 'POST',
             }),
         );
-        expect(usersServiceMock.findByDocumentNumber).toHaveBeenCalledWith('123');
+        expect(usersServiceMock.findByEmailOrUsername).toHaveBeenCalledWith('123');
     });
 });

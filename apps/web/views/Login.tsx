@@ -17,7 +17,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, isLoading } = useAuthStore();
-  const [documentNumber, setDocumentNumber] = React.useState('');
+  const [identifier, setIdentifier] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState<string | null>(
     searchParams.get('error') === 'oauth_failed'
@@ -35,7 +35,7 @@ const Login: React.FC = () => {
     try {
       const recaptchaToken = await getRecaptchaToken('login');
       await login({
-        identifier: documentNumber,
+        identifier,
         password,
         ...(recaptchaToken ? { recaptchaToken } : {}),
       });
@@ -43,7 +43,7 @@ const Login: React.FC = () => {
       const { user } = useAuthStore.getState();
       if (user && user.emailVerified === false) {
         // Store email in sessionStorage for display in EmailVerification view
-        sessionStorage.setItem('registrationEmail', user.email ?? documentNumber);
+        sessionStorage.setItem('registrationEmail', user.email ?? identifier);
         navigate('/verify-email');
       } else {
         navigate('/dashboard');
@@ -112,15 +112,15 @@ const Login: React.FC = () => {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Documento</label>
+              <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Correo, usuario o documento</label>
               <Input
-                name="documentNumber"
-                placeholder="Cédula o documento"
+                name="identifier"
+                placeholder="tu@email.com, usuario o cédula"
                 autoComplete="username"
                 required
                 disabled={isLoading}
-                value={documentNumber}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentNumber(e.target.value)}
+                value={identifier}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIdentifier(e.target.value)}
               />
             </div>
             <div className="space-y-2">

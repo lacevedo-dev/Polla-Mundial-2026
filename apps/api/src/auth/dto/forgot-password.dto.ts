@@ -1,7 +1,7 @@
 ﻿import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class ForgotPasswordDto {
-    @IsNotEmpty({ message: 'Ingresa tu número de documento de identidad' })
+    @IsNotEmpty({ message: 'Ingresa tu correo, usuario o número de documento' })
     @IsString()
     identifier: string;
 
