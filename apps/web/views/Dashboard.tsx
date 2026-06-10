@@ -39,9 +39,12 @@ const Dashboard: React.FC = () => {
     const isSuperAdmin = useAuthStore((state) => state.isSuperAdmin);
     const activeLeague = useLeagueStore((state) => state.activeLeague);
     const myLeagues = useLeagueStore((state) => state.myLeagues);
+    const publicLeagues = useLeagueStore((state) => state.publicLeagues);
     const leagueLoading = useLeagueStore((state) => state.isLoading);
     const fetchMyLeagues = useLeagueStore((state) => state.fetchMyLeagues);
     const fetchLeagueDetails = useLeagueStore((state) => state.fetchLeagueDetails);
+    const fetchPublicLeagues = useLeagueStore((state) => state.fetchPublicLeagues);
+    const joinLeague = useLeagueStore((state) => state.joinLeague);
     const setActiveLeague = useLeagueStore((state) => state.setActiveLeague);
     const matches = usePredictionStore((state) => state.matches);
     const leaderboard = usePredictionStore((state) => state.leaderboard);
@@ -56,6 +59,7 @@ const Dashboard: React.FC = () => {
     const fetchDashboardData = useDashboardStore((state) => state.fetchDashboardData);
 
     const [error, setError] = useState<string | null>(null);
+    const [joiningPublicId, setJoiningPublicId] = useState<string | null>(null);
     const [onboardingVisible, setOnboardingVisible] = useState(
         () => localStorage.getItem('onboarding_dismissed') !== '1',
     );
@@ -210,7 +214,8 @@ const Dashboard: React.FC = () => {
         void fetchMyLeagues().catch((e) => {
             setError(e instanceof Error ? e.message : 'No fue posible cargar tus ligas.');
         });
-    }, [fetchMyLeagues, myLeagues.length]);
+        void fetchPublicLeagues();
+    }, [fetchMyLeagues, fetchPublicLeagues, myLeagues.length]);
 
     useEffect(() => {
         const interval = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
@@ -298,8 +303,63 @@ const Dashboard: React.FC = () => {
 
     /* ── Empty state ── */
     if (!isLoading && myLeagues.length === 0 && !error) {
+        const featuredLeague = publicLeagues[0] ?? null;
+
+        const handleJoinFeatured = async () => {
+            if (!featuredLeague) return;
+            setJoiningPublicId(featuredLeague.id);
+            try {
+                await joinLeague(featuredLeague.code);
+                await fetchLeagueDetails(
+                    useLeagueStore.getState().myLeagues[0]?.id ?? featuredLeague.id,
+                );
+                setActiveLeague(useLeagueStore.getState().myLeagues[0]?.id ?? featuredLeague.id);
+                navigate('/predictions');
+            } catch {
+                setJoiningPublicId(null);
+            }
+        };
+
         return (
             <motion.div {...fade()} className="space-y-5">
+                {/* Featured public league card */}
+                {featuredLeague && (
+                    <div className="rounded-[2rem] bg-slate-900 p-6 text-white">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-lime-400 text-slate-900">
+                                <Trophy size={22} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-lime-400">Polla oficial · Gratis</p>
+                                <h2 className="text-lg font-black uppercase tracking-tight text-white leading-tight">{featuredLeague.name}</h2>
+                            </div>
+                        </div>
+                        {featuredLeague.description && (
+                            <p className="text-sm text-slate-300 mb-4 leading-5">{featuredLeague.description}</p>
+                        )}
+                        <div className="flex items-center gap-4 text-[11px] text-slate-400 mb-5">
+                            <span className="inline-flex items-center gap-1.5">
+                                <AlertCircle size={11} />
+                                {featuredLeague.memberCount} participantes
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                                <Trophy size={11} />
+                                {featuredLeague.baseFee ? `$${featuredLeague.baseFee.toLocaleString('es-CO')}` : 'Sin costo'}
+                            </span>
+                        </div>
+                        <button
+                            onClick={handleJoinFeatured}
+                            disabled={joiningPublicId === featuredLeague.id}
+                            className="w-full rounded-2xl bg-lime-400 py-3 text-sm font-black uppercase tracking-wide text-slate-900 hover:bg-lime-300 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                        >
+                            {joiningPublicId === featuredLeague.id
+                                ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" /> Uniéndome...</>
+                                : '¡Unirme gratis y pronosticar!'
+                            }
+                        </button>
+                    </div>
+                )}
+
                 <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-10 text-center">
                     <motion.div
                         animate={{ y: [0, -6, 0] }}

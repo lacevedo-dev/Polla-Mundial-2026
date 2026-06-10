@@ -36,6 +36,7 @@ export interface InvitationItem {
 
 export interface PublicLeagueItem {
     id: string;
+    code: string;
     name: string;
     description?: string;
     memberCount: number;
@@ -241,6 +242,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
             const raw = await request<any[]>('/leagues/public');
             const publicLeagues: PublicLeagueItem[] = raw.map((l) => ({
                 id: l.id,
+                code: l.code,
                 name: l.name,
                 description: l.description ?? undefined,
                 memberCount: l._count?.members ?? 0,
