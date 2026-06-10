@@ -53,6 +53,12 @@ export class EmailProviderCryptoService {
 
   private getRawKey(): string | undefined {
     const value = process.env.EMAIL_PROVIDER_ENCRYPTION_KEY?.trim();
+    if (value) {
+      const keyFingerprint = createHash('sha256').update(value).digest('hex').slice(0, 16);
+      console.log(`[CryptoService] KEY_FINGERPRINT=${keyFingerprint} keyLength=${value.length}`);
+    } else {
+      console.log('[CryptoService] EMAIL_PROVIDER_ENCRYPTION_KEY not set');
+    }
     return value ? value : undefined;
   }
 
