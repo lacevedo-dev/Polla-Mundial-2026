@@ -182,6 +182,11 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                 <p className="text-sm font-bold text-white truncate max-w-[110px]">
                                     {user?.name ?? 'Usuario'}
                                 </p>
+                                {user?.username && (
+                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[110px]">
+                                        {user.username}
+                                    </p>
+                                )}
                                 <p className="text-[10px] text-slate-500 font-medium mt-0.5">
                                     {isAdmin ? (user?.tenantRole === 'OWNER' ? 'Propietario' : 'Administrador') : 'Participante'}
                                 </p>
@@ -210,12 +215,27 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         </div>
                     )}
                 </Link>
-                <button
-                    onClick={() => setMobileOpen(!mobileOpen)}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800"
-                >
-                    {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* User avatar — toca para abrir menú con datos completos */}
+                    <button
+                        onClick={() => setMobileOpen(true)}
+                        title={user?.name ?? 'Mi perfil'}
+                        className="rounded-full hover:opacity-80 transition-opacity"
+                    >
+                        <img
+                            src={avatarUrl}
+                            alt={user?.name ?? 'Avatar'}
+                            className="w-8 h-8 rounded-full object-cover"
+                            style={{ boxShadow: `0 0 0 2px var(--color-primary, #f59e0b)` }}
+                        />
+                    </button>
+                    <button
+                        onClick={() => setMobileOpen(!mobileOpen)}
+                        className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800"
+                    >
+                        {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+                    </button>
+                </div>
             </header>
 
             {/* ── Mobile Menu Overlay ── */}
@@ -252,6 +272,11 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                             />
                             <div className="flex-1 min-w-0">
                                 <p className="text-white font-bold truncate">{user?.name ?? 'Usuario'}</p>
+                                {user?.username && (
+                                    <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                                        {user.username}
+                                    </p>
+                                )}
                                 <p className="text-xs text-slate-400 mt-0.5">
                                     {isAdmin ? (user?.tenantRole === 'OWNER' ? 'Propietario' : 'Administrador') : 'Participante'}
                                 </p>
