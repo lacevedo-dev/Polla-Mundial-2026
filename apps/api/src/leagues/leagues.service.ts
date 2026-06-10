@@ -540,7 +540,6 @@ export class LeaguesService {
         }
 
         const requiresPayment =
-            league.privacy === 'PUBLIC' &&
             league.includeBaseFee &&
             (league.baseFee ?? 0) > 0;
 
@@ -549,9 +548,11 @@ export class LeaguesService {
                 userId,
                 leagueId: league.id,
                 role: MemberRole.PLAYER,
-                status: league.privacy === 'PUBLIC'
-                    ? (requiresPayment ? MemberStatus.PENDING_PAYMENT : MemberStatus.ACTIVE)
-                    : MemberStatus.PENDING,
+                status: requiresPayment
+                    ? MemberStatus.PENDING_PAYMENT
+                    : league.privacy === 'PUBLIC'
+                        ? MemberStatus.ACTIVE
+                        : MemberStatus.PENDING,
             },
         });
 

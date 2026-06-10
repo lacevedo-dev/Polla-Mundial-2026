@@ -167,6 +167,95 @@ export class AdminPaymentsService {
         return { expired: expired.count };
     }
 
+    async backfillPrincipalObligations(leagueId: string) {
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            select: {
+                id: true,
+                name: true,
+                includeBaseFee: true,
+                baseFee: true,
+                currency: true,
+            },
+        });
+
+        if (!league) {
+            throw new NotFoundException('Liga no encontrada');
+        }
+
+        if (!league.includeBaseFee || !league.baseFee || league.baseFee <= 0) {
+            return { created: 0, skipped: 0, reason: 'La liga no tiene cuota base configurada' };
+        }
+
+        const members = await this.prisma.leagueMember.findMany({
+            where: {
+                leagueId,
+                status: { in: ['ACTIVE', 'PENDING_PAYMENT', 'PENDING'] },
+            },
+            select: { userId: true, status: true },
+        });
+
+        let created = 0;
+        let skipped = 0;
+
+        for (const member of members) {
+            const hasPredictions = await this.prisma.prediction.findFirst({
+                where: { leagueId, userId: member.userId },
+                select: { id: true },
+            });
+
+            if (!hasPredictions) {
+                skipped++;
+                continue;
+            }
+
+            const existingObligation = await this.prisma.participationObligation.findFirst({
+                where: {
+                    userId: member.userId,
+                    leagueId,
+                    category: 'PRINCIPAL',
+                    status: { in: ['PENDING_PAYMENT', 'PAID'] },
+                },
+                select: { id: true },
+            });
+
+            if (existingObligation) {
+                skipped++;
+                continue;
+            }
+
+            await this.prisma.participationObligation.create({
+                data: {
+                    userId: member.userId,
+                    leagueId,
+                    matchId: null,
+                    category: 'PRINCIPAL',
+                    referenceId: leagueId,
+                    referenceLabel: league.name,
+                    source: 'INVITATION',
+                    unitAmount: league.baseFee,
+                    multiplier: 1,
+                    totalAmount: league.baseFee,
+                    currency: league.currency,
+                    deadlineAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                    status: 'PENDING_PAYMENT',
+                },
+            });
+
+            if (member.status === 'ACTIVE') {
+                await this.prisma.leagueMember.update({
+                    where: { userId_leagueId: { userId: member.userId, leagueId } },
+                    data: { status: 'PENDING_PAYMENT' },
+                });
+            }
+
+            created++;
+        }
+
+        this.logger.log(`[Backfill] League ${leagueId}: ${created} obligations created, ${skipped} skipped`);
+        return { created, skipped };
+    }
+
     private _formatCurrency(amount: number, currency: string): string {
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',

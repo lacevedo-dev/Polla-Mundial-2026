@@ -59,4 +59,11 @@ export class AdminPaymentsController {
     async expireOverdue() {
         return this.adminPayments.expireOverdueObligations();
     }
+
+    @Post('obligations/backfill-principal')
+    @ApiOperation({ summary: 'Create missing PENDING_PAYMENT principal obligations for members with predictions but no obligation' })
+    @ApiQuery({ name: 'leagueId', required: true })
+    async backfillPrincipal(@Query('leagueId') leagueId: string) {
+        return this.adminPayments.backfillPrincipalObligations(leagueId);
+    }
 }
