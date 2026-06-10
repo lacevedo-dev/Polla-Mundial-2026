@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, Trophy } from 'lucide-react';
+import { AlertCircle, ArrowRight, BadgeCheck, Banknote, Calendar, Globe2, Star, Trophy, Users } from 'lucide-react';
 import { request } from '../api';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type MatchViewModel } from '../stores/prediction.store';
@@ -324,39 +324,97 @@ const Dashboard: React.FC = () => {
             <motion.div {...fade()} className="space-y-5">
                 {/* Featured public league card */}
                 {featuredLeague && (
-                    <div className="rounded-[2rem] bg-slate-900 p-6 text-white">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-lime-400 text-slate-900">
-                                <Trophy size={22} />
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-lime-400">Polla oficial · Gratis</p>
-                                <h2 className="text-lg font-black uppercase tracking-tight text-white leading-tight">{featuredLeague.name}</h2>
-                            </div>
+                    <div className="rounded-[2rem] overflow-hidden bg-slate-900 text-white">
+                        {/* Header banner */}
+                        <div className="bg-gradient-to-r from-lime-500 to-lime-400 px-6 py-3 flex items-center gap-2">
+                            <Star size={13} className="text-slate-900" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-900">Polla oficial del Mundial · Únete ahora</span>
                         </div>
-                        {featuredLeague.description && (
-                            <p className="text-sm text-slate-300 mb-4 leading-5">{featuredLeague.description}</p>
-                        )}
-                        <div className="flex items-center gap-4 text-[11px] text-slate-400 mb-5">
-                            <span className="inline-flex items-center gap-1.5">
-                                <AlertCircle size={11} />
-                                {featuredLeague.memberCount} participantes
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                                <Trophy size={11} />
-                                {featuredLeague.baseFee ? `$${featuredLeague.baseFee.toLocaleString('es-CO')}` : 'Sin costo'}
-                            </span>
+
+                        <div className="p-6">
+                            {/* Title */}
+                            <div className="flex items-start gap-4 mb-5">
+                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-lime-400/10 border border-lime-400/30 text-lime-400">
+                                    <Globe2 size={26} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black uppercase tracking-tight text-white leading-tight">{featuredLeague.name}</h2>
+                                    <p className="text-xs text-slate-400 mt-0.5">FIFA World Cup 2026 · México, Canadá y EE.UU.</p>
+                                </div>
+                            </div>
+
+                            {/* Description */}
+                            <p className="text-sm text-slate-300 leading-5 mb-5">
+                                {featuredLeague.description ||
+                                    'Participa en la polla oficial del Mundial 2026. Pronostica los resultados de los 104 partidos y compite en el ranking general.'}
+                            </p>
+
+                            {/* Info grid */}
+                            <div className="grid grid-cols-2 gap-3 mb-5">
+                                <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-1">Valor inscripción</p>
+                                    <p className="text-base font-black text-lime-400 flex items-center gap-1.5">
+                                        <Banknote size={15} />
+                                        {featuredLeague.baseFee
+                                            ? `$${featuredLeague.baseFee.toLocaleString('es-CO')} ${featuredLeague.currency ?? 'COP'}`
+                                            : 'Gratuito'}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-1">Participantes</p>
+                                    <p className="text-base font-black text-white flex items-center gap-1.5">
+                                        <Users size={15} />
+                                        {featuredLeague.memberCount}
+                                        {featuredLeague.maxParticipants ? ` / ${featuredLeague.maxParticipants}` : ''}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-1">Torneo</p>
+                                    <p className="text-sm font-bold text-white flex items-center gap-1.5">
+                                        <Calendar size={13} />
+                                        104 partidos
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-1">Tipo</p>
+                                    <p className="text-sm font-bold text-white flex items-center gap-1.5">
+                                        <BadgeCheck size={13} className="text-lime-400" />
+                                        Liga pública
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Highlights */}
+                            <ul className="space-y-2 mb-6">
+                                {[
+                                    'Pronostica resultado y marcador exacto de cada partido',
+                                    'Gana puntos por aciertos: marcador exacto = 3 pts, resultado = 1 pt',
+                                    'Compite en el ranking general contra todos los participantes',
+                                    featuredLeague.baseFee
+                                        ? `Inscripción única de $${featuredLeague.baseFee.toLocaleString('es-CO')} ${featuredLeague.currency ?? 'COP'} para participar`
+                                        : 'Participación completamente gratuita',
+                                ].map((item) => (
+                                    <li key={item} className="flex items-start gap-2 text-xs text-slate-300">
+                                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime-400/20 text-lime-400 text-[9px] font-black">
+                                            ✓
+                                        </span>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+
+                            {/* CTA */}
+                            <button
+                                onClick={handleJoinFeatured}
+                                disabled={joiningPublicId === featuredLeague.id}
+                                className="w-full rounded-2xl bg-lime-400 py-3.5 text-sm font-black uppercase tracking-wide text-slate-900 hover:bg-lime-300 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {joiningPublicId === featuredLeague.id
+                                    ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" /> Uniéndome...</>
+                                    : <><Trophy size={15} /> Quiero participar en la Polla Mundial 2026 <ArrowRight size={14} /></>
+                                }
+                            </button>
                         </div>
-                        <button
-                            onClick={handleJoinFeatured}
-                            disabled={joiningPublicId === featuredLeague.id}
-                            className="w-full rounded-2xl bg-lime-400 py-3 text-sm font-black uppercase tracking-wide text-slate-900 hover:bg-lime-300 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-                        >
-                            {joiningPublicId === featuredLeague.id
-                                ? <><div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" /> Uniéndome...</>
-                                : '¡Unirme gratis y pronosticar!'
-                            }
-                        </button>
                     </div>
                 )}
 
