@@ -63,6 +63,7 @@ export default function AdminCorpMembers() {
     const authUser = useAuthStore((s) => s.user);
     const tenant = useTenantStore((s) => s.tenant);
     const callerIsStaff = authUser?.tenantRole === 'STAFF';
+    const callerIsAdmin = authUser?.tenantRole === 'ADMIN' || authUser?.tenantRole === 'OWNER';
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -319,10 +320,12 @@ export default function AdminCorpMembers() {
                                             className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                                             <Pencil size={14} />
                                         </button>
-                                        <button onClick={() => openDelete(member)} title="Eliminar"
-                                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                                            <Trash2 size={14} />
-                                        </button>
+                                        {callerIsAdmin && (
+                                            <button onClick={() => openDelete(member)} title="Eliminar"
+                                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             );
