@@ -406,6 +406,11 @@ export default function AdminCorpMembers() {
                                 <div>
                                     <p className="font-bold text-slate-800 text-sm">{target.name}</p>
                                     <p className="text-xs text-slate-400">{target.email}</p>
+                                    {target.username && (
+                                        <p className="text-xs text-slate-500 font-mono mt-0.5">
+                                            <span className="text-slate-400">Doc:</span> {target.username}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                             <div>
