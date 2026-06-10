@@ -311,6 +311,7 @@ export class LeaguesService {
                      where: { userId },
                      select: { role: true, status: true },
                  },
+                 distributions: true,
              },
              orderBy: { createdAt: 'desc' },
          });

@@ -163,6 +163,7 @@ const Dashboard: React.FC = () => {
         activeLeague?.settings.baseFee,
         activeLeague?.stats.memberCount,
         activeLeague?.settings.currency ?? 'COP',
+        activeLeague?.distributions,
     ), [activeLeague]);
 
     const memberCount = activeLeague?.stats.memberCount ?? 0;

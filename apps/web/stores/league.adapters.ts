@@ -287,6 +287,7 @@ export function toLeagueContextListItem(response: LeagueApiResponse): LeagueCont
             memberCount,
             totalPrize: estimatePrizePool(response.baseFee, memberCount, response.currency),
         },
+        distributions: response.distributions,
     };
 }
 

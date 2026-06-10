@@ -17,17 +17,46 @@ export function safeText(value?: string | null, fallback = 'Sin datos'): string 
 
 export const ADMIN_COMMISSION = 0.1;
 
-export function calcPrizes(baseFee: number | null | undefined, memberCount: number | undefined, currency = 'COP') {
+export interface PrizePosition {
+    label: string;
+    percentage: number;
+    amount: number;
+}
+
+export function calcPrizes(
+    baseFee: number | null | undefined,
+    memberCount: number | undefined,
+    currency = 'COP',
+    distributions?: Array<{ category: string; position: number; label: string; percentage: number; active: boolean }>,
+) {
     const raw = (baseFee ?? 0) * (memberCount ?? 0);
     const net = Math.round(raw * (1 - ADMIN_COMMISSION));
     const commission = raw - net;
     const fmt = (n: number) => (n > 0 ? formatCurrency(n, currency) : '—');
+
+    const activeDist = (distributions ?? [])
+        .filter((d) => d.active && d.category === 'GENERAL')
+        .sort((a, b) => a.position - b.position);
+
+    const fallback: Array<{ label: string; percentage: number }> = [
+        { label: '1er puesto', percentage: 60 },
+        { label: '2do puesto', percentage: 20 },
+        { label: '3er puesto', percentage: 10 },
+    ];
+
+    const source = activeDist.length > 0 ? activeDist : fallback;
+
+    const positions: PrizePosition[] = source.map((d) => ({
+        label: d.label,
+        percentage: d.percentage,
+        amount: Math.round(net * (d.percentage / 100)),
+    }));
+
     return {
-        raw, net, commission,
-        first: Math.round(net * 0.6),
-        second: Math.round(net * 0.3),
-        third: Math.round(net * 0.1),
-        fmt,
+        raw, net, commission, fmt, positions,
+        first: positions[0]?.amount ?? 0,
+        second: positions[1]?.amount ?? 0,
+        third: positions[2]?.amount ?? 0,
     };
 }
 
