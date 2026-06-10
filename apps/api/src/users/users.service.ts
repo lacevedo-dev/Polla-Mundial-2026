@@ -64,7 +64,7 @@ export class UsersService {
         const where: any = {
             OR: [
                 { email: value.toLowerCase() },
-                { username: { equals: value, mode: 'insensitive' as any } },
+                { username: value },
                 ...documentCandidates.map((documentNumber) => ({ documentNumber })),
             ],
             ...this.buildStatusWhere(options.includeInactive),
