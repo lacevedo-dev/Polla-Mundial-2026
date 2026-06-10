@@ -33,16 +33,32 @@ export class TenantProvisioningService {
         const role = (dto.role ?? 'OWNER') as TenantRole;
         const sendEmail = dto.sendEmail !== false;
 
-        // Buscar usuario existente
-        const existingUser = await this.prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email },
-                    ...(documentNumber ? [{ documentNumber }] : []),
-                ],
-            } as any,
-            select: { id: true, name: true, email: true, documentNumber: true },
-        });
+        // Buscar usuario existente — documento es la clave principal en contexto corporativo
+        let existingUser: { id: string; name: string; email: string; documentNumber: string | null } | null = null;
+
+        if (documentNumber) {
+            existingUser = await this.prisma.user.findFirst({
+                where: { documentNumber },
+                select: { id: true, name: true, email: true, documentNumber: true },
+            });
+        }
+
+        if (!existingUser) {
+            existingUser = await this.prisma.user.findFirst({
+                where: { email },
+                select: { id: true, name: true, email: true, documentNumber: true },
+            });
+        }
+
+        // Validar consistencia entre documento y correo encontrados
+        if (existingUser && documentNumber) {
+            if (existingUser.documentNumber && existingUser.documentNumber !== documentNumber) {
+                throw new BadRequestException('El correo electrónico ya está registrado con otro número de documento');
+            }
+            if (existingUser.email !== email) {
+                throw new BadRequestException('El número de documento ya está registrado con otro correo electrónico');
+            }
+        }
 
         let userId: string;
         let isNewUser = false;
@@ -51,12 +67,6 @@ export class TenantProvisioningService {
         if (existingUser) {
             userId = existingUser.id;
             await this.limitsService.checkUserLimit(tenantId);
-            if (documentNumber && existingUser.documentNumber !== documentNumber) {
-                await this.prisma.user.update({
-                    where: { id: existingUser.id },
-                    data: { documentNumber },
-                });
-            }
         } else {
             // Validar límite ANTES de crear el user
             await this.limitsService.checkUserLimit(tenantId);

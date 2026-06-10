@@ -51,6 +51,9 @@ class BulkProvisionMembersDto {
 class UpdateMemberDto {
     @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
     @IsOptional() @IsEnum(TenantMemberStatus) status?: TenantMemberStatus;
+    @IsOptional() @IsString() name?: string;
+    @IsOptional() @IsEmail() email?: string;
+    @IsOptional() @IsString() documentNumber?: string;
 }
 
 class UpdateCorpConfigDto {
@@ -740,15 +743,49 @@ export class CorpPortalController {
     async updateMember(@Req() req: any, @Param('memberId') memberId: string, @Body() dto: UpdateMemberDto) {
         const tenantId: string = req.tenantId;
         const callerRole: string = req.tenantRole;
-        const member = await this.prisma.tenantMember.findFirst({ where: { id: memberId, tenantId } });
+        const member = await this.prisma.tenantMember.findFirst({
+            where: { id: memberId, tenantId },
+            include: { user: { select: { id: true } } },
+        });
         if (!member) throw new NotFoundException('Miembro no encontrado');
         if (callerRole === 'STAFF' && dto.role && ['OWNER', 'ADMIN', 'STAFF'].includes(dto.role)) {
             throw new ForbiddenException('El rol Usuario solo puede asignar el rol Jugador');
         }
-        const data: Partial<{ role: TenantRole; status: TenantMemberStatus }> = {};
-        if (dto.role !== undefined) data.role = dto.role;
-        if (dto.status !== undefined) data.status = dto.status;
-        if (Object.keys(data).length) await this.prisma.tenantMember.update({ where: { id: memberId }, data });
+
+        const memberData: Partial<{ role: TenantRole; status: TenantMemberStatus }> = {};
+        if (dto.role !== undefined) memberData.role = dto.role;
+        if (dto.status !== undefined) memberData.status = dto.status;
+
+        const userData: any = {};
+        if (dto.name !== undefined) userData.name = dto.name.trim();
+        if (dto.email !== undefined) {
+            const email = dto.email.toLowerCase().trim();
+            const existingEmail = await this.prisma.user.findFirst({
+                where: { email, id: { not: member.userId } },
+                select: { id: true },
+            });
+            if (existingEmail) throw new BadRequestException('Ya existe otro usuario con ese correo electrónico');
+            userData.email = email;
+        }
+        if (dto.documentNumber !== undefined) {
+            const doc = dto.documentNumber.trim().replace(/\D/g, '');
+            const existingDoc = await this.prisma.user.findFirst({
+                where: { documentNumber: doc, id: { not: member.userId } },
+                select: { id: true },
+            });
+            if (existingDoc) throw new BadRequestException('Ya existe otro usuario con ese número de documento');
+            userData.documentNumber = doc || null;
+        }
+
+        await this.prisma.$transaction(async (tx) => {
+            if (Object.keys(memberData).length) {
+                await tx.tenantMember.update({ where: { id: memberId }, data: memberData });
+            }
+            if (Object.keys(userData).length) {
+                await tx.user.update({ where: { id: member.userId }, data: userData });
+            }
+        });
+
         return { ok: true };
     }
 
@@ -759,13 +796,9 @@ export class CorpPortalController {
         const tenantId: string = req.tenantId;
         const member = await this.prisma.tenantMember.findFirst({
             where: { id: memberId, tenantId },
-            include: { user: { select: { id: true } } },
         });
         if (!member) throw new NotFoundException('Miembro no encontrado');
-        await this.prisma.tenantMember.update({
-            where: { id: memberId },
-            data: { status: 'INACTIVE' },
-        });
+        await this.prisma.tenantMember.delete({ where: { id: memberId } });
         return { ok: true };
     }
 

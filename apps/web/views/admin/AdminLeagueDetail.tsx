@@ -323,7 +323,8 @@ const AdminLeagueDetail: React.FC = () => {
                                     ))}
                                 </div>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
+                            <p className="text-[10px] text-sla
+                            te-400 mt-2 flex items-center gap-1">
                                 <Star size={10} className="text-amber-500" />
                                 El torneo <strong>Principal</strong> determina qué partidos generan sugerencia de participación
                             </p>

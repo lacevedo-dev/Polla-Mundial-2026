@@ -129,11 +129,24 @@ export default function AdminCorpMembers() {
 
     async function handleEdit() {
         if (!target) return;
+        if (!form.name.trim() || !form.email.trim() || !form.documentNumber.trim()) {
+            setModalError('Nombre, correo y documento son obligatorios.'); return;
+        }
         setSaving(true); setModalError(null);
         try {
-            await request(`/corp/members/${target.id}`, { method: 'PATCH', body: JSON.stringify({ role: form.role }) });
-            setMembers(prev => prev.map(m => m.id === target.id ? { ...m, role: form.role } : m));
-            closeModal(); showSuccess('Rol actualizado correctamente.');
+            const payload: any = { role: form.role };
+            if (form.name.trim() !== target.name) payload.name = form.name.trim();
+            if (form.email.trim().toLowerCase() !== target.email.toLowerCase()) payload.email = form.email.trim();
+            if (form.documentNumber.trim() !== target.username) payload.documentNumber = form.documentNumber.trim();
+            await request(`/corp/members/${target.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+            setMembers(prev => prev.map(m => m.id === target.id ? {
+                ...m,
+                name: form.name.trim(),
+                email: form.email.trim().toLowerCase(),
+                username: form.documentNumber.trim(),
+                role: form.role,
+            } : m));
+            closeModal(); showSuccess('Usuario actualizado correctamente.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al actualizar.'); }
         finally { setSaving(false); }
     }
@@ -399,10 +412,10 @@ export default function AdminCorpMembers() {
                 </div>
             )}
 
-            {/* ── Modal: Editar rol ── */}
+            {/* ── Modal: Editar usuario ── */}
             {modal === 'edit' && target && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
                         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                             <h3 className="font-black text-slate-900">Editar usuario</h3>
                             <button onClick={closeModal} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X size={17} /></button>
@@ -420,6 +433,36 @@ export default function AdminCorpMembers() {
                                         </p>
                                     )}
                                 </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Nombre completo *</label>
+                                <input
+                                    type="text"
+                                    value={form.name}
+                                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent"
+                                    style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Correo electrónico *</label>
+                                <input
+                                    type="email"
+                                    value={form.email}
+                                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent"
+                                    style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Número de documento *</label>
+                                <input
+                                    type="text"
+                                    value={form.documentNumber}
+                                    onChange={e => setForm(f => ({ ...f, documentNumber: e.target.value }))}
+                                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent font-mono"
+                                    style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any}
+                                />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
