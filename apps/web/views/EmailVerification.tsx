@@ -15,6 +15,7 @@ import {
   Check as CheckIcon
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
+import { useLeagueStore } from '../stores/league.store';
 
 interface EmailVerificationProps {
   email?: string;
@@ -59,12 +60,21 @@ const EmailVerification: React.FC<EmailVerificationProps> = ({ email: propEmail 
     setResendMessage(null);
 
     try {
-      await verifyEmail(tokenToVerify);
+      const response = await verifyEmail(tokenToVerify);
       setVerificationSuccess(true);
-      // Redirect to dashboard after 2 seconds
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
+
+      const defaultLeagueId = response?.defaultLeagueId;
+      if (defaultLeagueId) {
+        const { fetchLeagueDetails, setActiveLeague } = useLeagueStore.getState();
+        await fetchLeagueDetails(defaultLeagueId);
+        setActiveLeague(defaultLeagueId);
+        navigate('/predictions');
+      } else {
+        // Redirect to dashboard after 2 seconds
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 2000);
+      }
     } catch (err: any) {
       const errorMessage = err.message || 'Error al verificar el token.';
       if (errorMessage.includes('expirado') || errorMessage.includes('expired')) {

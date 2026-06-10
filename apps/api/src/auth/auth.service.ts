@@ -10,6 +10,7 @@ import { generateVerificationToken, calculateTokenExpiration } from './verificat
 import { PrismaService } from '../prisma/prisma.service';
 import { AvatarStorageService, type AvatarUploadFile } from './avatar-storage.service';
 import { USER_STATUS } from '../users/user-status.constants';
+import { MemberRole, MemberStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -179,6 +180,52 @@ export class AuthService {
             ]).then(results => results[0]),
         );
 
+        // Auto-join public World Cup 2026 league
+        let defaultLeagueId: string | undefined;
+        try {
+            const tournament = await this.prisma.tournament.findFirst({
+                where: { apiFootballLeagueId: 1, season: 2026 },
+            });
+
+            if (tournament) {
+                const publicLeague = await this.prisma.league.findFirst({
+                    where: {
+                        privacy: 'PUBLIC',
+                        primaryTournamentId: tournament.id,
+                        status: { not: 'CANCELLED' as any },
+                    },
+                });
+
+                if (publicLeague) {
+                    const existingMember = await this.prisma.leagueMember.findUnique({
+                        where: {
+                            userId_leagueId: { userId: user.id, leagueId: publicLeague.id },
+                        },
+                    });
+
+                    if (!existingMember) {
+                        const requiresPayment =
+                            publicLeague.includeBaseFee && (publicLeague.baseFee ?? 0) > 0;
+
+                        await this.prisma.leagueMember.create({
+                            data: {
+                                userId: user.id,
+                                leagueId: publicLeague.id,
+                                role: MemberRole.PLAYER,
+                                status: requiresPayment ? MemberStatus.PENDING_PAYMENT : MemberStatus.ACTIVE,
+                            },
+                        });
+                    }
+
+                    defaultLeagueId = publicLeague.id;
+                }
+            }
+        } catch (joinError) {
+            this.logger.warn(
+                `No se pudo unir automáticamente al usuario ${user.id} a la polla por defecto: ${joinError instanceof Error ? joinError.message : String(joinError)}`,
+            );
+        }
+
         const { passwordHash: _, ...result } = user;
         const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified, systemRole: (user as any).systemRole ?? 'USER' };
 
@@ -186,6 +233,7 @@ export class AuthService {
             message: 'Email verificado exitosamente',
             accessToken: this.jwtService.sign(payload),
             user: result,
+            ...(defaultLeagueId ? { defaultLeagueId } : {}),
         };
     }
 

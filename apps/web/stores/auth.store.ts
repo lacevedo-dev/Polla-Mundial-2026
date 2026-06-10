@@ -30,7 +30,7 @@ interface AuthState {
     loginWithToken: (token: string) => Promise<void>;
     logout: () => void;
     checkAuth: () => Promise<boolean>;
-    verifyEmail: (token: string) => Promise<void>;
+    verifyEmail: (token: string) => Promise<any>;
     resendVerification: () => Promise<void>;
     isEmailVerified: () => boolean;
     isSuperAdmin: () => boolean;
@@ -179,14 +179,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 method: 'POST',
                 body: JSON.stringify({ token }),
             });
+            const accessToken = response.accessToken ?? response.access_token;
+            if (accessToken) {
+                localStorage.setItem('token', accessToken);
+            }
             const user = normalizeUser(response.user) ?? get().user;
             const emailVerified = response.user?.emailVerified ?? true;
             set({
                 user: { ...user, emailVerified },
+                token: accessToken ?? get().token,
                 emailVerified,
                 sessionChecked: true,
                 isLoading: false,
             });
+            return response;
         } catch (error) {
             set({ isLoading: false });
             throw normalizeAuthError(error, 'verifyEmail');
