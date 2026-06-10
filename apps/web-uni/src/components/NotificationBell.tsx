@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, CheckCheck, X, EyeOff, Eye } from 'lucide-react';
+import { Bell, CheckCheck, X, EyeOff, Eye, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
@@ -72,12 +72,13 @@ function isNavigable(type: string): boolean {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function NotificationBell() {
-    const [open, setOpen]           = useState(false);
-    const [data, setData]           = useState<NotifResponse | null>(null);
-    const [loading, setLoading]     = useState(false);
-    const [activeFilter, setFilter] = useState<string | null>(null);
-    const [hideRead, setHideRead]   = useState(true);
-    const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
+    const [open, setOpen]             = useState(false);
+    const [data, setData]             = useState<NotifResponse | null>(null);
+    const [loading, setLoading]       = useState(false);
+    const [activeFilter, setFilter]   = useState<string | null>(null);
+    const [hideRead, setHideRead]     = useState(true);
+    const [isDesktop, setIsDesktop]   = useState(() => window.innerWidth >= 768);
+    const [confirmClear, setConfirmClear] = useState(false);
     const containerRef              = useRef<HTMLDivElement>(null);
     const navigate                  = useNavigate();
     const tenant                    = useTenantStore(s => s.tenant);
@@ -139,6 +140,12 @@ export default function NotificationBell() {
             unreadCount: 0,
             notifications: prev.notifications.map(n => ({ ...n, read: true })),
         } : prev);
+    };
+
+    const clearHistory = async () => {
+        await request('/notifications', { method: 'DELETE' });
+        setData({ notifications: [], unreadCount: 0 });
+        setConfirmClear(false);
     };
 
     const handleOpen = () => {
@@ -254,6 +261,26 @@ export default function NotificationBell() {
                                 >
                                     <CheckCheck size={12} />
                                 </button>
+                            )}
+                            {(data?.notifications.length ?? 0) > 0 && (
+                                confirmClear ? (
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={clearHistory} className="px-1.5 py-1 rounded-lg text-[10px] font-black text-red-400 hover:bg-red-900/40 transition-colors">
+                                            Borrar
+                                        </button>
+                                        <button onClick={() => setConfirmClear(false)} className="px-1.5 py-1 rounded-lg text-[10px] font-black text-slate-400 hover:bg-slate-800 transition-colors">
+                                            No
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setConfirmClear(true)}
+                                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-900/30 transition-colors"
+                                        title="Limpiar historial"
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
+                                )
                             )}
                             <button
                                 onClick={() => setOpen(false)}

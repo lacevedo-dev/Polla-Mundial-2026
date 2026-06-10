@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -172,5 +172,14 @@ export class NotificationsController {
       data: { read: true },
     });
     return { ok: true, count };
+  }
+
+  /** Eliminar todo el historial de notificaciones del usuario */
+  @Delete()
+  async clearAll(@CurrentUser() user: { id: string }) {
+    const { count } = await this.prisma.notification.deleteMany({
+      where: { userId: user.id },
+    });
+    return { ok: true, deleted: count };
   }
 }
