@@ -22,9 +22,10 @@ export class TenantInvitationService {
         return `https://${tenantSlug}.zonapronosticos.com/join-org?token=${token}`;
     }
 
-    private buildInviteEmail(tenantName: string, link: string, branding?: { primaryColor?: string | null; companyDisplayName?: string | null } | null): { html: string; text: string } {
+    private buildInviteEmail(tenantName: string, link: string, branding?: { primaryColor?: string | null; companyDisplayName?: string | null } | null, contactEmail?: string): { html: string; text: string } {
         const displayName = branding?.companyDisplayName ?? tenantName;
         const color = branding?.primaryColor ?? '#16a34a';
+        const websiteDisplay = contactEmail ? (contactEmail.split('@')[1] ?? contactEmail) : null;
 
         const html = `
 <!DOCTYPE html>
@@ -52,14 +53,14 @@ export class TenantInvitationService {
       <a href="${link}" style="color: ${color}; word-break: break-all;">${link}</a>
     </p>
     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-    <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin: 0;">
-      Esta invitación expira en 7 días. Si no reconoces este mensaje, ignóralo.
+    <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
+      Esta invitación expira en 7 días. Si no esperabas este correo, ignóralo${websiteDisplay ? ` o contáctanos con <strong>${displayName}</strong> en <a href="https://${websiteDisplay}" style="color: ${color};">${websiteDisplay}</a>` : ''}.
     </p>
   </div>
 </body>
 </html>`;
 
-        const text = `${displayName} te invita a la Polla del Mundial 2026.\n\nAcepta tu invitación aquí: ${link}\n\nEsta invitación expira en 7 días.`;
+        const text = `${displayName} te invita a la Polla del Mundial 2026.\n\nAcepta tu invitación aquí: ${link}\n\nEsta invitación expira en 7 días.${websiteDisplay ? `\n\nSi no esperabas este correo, ignóralo o contáctanos con ${displayName} en ${websiteDisplay}.` : ''}`;
 
         return { html, text };
     }
@@ -88,7 +89,7 @@ export class TenantInvitationService {
         });
 
         const link = this.buildInviteLink(tenant.slug, token);
-        const { html, text } = this.buildInviteEmail(tenant.name, link, tenant.branding);
+        const { html, text } = this.buildInviteEmail(tenant.name, link, tenant.branding, tenant.contactEmail);
 
         await this.emailQueue.enqueueEmail({
             type: 'VERIFICATION',
@@ -142,7 +143,7 @@ export class TenantInvitationService {
                     update: { role, token, status: 'SENT', expiresAt, bulkBatchId: batchId, sentAt: now, resendCount: { increment: 1 } },
                 });
 
-                const { html, text } = this.buildInviteEmail(tenant.name, inviteLink, tenant.branding);
+                const { html, text } = this.buildInviteEmail(tenant.name, inviteLink, tenant.branding, tenant.contactEmail);
 
                 await this.emailQueue.enqueueEmail({
                     type: 'VERIFICATION',
@@ -193,7 +194,7 @@ export class TenantInvitationService {
         });
 
         const link = this.buildInviteLink(tenant.slug, newToken);
-        const { html, text } = this.buildInviteEmail(tenant.name, link, tenant.branding);
+        const { html, text } = this.buildInviteEmail(tenant.name, link, tenant.branding, tenant.contactEmail);
 
         await this.emailQueue.enqueueEmail({
             type: 'VERIFICATION',

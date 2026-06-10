@@ -137,6 +137,7 @@ export class TenantProvisioningService {
                 email,
                 tempPassword,
                 primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
+                contactEmail: tenant.contactEmail,
             });
 
             try {
@@ -233,6 +234,7 @@ export class TenantProvisioningService {
             email,
             tempPassword,
             primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
+            contactEmail: tenant.contactEmail,
         });
 
         let emailSent = false;
@@ -333,8 +335,10 @@ export class TenantProvisioningService {
         email: string;
         tempPassword: string;
         primaryColor: string;
+        contactEmail: string;
     }): { html: string; text: string } {
-        const { userName, tenantName, portalUrl, email, tempPassword, primaryColor } = params;
+        const { userName, tenantName, portalUrl, email, tempPassword, primaryColor, contactEmail } = params;
+        const websiteDisplay = contactEmail.split('@')[1] ?? contactEmail;
 
         const html = `
 <!DOCTYPE html>
@@ -350,8 +354,7 @@ export class TenantProvisioningService {
     </div>
 
     <p style="color: #334155; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
-      Hola <strong>${userName}</strong>, hemos creado tu cuenta como administrador del portal corporativo
-      de <strong>${tenantName}</strong> en ZonaPronósticos.
+      Hemos creado una cuenta de administrador para la <strong>Polla ${tenantName}</strong>.
     </p>
 
     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin: 0 0 24px;">
@@ -386,14 +389,14 @@ export class TenantProvisioningService {
 
     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
     <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
-      Si no esperabas este correo, ignóralo o contáctanos en
-      <a href="mailto:soporte@zonapronosticos.com" style="color: ${primaryColor};">soporte@zonapronosticos.com</a>.
+      Si no esperabas este correo, ignóralo o contáctanos con <strong>${tenantName}</strong>
+      en <a href="https://${websiteDisplay}" style="color: ${primaryColor};">${websiteDisplay}</a>.
     </p>
   </div>
 </body>
 </html>`.trim();
 
-        const text = `Bienvenido a ${tenantName}\n\nHola ${userName},\n\nTus credenciales de acceso al portal corporativo:\n\nUsuario: ${email}\nContraseña: ${tempPassword}\nPortal: ${portalUrl}\n\nPor seguridad, deberás cambiar tu contraseña al iniciar sesión por primera vez.\n\nIngresa aquí: ${portalUrl}/login`;
+        const text = `Polla ${tenantName}\n\nHemos creado una cuenta de administrador para la Polla ${tenantName}.\n\nTus credenciales de acceso:\n\nUsuario: ${email}\nContraseña: ${tempPassword}\nPortal: ${portalUrl}\n\nPor seguridad, deberás cambiar tu contraseña al iniciar sesión por primera vez.\n\nIngresa aquí: ${portalUrl}/login\n\nSi no esperabas este correo, ignóralo o contáctanos con ${tenantName} en ${websiteDisplay}.`;
 
         return { html, text };
     }
