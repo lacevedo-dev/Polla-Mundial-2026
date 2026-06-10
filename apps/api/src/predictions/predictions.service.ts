@@ -77,7 +77,7 @@ export class PredictionsService {
             where: { userId_leagueId: { userId, leagueId } },
         });
 
-        if (!membership || membership.status !== MemberStatus.ACTIVE) {
+        if (!membership || (membership.status !== MemberStatus.ACTIVE && membership.status !== MemberStatus.PENDING_PAYMENT)) {
             throw new ForbiddenException('No eres un miembro activo de esta liga');
         }
 
@@ -576,7 +576,7 @@ export class PredictionsService {
             where: {
                 userId,
                 leagueId,
-                status: MemberStatus.ACTIVE,
+                status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING_PAYMENT] },
                 user: { is: { status: USER_STATUS.ACTIVE } },
             },
             include: {
