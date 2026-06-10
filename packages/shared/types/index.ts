@@ -104,6 +104,7 @@ export interface TenantContext {
   slug: string;
   name: string;
   legalName: string | null;
+  contactEmail?: string | null;
   status: TenantStatus;
   planTier: TenantPlanTier;
   customDomain: string | null;

@@ -58,6 +58,7 @@ export class TenantService {
                 slug: true,
                 name: true,
                 legalName: true,
+                contactEmail: true,
                 status: true,
                 planTier: true,
                 customDomain: true,

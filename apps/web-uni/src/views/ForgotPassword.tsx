@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Loader2, Mail, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, Loader2, Mail, ShieldAlert } from 'lucide-react';
 import { request, ApiError } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
+
+function deriveContactUrl(contactEmail?: string | null): string | null {
+    if (!contactEmail) return null;
+    const domain = contactEmail.split('@')[1];
+    return domain ? `www.${domain}` : null;
+}
 
 export default function ForgotPassword() {
     const tenant = useTenantStore((s) => s.tenant);
     const [identifier, setIdentifier] = useState('');
     const [loading, setLoading] = useState(false);
     const [sent, setSent] = useState(false);
+    const [notFound, setNotFound] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const orgName = tenant?.branding?.companyDisplayName?.trim() || tenant?.name || 'Portal corporativo';
@@ -19,11 +26,15 @@ export default function ForgotPassword() {
         setError(null);
         setLoading(true);
         try {
-            await request('/auth/forgot-password', {
+            const res = await request<{ ok: boolean; found?: boolean }>('/auth/forgot-password', {
                 method: 'POST',
                 body: JSON.stringify({ identifier: identifier.trim(), appUrl: window.location.origin }),
             });
-            setSent(true);
+            if (res.found === false) {
+                setNotFound(true);
+            } else {
+                setSent(true);
+            }
         } catch (err) {
             setError(err instanceof ApiError ? err.message : 'No fue posible procesar la solicitud.');
         } finally {
@@ -47,7 +58,30 @@ export default function ForgotPassword() {
                         <p className="text-slate-400 text-sm mt-1">{orgName}</p>
                     </div>
 
-                    {sent ? (
+                    {notFound ? (
+                        <div className="text-center space-y-4">
+                            <AlertCircle size={44} className="text-rose-400 mx-auto" />
+                            <div className="text-sm text-slate-300 space-y-2">
+                                <p>La cédula <strong className="text-white">{identifier}</strong> no aparece registrada en la base de datos.</p>
+                                {(() => {
+                                    const contactUrl = deriveContactUrl(tenant?.contactEmail);
+                                    return contactUrl ? (
+                                        <p className="text-slate-400">Comuníquese con <span className="text-white font-semibold">{orgName}</span> en{' '}
+                                            <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primaryColor }}>
+                                                {contactUrl}
+                                            </a>.
+                                        </p>
+                                    ) : (
+                                        <p className="text-slate-400">Comuníquese con <span className="text-white font-semibold">{orgName}</span> para solicitar su registro.</p>
+                                    );
+                                })()}
+                            </div>
+                            <button onClick={() => { setNotFound(false); setError(null); }} className="block w-full rounded-xl py-3 text-center text-sm font-black text-white" style={{ backgroundColor: primaryColor }}>
+                                Intentar con otro documento
+                            </button>
+                            <Link to="/login" className="block text-xs text-slate-500 hover:text-slate-300 mt-1">Volver al login</Link>
+                        </div>
+                    ) : sent ? (
                         <div className="text-center space-y-4">
                             <CheckCircle2 size={44} className="text-emerald-400 mx-auto" />
                             <p className="text-sm text-slate-300">

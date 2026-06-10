@@ -328,7 +328,7 @@ export class AuthService {
     async forgotPassword(identifier: string, appUrl?: string) {
         const user = await this.usersService.findByEmailOrUsername(identifier);
         if (!user) {
-            return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
+            return { ok: true, found: false, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
         }
 
         const token = generateVerificationToken();
@@ -344,7 +344,7 @@ export class AuthService {
         const firstName = user.name?.split(' ')[0] ?? user.username ?? 'Usuario';
         await this.emailService.sendPasswordResetEmail(user.email, token, firstName, resetBaseUrl);
 
-        return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
+        return { ok: true, found: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
     }
 
     async resetPassword(token: string, newPassword: string) {
