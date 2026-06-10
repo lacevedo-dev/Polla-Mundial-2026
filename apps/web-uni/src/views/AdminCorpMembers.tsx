@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
     Users, Search, Crown, Shield, User, Mail, Copy, Check,
     Plus, Pencil, Trash2, X, Loader2, AlertTriangle, Upload,
-    Send, KeyRound, EyeOff, Eye, RefreshCw,
+    Send, KeyRound, EyeOff, Eye, RefreshCw, Hash,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, ApiError } from '../api';
@@ -304,12 +304,17 @@ export default function AdminCorpMembers() {
                                                 </span>
                                             )}
                                         </div>
+                                        {member.username && (
+                                            <div className="flex items-center gap-1 mt-0.5">
+                                                <Hash size={9} className="text-slate-300 shrink-0" />
+                                                <span className="text-[11px] text-slate-400 font-mono">{member.username}</span>
+                                            </div>
+                                        )}
                                         <div className="flex items-center gap-1 mt-0.5">
                                             <Mail size={10} className="text-slate-300 shrink-0" />
                                             <span className="text-xs text-slate-400 truncate">{member.email}</span>
                                             <CopyBtn value={member.email} />
                                         </div>
-                                        {member.username && <p className="text-[10px] text-slate-300 font-mono mt-0.5">@{member.username}</p>}
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
                                         <button onClick={() => handleResend(member)} disabled={resending === member.id} title="Reenviar credenciales"
