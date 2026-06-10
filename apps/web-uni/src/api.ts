@@ -120,11 +120,13 @@ export async function request<T = unknown>(
 
     if (!res.ok) {
         let msg = `HTTP ${res.status}`;
+        let code: string | undefined;
         try {
             const body = await res.json();
             msg = body?.message ?? body?.error ?? msg;
+            code = body?.code ?? undefined;
         } catch { /* ignore */ }
-        throw new ApiError(msg, { status: res.status });
+        throw new ApiError(msg, { status: res.status, code });
     }
 
     if (res.status === 204) return undefined as T;

@@ -36,6 +36,10 @@ export class AuthService {
 
     async login(loginDto: LoginDto) {
         await this.verifyRecaptcha(loginDto.recaptchaToken, 'login');
+        const exists = await this.usersService.findByEmailOrUsername(loginDto.identifier);
+        if (!exists) {
+            throw new UnauthorizedException({ message: 'Credenciales inválidas', code: 'IDENTIFIER_NOT_FOUND' });
+        }
         const user = await this.validateUser(loginDto.identifier, loginDto.password);
         if (!user) {
             throw new UnauthorizedException('Credenciales inválidas');

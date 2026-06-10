@@ -4,6 +4,13 @@ import { Eye, EyeOff, Building2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenantStore } from '../stores/tenant.store';
 import { getRecaptchaToken } from '../recaptcha';
+import { ApiError } from '../api';
+
+function deriveContactUrl(contactEmail?: string | null): string | null {
+    if (!contactEmail) return null;
+    const domain = contactEmail.split('@')[1];
+    return domain ? `www.${domain}` : null;
+}
 
 export default function Login() {
     const navigate = useNavigate();
@@ -13,6 +20,7 @@ export default function Login() {
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
+    const [notRegistered, setNotRegistered] = useState(false);
 
     const orgName = tenant?.branding?.companyDisplayName?.trim() || tenant?.name || 'Polla Coopcanapro';
     const primaryColor = tenant?.branding?.primaryColor ?? '#f59e0b';
@@ -23,6 +31,7 @@ export default function Login() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setNotRegistered(false);
         try {
             const recaptchaToken = await getRecaptchaToken('login');
             const user = await login(identifier.trim(), password, recaptchaToken);
@@ -31,7 +40,11 @@ export default function Login() {
             } else {
                 navigate(params.get('next') ?? '/', { replace: true });
             }
-        } catch { /* error ya está en el store */ }
+        } catch (err) {
+            if (err instanceof ApiError && err.code === 'IDENTIFIER_NOT_FOUND') {
+                setNotRegistered(true);
+            }
+        }
     };
 
     return (
@@ -69,11 +82,30 @@ export default function Login() {
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="bg-slate-900/95 backdrop-blur-sm rounded-2xl p-6 space-y-4 border border-slate-800 shadow-2xl">
-                    {error && (
+                    {notRegistered ? (
+                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm space-y-1">
+                            <p>La cédula <strong>{identifier}</strong> no aparece registrada en la base de datos.</p>
+                            {(() => {
+                                const contactUrl = deriveContactUrl(tenant?.contactEmail);
+                                return contactUrl ? (
+                                    <p className="text-rose-300">Comuníquese con{' '}
+                                        <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="font-bold underline text-amber-400">
+                                            {orgName}
+                                        </a>{' '}en{' '}
+                                        <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="font-bold underline text-amber-400">
+                                            {contactUrl}
+                                        </a>.
+                                    </p>
+                                ) : (
+                                    <p className="text-rose-300">Comuníquese con <strong>{orgName}</strong> para solicitar su registro.</p>
+                                );
+                            })()}
+                        </div>
+                    ) : error ? (
                         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm">
                             {error}
                         </div>
-                    )}
+                    ) : null}
 
                     <div>
                         <label className="block text-sm font-semibold text-slate-300 mb-1.5">Documento</label>
@@ -125,7 +157,7 @@ export default function Login() {
                     </div>
                     <div className="border-t border-slate-800 pt-4 text-center text-xs text-slate-300">
                         ¿No tienes cuenta?{' '}
-                        <a href="https://pollacoopcanapro.atencionesvirtuales.com" className="font-bold text-amber-400 hover:underline">
+                        <a href="https://pollacoopcanapro.atencionesvirtuales.com.co/login" className="font-bold text-amber-400 hover:underline">
                             Contáctanos
                         </a>
                     </div>

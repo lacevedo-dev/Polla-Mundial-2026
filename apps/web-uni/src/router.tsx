@@ -47,6 +47,10 @@ function RequireSession({ children }: { children: React.ReactNode }) {
 export function AppRouter() {
     const phase = useTenantStore((s) => s.phase);
 
+    if (phase === 'loading') {
+        return <Loader />;
+    }
+
     return (
         <Suspense fallback={<Loader />}>
             {phase === 'landing' ? (
