@@ -621,3 +621,74 @@ enum EmailBacklogAuditStatus {
   FAILED
   SKIPPED
 }
+
+// ─── Email Provider & Blacklist ───────────────────────────────────────────────
+
+model EmailProviderUsage {
+  id               String    @id @default(cuid())
+  providerKey      String
+  quotaWindowStart DateTime
+  sentCount        Int       @default(0)
+  blockedUntil     DateTime?
+  lastError        String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([providerKey, quotaWindowStart])
+  @@index([providerKey, blockedUntil])
+}
+
+model EmailProviderAccount {
+  id                      String    @id @default(cuid())
+  key                     String    @unique
+  name                    String    @db.VarChar(120)
+  fromEmail               String    @db.VarChar(320)
+  fromName                String?
+  smtpHost                String    @db.VarChar(255)
+  smtpPort                Int       @default(587)
+  secure                  Boolean   @default(false)
+  smtpUser                String?   @db.VarChar(320)
+  smtpPassEncrypted       String?   @db.LongText
+  dailyLimit              Int       @default(100)
+  reservedHighPriority    Int       @default(60)
+  maxRecipientsPerMessage Int       @default(100)
+  maxEmailSizeMb          Int       @default(35)
+  maxAttachmentSizeMb     Int       @default(25)
+  active                  Boolean   @default(true)
+  blockedUntil            DateTime?
+  lastUsedAt              DateTime?
+  lastError               String?   @db.Text
+  deletedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([active, deletedAt])
+  @@index([key, blockedUntil])
+}
+
+model EmailBlacklist {
+  id           String               @id @default(cuid())
+  email        String               @unique @db.VarChar(320)
+  reason       EmailBlacklistReason @default(BOUNCE)
+  failureCount Int                  @default(1)
+  lastFailure  DateTime             @default(now())
+  lastError    String?              @db.Text
+  autoBlocked  Boolean              @default(true)
+  blockedAt    DateTime             @default(now())
+  blockedBy    String?
+  notes        String?              @db.Text
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([email])
+  @@index([reason])
+  @@index([autoBlocked])
+}
+
+enum EmailBlacklistReason {
+  BOUNCE
+  INVALID_ADDRESS
+  SPAM_COMPLAINT
+  MANUAL
+  REPEATED_FAILURE
+}
