@@ -291,12 +291,17 @@ const Ranking: React.FC = () => {
         [leaderboard, activeCategory],
     );
 
+    const RANKING_LIMIT = 50;
+
     const filteredRanking = React.useMemo(() => {
         const q = searchTerm.trim().toLowerCase();
-        if (!q) return leaderboard;
-        return leaderboard.filter((p) =>
-            `${p.name} ${p.username}`.toLowerCase().includes(q),
-        );
+        let list = leaderboard;
+        if (q) {
+            list = leaderboard.filter((p) =>
+                `${p.name} ${p.username}`.toLowerCase().includes(q),
+            );
+        }
+        return list.slice(0, RANKING_LIMIT);
     }, [leaderboard, searchTerm]);
 
     const podium = filteredRanking.slice(0, 3);
@@ -374,6 +379,7 @@ const Ranking: React.FC = () => {
                         {activeLeague && (
                             <p className="text-[10px] font-semibold text-slate-400">
                                 {leaderboard.length} participante{leaderboard.length !== 1 ? 's' : ''}
+                                {leaderboard.length > RANKING_LIMIT ? ` · Mostrando top ${RANKING_LIMIT}` : ''}
                                 {tournamentStarted ? '' : ' · Torneo aún no iniciado'}
                             </p>
                         )}
