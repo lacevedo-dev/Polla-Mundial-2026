@@ -41,6 +41,7 @@ model User {
   tenantMemberships  TenantMember[]
   leagueMembers      LeagueMember[]
   predictions        Prediction[]
+  notifications      Notification[]
 
   @@index([email])
   @@index([status])
@@ -336,6 +337,41 @@ model Prediction {
   @@index([userId, submittedAt(sort: Desc)])
   @@index([matchId])
   @@index([advanceTeamId])
+}
+
+// ─── Notificaciones In-App ──────────────────────────────────────────────────
+
+model Notification {
+  id      String           @id @default(cuid())
+  userId  String
+  type    NotificationType
+  title   String
+  body    String           @db.Text
+  data    String?          @db.LongText
+  read    Boolean          @default(false)
+  channel NotifChannel     @default(IN_APP)
+  sentAt  DateTime         @default(now())
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([sentAt])
+}
+
+enum NotificationType {
+  MATCH_REMINDER
+  PREDICTION_CLOSED
+  RESULT_PUBLISHED
+  RANKING_CHANGE
+  INVITE_RECEIVED
+  PAYMENT_CONFIRMED
+  LEAGUE_UPDATE
+  GOAL_SCORED
+}
+
+enum NotifChannel {
+  IN_APP
+  PUSH
+  EMAIL
 }
 
 // ─── Datos de Fútbol (sincronizados desde API principal) ────────────────────

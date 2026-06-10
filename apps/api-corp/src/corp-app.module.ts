@@ -16,7 +16,7 @@ import { CorporateTenantModule } from '@corp-api/corporate-tenant/corporate-tena
 import { FootballProxyModule } from './football-proxy/football-proxy.module';
 import { CorpHealthModule } from './health/corp-health.module';
 import { DataSyncModule } from './sync/data-sync.module';
-import { NotificationsProxyModule } from './notifications-proxy/notifications-proxy.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
     imports: [
@@ -43,8 +43,8 @@ import { NotificationsProxyModule } from './notifications-proxy/notifications-pr
         // Sincronización de datos desde API principal
         DataSyncModule,
 
-        // Proxy de notificaciones hacia API principal
-        NotificationsProxyModule,
+        // Notificaciones desde BD corporativa
+        NotificationsModule,
 
         // Health check propio
         CorpHealthModule,
