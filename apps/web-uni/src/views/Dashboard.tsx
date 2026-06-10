@@ -103,7 +103,7 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
         if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Marcadores inválidos'); return; }
         setSaving(true); setErr(null);
         try {
-            await request('/predictions', { method: 'POST', body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }) });
+            await request('/corp/predictions', { method: 'POST', body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }) });
             setSaved(true); onSaved(match.id, h, a);
             setTimeout(() => setSaved(false), 2000);
         } catch (e: any) { setErr(e?.message ?? 'Error'); }

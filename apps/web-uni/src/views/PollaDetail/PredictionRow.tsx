@@ -58,7 +58,7 @@ export function PredictionRow({
         if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Marcadores inválidos'); return; }
         setSaving(true); setErr(null);
         try {
-            await request('/predictions', {
+            await request('/corp/predictions', {
                 method: 'POST',
                 body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }),
             });
