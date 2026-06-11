@@ -33,7 +33,7 @@ export class TenantProvisioningService {
         const role = (dto.role ?? 'OWNER') as TenantRole;
         const sendEmail = dto.sendEmail !== false;
 
-        // Buscar usuario existente — documento es la clave principal en contexto corporativo
+        // Buscar usuario existente — documento es la clave única en contexto corporativo
         let existingUser: { id: string; name: string; email: string; documentNumber: string | null } | null = null;
 
         if (documentNumber) {
@@ -43,21 +43,8 @@ export class TenantProvisioningService {
             });
         }
 
-        if (!existingUser) {
-            existingUser = await this.prisma.user.findFirst({
-                where: { email },
-                select: { id: true, name: true, email: true, documentNumber: true },
-            });
-        }
-
-        // Validar consistencia entre documento y correo encontrados
-        if (existingUser && documentNumber) {
-            if (existingUser.documentNumber && existingUser.documentNumber !== documentNumber) {
-                throw new BadRequestException('El correo electrónico ya está registrado con otro número de documento');
-            }
-            if (existingUser.email !== email) {
-                throw new BadRequestException('El número de documento ya está registrado con otro correo electrónico');
-            }
+        if (existingUser && existingUser.email !== email) {
+            throw new BadRequestException('El número de documento ya está registrado con otro correo electrónico');
         }
 
         let userId: string;

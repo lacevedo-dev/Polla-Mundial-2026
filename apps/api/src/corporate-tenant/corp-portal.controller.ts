@@ -752,13 +752,7 @@ export class CorpPortalController {
         const userData: any = {};
         if (dto.name !== undefined) userData.name = dto.name.trim();
         if (dto.email !== undefined) {
-            const email = dto.email.toLowerCase().trim();
-            const existingEmail = await this.prisma.user.findFirst({
-                where: { email, id: { not: member.userId } },
-                select: { id: true },
-            });
-            if (existingEmail) throw new BadRequestException('Ya existe otro usuario con ese correo electrónico');
-            userData.email = email;
+            userData.email = dto.email.toLowerCase().trim();
         }
         if (dto.documentNumber !== undefined) {
             const doc = dto.documentNumber.trim().replace(/\D/g, '');
