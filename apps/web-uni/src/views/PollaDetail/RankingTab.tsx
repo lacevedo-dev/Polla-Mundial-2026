@@ -5,20 +5,27 @@ import { TopRankEntry } from './types';
 
 const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
+const RANKING_LIMIT = 50;
+
 export function RankingTab({ topRanking }: { topRanking: TopRankEntry[] }) {
+    const limitedRanking = topRanking.slice(0, RANKING_LIMIT);
+
     return (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="px-4 py-3.5 border-b border-slate-50">
                 <h2 className="font-black text-slate-900 text-sm flex items-center gap-2">
                     <Star size={14} className="text-slate-400" /> Clasificación
                 </h2>
+                {topRanking.length > RANKING_LIMIT && (
+                    <p className="text-[10px] text-slate-400 mt-1">Mostrando top {RANKING_LIMIT}</p>
+                )}
             </div>
 
-            {topRanking.length === 0 ? (
+            {limitedRanking.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">Sin puntuaciones aún</div>
             ) : (
                 <div className="divide-y divide-slate-50">
-                    {topRanking.map((entry) => (
+                    {limitedRanking.map((entry) => (
                         <div
                             key={entry.userId}
                             className="flex items-center gap-3 px-4 py-3"

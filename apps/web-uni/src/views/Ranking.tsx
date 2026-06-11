@@ -27,9 +27,11 @@ export default function Ranking() {
             .finally(() => setLoading(false));
     }, []);
 
-    const filtered = entries.filter((e) =>
-        e.name.toLowerCase().includes(search.toLowerCase()),
-    );
+    const RANKING_LIMIT = 50;
+
+    const filtered = entries
+        .filter((e) => e.name.toLowerCase().includes(search.toLowerCase()))
+        .slice(0, RANKING_LIMIT);
 
     const myEntry = entries.find((e) => e.isMe);
 
@@ -37,7 +39,10 @@ export default function Ranking() {
         <CorpLayout>
             <div className="mb-6">
                 <h1 className="text-2xl font-black text-slate-900">Ranking</h1>
-                <p className="text-slate-500 text-sm mt-1">Clasificación general de tu organización</p>
+                <p className="text-slate-500 text-sm mt-1">
+                    Clasificación general de tu organización
+                    {entries.length > RANKING_LIMIT && ` · Mostrando top ${RANKING_LIMIT}`}
+                </p>
             </div>
 
             {/* My position card */}
