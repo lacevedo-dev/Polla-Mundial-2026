@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantProvisioningService } from './tenant-provisioning.service';
 import { TenantService } from './tenant.service';
 import { UpdateTenantBrandingDto } from './dto/tenant.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
 import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -46,14 +47,6 @@ class BulkProvisionMembersDto {
     @IsArray() @ValidateNested({ each: true }) @Type(() => BulkUserRow) users: BulkUserRow[];
     @IsOptional() @IsString() sharedTempPassword?: string;
     @IsOptional() @IsBoolean() sendEmail?: boolean;
-}
-
-class UpdateMemberDto {
-    @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
-    @IsOptional() @IsEnum(TenantMemberStatus) status?: TenantMemberStatus;
-    @IsOptional() @IsString() name?: string;
-    @IsOptional() @IsEmail() email?: string;
-    @IsOptional() @IsString() documentNumber?: string;
 }
 
 class UpdateCorpConfigDto {

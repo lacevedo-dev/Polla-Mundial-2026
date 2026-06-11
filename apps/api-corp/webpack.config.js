@@ -87,6 +87,10 @@ module.exports = (options) => {
             path.resolve(__dirname, 'src/overrides/corporate-tenant.module.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]dto[\\/]update-member\.dto/,
+            path.resolve(__dirname, 'src/overrides/corporate-tenant/dto/update-member.dto.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]branding-storage\.service/,
             path.resolve(__dirname, 'src/overrides/branding-storage.service.ts'),
         ),
