@@ -136,7 +136,7 @@ export class TenantProvisioningService {
 
         // Enviar email con credenciales (solo si es usuario nuevo y sendEmail=true)
         if (sendEmail && isNewUser && tempPassword) {
-            const contactUrl = tenant.customDomain ? `https://${tenant.customDomain}` : portalUrl;
+            const contactUrl = tenant.customDomain ? `${tenant.customDomain}` : portalUrl;
             const { html, text } = this.buildCredentialsEmail({
                 userName: dto.name.split(' ')[0],
                 tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
@@ -236,7 +236,7 @@ export class TenantProvisioningService {
         });
 
         const portalUrl = this.resolvePortalUrl(tenant);
-        const contactUrl = tenant.customDomain ? `https://${tenant.customDomain}` : portalUrl;
+        const contactUrl = tenant.customDomain ? `{tenant.customDomain}` : portalUrl;
         const { html, text } = this.buildCredentialsEmail({
             userName: user.name.split(' ')[0],
             tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
@@ -333,7 +333,7 @@ export class TenantProvisioningService {
 
     protected resolvePortalUrl(tenant: { slug: string; customDomain: string | null }): string {
         if (tenant.customDomain) {
-            return `https://${tenant.customDomain}`;
+            return `${tenant.customDomain}`;
         }
         return `https://${tenant.slug}.zonapronosticos.com`;
     }
