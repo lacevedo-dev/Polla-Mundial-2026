@@ -186,9 +186,9 @@ export default function AdminCorpMembers() {
         const users: any[] = [];
         for (const line of lines) {
             const parts = line.split(',').map(p => p.trim());
-            if (parts.length < 3) { setModalError(`Línea inválida: "${line}". Formato: Documento,Nombre,email[,ROL]`); return; }
-            const [documentNumber, name, email, role] = parts;
-            users.push({ documentNumber, name, email, role: ['OWNER', 'ADMIN', 'PLAYER'].includes(role?.toUpperCase()) ? role.toUpperCase() : 'PLAYER' });
+            if (parts.length < 3) { setModalError(`Línea inválida: "${line}". Formato: Documento,Nombre,email[,ROL[,PasswordTemporal]]`); return; }
+            const [documentNumber, name, email, role, tempPassword] = parts;
+            users.push({ documentNumber, name, email, role: ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'].includes(role?.toUpperCase()) ? role.toUpperCase() : 'PLAYER', tempPassword: tempPassword || undefined });
         }
         setSaving(true); setModalError(null);
         try {
@@ -512,7 +512,7 @@ export default function AdminCorpMembers() {
                         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
                             <div>
                                 <h3 className="font-black text-slate-900">Importar usuarios masivamente</h3>
-                                <p className="text-xs text-slate-400 mt-0.5">Un usuario por línea: <code className="bg-slate-100 px-1 rounded">Documento,Nombre,email[,ROL]</code></p>
+                                <p className="text-xs text-slate-400 mt-0.5">Un usuario por línea: <code className="bg-slate-100 px-1 rounded">Documento,Nombre,email[,ROL[,PasswordTemporal]]</code></p>
                             </div>
                             <button onClick={closeModal} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X size={17} /></button>
                         </div>
@@ -520,7 +520,7 @@ export default function AdminCorpMembers() {
                             {modalError && <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2.5 text-sm"><AlertTriangle size={14} className="shrink-0 mt-0.5" />{modalError}</div>}
                             <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Lista de usuarios *</label>
-                                <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={8} placeholder={"123456789,Carlos Pérez,carlos@empresa.com,PLAYER\n987654321,Ana Torres,ana@empresa.com,ADMIN\n555555555,Juan López,juan@empresa.com"}
+                                <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={8} placeholder={"123456789,Carlos Pérez,carlos@empresa.com,PLAYER,TempPass1\n987654321,Ana Torres,ana@empresa.com,ADMIN\n555555555,Juan López,juan@empresa.com,,MiClave123"}
                                     className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent resize-y font-mono"
                                     style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
                                 <p className="text-xs text-slate-400 mt-1">Roles disponibles: <code>PLAYER</code> (defecto), <code>STAFF</code>, <code>ADMIN</code>, <code>OWNER</code>.</p>
@@ -528,7 +528,7 @@ export default function AdminCorpMembers() {
                             <div>
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Contraseña temporal compartida</label>
                                 <input value={bulkSharedPass} onChange={e => setBulkSharedPass(e.target.value)} placeholder="Se genera automáticamente para cada uno" className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent" style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
-                                <p className="text-xs text-slate-400 mt-1">Si la dejas vacía, se genera una contraseña única por usuario.</p>
+                                <p className="text-xs text-slate-400 mt-1">Solo se usa si una línea no incluye su propia contraseña. Si la dejas vacía y una línea tampoco la tiene, se genera automáticamente.</p>
                             </div>
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input type="checkbox" checked={bulkSendEmail} onChange={e => setBulkSendEmail(e.target.checked)} className="w-4 h-4 rounded accent-amber-500" />

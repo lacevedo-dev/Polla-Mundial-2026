@@ -41,6 +41,7 @@ class BulkUserRow {
     @IsString() @IsNotEmpty() name: string;
     @IsEmail() email: string;
     @IsOptional() @IsEnum(TenantRole) role?: TenantRole;
+    @IsOptional() @IsString() tempPassword?: string;
 }
 
 class BulkProvisionMembersDto {
@@ -719,7 +720,7 @@ export class CorpPortalController {
                     documentNumber: user.documentNumber,
                     username: user.documentNumber,
                     role: user.role ?? TenantRole.PLAYER,
-                    tempPassword: dto.sharedTempPassword,
+                    tempPassword: user.tempPassword || dto.sharedTempPassword,
                     sendEmail: dto.sendEmail !== false,
                 });
                 results.push({ email: user.email, ok: true, isNewUser: result.isNewUser });
