@@ -17,6 +17,7 @@ import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin
 import { TenantStaffGuard } from '@corp-api/corporate-tenant/guards/tenant-staff.guard';
 import { CorpPortalController } from '@corp-api/corporate-tenant/corp-portal.controller';
 import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-storage.service';
+import { CorpMembersResendController } from './corp-members-resend.controller';
 
 @Module({
     imports: [PrismaModule, EmailModule],
@@ -25,6 +26,7 @@ import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-stor
         AdminTenantController,
         TenantInvitationController,
         TenantInvitationAdminController,
+        CorpMembersResendController,
         CorpPortalController,
     ],
     providers: [

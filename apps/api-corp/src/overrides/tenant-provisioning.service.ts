@@ -11,13 +11,25 @@ export class TenantProvisioningService extends BaseTenantProvisioningService {
         if (!tenant) throw new NotFoundException('Tenant no encontrado');
 
         const documentNumber = this.normalizeDocumentNumber(dto.documentNumber);
-        if (!documentNumber) throw new BadRequestException('Se requiere un número de documento válido');
 
-        const user = await this.prisma.user.findFirst({
-            where: { documentNumber },
-            select: { id: true, name: true, documentNumber: true, email: true },
-        });
-        if (!user) throw new NotFoundException(`No existe ningún usuario con el documento ${documentNumber}`);
+        let user: { id: string; name: string; documentNumber: string | null; email: string } | null = null;
+
+        if (documentNumber) {
+            user = await this.prisma.user.findFirst({
+                where: { documentNumber },
+                select: { id: true, name: true, documentNumber: true, email: true },
+            });
+        } else if (dto.email) {
+            user = await this.prisma.user.findFirst({
+                where: { email: dto.email },
+                select: { id: true, name: true, documentNumber: true, email: true },
+            });
+        }
+
+        if (!user) {
+            const identifier = documentNumber ?? dto.email ?? 'desconocido';
+            throw new NotFoundException(`No existe ningún usuario con el identificador ${identifier}`);
+        }
 
         const email = user.email;
 
