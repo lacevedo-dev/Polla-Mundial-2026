@@ -23,6 +23,8 @@
       "@corp-api/email/*": ["apps/api-corp/src/email/*"],
       "@corp-api/auth/*": ["apps/api-corp/src/auth/*"],
       "@corp-api/users/*": ["apps/api-corp/src/users/*"],
+      "@api-base/*": ["apps/api/src/*"],
+      "@corp-api/corporate-tenant/tenant-provisioning.service": ["apps/api-corp/src/overrides/tenant-provisioning.service.ts"],
       "@corp-api/*": ["apps/api/src/*"]
     }
   }

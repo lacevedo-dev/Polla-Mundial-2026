@@ -6,7 +6,7 @@ import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { PrismaService } from '../prisma/prisma.service';
-import { TenantProvisioningService } from './tenant-provisioning.service';
+import { TenantProvisioningService } from '@corp-api/corporate-tenant/tenant-provisioning.service';
 import { TenantService } from './tenant.service';
 import { UpdateTenantBrandingDto } from './dto/tenant.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
@@ -892,9 +892,12 @@ export class CorpPortalController {
         const tenantId: string = req.tenantId;
         const member = await this.prisma.tenantMember.findFirst({
             where: { id: memberId, tenantId },
-            include: { user: { select: { documentNumber: true } } },
+            include: { user: { select: { documentNumber: true, email: true } } },
         });
         if (!member) throw new NotFoundException('Miembro no encontrado');
-        return this.provisioning.resendCredentials(tenantId, { documentNumber: member.user.documentNumber ?? '' });
+        return this.provisioning.resendCredentials(tenantId, {
+            email: member.user.email,
+            documentNumber: member.user.documentNumber ?? undefined,
+        });
     }
 }

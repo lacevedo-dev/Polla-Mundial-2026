@@ -14,7 +14,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { TenantService } from './tenant.service';
 import { TenantLimitsService } from './tenant-limits.service';
-import { TenantProvisioningService } from './tenant-provisioning.service';
+import { TenantProvisioningService } from '@corp-api/corporate-tenant/tenant-provisioning.service';
 import {
     CreateTenantDto,
     UpdateTenantDto,

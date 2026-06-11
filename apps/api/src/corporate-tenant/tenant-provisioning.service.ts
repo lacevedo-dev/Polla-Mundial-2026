@@ -8,12 +8,12 @@ import { ProvisionTenantOwnerDto, ResendCredentialsDto } from './dto/tenant.dto'
 
 @Injectable()
 export class TenantProvisioningService {
-    private readonly logger = new Logger(TenantProvisioningService.name);
+    protected readonly logger = new Logger(TenantProvisioningService.name);
 
     constructor(
-        private readonly prisma: PrismaService,
-        private readonly emailQueue: EmailQueueService,
-        private readonly limitsService: TenantLimitsService,
+        protected readonly prisma: PrismaService,
+        protected readonly emailQueue: EmailQueueService,
+        protected readonly limitsService: TenantLimitsService,
     ) {}
 
     /**
@@ -202,14 +202,13 @@ export class TenantProvisioningService {
         });
         if (!tenant) throw new NotFoundException('Tenant no encontrado');
 
-        const documentNumber = this.normalizeDocumentNumber(dto.documentNumber);
-        if (!documentNumber) throw new BadRequestException('Se requiere un número de documento válido');
+        if (!dto.email) throw new BadRequestException('Se requiere un email válido');
 
-        const user = await this.prisma.user.findFirst({
-            where: { documentNumber },
+        const user = await this.prisma.user.findUnique({
+            where: { email: dto.email },
             select: { id: true, name: true, documentNumber: true, email: true },
         });
-        if (!user) throw new NotFoundException(`No existe ningún usuario con el documento ${documentNumber}`);
+        if (!user) throw new NotFoundException(`No existe ningún usuario con el email ${dto.email}`);
 
         const email = user.email;
 
@@ -294,7 +293,7 @@ export class TenantProvisioningService {
      * Genera una contraseña temporal legible: 12 caracteres,
      * sin caracteres ambiguos (0/O/1/l/I).
      */
-    private generateTempPassword(): string {
+    protected generateTempPassword(): string {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
         let out = '';
         for (let i = 0; i < 12; i++) {
@@ -307,7 +306,7 @@ export class TenantProvisioningService {
      * Convierte un texto en username válido y verifica unicidad.
      * Si choca, agrega sufijo numérico hasta encontrar disponible.
      */
-    private async resolveUniqueUsername(base: string): Promise<string> {
+    protected async resolveUniqueUsername(base: string): Promise<string> {
         const sanitized = base
             .toLowerCase()
             .replace(/[^a-z0-9_]/g, '')
@@ -323,21 +322,21 @@ export class TenantProvisioningService {
         return candidate;
     }
 
-    private resolvePortalUrl(tenant: { slug: string; customDomain: string | null }): string {
+    protected resolvePortalUrl(tenant: { slug: string; customDomain: string | null }): string {
         if (tenant.customDomain) {
             return `https://${tenant.customDomain}`;
         }
         return `https://${tenant.slug}.zonapronosticos.com`;
     }
 
-    private normalizeDocumentNumber(value?: string | null): string | null {
+    protected normalizeDocumentNumber(value?: string | null): string | null {
         const trimmed = value?.trim();
         if (!trimmed) return null;
         const digitsOnly = trimmed.replace(/\D/g, '');
         return digitsOnly || trimmed;
     }
 
-    private buildCredentialsEmail(params: {
+    protected buildCredentialsEmail(params: {
         userName: string;
         tenantName: string;
         portalUrl: string;

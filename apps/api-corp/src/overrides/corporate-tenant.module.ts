@@ -49,7 +49,7 @@ import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-stor
                 prisma: PrismaService,
                 emailQueue: EmailQueueService,
                 limits: TenantLimitsService,
-            ) => new TenantProvisioningService(prisma, emailQueue as any, limits),
+            ) => new TenantProvisioningService(prisma as any, emailQueue as any, limits),
             inject: [PrismaService, EmailQueueService, TenantLimitsService],
         },
     ],
