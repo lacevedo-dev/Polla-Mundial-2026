@@ -184,11 +184,16 @@ export default function AdminCorpMembers() {
         const lines = bulkText.trim().split('\n').map(l => l.trim()).filter(Boolean);
         if (!lines.length) { setModalError('Ingresa al menos un usuario.'); return; }
         const users: any[] = [];
+        const VALID_ROLES = ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'];
         for (const line of lines) {
-            const parts = line.split(',').map(p => p.trim());
-            if (parts.length < 3) { setModalError(`Línea inválida: "${line}". Formato: Documento,Nombre,email[,ROL[,PasswordTemporal]]`); return; }
-            const [documentNumber, name, email, role, tempPassword] = parts;
-            users.push({ documentNumber, name, email, role: ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'].includes(role?.toUpperCase()) ? role.toUpperCase() : 'PLAYER', tempPassword: tempPassword || undefined });
+            const sep = line.includes(';') ? ';' : ',';
+            const parts = line.split(sep).map(p => p.trim());
+            if (parts.length < 3) { setModalError(`Línea inválida: "${line}". Formato: Documento,Nombre,Email[,ROL[,Contraseña]]`); return; }
+            const [documentNumber, name, email, col4, col5] = parts;
+            const col4IsRole = col4 ? VALID_ROLES.includes(col4.toUpperCase()) : false;
+            const role = col4IsRole ? col4.toUpperCase() : 'PLAYER';
+            const tempPassword = col4IsRole ? (col5 || undefined) : (col4 || undefined);
+            users.push({ documentNumber, name, email, role, tempPassword });
         }
         setSaving(true); setModalError(null);
         try {
@@ -542,11 +547,16 @@ export default function AdminCorpMembers() {
                                     <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-600">Resultados de importación</div>
                                     <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
                                         {bulkResults.map((r, i) => (
-                                            <div key={i} className={`flex items-center justify-between px-3 py-2 text-xs ${r.ok ? 'text-slate-600' : 'text-red-500 bg-red-50'}`}>
-                                                <span className="truncate">{r.email}</span>
-                                                <span className={`font-bold shrink-0 ml-2 ${r.ok ? 'text-emerald-600' : 'text-red-500'}`}>
-                                                    {r.ok ? (r.isNewUser ? '✓ Creado' : '✓ Vinculado') : `✗ ${r.error}`}
-                                                </span>
+                                            <div key={i} className={`px-3 py-2 text-xs ${r.ok ? 'text-slate-600' : 'text-red-500 bg-red-50'}`}>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="truncate">{r.email}</span>
+                                                    <span className={`font-bold shrink-0 ml-2 ${r.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                        {r.ok ? (r.isNewUser ? '✓ Creado' : '✓ Vinculado') : `✗ ${r.error}`}
+                                                    </span>
+                                                </div>
+                                                {r.ok && r.tempPassword && (
+                                                    <div className="mt-0.5 text-[10px] text-slate-400">Clave temporal: <span className="font-mono font-bold text-amber-600">{r.tempPassword}</span></div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>

@@ -724,7 +724,7 @@ export class CorpPortalController {
                     tempPassword: user.tempPassword || dto.sharedTempPassword,
                     sendEmail: dto.sendEmail !== false,
                 });
-                results.push({ email: user.email, ok: true, isNewUser: result.isNewUser });
+                results.push({ email: user.email, ok: true, isNewUser: result.isNewUser, tempPassword: result.tempPassword });
             } catch (e: any) {
                 results.push({ email: user.email, ok: false, error: e?.message ?? 'Error desconocido' });
             }

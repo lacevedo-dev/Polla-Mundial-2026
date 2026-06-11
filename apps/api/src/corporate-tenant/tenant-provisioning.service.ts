@@ -188,7 +188,7 @@ export class TenantProvisioningService {
             memberId: member.id,
             isNewUser,
             role,
-            tempPassword: isNewUser && !sendEmail ? tempPassword : undefined,
+            tempPassword: tempPassword ?? undefined,
             portalUrl,
             email: {
                 queued: emailQueued,
