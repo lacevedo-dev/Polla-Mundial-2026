@@ -892,9 +892,9 @@ export class CorpPortalController {
         const tenantId: string = req.tenantId;
         const member = await this.prisma.tenantMember.findFirst({
             where: { id: memberId, tenantId },
-            include: { user: { select: { email: true } } },
+            include: { user: { select: { documentNumber: true } } },
         });
         if (!member) throw new NotFoundException('Miembro no encontrado');
-        return this.provisioning.resendCredentials(tenantId, { email: member.user.email });
+        return this.provisioning.resendCredentials(tenantId, { documentNumber: member.user.documentNumber ?? '' });
     }
 }
