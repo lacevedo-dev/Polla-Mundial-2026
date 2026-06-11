@@ -83,12 +83,11 @@ export default function Login() {
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="bg-slate-900/95 backdrop-blur-sm rounded-2xl p-6 space-y-4 border border-slate-800 shadow-2xl">
                     {notRegistered ? (
-                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm space-y-1">
-                            <p>La cédula <strong>{identifier}</strong> no aparece registrada en la base de datos.</p>
+                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm">
                             {(() => {
                                 const contactUrl = deriveContactUrl(tenant?.contactEmail);
                                 return contactUrl ? (
-                                    <p className="text-rose-300">Comuníquese con{' '}
+                                    <p>La cédula <strong>{identifier}</strong> no aparece registrada en la base de datos. Cualquier novedad, comuníquese con{' '}
                                         <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="font-bold underline text-amber-400">
                                             {orgName}
                                         </a>{' '}en{' '}
@@ -97,7 +96,7 @@ export default function Login() {
                                         </a>.
                                     </p>
                                 ) : (
-                                    <p className="text-rose-300">Comuníquese con <strong>{orgName}</strong> para solicitar su registro.</p>
+                                    <p>La cédula <strong>{identifier}</strong> no aparece registrada en la base de datos. Cualquier novedad, comuníquese con <strong>{orgName}</strong> para solicitar su registro.</p>
                                 );
                             })()}
                         </div>
