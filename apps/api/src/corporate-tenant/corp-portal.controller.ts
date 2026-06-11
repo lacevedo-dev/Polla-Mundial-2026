@@ -6,7 +6,7 @@ import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { PrismaService } from '../prisma/prisma.service';
-import { TenantProvisioningService } from '@corp-api/corporate-tenant/tenant-provisioning.service';
+import { TenantProvisioningService } from './tenant-provisioning.service';
 import { TenantService } from './tenant.service';
 import { UpdateTenantBrandingDto } from './dto/tenant.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';

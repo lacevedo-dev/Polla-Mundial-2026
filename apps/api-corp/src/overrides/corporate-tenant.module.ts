@@ -7,7 +7,7 @@ import { EmailQueueService } from '@corp-api/email/email-queue.service';
 import { TenantService } from '@corp-api/corporate-tenant/tenant.service';
 import { TenantLimitsService } from '@corp-api/corporate-tenant/tenant-limits.service';
 import { TenantInvitationService } from '@corp-api/corporate-tenant/tenant-invitation.service';
-import { TenantProvisioningService } from '@corp-api/corporate-tenant/tenant-provisioning.service';
+import { TenantProvisioningService } from './tenant-provisioning.service';
 import { TenantController } from '@corp-api/corporate-tenant/tenant.controller';
 import { AdminTenantController } from '@corp-api/corporate-tenant/admin-tenant.controller';
 import { TenantInvitationController, TenantInvitationAdminController } from '@corp-api/corporate-tenant/tenant-invitation.controller';

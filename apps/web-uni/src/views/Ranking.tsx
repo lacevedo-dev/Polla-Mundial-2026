@@ -110,7 +110,6 @@ export default function Ranking() {
                                             {entry.name}
                                             {entry.isMe && <span className="ml-1 text-[10px] font-black opacity-70">(tú)</span>}
                                         </p>
-                                        {entry.username && <p className="text-[10px] text-slate-300 font-mono">@{entry.username}</p>}
                                     </div>
                                 </div>
                                 <div className="text-sm font-black text-right" style={entry.isMe ? { color: 'var(--color-primary, #f59e0b)' } : { color: '#0f172a' }}>

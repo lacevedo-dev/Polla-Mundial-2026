@@ -84,7 +84,14 @@ module.exports = (options) => {
         ),
         new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]tenant-provisioning\.service/,
-            path.resolve(__dirname, 'src/overrides/tenant-provisioning.service.ts'),
+            (result) => {
+                if (result.contextInfo.issuer && result.contextInfo.issuer.includes('overrides')) {
+                    return;
+                }
+                const overridePath = path.resolve(__dirname, 'src/overrides/tenant-provisioning.service.ts');
+                result.createData.resource = overridePath;
+                result.createData.context = path.dirname(overridePath);
+            },
         ),
         new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]corporate-tenant\.module/,
