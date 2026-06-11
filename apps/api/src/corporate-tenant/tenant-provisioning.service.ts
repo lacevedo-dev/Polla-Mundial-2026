@@ -202,13 +202,16 @@ export class TenantProvisioningService {
         });
         if (!tenant) throw new NotFoundException('Tenant no encontrado');
 
-        const email = dto.email.toLowerCase().trim();
+        const documentNumber = this.normalizeDocumentNumber(dto.documentNumber);
+        if (!documentNumber) throw new BadRequestException('Se requiere un número de documento válido');
 
-        const user = await this.prisma.user.findUnique({
-            where: { email },
-            select: { id: true, name: true, documentNumber: true },
+        const user = await this.prisma.user.findFirst({
+            where: { documentNumber },
+            select: { id: true, name: true, documentNumber: true, email: true },
         });
-        if (!user) throw new NotFoundException(`No existe ningún usuario con el email ${email}`);
+        if (!user) throw new NotFoundException(`No existe ningún usuario con el documento ${documentNumber}`);
+
+        const email = user.email;
 
         // Verificar que es miembro activo del tenant
         const member = await this.prisma.tenantMember.findFirst({
