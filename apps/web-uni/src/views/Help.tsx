@@ -21,8 +21,7 @@ const Help: React.FC = () => {
 
     const tabs: { id: Tab; label: string; icon: React.FC<{ size?: number }> }[] = [
         { id: 'points', label: 'Sistema de Puntos', icon: TrendingUp },
-        { id: 'rules', label: 'Reglas del Juego', icon: Shield },
-        { id: 'notifications', label: 'Notificaciones', icon: Bell },
+        { id: 'rules', label: 'Reglas del Juego', icon: Shield }
     ];
 
     return (
