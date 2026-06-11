@@ -25,6 +25,7 @@
       "@corp-api/users/*": ["apps/api-corp/src/users/*"],
       "@api-base/*": ["apps/api/src/*"],
       "@corp-api/corporate-tenant/tenant-provisioning.service": ["apps/api-corp/src/overrides/tenant-provisioning.service.ts"],
+      "@corp-api/corporate-tenant/corp-members-resend.controller": ["apps/api-corp/src/overrides/corp-members-resend.controller"],
       "@corp-api/*": ["apps/api/src/*"]
     }
   }
