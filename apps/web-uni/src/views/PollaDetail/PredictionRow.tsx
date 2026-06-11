@@ -76,22 +76,15 @@ export function PredictionRow({
         if (value && !/^\d*$/.test(value)) return;
         if (value.length > 2) return;
         setHome(value);
-        if (value && /^\d+$/.test(value) && onHomeEnter) {
-            setTimeout(() => onHomeEnter(), 120);
-        }
-    }, [onHomeEnter]);
+        if (err) setErr(null);
+    }, [err]);
 
     const handleAwayChange = useCallback((value: string) => {
         if (value && !/^\d*$/.test(value)) return;
         if (value.length > 2) return;
         setAway(value);
-        if (value && /^\d+$/.test(value) && onAwayEnter) {
-            setTimeout(() => {
-                submit();
-                onAwayEnter();
-            }, 120);
-        }
-    }, [onAwayEnter, submit]);
+        if (err) setErr(null);
+    }, [err]);
 
     const statusBadge = () => {
         if (live) return <span className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-rose-600 animate-pulse">En vivo</span>;
