@@ -11,6 +11,7 @@ import { MonitoringService } from './monitoring.service';
 import { PredictionReportService } from '../../prediction-report/prediction-report.service';
 import { SyncEventsService } from './sync-events.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 describe('MatchSyncService', () => {
   let service: MatchSyncService;
@@ -71,6 +72,11 @@ describe('MatchSyncService', () => {
 
   const mockPushNotificationsService = {
     sendMulticast: jest.fn(),
+    sendToUser: jest.fn(),
+  };
+
+  const mockNotificationsService = {
+    createInAppNotification: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -87,6 +93,7 @@ describe('MatchSyncService', () => {
         { provide: SyncEventsService, useValue: mockSyncEventsService },
         { provide: FootballConfigService, useValue: mockFootballConfigService },
         { provide: PushNotificationsService, useValue: mockPushNotificationsService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 
@@ -703,6 +710,141 @@ describe('MatchSyncService', () => {
       }),
       200,
       2,
+    );
+  });
+
+  it('syncs a linked match even if canonical team metadata refresh conflicts with an existing local team', async () => {
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockApiFootballClient.getFixtureById.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: {
+            id: 1538999,
+            date: '2026-06-12T02:00:00.000Z',
+            timestamp: 1781229600,
+            venue: { name: 'Estadio Akron', city: 'Guadalajara', id: 1076 },
+            status: { long: 'Not Started', short: 'NS', elapsed: null },
+          },
+          league: {
+            id: 1,
+            name: 'World Cup',
+            country: 'World',
+            logo: '',
+            flag: null,
+            season: 2026,
+            round: 'Group Stage - 1',
+          },
+          teams: {
+            home: {
+              id: 17,
+              name: 'South Korea',
+              logo: 'https://media.api-sports.io/football/teams/17.png',
+              winner: null,
+            },
+            away: {
+              id: 770,
+              name: 'Czech Republic',
+              logo: 'https://media.api-sports.io/football/teams/770.png',
+              winner: null,
+            },
+          },
+          goals: { home: null, away: null },
+          score: {
+            halftime: { home: null, away: null },
+            fulltime: { home: null, away: null },
+            extratime: { home: null, away: null },
+            penalty: { home: null, away: null },
+          },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique
+      .mockResolvedValueOnce({
+        id: 'match-kor-cze',
+        externalId: '1538999',
+      })
+      .mockResolvedValueOnce({
+        id: 'match-kor-cze',
+        externalId: '1538999',
+        homeTeamId: 'team-kor-local',
+        awayTeamId: 'team-cze-local',
+        homeScore: null,
+        awayScore: null,
+        status: MatchStatus.SCHEDULED,
+        statusShort: null,
+        eventsNoDataAt: null,
+        resultNotificationSentAt: null,
+        matchDate: new Date('2026-06-12T07:00:00.000Z'),
+        phase: 'GROUP',
+        homeTeam: {
+          id: 'team-kor-local',
+          name: 'República de Corea',
+          code: 'KOR',
+          shortCode: 'KOR',
+          apiFootballTeamId: null,
+          flagUrl: 'https://flagcdn.com/w80/kr.png',
+          group: 'A',
+        },
+        awayTeam: {
+          id: 'team-cze-local',
+          name: 'República Checa',
+          code: 'CZE',
+          shortCode: 'CZE',
+          apiFootballTeamId: null,
+          flagUrl: 'https://flagcdn.com/w80/cz.png',
+          group: 'A',
+        },
+      });
+    mockPrismaService.team.findUnique
+      .mockResolvedValueOnce({
+        id: 'team-kor-api',
+        name: 'South Korea',
+        code: 'SOU',
+        shortCode: 'SOU',
+        apiFootballTeamId: 17,
+        flagUrl: 'https://media.api-sports.io/football/teams/17.png',
+        group: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'team-cze-api',
+        name: 'Czech Republic',
+        code: 'CZ1',
+        shortCode: 'CZE',
+        apiFootballTeamId: 770,
+        flagUrl: 'https://media.api-sports.io/football/teams/770.png',
+        group: null,
+      });
+    mockPrismaService.team.update
+      .mockRejectedValueOnce(new Error('Unique constraint failed on Team.code'))
+      .mockResolvedValueOnce({});
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-kor-cze',
+      status: MatchStatus.SCHEDULED,
+      homeTeamId: 'team-kor-api',
+      awayTeamId: 'team-cze-api',
+    });
+
+    await expect(service.syncMatchById('match-kor-cze')).resolves.toBe(true);
+
+    expect(mockPrismaService.match.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'match-kor-cze' },
+        data: expect.objectContaining({
+          homeTeamId: 'team-kor-api',
+          awayTeamId: 'team-cze-api',
+          status: MatchStatus.SCHEDULED,
+          statusShort: 'NS',
+        }),
+      }),
+    );
+    expect(mockMonitoringService.createLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'MATCH_SYNC',
+        status: 'SUCCESS',
+        matchId: 'match-kor-cze',
+        externalId: '1538999',
+      }),
     );
   });
 });

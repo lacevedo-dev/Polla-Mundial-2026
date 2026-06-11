@@ -901,7 +901,14 @@ export class MatchSyncService {
     });
 
     if (directMatch) {
-      await this.refreshTeamDisplayFields(directMatch.id, fixtureTeam, canonical);
+      try {
+        await this.refreshTeamDisplayFields(directMatch.id, fixtureTeam, canonical);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Fixture ${fixtureId} ${side} team metadata refresh skipped for ${directMatch.name} using apiFootballTeamId=${fixtureTeam.id}: ${message}`,
+        );
+      }
 
       if (directMatch.id !== currentTeam.id) {
         this.logger.warn(

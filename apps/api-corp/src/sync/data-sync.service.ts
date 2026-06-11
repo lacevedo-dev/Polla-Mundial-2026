@@ -508,6 +508,7 @@ export class DataSyncService implements OnModuleInit {
                         venue: match.venue,
                         matchDate: new Date(matchDate),
                         status: match.status,
+                        externalId: match.externalId ?? null,
                         round: match.round,
                         tournamentId: match.tournamentId,
                         lastSyncAt: match.lastSyncAt ? new Date(match.lastSyncAt) : new Date(),

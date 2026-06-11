@@ -64,7 +64,15 @@ export class InternalController {
     async getTeams(@Headers('x-internal-api-key') apiKey: string) {
         this.assertApiKey(apiKey);
         return this.prisma.team.findMany({
-            select: { id: true, name: true, code: true, flagUrl: true },
+            select: {
+                id: true,
+                name: true,
+                code: true,
+                group: true,
+                flagUrl: true,
+                shortCode: true,
+                apiFootballTeamId: true,
+            },
             orderBy: { name: 'asc' },
         });
     }
