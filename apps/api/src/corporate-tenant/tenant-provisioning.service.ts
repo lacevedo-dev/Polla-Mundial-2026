@@ -144,7 +144,7 @@ export class TenantProvisioningService {
                 userName: dto.name.split(' ')[0],
                 tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
                 portalUrl,
-                email,
+                documentNumber: documentNumber ?? email,
                 tempPassword,
                 primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
                 contactEmail: tenant.contactEmail,
@@ -218,7 +218,7 @@ export class TenantProvisioningService {
 
         const user = await this.prisma.user.findUnique({
             where: { email },
-            select: { id: true, name: true },
+            select: { id: true, name: true, documentNumber: true },
         });
         if (!user) throw new NotFoundException(`No existe ningún usuario con el email ${email}`);
 
@@ -241,7 +241,7 @@ export class TenantProvisioningService {
             userName: user.name.split(' ')[0],
             tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
             portalUrl,
-            email,
+            documentNumber: user.documentNumber ?? email,
             tempPassword,
             primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
             contactEmail: tenant.contactEmail,
@@ -342,12 +342,12 @@ export class TenantProvisioningService {
         userName: string;
         tenantName: string;
         portalUrl: string;
-        email: string;
+        documentNumber: string;
         tempPassword: string;
         primaryColor: string;
         contactEmail: string;
     }): { html: string; text: string } {
-        const { userName, tenantName, portalUrl, email, tempPassword, primaryColor, contactEmail } = params;
+        const { userName, tenantName, portalUrl, documentNumber, tempPassword, primaryColor, contactEmail } = params;
         const websiteDisplay = contactEmail.split('@')[1] ?? contactEmail;
 
         const html = `
@@ -372,7 +372,7 @@ export class TenantProvisioningService {
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
           <td style="padding: 6px 0; color: #64748b; font-size: 13px; width: 100px;">Usuario:</td>
-          <td style="padding: 6px 0; color: #0f172a; font-size: 14px; font-weight: 600;">${email}</td>
+          <td style="padding: 6px 0; color: #0f172a; font-size: 14px; font-weight: 600;">${documentNumber}</td>
         </tr>
         <tr>
           <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Contraseña:</td>
@@ -406,7 +406,7 @@ export class TenantProvisioningService {
 </body>
 </html>`.trim();
 
-        const text = `Polla ${tenantName}\n\nHemos creado una cuenta de administrador para la Polla ${tenantName}.\n\nTus credenciales de acceso:\n\nUsuario: ${email}\nContraseña: ${tempPassword}\nPortal: ${portalUrl}\n\nPor seguridad, deberás cambiar tu contraseña al iniciar sesión por primera vez.\n\nIngresa aquí: ${portalUrl}/login\n\nSi no esperabas este correo, ignóralo o contáctanos con ${tenantName} en ${websiteDisplay}.`;
+        const text = `Polla ${tenantName}\n\nHemos creado una cuenta de administrador para la Polla ${tenantName}.\n\nTus credenciales de acceso:\n\nUsuario: ${documentNumber}\nContraseña: ${tempPassword}\nPortal: ${portalUrl}\n\nPor seguridad, deberás cambiar tu contraseña al iniciar sesión por primera vez.\n\nIngresa aquí: ${portalUrl}/login\n\nSi no esperabas este correo, ignóralo o contáctanos con ${tenantName} en ${websiteDisplay}.`;
 
         return { html, text };
     }
