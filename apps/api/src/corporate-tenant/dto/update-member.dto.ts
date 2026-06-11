@@ -7,4 +7,5 @@ export class UpdateMemberDto {
     @IsOptional() @IsString() name?: string;
     @IsOptional() @IsEmail() email?: string;
     @IsOptional() @IsString() documentNumber?: string;
+    @IsOptional() @IsString() tempPassword?: string;
 }

@@ -765,6 +765,11 @@ export class CorpPortalController {
             if (existingDoc) throw new BadRequestException('Ya existe otro usuario con ese número de documento');
             userData.documentNumber = doc || null;
         }
+        if (dto.tempPassword?.trim()) {
+            const bcrypt = await import('bcrypt');
+            userData.passwordHash = await bcrypt.hash(dto.tempPassword.trim(), 10);
+            userData.mustChangePassword = true;
+        }
 
         await this.prisma.$transaction(async (tx) => {
             if (Object.keys(memberData).length) {
