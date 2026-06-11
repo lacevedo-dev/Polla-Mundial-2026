@@ -47,6 +47,7 @@ interface CorpLeague {
     myPoints: number;
     status?: string;
     primaryTournamentId?: string | null;
+    maxParticipants?: number | null;
 }
 
 interface FormState {
@@ -535,7 +536,7 @@ export default function AdminCorpLeagues() {
             name: league.name,
             description: league.description ?? '',
             privacy: league.isPublic ? 'PUBLIC' : 'PRIVATE',
-            maxParticipants: '',
+            maxParticipants: league.maxParticipants ? String(league.maxParticipants) : '',
             primaryTournamentId: resolvedTournamentId,
         });
         setSelectedMatchIds(new Set());

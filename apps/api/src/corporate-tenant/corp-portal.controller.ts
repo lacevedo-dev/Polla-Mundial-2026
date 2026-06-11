@@ -347,6 +347,7 @@ export class CorpPortalController {
             myPoints: pointsMap.get(l.id) ?? 0,
             status: l.status,
             primaryTournamentId: l.primaryTournamentId ?? null,
+            maxParticipants: l.maxParticipants,
         }));
     }
 
