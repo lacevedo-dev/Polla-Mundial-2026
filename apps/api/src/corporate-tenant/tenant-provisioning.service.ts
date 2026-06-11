@@ -54,6 +54,15 @@ export class TenantProvisioningService {
         if (existingUser) {
             userId = existingUser.id;
             await this.limitsService.checkUserLimit(tenantId);
+            // Si se pasa una contraseña temporal explícita, actualizarla y forzar cambio
+            if (dto.tempPassword?.trim()) {
+                tempPassword = dto.tempPassword.trim();
+                const passwordHash = await bcrypt.hash(tempPassword, 10);
+                await this.prisma.user.update({
+                    where: { id: userId },
+                    data: { passwordHash, mustChangePassword: true },
+                });
+            }
         } else {
             // Validar límite ANTES de crear el user
             await this.limitsService.checkUserLimit(tenantId);
