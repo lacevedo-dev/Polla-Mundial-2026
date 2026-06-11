@@ -83,6 +83,10 @@ module.exports = (options) => {
             path.resolve(__dirname, 'src/email/email.module.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]tenant-provisioning\.service/,
+            path.resolve(__dirname, 'src/overrides/tenant-provisioning.service.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]corporate-tenant\.module/,
             path.resolve(__dirname, 'src/overrides/corporate-tenant.module.ts'),
         ),
