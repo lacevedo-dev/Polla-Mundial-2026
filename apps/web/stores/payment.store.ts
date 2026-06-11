@@ -43,6 +43,7 @@ export const PAYMENT_METHODS = [
     { id: 'Nequi', label: 'Nequi', color: 'text-purple-600' },
     { id: 'Daviplata', label: 'Daviplata', color: 'text-rose-600' },
     { id: 'Bancolombia', label: 'Bancolombia', color: 'text-slate-900' },
+    { id: 'B-BRE', label: 'B-BRE', color: 'text-amber-600' },
 ];
 
 const MOCK_USERS_DATA: UserPaymentData[] = [

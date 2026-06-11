@@ -3679,6 +3679,7 @@ const Predictions: React.FC = () => {
                                         { id: 'Nequi', label: 'Nequi', Icon: Smartphone, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
                                         { id: 'Daviplata', label: 'Daviplata', Icon: Smartphone, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
                                         { id: 'Bancolombia', label: 'Bancolombia', Icon: Landmark, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
+                                        { id: 'B-BRE', label: 'B-BRE', Icon: Smartphone, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
                                         { id: 'Efectivo', label: 'Efectivo', Icon: Banknote, color: 'text-lime-700', bg: 'bg-lime-50', border: 'border-lime-200' },
                                     ].map(({ id, label, Icon, color, bg, border }) => (
                                         <button

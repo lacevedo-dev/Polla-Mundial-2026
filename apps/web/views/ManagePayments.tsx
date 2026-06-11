@@ -47,6 +47,7 @@ const PAYMENT_METHODS = [
     { id: 'Nequi', label: 'Nequi', Icon: Smartphone, color: 'text-purple-600' },
     { id: 'Daviplata', label: 'Daviplata', Icon: Smartphone, color: 'text-rose-600' },
     { id: 'Bancolombia', label: 'Bancolombia', Icon: Landmark, color: 'text-slate-900' },
+    { id: 'B-BRE', label: 'B-BRE', Icon: Smartphone, color: 'text-amber-600' },
 ];
 
 const CHANNEL_CONFIG: Record<ReminderChannel, { label: string; Icon: React.ElementType; color: string; bg: string; border: string }> = {
