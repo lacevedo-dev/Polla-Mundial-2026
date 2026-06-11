@@ -269,7 +269,7 @@ export class AuthService {
         try {
             const user = await this.usersService.findByDocumentNumber(identifier);
             if (!user) {
-                return { ok: true, message: 'Si el correo existe, recibirás las instrucciones en breve.' };
+                return { ok: true, found: false };
             }
 
             const token = generateVerificationToken();
