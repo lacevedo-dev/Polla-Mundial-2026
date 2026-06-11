@@ -492,7 +492,7 @@ export default function AdminCorpMembers() {
                         <div className="px-6 py-5 text-center">
                             <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3"><Trash2 size={20} className="text-red-500" /></div>
                             <h3 className="font-black text-slate-900 text-lg mb-1">¿Eliminar miembro?</h3>
-                            <p className="text-slate-500 text-sm">Se quitará a <strong>{target.name}</strong> del equipo. Su cuenta de usuario no se elimina.</p>
+                            <p className="text-slate-500 text-sm">Se eliminará permanentemente a <strong>{target.name}</strong> del equipo. Esta acción no se puede deshacer.</p>
                             {modalError && <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2 text-sm"><AlertTriangle size={13} />{modalError}</div>}
                         </div>
                         <div className="px-6 pb-5 flex gap-3">
