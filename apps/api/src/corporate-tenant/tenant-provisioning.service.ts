@@ -120,13 +120,14 @@ export class TenantProvisioningService {
             data: { status: 'ACCEPTED' },
         });
 
-        const portalUrl = `https://${tenant.slug}.zonapronosticos.com`;
+        const portalUrl = this.resolvePortalUrl(tenant);
         let emailSent = false;
         let emailQueued = false;
         let emailError: string | undefined;
 
         // Enviar email con credenciales (solo si es usuario nuevo y sendEmail=true)
         if (sendEmail && isNewUser && tempPassword) {
+            const contactUrl = tenant.customDomain ? `https://${tenant.customDomain}` : portalUrl;
             const { html, text } = this.buildCredentialsEmail({
                 userName: dto.name.split(' ')[0],
                 tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
@@ -134,7 +135,7 @@ export class TenantProvisioningService {
                 documentNumber: documentNumber ?? email,
                 tempPassword,
                 primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
-                contactEmail: tenant.contactEmail,
+                contactUrl,
             });
 
             try {
@@ -143,7 +144,7 @@ export class TenantProvisioningService {
                     priority: 'HIGH',
                     required: true,
                     recipientEmail: email,
-                    subject: `Tu acceso al portal corporativo de ${tenant.branding?.companyDisplayName ?? tenant.name}`,
+                    subject: `Tu acceso de la Polla de ${tenant.branding?.companyDisplayName ?? tenant.name}`,
                     html,
                     text,
                     dedupeKey: `tenant-provision:${tenantId}:${userId}:${Date.now()}`,
@@ -223,7 +224,8 @@ export class TenantProvisioningService {
             data: { passwordHash, mustChangePassword: true },
         });
 
-        const portalUrl = `https://${tenant.slug}.zonapronosticos.com`;
+        const portalUrl = this.resolvePortalUrl(tenant);
+        const contactUrl = tenant.customDomain ? `https://${tenant.customDomain}` : portalUrl;
         const { html, text } = this.buildCredentialsEmail({
             userName: user.name.split(' ')[0],
             tenantName: tenant.branding?.companyDisplayName ?? tenant.name,
@@ -231,7 +233,7 @@ export class TenantProvisioningService {
             documentNumber: user.documentNumber ?? email,
             tempPassword,
             primaryColor: tenant.branding?.primaryColor ?? '#f59e0b',
-            contactEmail: tenant.contactEmail,
+            contactUrl,
         });
 
         let emailSent = false;
@@ -244,7 +246,7 @@ export class TenantProvisioningService {
                 priority: 'HIGH',
                 required: true,
                 recipientEmail: email,
-                subject: `Tus nuevas credenciales de acceso — ${tenant.branding?.companyDisplayName ?? tenant.name}`,
+                subject: `Tu acceso de la Polla de ${tenant.branding?.companyDisplayName ?? tenant.name}`,
                 html,
                 text,
                 dedupeKey: `tenant-resend:${tenantId}:${user.id}:${Date.now()}`,
@@ -318,6 +320,13 @@ export class TenantProvisioningService {
         return candidate;
     }
 
+    private resolvePortalUrl(tenant: { slug: string; customDomain: string | null }): string {
+        if (tenant.customDomain) {
+            return `https://${tenant.customDomain}`;
+        }
+        return `https://${tenant.slug}.zonapronosticos.com`;
+    }
+
     private normalizeDocumentNumber(value?: string | null): string | null {
         const trimmed = value?.trim();
         if (!trimmed) return null;
@@ -332,10 +341,10 @@ export class TenantProvisioningService {
         documentNumber: string;
         tempPassword: string;
         primaryColor: string;
-        contactEmail: string;
+        contactUrl: string;
     }): { html: string; text: string } {
-        const { userName, tenantName, portalUrl, documentNumber, tempPassword, primaryColor, contactEmail } = params;
-        const websiteDisplay = contactEmail.split('@')[1] ?? contactEmail;
+        const { userName, tenantName, portalUrl, documentNumber, tempPassword, primaryColor, contactUrl } = params;
+        const websiteDisplay = contactUrl.replace(/^https?:\/\//, '');
 
         const html = `
 <!DOCTYPE html>

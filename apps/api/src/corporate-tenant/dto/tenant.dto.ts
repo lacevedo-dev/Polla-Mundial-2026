@@ -205,8 +205,8 @@ export class ProvisionTenantOwnerDto {
 }
 
 export class ResendCredentialsDto {
-    @IsEmail()
-    email: string;
+    @IsString()
+    documentNumber: string;
 
     @IsOptional()
     @IsString()
