@@ -12,7 +12,7 @@ import { BASE_URL } from '../api';
 
 const NAV_ITEMS = [
     { path: '/', label: 'Inicio', icon: Home },
-    { path: '/pollas', label: 'Mis Pollas', icon: Trophy },
+    { path: '/pollas', label: 'Participar', icon: Trophy },
     { path: '/ranking', label: 'Ranking', icon: BarChart2 },
     { path: '/help', label: 'Ayuda', icon: HelpCircle },
 ];
