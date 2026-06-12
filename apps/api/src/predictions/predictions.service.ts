@@ -432,7 +432,9 @@ export class PredictionsService {
         const members = await this.prisma.leagueMember.findMany({
             where: {
                 leagueId,
-                status: MemberStatus.ACTIVE,
+                // PENDING_PAYMENT members can predict and already appear in their own
+                // breakdown (getLeaderboardUserBreakdown), so they must rank too.
+                status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING_PAYMENT] },
                 user: { is: { status: USER_STATUS.ACTIVE } },
             },
             include: {

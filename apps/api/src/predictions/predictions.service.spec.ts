@@ -341,6 +341,32 @@ describe('PredictionsService', () => {
 
             expect(lb[0]).toMatchObject({ id: 'u1', points: 14, phaseBonusPoints: 8 });
         });
+
+        it('incluye en el ranking a los miembros PENDING_PAYMENT (no solo ACTIVE)', async () => {
+            const prismaMock = {
+                leagueMember: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', user: { id: 'u1', username: 'ana', name: 'Ana', avatar: null } },
+                    ]),
+                },
+                prediction: {
+                    findMany: jest.fn().mockResolvedValue([
+                        { userId: 'u1', points: 10, pointDetail: null },
+                    ]),
+                },
+                phaseBonus: { findMany: jest.fn().mockResolvedValue([]) },
+            };
+            const service = createService(prismaMock);
+            await service.getLeaderboard('league-1');
+
+            expect(prismaMock.leagueMember.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({
+                        status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING_PAYMENT] },
+                    }),
+                }),
+            );
+        });
     });
 
     describe('getLeaderboardUserBreakdown', () => {
