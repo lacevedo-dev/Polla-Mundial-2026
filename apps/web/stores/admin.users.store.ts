@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { request } from '../api';
+import { request, BASE_URL } from '../api';
 
 export type AdminUserStatus = 'ACTIVE' | 'INACTIVE' | 'BANNED' | string;
 
@@ -44,6 +44,7 @@ interface AdminUsersState {
     fetchUsers: () => Promise<void>;
     fetchUser: (id: string) => Promise<void>;
     updateUser: (id: string, data: Partial<{ plan: string; systemRole: string; emailVerified: boolean }>) => Promise<void>;
+    updateUserAvatar: (id: string, file: File) => Promise<void>;
     setUserStatus: (id: string, status: 'ACTIVE' | 'INACTIVE') => Promise<void>;
     permanentlyDeleteUser: (id: string) => Promise<void>;
     resetUserCredits: (id: string) => Promise<void>;
@@ -106,6 +107,33 @@ export const useAdminUsersStore = create<AdminUsersState>((set, get) => ({
             }));
         } catch (error) {
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error al actualizar' });
+            throw error;
+        }
+    },
+
+    updateUserAvatar: async (id, file) => {
+        set({ isSaving: true, error: null });
+        try {
+            const token = localStorage.getItem('token');
+            const formData = new FormData();
+            formData.append('avatar', file);
+            const response = await fetch(`${BASE_URL}/admin/users/${id}/avatar`, {
+                method: 'PATCH',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                body: formData,
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({})) as { message?: string };
+                throw new Error(body.message || 'Error al subir avatar');
+            }
+            const updated = await response.json() as { id: string; avatar: string };
+            set((state) => ({
+                users: state.users.map((u) => (u.id === id ? { ...u, avatar: updated.avatar } : u)),
+                selectedUser: state.selectedUser?.id === id ? { ...state.selectedUser, avatar: updated.avatar } : state.selectedUser,
+                isSaving: false,
+            }));
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error al subir avatar' });
             throw error;
         }
     },

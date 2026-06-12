@@ -154,6 +154,14 @@ export class UsersService {
         });
     }
 
+    async updateAvatar(id: string, avatarPath: string) {
+        return this.prisma.user.update({
+            where: { id },
+            data: { avatar: avatarPath },
+            select: { id: true, avatar: true },
+        });
+    }
+
     async setStatus(id: string, status: UserStatusValue) {
         return this.prisma.$transaction(async (tx) => {
             const user = await tx.user.update({

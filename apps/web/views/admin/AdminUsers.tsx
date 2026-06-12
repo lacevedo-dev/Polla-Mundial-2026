@@ -1,9 +1,10 @@
 import React from 'react';
 import {
     Search, Edit3, Ban, CheckCircle, Trash2,
-    ChevronDown, X, Shield, Users, Sparkles, MoreVertical,
+    ChevronDown, X, Shield, Users, Sparkles, MoreVertical, Camera,
 } from 'lucide-react';
 import { useAdminUsersStore } from '../../stores/admin.users.store';
+import { resolveApiAssetUrl } from '../../api';
 import StatusBadge from '../../components/admin/StatusBadge';
 import AdminPagination from '../../components/admin/AdminPagination';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
@@ -23,7 +24,8 @@ function useDebounce<T>(value: T, delay = 400): T {
 }
 
 function avatarUrl(name: string, avatar?: string | null) {
-    if (avatar) return avatar;
+    const resolved = resolveApiAssetUrl(avatar);
+    if (resolved) return resolved;
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=e2e8f0&color=64748b&size=72`;
 }
 
@@ -82,18 +84,51 @@ const EditUserDialog: React.FC<{
     open: boolean;
     onOpenChange: (v: boolean) => void;
 }> = ({ user, open, onOpenChange }) => {
-    const { updateUser, isSaving } = useAdminUsersStore();
+    const { updateUser, updateUserAvatar, isSaving } = useAdminUsersStore();
     const [plan, setPlan] = React.useState(user?.plan ?? 'FREE');
     const [systemRole, setSystemRole] = React.useState(user?.systemRole ?? 'USER');
+    const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
+    const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
+    const [avatarError, setAvatarError] = React.useState<string | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     React.useEffect(() => {
-        if (user) { setPlan(user.plan); setSystemRole(user.systemRole); }
+        if (user) {
+            setPlan(user.plan);
+            setSystemRole(user.systemRole);
+            setAvatarPreview(null);
+            setAvatarFile(null);
+            setAvatarError(null);
+        }
     }, [user]);
 
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+            setAvatarError('Solo se aceptan imágenes JPG, PNG o WebP.');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            setAvatarError('La imagen no puede superar los 5 MB.');
+            return;
+        }
+        setAvatarError(null);
+        setAvatarFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => setAvatarPreview(ev.target?.result as string);
+        reader.readAsDataURL(file);
+    };
+
     const handleSave = async () => {
+        if (avatarFile) {
+            await updateUserAvatar(user.id, avatarFile);
+        }
         await updateUser(user.id, { plan, systemRole });
         onOpenChange(false);
     };
+
+    const currentAvatar = avatarPreview ?? avatarUrl(user?.name ?? '', user?.avatar);
 
     return (
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -112,18 +147,49 @@ const EditUserDialog: React.FC<{
                         </DialogPrimitive.Close>
                     </div>
 
-                    {/* Avatar + name */}
+                    {/* Avatar + name + change photo */}
                     <div className="flex items-center gap-3 mb-5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                        <img
-                            src={avatarUrl(user?.name ?? '', user?.avatar)}
-                            alt={user?.name}
-                            className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
-                        />
-                        <div className="min-w-0">
+                        <div className="relative shrink-0">
+                            <img
+                                src={currentAvatar}
+                                alt={user?.name}
+                                className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? '')}&background=e2e8f0&color=64748b&size=72`;
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-400 hover:bg-amber-500 text-white flex items-center justify-center shadow-sm transition-colors"
+                                title="Cambiar foto"
+                            >
+                                <Camera size={11} />
+                            </button>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="hidden"
+                                onChange={handleAvatarChange}
+                            />
+                        </div>
+                        <div className="min-w-0 flex-1">
                             <p className="font-bold text-slate-900 truncate">{user?.name}</p>
                             <p className="text-xs text-slate-500 truncate">@{user?.username}</p>
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-[10px] font-semibold text-amber-600 hover:text-amber-700 mt-0.5 transition-colors"
+                            >
+                                {avatarFile ? '✓ Nueva foto seleccionada' : 'Cambiar foto'}
+                            </button>
                         </div>
                     </div>
+
+                    {avatarError && (
+                        <p className="text-xs text-rose-600 font-semibold mb-3 px-1">{avatarError}</p>
+                    )}
 
                     <div className="space-y-4">
                         {/* Plan */}

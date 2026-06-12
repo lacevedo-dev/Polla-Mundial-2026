@@ -1,7 +1,10 @@
 import {
     Controller, Get, Patch, Post, Delete, Param, Body, Query, UseGuards,
-    NotFoundException, ParseIntPipe, DefaultValuePipe,
+    NotFoundException, ParseIntPipe, DefaultValuePipe, BadRequestException,
+    UploadedFile, UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Plan, SystemRole } from '@prisma/client';
 import { IsOptional, IsEnum, IsBoolean } from 'class-validator';
@@ -12,6 +15,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminService } from './admin.service';
+import { AvatarStorageService } from '../auth/avatar-storage.service';
+import type { AvatarUploadFile } from '../auth/avatar-storage.service';
 import { USER_STATUS } from '../users/user-status.constants';
 import type { UserStatusValue } from '../users/user-status.constants';
 
@@ -45,6 +50,7 @@ export class AdminUsersController {
         private readonly usersService: UsersService,
         private readonly prisma: PrismaService,
         private readonly adminService: AdminService,
+        private readonly avatarStorageService: AvatarStorageService,
     ) {}
 
     @Get()
@@ -123,6 +129,36 @@ export class AdminUsersController {
         if (!user) throw new NotFoundException('Usuario no encontrado');
         const summary = await this.usersService.hardDeleteByAdmin(id);
         return { message: 'Usuario eliminado definitivamente', ...summary };
+    }
+
+    @Patch(':id/avatar')
+    @ApiOperation({ summary: 'Update avatar photo for a specific user (admin)' })
+    @UseInterceptors(
+        FileInterceptor('avatar', {
+            storage: memoryStorage(),
+            fileFilter: (_req, file, cb) => {
+                if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+                    return cb(new BadRequestException('El avatar debe ser JPG, PNG o WebP.'), false);
+                }
+                return cb(null, true);
+            },
+            limits: { fileSize: 5 * 1024 * 1024 },
+        }),
+    )
+    async updateAvatar(
+        @Param('id') id: string,
+        @UploadedFile() avatarFile?: AvatarUploadFile,
+    ) {
+        const user = await this.usersService.findById(id, { includeInactive: true });
+        if (!user) throw new NotFoundException('Usuario no encontrado');
+        if (!avatarFile) throw new BadRequestException('Se requiere un archivo de imagen.');
+
+        if (user.avatar && user.avatar.startsWith('/uploads/')) {
+            await this.avatarStorageService.remove(user.avatar).catch(() => undefined);
+        }
+
+        const avatarPath = await this.avatarStorageService.save(avatarFile);
+        return this.usersService.updateAvatar(id, avatarPath);
     }
 
     @Post(':id/credits/reset')
