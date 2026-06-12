@@ -6,6 +6,7 @@ const BAR_COLORS = ['bg-lime-400', 'bg-amber-400', 'bg-slate-400', 'bg-blue-400'
 
 interface PrizesCardProps {
     prizes: {
+        raw: number;
         net: number;
         positions: PrizePosition[];
         fmt: (n: number) => string;
@@ -18,7 +19,7 @@ const PrizesCard: React.FC<PrizesCardProps> = ({ prizes, totalPrizeLabel }) => (
         <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-900">Premios</h2>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide">
-                Bolsa: {prizes.net > 0 ? prizes.fmt(prizes.net) : (totalPrizeLabel || '—')}
+                Bolsa: {prizes.raw > 0 ? prizes.fmt(prizes.raw) : (totalPrizeLabel || '—')}
             </span>
         </div>
         <div className="space-y-3">

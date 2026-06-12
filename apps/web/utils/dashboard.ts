@@ -49,7 +49,7 @@ export function calcPrizes(
     const positions: PrizePosition[] = source.map((d) => ({
         label: d.label,
         percentage: d.percentage,
-        amount: Math.round(net * (d.percentage / 100)),
+        amount: Math.round(raw * (d.percentage / 100)),
     }));
 
     return {
