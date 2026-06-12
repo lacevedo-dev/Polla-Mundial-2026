@@ -181,32 +181,171 @@ export default function AdminCorpMembers() {
     }
 
     async function handleBulk() {
-        const lines = bulkText.trim().split('\n').map(l => l.trim()).filter(Boolean);
-        if (!lines.length) { setModalError('Ingresa al menos un usuario.'); return; }
-        const users: any[] = [];
-        const VALID_ROLES = ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'];
-        for (const line of lines) {
-            const sep = line.includes(';') ? ';' : ',';
-            const parts = line.split(sep).map(p => p.trim());
-            if (parts.length < 3) { setModalError(`Línea inválida: "${line}". Formato: Documento,Nombre,Email[,ROL[,Contraseña]]`); return; }
-            const [documentNumber, name, email, col4, col5] = parts;
-            const col4IsRole = col4 ? VALID_ROLES.includes(col4.toUpperCase()) : false;
-            const role = col4IsRole ? col4.toUpperCase() : 'PLAYER';
-            const tempPassword = col4IsRole ? (col5 || undefined) : (col4 || undefined);
-            users.push({ documentNumber, name, email, role, tempPassword });
-        }
-        setSaving(true); setModalError(null);
-        try {
-            const res = await request<any>('/corp/members/bulk', {
-                method: 'POST',
-                body: JSON.stringify({ users, sharedTempPassword: bulkSharedPass || undefined, sendEmail: bulkSendEmail }),
-            });
-            setBulkResults(res.results);
-            loadMembers();
-            showSuccess(`${res.successful} de ${res.total} usuarios importados correctamente.`);
-        } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error en importación masiva.'); }
-        finally { setSaving(false); }
+    setModalError(null);
+
+    const rawText = bulkText.trim();
+
+    if (!rawText) {
+        setModalError('Ingresa al menos un usuario.');
+        return;
     }
+
+    const VALID_ROLES = ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'];
+
+    const ROLE_ALIASES: Record<string, string> = {
+        'OWNER': 'OWNER',
+        'ADMIN': 'ADMIN',
+        'ADMINISTRADOR': 'ADMIN',
+        'STAFF': 'STAFF',
+        'USUARIO': 'PLAYER',
+        'PLAYER': 'PLAYER',
+        'JUGADOR': 'PLAYER',
+        'PARTICIPANTE': 'PLAYER',
+    };
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    const normalizeValue = (value?: string) => {
+        return (value || '')
+            .replace(/\u00A0/g, ' ') // elimina espacios invisibles pegados desde Excel
+            .trim();
+    };
+
+    const detectSeparator = (line: string) => {
+        if (line.includes('\t')) return '\t';
+        if (line.includes(';')) return ';';
+        return ',';
+    };
+
+    const lines = rawText
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
+
+    const users: any[] = [];
+    const errors: string[] = [];
+
+    lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+
+        const sep = detectSeparator(line);
+        const parts = line.split(sep).map(normalizeValue);
+
+        // Ignorar encabezado
+        const firstCol = parts[0]?.toLowerCase();
+        const secondCol = parts[1]?.toLowerCase();
+        const thirdCol = parts[2]?.toLowerCase();
+
+        if (
+            lineNumber === 1 &&
+            (
+                firstCol?.includes('documento') ||
+                firstCol?.includes('cedula') ||
+                secondCol?.includes('nombre') ||
+                thirdCol?.includes('email') ||
+                thirdCol?.includes('correo')
+            )
+        ) {
+            return;
+        }
+
+        if (parts.length < 3) {
+            errors.push(`Línea ${lineNumber}: formato inválido. Usa Documento, Nombre, Email[, Rol[, Contraseña]].`);
+            return;
+        }
+
+        const [documentNumberRaw, nameRaw, emailRaw, col4Raw, col5Raw] = parts;
+
+        const documentNumber = normalizeValue(documentNumberRaw);
+        const name = normalizeValue(nameRaw);
+        const email = normalizeValue(emailRaw).toLowerCase();
+        const col4 = normalizeValue(col4Raw);
+        const col5 = normalizeValue(col5Raw);
+
+        if (!documentNumber) {
+            errors.push(`Línea ${lineNumber}: el documento es obligatorio.`);
+            return;
+        }
+
+        if (!name) {
+            errors.push(`Línea ${lineNumber}: el nombre es obligatorio.`);
+            return;
+        }
+
+        if (!email || !emailRegex.test(email)) {
+            errors.push(`Línea ${lineNumber}: correo inválido "${emailRaw}".`);
+            return;
+        }
+
+        let role = 'PLAYER';
+        let tempPassword: string | undefined = undefined;
+
+        const col4Upper = col4.toUpperCase();
+        const col5Upper = col5.toUpperCase();
+
+        if (col4 && ROLE_ALIASES[col4Upper]) {
+            role = ROLE_ALIASES[col4Upper];
+            tempPassword = col5 || undefined;
+        } else if (col4 && col5 && ROLE_ALIASES[col5Upper]) {
+            // Permite formato: Documento, Nombre, Email, Contraseña, Rol
+            tempPassword = col4;
+            role = ROLE_ALIASES[col5Upper];
+        } else if (col4) {
+            // Si la cuarta columna no es rol, se toma como contraseña
+            tempPassword = col4;
+        }
+
+        if (!VALID_ROLES.includes(role)) {
+            errors.push(`Línea ${lineNumber}: rol inválido "${role}".`);
+            return;
+        }
+
+        users.push({
+            documentNumber,
+            name,
+            email,
+            role,
+            tempPassword,
+        });
+    });
+
+    if (errors.length > 0) {
+        setModalError(errors.slice(0, 10).join('\n'));
+        return;
+    }
+
+    if (!users.length) {
+        setModalError('No se encontraron usuarios válidos para importar.');
+        return;
+    }
+
+    setSaving(true);
+
+    try {
+        const payload = {
+            users,
+            sharedTempPassword: bulkSharedPass?.trim() || undefined,
+            sendEmail: bulkSendEmail,
+        };
+
+        console.log('Payload importación masiva:', payload);
+
+        const res = await request<any>('/corp/members/bulk', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+
+        setBulkResults(res.results || []);
+        await loadMembers();
+
+        showSuccess(`${res.successful || 0} de ${res.total || users.length} usuarios importados correctamente.`);
+    } catch (e) {
+        console.error('Error importación masiva:', e);
+        setModalError(e instanceof ApiError ? e.message : 'Error en importación masiva.');
+    } finally {
+        setSaving(false);
+    }
+}
 
     const filtered = members
         .filter(m => m.status === 'ACTIVE')
