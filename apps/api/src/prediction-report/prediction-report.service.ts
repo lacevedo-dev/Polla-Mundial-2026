@@ -391,7 +391,7 @@ async sendPendingReports(
 
       const predictions = await this.prisma.prediction.findMany({
         where: { matchId, leagueId, points: { not: null } },
-        include: { user: { select: { id: true, name: true } } },
+        include: { user: { select: { id: true, name: true, email: true } } },
         orderBy: { submittedAt: 'asc' },
       });
       if (predictions.length === 0) continue;
@@ -414,6 +414,7 @@ async sendPendingReports(
         return {
           userId:       p.userId,
           name:         this.resolvePredictorName(p.user, p.userId),
+          email:        p.user.email ?? undefined,
           isAdmin:      member?.role === 'ADMIN',
           homeScore:    p.homeScore,
           awayScore:    p.awayScore,
