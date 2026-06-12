@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,6 +29,7 @@ import { PredictionReportModule } from './prediction-report/prediction-report.mo
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { CorporateTenantModule } from './corporate-tenant/corporate-tenant.module';
 import { InternalModule } from './internal/internal.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -40,6 +42,7 @@ import { InternalModule } from './internal/internal.module';
       serveRoot: '/uploads',
     }),
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot(),
     EmailModule,
     AuthModule,
     AdminModule,
@@ -63,6 +66,7 @@ import { InternalModule } from './internal/internal.module';
     PushNotificationsModule,
     CorporateTenantModule,
     InternalModule,
+    WhatsappModule,
   ],
   controllers: [AppController],
   providers: [AppService],

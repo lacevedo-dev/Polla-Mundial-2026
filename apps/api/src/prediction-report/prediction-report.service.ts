@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationStep, EmailJobType, MatchStatus, MemberStatus } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import {
   getPendingReportMatches,
@@ -10,6 +11,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfReportService } from './pdf-report.service';
 import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
+
+export const WA_RESULT_REPORT_EVENT = 'whatsapp.result_report';
+export const WA_PREDICTION_REPORT_EVENT = 'whatsapp.prediction_report';
+
+export interface WhatsappReportEvent {
+  matchId: string;
+  leagueId: string;
+}
 
 type PendingReportLeague = {
   id: string;
@@ -32,6 +41,7 @@ export class PredictionReportService {
     private readonly observability: AutomationObservabilityService,
     private readonly emailService: PredictionReportEmailService,
     private readonly pdfReport: PdfReportService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
 
   private readonly hasCompletePredictionScores = <
@@ -204,6 +214,15 @@ async sendPendingReports(
         });
 
         this.logger.log(`Reporte agrupado enviado para match ${matchId}`);
+
+        // Emit WhatsApp events for each league (best-effort)
+        if (this.eventEmitter) {
+          for (const { leagueId } of data.leaguesData) {
+            try {
+              this.eventEmitter.emit(WA_PREDICTION_REPORT_EVENT, { matchId, leagueId } satisfies WhatsappReportEvent);
+            } catch { /* ignore */ }
+          }
+        }
 } catch (error) {
         this.logger.error(`Error enviando reporte agrupado para match ${matchId}: ${error}`);
       }
@@ -472,6 +491,15 @@ async sendPendingReports(
         deliveredCount: totalRecipients,
         details: { matchId, leagues: leaguesData.map(l => l.leagueCode) },
       });
+
+      // Emit WhatsApp events for each league (best-effort, ignored if no listener)
+      if (this.eventEmitter) {
+        for (const { leagueId } of leaguesData) {
+          try {
+            this.eventEmitter.emit(WA_RESULT_REPORT_EVENT, { matchId, leagueId } satisfies WhatsappReportEvent);
+          } catch { /* ignore */ }
+        }
+      }
     } catch (error) {
       await this.observability.failRun(
         runId, error,
@@ -869,6 +897,121 @@ async sendPendingReports(
 
   async getLeagueAudience(leagueId: string) {
     return this.getLeagueReportAudience(leagueId);
+  }
+
+  /**
+   * Returns structured results data for a league+match (used by WhatsApp group publisher).
+   */
+  async getResultsDataForLeague(matchId: string, leagueId: string): Promise<{
+    match: { homeTeam: string; awayTeam: string; matchDate: Date; homeScore: number; awayScore: number; venue?: string; round?: string };
+    results: import('./prediction-report-email.service').ResultEntry[];
+  }> {
+    const match = await this.prisma.match.findUniqueOrThrow({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (match.homeScore === null || match.awayScore === null) {
+      throw new Error('Este partido no tiene resultado registrado.');
+    }
+
+    const { members } = await this.getLeagueReportAudience(leagueId);
+
+    const predictions = await this.prisma.prediction.findMany({
+      where: { matchId, leagueId, points: { not: null } },
+      include: { user: { select: { id: true, name: true, email: true } } },
+      orderBy: { submittedAt: 'asc' },
+    });
+
+    const prevPreds = await this.prisma.prediction.findMany({
+      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
+      select: { userId: true, points: true },
+    });
+    const prevTotals = new Map<string, number>();
+    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+    const afterTotals = new Map<string, number>(prevTotals);
+    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+    const prevStandings  = new Map([...prevTotals.entries()].sort((a, b) => b[1] - a[1]).map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
+    const afterStandings = new Map([...afterTotals.entries()].sort((a, b) => b[1] - a[1]).map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
+
+    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
+      const member = members.find(m => m.userId === p.userId);
+      return {
+        userId:       p.userId,
+        name:         this.resolvePredictorName(p.user, p.userId),
+        email:        p.user.email ?? undefined,
+        isAdmin:      member?.role === 'ADMIN',
+        homeScore:    p.homeScore,
+        awayScore:    p.awayScore,
+        submittedAt:  p.submittedAt,
+        outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
+        pointsEarned: p.points ?? 0,
+        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
+        prevPosition: prevStandings.get(p.userId)?.position ?? 99,
+        newPosition:  afterStandings.get(p.userId)?.position ?? 99,
+      };
+    });
+
+    return {
+      match: {
+        homeTeam:  match.homeTeam.name,
+        awayTeam:  match.awayTeam.name,
+        matchDate: match.matchDate,
+        homeScore: match.homeScore,
+        awayScore: match.awayScore,
+        venue:     match.venue ?? undefined,
+        round:     match.round ?? undefined,
+      },
+      results,
+    };
+  }
+
+  /**
+   * Returns structured predictors data for a league+match (used by WhatsApp group publisher).
+   */
+  async getPredictionsDataForLeague(matchId: string, leagueId: string): Promise<{
+    match: { homeTeam: string; awayTeam: string; matchDate: Date; venue?: string; round?: string };
+    predictors: Array<{ userId: string; name: string; email?: string; isAdmin: boolean; homeScore: number; awayScore: number; submittedAt: Date }>;
+  }> {
+    const match = await this.prisma.match.findUniqueOrThrow({
+      where: { id: matchId },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        predictions: {
+          where: { leagueId },
+          include: { user: { select: { id: true, name: true, email: true } } },
+          orderBy: { submittedAt: 'asc' },
+        },
+      },
+    });
+
+    const { members } = await this.getLeagueReportAudience(leagueId);
+
+    const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
+      const member = members.find(m => m.userId === p.userId);
+      return {
+        userId:      p.userId,
+        name:        this.resolvePredictorName(p.user, p.userId),
+        email:       p.user.email ?? undefined,
+        isAdmin:     member?.role === 'ADMIN',
+        homeScore:   p.homeScore,
+        awayScore:   p.awayScore,
+        submittedAt: p.submittedAt,
+      };
+    });
+
+    return {
+      match: {
+        homeTeam:  match.homeTeam.name,
+        awayTeam:  match.awayTeam.name,
+        matchDate: match.matchDate,
+        venue:     match.venue ?? undefined,
+        round:     match.round ?? undefined,
+      },
+      predictors,
+    };
   }
 
   private async getLeagueReportAudience(

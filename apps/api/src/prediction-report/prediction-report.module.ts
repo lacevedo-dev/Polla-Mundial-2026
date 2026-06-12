@@ -11,6 +11,7 @@ import { PdfReportService } from './pdf-report.service';
 
 @Module({
   imports: [ScheduleModule, PrismaModule, AutomationObservabilityModule, EmailModule],
+  // EventEmitterModule is registered globally in AppModule
   controllers: [PredictionReportController],
   providers: [
     PredictionReportService,

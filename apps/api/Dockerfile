@@ -10,8 +10,16 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Instalar openssl requerido por Prisma en Alpine,
-# python3 y build-base requeridos por bcrypt (libreria nativa)
-RUN apk add --no-cache openssl build-base python3
+# python3 y build-base requeridos por bcrypt (libreria nativa),
+# Chromium y sus dependencias para whatsapp-web.js y puppeteer-core
+RUN apk add --no-cache \
+    openssl build-base python3 \
+    chromium nss freetype harfbuzz ca-certificates ttf-freefont \
+    dbus udev
+
+# Indicar a puppeteer que use el Chromium del sistema (no descargar el propio)
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copiar package.json principal y de los workspaces
 COPY package.json package-lock.json ./
@@ -42,8 +50,16 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Instalar openssl necesario para que Prisma funcione en Alpine
-RUN apk add --no-cache openssl
+# Instalar openssl necesario para que Prisma funcione en Alpine,
+# Chromium + libs para whatsapp-web.js / puppeteer-core en producción
+RUN apk add --no-cache \
+    openssl \
+    chromium nss freetype harfbuzz ca-certificates ttf-freefont \
+    dbus udev
+
+# Indicar a puppeteer el ejecutable del sistema
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Setear entorno de producción
 ENV NODE_ENV=production

@@ -31,6 +31,7 @@ const AdminSyncSettings = React.lazy(() => import('./views/admin/AdminSyncSettin
 const AdminAutomation = React.lazy(() => import('./views/admin/AdminAutomation'));
 const AdminEmailProviders = React.lazy(() => import('./views/admin/AdminEmailProviders'));
 const AdminEmailLogs = React.lazy(() => import('./views/admin/AdminEmailLogs'));
+const AdminWhatsapp = React.lazy(() => import('./views/admin/AdminWhatsapp'));
 const AdminEmailTesting = React.lazy(() => import('./views/admin/AdminEmailTesting'));
 const AdminTenants = React.lazy(() => import('./views/admin/AdminTenants'));
 const AdminTenantDetail = React.lazy(() => import('./views/admin/AdminTenantDetail'));
@@ -126,6 +127,7 @@ const adminRoutes: RouteObject[] = [
     { path: '/admin/automation', element: <Suspense fallback={<LoadingFallback />}><AdminAutomation /></Suspense> },
     { path: '/admin/email-providers', element: <Suspense fallback={<LoadingFallback />}><AdminEmailProviders /></Suspense> },
     { path: '/admin/email-logs', element: <Suspense fallback={<LoadingFallback />}><AdminEmailLogs /></Suspense> },
+    { path: '/admin/whatsapp', element: <Suspense fallback={<LoadingFallback />}><AdminWhatsapp /></Suspense> },
     { path: '/admin/email-testing', element: <Suspense fallback={<LoadingFallback />}><AdminEmailTesting /></Suspense> },
     { path: '/admin/tenants', element: <Suspense fallback={<LoadingFallback />}><AdminTenants /></Suspense> },
     { path: '/admin/tenants/:id', element: <Suspense fallback={<LoadingFallback />}><AdminTenantDetail /></Suspense> },

@@ -56,10 +56,15 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.18.0",
+    "puppeteer-core": "^25.1.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "stripe": "^20.4.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "whatsapp-web.js": "^1.34.7",
+    "qrcode": "^1.5.4",
+    "puppeteer-core": "^22.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -77,6 +82,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
     "@types/web-push": "^3.6.4",
+    "@types/qrcode": "^1.5.5",
     "dotenv": "^17.3.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

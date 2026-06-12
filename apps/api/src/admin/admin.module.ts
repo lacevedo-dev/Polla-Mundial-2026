@@ -10,6 +10,9 @@ import { LeaguesModule } from '../leagues/leagues.module';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { EmailModule } from '../email/email.module';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { AvatarStorageService } from '../auth/avatar-storage.service';
+import { AdminWhatsappController } from './admin-whatsapp.controller';
 import { AdminService } from './admin.service';
 import { AdminPaymentsService } from './admin-payments.service';
 import { AdminStatsController } from './admin-stats.controller';
@@ -40,6 +43,7 @@ import { AdminSystemController } from './admin-system.controller';
     EmailModule,
     AutomationObservabilityModule,
     PredictionReportModule,
+    WhatsappModule,
   ],
   controllers: [
     AdminStatsController,
@@ -57,7 +61,8 @@ import { AdminSystemController } from './admin-system.controller';
     AdminEmailProvidersController,
     AdminEmailLogsController,
     AdminSystemController,
+    AdminWhatsappController,
   ],
-  providers: [AdminService, AdminPaymentsService, Reflector],
+  providers: [AdminService, AdminPaymentsService, AvatarStorageService, Reflector],
 })
 export class AdminModule {}

@@ -106,8 +106,12 @@ model League {
   scoringRules             ScoringRule[]
   stageFees                StageFee[]
 
+  whatsappGroupId          String?                   @db.VarChar(64)
+
   tenantId                 String?
   tenant                   CorporateTenant?          @relation(fields: [tenantId], references: [id])
+
+  whatsappGroupJobs        WhatsappGroupJob[]
 
   @@index([code])
   @@index([status])
@@ -1301,4 +1305,37 @@ enum TenantMemberStatus {
   ACTIVE
   INACTIVE
   BANNED
+}
+
+model WhatsappGroupJob {
+  id           String               @id @default(cuid())
+  type         WhatsappGroupJobType
+  status       WhatsappJobStatus    @default(PENDING)
+  matchId      String
+  leagueId     String
+  groupId      String               @db.VarChar(64)
+  dedupeKey    String               @unique
+  caption      String               @db.LongText
+  attemptCount Int                  @default(0)
+  lastError    String?              @db.Text
+  sentAt       DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  league       League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([matchId])
+  @@index([leagueId])
+}
+
+enum WhatsappGroupJobType {
+  RESULT_REPORT
+  PREDICTION_REPORT
+}
+
+enum WhatsappJobStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
 }

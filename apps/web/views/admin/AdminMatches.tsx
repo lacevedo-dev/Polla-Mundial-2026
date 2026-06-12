@@ -1,6 +1,6 @@
 import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
+import { ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, MessageCircle, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
@@ -8,6 +8,7 @@ import StatusBadge from '../../components/admin/StatusBadge';
 import TournamentImportModal from '../../components/admin/TournamentImportModal';
 import { useAdminMatchesStore } from '../../stores/admin.matches.store';
 import type { AdminMatch, AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
+import { useAdminWhatsappStore } from '../../stores/admin.whatsapp.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
 
 const PHASES = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
@@ -550,6 +551,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
 
 const AdminMatches: React.FC = () => {
   const { matches, total, summary, filters, isLoading, isSaving, tournaments, fetchMatches, fetchTeams, fetchTournaments, deleteMatch, setFilters, syncMatch, autoLinkAndSync, bulkAutoLink, resendPredictionReport, resendResultsReport, getMatchPreviewLeagues, getMatchLeagueRecipients, getEmailPreviewHtml, downloadReportPdf } = useAdminMatchesStore();
+  const { publishManual: waPublish } = useAdminWhatsappStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -566,6 +568,8 @@ const AdminMatches: React.FC = () => {
   const [previewRecipients, setPreviewRecipients] = React.useState<string[]>([]);
   const [showAllRecipients, setShowAllRecipients] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+  const [waPublishing, setWaPublishing] = React.useState(false);
+  const [waFeedback, setWaFeedback] = React.useState<string | null>(null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   const filteredMatches = React.useMemo(() => {
@@ -726,6 +730,22 @@ const AdminMatches: React.FC = () => {
       setReportFeedback(`Cierre reenviado para ${match.homeTeam.name} vs ${match.awayTeam.name}: ${result.recipients} correos en ${result.leagues} liga(s).`);
     }
   }, [previewMatch, resendPredictionReport, resendResultsReport]);
+
+  const handlePublishWA = React.useCallback(async () => {
+    if (!previewMatch || !previewLeagueId) return;
+    setWaPublishing(true);
+    setWaFeedback(null);
+    try {
+      const type = previewMatch.type === 'start' ? 'predictions' : 'results';
+      await waPublish(previewMatch.match.id, previewLeagueId, type);
+      setWaFeedback('Publicación encolada — se enviará en el próximo ciclo del dispatcher (≤2 min).');
+    } catch (e: any) {
+      setWaFeedback(`Error: ${e.message}`);
+    } finally {
+      setWaPublishing(false);
+    }
+  }, [previewMatch, previewLeagueId, waPublish]);
+
   const [confirmDelete, setConfirmDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [syncFeedback, setSyncFeedback] = React.useState<string | null>(null);
   const [bulkLinking, setBulkLinking] = React.useState(false);
@@ -1300,12 +1320,25 @@ const AdminMatches: React.FC = () => {
                 <button
                   onClick={() => void handleShareWhatsApp()}
                   disabled={!previewHtml || previewLoading || exporting}
-                  title="Compartir por WhatsApp"
+                  title="Compartir imagen por WhatsApp"
                   className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition-all hover:bg-emerald-100 disabled:opacity-40"
                 >
                   {exporting ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />} WhatsApp
                 </button>
+                <button
+                  onClick={() => void handlePublishWA()}
+                  disabled={!previewLeagueId || waPublishing}
+                  title="Publicar reporte en grupo de WhatsApp"
+                  className="flex items-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700 transition-all hover:bg-green-100 disabled:opacity-40"
+                >
+                  {waPublishing ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />} Publicar grupo
+                </button>
               </div>
+              {waFeedback && (
+                <p className={`-mt-2 rounded-xl px-3 py-2 text-xs font-bold ${waFeedback.startsWith('Error') ? 'bg-rose-50 text-rose-700' : 'bg-green-50 text-green-700'}`}>
+                  {waFeedback}
+                </p>
+              )}
               <div className="flex gap-3">
                 <DialogPrimitive.Close className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">
                   Cancelar
