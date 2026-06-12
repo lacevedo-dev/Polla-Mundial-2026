@@ -55,6 +55,7 @@ describe('MatchSyncService', () => {
 
   const mockPredictionsService = {
     calculateMatchPoints: jest.fn(),
+    calculatePhaseBonuses: jest.fn(),
   };
 
   const mockMonitoringService = {
@@ -202,6 +203,107 @@ describe('MatchSyncService', () => {
         matchesUpdated: 1,
         requestsUsed: 1,
       }),
+    );
+  });
+
+  it('recovers a force-closed match: clears resultNotificationSentAt and recalculates points when the API reports a final score', async () => {
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([
+      { externalId: '777' },
+    ]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: { id: 777, status: { short: 'FT', elapsed: 90 } },
+          teams: {
+            home: { id: 10, name: 'England', logo: '', winner: true },
+            away: { id: 2, name: 'France', logo: '', winner: false },
+          },
+          goals: { home: 2, away: 1 },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-stale',
+      externalId: '777',
+      homeTeamId: 'team-eng',
+      awayTeamId: 'team-fra',
+      homeScore: null,
+      awayScore: null,
+      status: MatchStatus.FINISHED,
+      statusShort: null,
+      eventsNoDataAt: null,
+      // Force-closed earlier without a real score.
+      resultNotificationSentAt: new Date('2026-06-11T20:00:00.000Z'),
+      matchDate: new Date('2026-06-11T17:00:00.000Z'),
+      phase: 'GROUP',
+      homeTeam: {
+        id: 'team-eng',
+        name: 'Inglaterra',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 10,
+        flagUrl: null,
+        group: 'C',
+      },
+      awayTeam: {
+        id: 'team-fra',
+        name: 'Francia',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 2,
+        flagUrl: null,
+        group: 'C',
+      },
+    });
+    mockPrismaService.team.findUnique
+      .mockResolvedValueOnce({
+        id: 'team-eng',
+        name: 'Inglaterra',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 10,
+        flagUrl: null,
+        group: 'C',
+      })
+      .mockResolvedValueOnce({
+        id: 'team-fra',
+        name: 'Francia',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: 2,
+        flagUrl: null,
+        group: 'C',
+      });
+    mockPrismaService.team.update.mockResolvedValue({});
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-stale',
+      status: MatchStatus.FINISHED,
+      homeTeamId: 'team-eng',
+      awayTeamId: 'team-fra',
+    });
+
+    await service.syncTodayMatchesForTrigger({
+      logType: 'CRON_SYNC' as any,
+      summaryLabel: 'Cron sync',
+      triggeredBy: 'scheduler',
+    });
+
+    expect(mockPrismaService.match.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'match-stale' },
+        data: expect.objectContaining({
+          resultNotificationSentAt: null,
+          homeScore: 2,
+          awayScore: 1,
+          status: MatchStatus.FINISHED,
+        }),
+      }),
+    );
+    expect(mockPredictionsService.calculateMatchPoints).toHaveBeenCalledWith(
+      'match-stale',
     );
   });
 

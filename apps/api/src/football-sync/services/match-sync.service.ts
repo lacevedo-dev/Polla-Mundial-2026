@@ -620,6 +620,19 @@ export class MatchSyncService {
         match.resultNotificationSentAt !== null &&
         (isActuallyLive || isRescheduledToFuture);
 
+      // A previously force-closed match (resultNotificationSentAt set, no real
+      // score) for which the API now reports a final score. Clear the suppression
+      // flag so the pending result notification can fire once the score lands.
+      const forceClosedNowHasScore =
+        match.status === MatchStatus.FINISHED &&
+        match.resultNotificationSentAt !== null &&
+        status === MatchStatus.FINISHED &&
+        match.homeScore === null &&
+        fixture.goals.home !== null &&
+        fixture.goals.away !== null;
+      const clearResultNotification =
+        wasForceClosedAndNowActive || forceClosedNowHasScore;
+
       // >1 min drift → update. Always update when restoring a force-closed match
       // so closeStaleUnlinkedMatches doesn't re-close it with the wrong date.
       const matchDateChanged = matchDateDriftMs > 60_000 || wasForceClosedAndNowActive;
@@ -631,7 +644,7 @@ export class MatchSyncService {
           ...(homeTeamId !== match.homeTeamId ? { homeTeamId } : {}),
           ...(awayTeamId !== match.awayTeamId ? { awayTeamId } : {}),
           ...(matchDateChanged && apiMatchDate ? { matchDate: apiMatchDate } : {}),
-          ...(wasForceClosedAndNowActive ? { resultNotificationSentAt: null } : {}),
+          ...(clearResultNotification ? { resultNotificationSentAt: null } : {}),
           homeScore: fixture.goals.home,
           awayScore: fixture.goals.away,
           status,
