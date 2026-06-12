@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   AutomationRun,
   AutomationRunStatus,
@@ -9,7 +9,6 @@ import {
   SyncLogStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
 import { buildWaGroupChannelBreakdown } from '../whatsapp/whatsapp-channel-status.util';
 
 type StepState =
@@ -57,10 +56,7 @@ type FinishRunInput = {
 export class AutomationObservabilityService {
   private readonly logger = new Logger(AutomationObservabilityService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    @Optional() private readonly waWeb?: WhatsappWebService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async startRun(input: StartRunInput): Promise<string | null> {
     try {
@@ -153,7 +149,7 @@ export class AutomationObservabilityService {
     }
   }
 
-  async getDailyOperations(dateKey?: string) {
+  async getDailyOperations(dateKey?: string, waConnected = false) {
     const normalizedDateKey = dateKey ?? this.getBogotaDateKey();
     const { dayStart, dayEnd, carryOverStart } = this.getOperationalWindow(normalizedDateKey);
     const now = new Date();
@@ -197,7 +193,6 @@ export class AutomationObservabilityService {
     }
 
     const matchIds = matches.map((match) => match.id);
-    const waConnected = this.waWeb?.isConnected() ?? false;
     const [activeLeagues, runs, syncLogs, waJobs] = await Promise.all([
       this.prisma.league.findMany({
         where: { status: 'ACTIVE' },

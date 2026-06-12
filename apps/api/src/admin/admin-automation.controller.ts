@@ -197,7 +197,7 @@ export class AdminAutomationController {
   async getOperations(
     @Query() query: AdminAutomationOperationsQueryDto,
   ) {
-    return this.observability.getDailyOperations(query.date);
+    return this.observability.getDailyOperations(query.date, this.waWeb.isConnected());
   }
 
   /** Matriz del día: partidos de hoy con estado de cada automatización.
