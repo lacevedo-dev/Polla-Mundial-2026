@@ -222,7 +222,7 @@ async function main() {
 
     for (const u of TEST_USERS) {
       const user = await prisma.user.upsert({
-        where: { email: u.email },
+        where: { username: u.username },
         create: {
           name: u.name,
           email: u.email,
