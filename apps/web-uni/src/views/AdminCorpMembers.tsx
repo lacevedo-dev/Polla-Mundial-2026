@@ -182,182 +182,296 @@ export default function AdminCorpMembers() {
     }
 
     async function handleBulk() {
-    setModalError(null);
-
-    const rawText = bulkText.trim();
-
-    if (!rawText) {
-        setModalError('Ingresa al menos un usuario.');
-        return;
-    }
-
-    const VALID_ROLES = ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'];
-
-    const ROLE_ALIASES: Record<string, string> = {
-        'OWNER': 'OWNER',
-        'ADMIN': 'ADMIN',
-        'ADMINISTRADOR': 'ADMIN',
-        'STAFF': 'STAFF',
-        'USUARIO': 'PLAYER',
-        'PLAYER': 'PLAYER',
-        'JUGADOR': 'PLAYER',
-        'PARTICIPANTE': 'PLAYER',
-    };
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    const normalizeValue = (value?: string) => {
-        return (value || '')
-            .replace(/\u00A0/g, ' ') // elimina espacios invisibles pegados desde Excel
-            .trim();
-    };
-
-    const detectSeparator = (line: string) => {
-        if (line.includes('\t')) return '\t';
-        if (line.includes(';')) return ';';
-        return ',';
-    };
-
-    const lines = rawText
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .filter(Boolean);
-
-    const users: any[] = [];
-    const errors: string[] = [];
-
-    lines.forEach((line, index) => {
-        const lineNumber = index + 1;
-
-        const sep = detectSeparator(line);
-        const parts = line.split(sep).map(normalizeValue);
-
-        // Ignorar encabezado
-        const firstCol = parts[0]?.toLowerCase();
-        const secondCol = parts[1]?.toLowerCase();
-        const thirdCol = parts[2]?.toLowerCase();
-
-        if (
-            lineNumber === 1 &&
-            (
-                firstCol?.includes('documento') ||
-                firstCol?.includes('cedula') ||
-                secondCol?.includes('nombre') ||
-                thirdCol?.includes('email') ||
-                thirdCol?.includes('correo')
-            )
-        ) {
+        setModalError(null);
+        setBulkResults(null);
+    
+        const rawText = bulkText.trim();
+    
+        if (!rawText) {
+            setModalError('Ingresa al menos un usuario.');
             return;
         }
-
-        if (parts.length < 3) {
-            errors.push(`Línea ${lineNumber}: formato inválido. Usa Documento, Nombre, Email[, Rol[, Contraseña]].`);
-            return;
-        }
-
-        const [documentNumberRaw, nameRaw, emailRaw, col4Raw, col5Raw] = parts;
-
-        const documentNumber = normalizeValue(documentNumberRaw);
-        const name = normalizeValue(nameRaw);
-        const email = normalizeValue(emailRaw).toLowerCase();
-        const col4 = normalizeValue(col4Raw);
-        const col5 = normalizeValue(col5Raw);
-
-        if (!documentNumber) {
-            errors.push(`Línea ${lineNumber}: el documento es obligatorio.`);
-            return;
-        }
-
-        if (!name) {
-            errors.push(`Línea ${lineNumber}: el nombre es obligatorio.`);
-            return;
-        }
-
-        if (!email || !emailRegex.test(email)) {
-            errors.push(`Línea ${lineNumber}: correo inválido "${emailRaw}".`);
-            return;
-        }
-
-        let role = 'PLAYER';
-        let tempPassword: string | undefined = undefined;
-
-        const col4Upper = col4.toUpperCase();
-        const col5Upper = col5.toUpperCase();
-
-        if (col4 && ROLE_ALIASES[col4Upper]) {
-            role = ROLE_ALIASES[col4Upper];
-            tempPassword = col5 || undefined;
-        } else if (col4 && col5 && ROLE_ALIASES[col5Upper]) {
-            // Permite formato: Documento, Nombre, Email, Contraseña, Rol
-            tempPassword = col4;
-            role = ROLE_ALIASES[col5Upper];
-        } else if (col4) {
-            // Si la cuarta columna no es rol, se toma como contraseña
-            tempPassword = col4;
-        }
-
-        if (!VALID_ROLES.includes(role)) {
-            errors.push(`Línea ${lineNumber}: rol inválido "${role}".`);
-            return;
-        }
-
-        users.push({
-            documentNumber,
-            name,
-            email,
-            role,
-            tempPassword,
-        });
-    });
-
-    if (errors.length > 0) {
-        setModalError(errors.slice(0, 10).join('\n'));
-        return;
-    }
-
-    if (!users.length) {
-        setModalError('No se encontraron usuarios válidos para importar.');
-        return;
-    }
-
-    setSaving(true);
-    setBulkProgress({ done: 0, total: users.length });
-
-    const CHUNK_SIZE = 500;
-    const allResults: any[] = [];
-    let totalSuccessful = 0;
-
-    try {
-        for (let i = 0; i < users.length; i += CHUNK_SIZE) {
-            const chunk = users.slice(i, i + CHUNK_SIZE);
-            const payload = {
-                users: chunk,
-                sharedTempPassword: bulkSharedPass?.trim() || undefined,
-                sendEmail: bulkSendEmail,
-            };
-
-            const res = await request<any>('/corp/members/bulk', {
-                method: 'POST',
-                body: JSON.stringify(payload),
+    
+        const VALID_ROLES = ['OWNER', 'ADMIN', 'STAFF', 'PLAYER'];
+    
+        const ROLE_ALIASES: Record<string, string> = {
+            OWNER: 'OWNER',
+            ADMIN: 'ADMIN',
+            ADMINISTRADOR: 'ADMIN',
+            STAFF: 'STAFF',
+            USUARIO: 'PLAYER',
+            PLAYER: 'PLAYER',
+            JUGADOR: 'PLAYER',
+            PARTICIPANTE: 'PLAYER',
+        };
+    
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+        const normalizeValue = (value?: string) => {
+            return (value || '')
+                .replace(/\u00A0/g, ' ')
+                .replace(/\uFEFF/g, '')
+                .trim();
+        };
+    
+        const detectSeparator = (line: string) => {
+            if (line.includes('\t')) return '\t';
+            if (line.includes(';')) return ';';
+            return ',';
+        };
+    
+        const lines = rawText
+            .split(/\r?\n/)
+            .map(l => l.trim())
+            .filter(Boolean);
+    
+        const users: any[] = [];
+        const errors: string[] = [];
+        const seenDocuments = new Set<string>();
+        const seenEmails = new Set<string>();
+    
+        lines.forEach((line, index) => {
+            const lineNumber = index + 1;
+            const sep = detectSeparator(line);
+            const parts = line.split(sep).map(normalizeValue);
+    
+            const firstCol = parts[0]?.toLowerCase();
+            const secondCol = parts[1]?.toLowerCase();
+            const thirdCol = parts[2]?.toLowerCase();
+    
+            if (
+                lineNumber === 1 &&
+                (
+                    firstCol?.includes('documento') ||
+                    firstCol?.includes('cedula') ||
+                    firstCol?.includes('cédula') ||
+                    secondCol?.includes('nombre') ||
+                    thirdCol?.includes('email') ||
+                    thirdCol?.includes('correo')
+                )
+            ) {
+                return;
+            }
+    
+            if (parts.length < 3) {
+                errors.push(`Línea ${lineNumber}: formato inválido. Usa Documento, Nombre, Email[, Rol[, Contraseña]].`);
+                return;
+            }
+    
+            const [documentNumberRaw, nameRaw, emailRaw, col4Raw, col5Raw] = parts;
+    
+            const documentNumber = normalizeValue(documentNumberRaw);
+            const name = normalizeValue(nameRaw);
+            const email = normalizeValue(emailRaw).toLowerCase();
+            const col4 = normalizeValue(col4Raw);
+            const col5 = normalizeValue(col5Raw);
+    
+            if (!documentNumber) {
+                errors.push(`Línea ${lineNumber}: el documento es obligatorio.`);
+                return;
+            }
+    
+            if (!name) {
+                errors.push(`Línea ${lineNumber}: el nombre es obligatorio.`);
+                return;
+            }
+    
+            if (!email || !emailRegex.test(email)) {
+                errors.push(`Línea ${lineNumber}: correo inválido "${emailRaw}".`);
+                return;
+            }
+    
+            if (seenDocuments.has(documentNumber)) {
+                errors.push(`Línea ${lineNumber}: documento duplicado en el archivo "${documentNumber}".`);
+                return;
+            }
+    
+            if (seenEmails.has(email)) {
+                errors.push(`Línea ${lineNumber}: correo duplicado en el archivo "${email}".`);
+                return;
+            }
+    
+            seenDocuments.add(documentNumber);
+            seenEmails.add(email);
+    
+            let role = 'PLAYER';
+            let tempPassword: string | undefined = undefined;
+    
+            const col4Upper = col4.toUpperCase();
+            const col5Upper = col5.toUpperCase();
+    
+            if (col4 && ROLE_ALIASES[col4Upper]) {
+                role = ROLE_ALIASES[col4Upper];
+                tempPassword = col5 || undefined;
+            } else if (col4 && col5 && ROLE_ALIASES[col5Upper]) {
+                tempPassword = col4;
+                role = ROLE_ALIASES[col5Upper];
+            } else if (col4) {
+                tempPassword = col4;
+            }
+    
+            if (!VALID_ROLES.includes(role)) {
+                errors.push(`Línea ${lineNumber}: rol inválido "${role}".`);
+                return;
+            }
+    
+            users.push({
+                documentNumber,
+                name,
+                email,
+                role,
+                tempPassword,
             });
-
-            allResults.push(...(res.results || []));
-            totalSuccessful += res.successful || 0;
-            setBulkProgress({ done: Math.min(i + CHUNK_SIZE, users.length), total: users.length });
+        });
+    
+        if (errors.length > 0) {
+            setModalError(
+                errors.slice(0, 20).join('\n') +
+                (errors.length > 20 ? `\n\nY ${errors.length - 20} errores adicionales.` : '')
+            );
+            return;
         }
-
-        setBulkResults(allResults);
-        await loadMembers();
-
-        showSuccess(`${totalSuccessful} de ${users.length} usuarios importados correctamente.`);
-    } catch (e) {
-        console.error('Error importación masiva:', e);
-        setModalError(e instanceof ApiError ? e.message : 'Error en importación masiva.');
-    } finally {
-        setSaving(false);
-        setBulkProgress(null);
+    
+        if (!users.length) {
+            setModalError('No se encontraron usuarios válidos para importar.');
+            return;
+        }
+    
+        setSaving(true);
+        setBulkProgress({ done: 0, total: users.length });
+    
+        /**
+         * Recomendación:
+         * 100 o 200 es más estable para importaciones grandes.
+         * Si además envías correo, usa 50 o 100.
+         */
+        const CHUNK_SIZE = bulkSendEmail ? 50 : 200;
+    
+        const visibleResults: any[] = [];
+        const failedChunks: string[] = [];
+    
+        let totalSuccessful = 0;
+        let totalFailed = 0;
+        let totalProcessed = 0;
+    
+        try {
+            for (let i = 0; i < users.length; i += CHUNK_SIZE) {
+                const chunk = users.slice(i, i + CHUNK_SIZE);
+                const chunkNumber = Math.floor(i / CHUNK_SIZE) + 1;
+                const from = i + 1;
+                const to = Math.min(i + CHUNK_SIZE, users.length);
+    
+                try {
+                    const payload = {
+                        users: chunk,
+                        sharedTempPassword: bulkSharedPass?.trim() || undefined,
+                        sendEmail: bulkSendEmail,
+                    };
+    
+                    const res = await request<any>('/corp/members/bulk', {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                    });
+    
+                    const results = Array.isArray(res?.results) ? res.results : [];
+    
+                    totalSuccessful += Number(res?.successful || 0);
+    
+                    const failedResults = results.filter((r: any) => !r.ok);
+                    totalFailed += failedResults.length;
+    
+                    /**
+                     * No guardar miles de registros en memoria/render.
+                     * Solo mostramos errores y una muestra de éxitos.
+                     */
+                    visibleResults.push(
+                        ...failedResults.map((r: any) => ({
+                            ...r,
+                            chunk: chunkNumber,
+                        }))
+                    );
+    
+                    const successSample = results
+                        .filter((r: any) => r.ok)
+                        .slice(0, 3)
+                        .map((r: any) => ({
+                            ...r,
+                            chunk: chunkNumber,
+                        }));
+    
+                    if (visibleResults.length < 100) {
+                        visibleResults.push(...successSample);
+                    }
+    
+                } catch (chunkError) {
+                    console.error(`Error en lote ${chunkNumber}, registros ${from}-${to}:`, chunkError);
+    
+                    totalFailed += chunk.length;
+    
+                    const msg = chunkError instanceof ApiError
+                        ? chunkError.message
+                        : 'Error desconocido en el lote.';
+    
+                    failedChunks.push(`Lote ${chunkNumber} registros ${from}-${to}: ${msg}`);
+    
+                    visibleResults.push({
+                        ok: false,
+                        email: `Registros ${from}-${to}`,
+                        error: msg,
+                        chunk: chunkNumber,
+                    });
+    
+                    /**
+                     * Si quieres que continúe con los siguientes lotes, deja este bloque así.
+                     * Si prefieres detener todo al primer error, descomenta:
+                     *
+                     * throw chunkError;
+                     */
+                }
+    
+                totalProcessed += chunk.length;
+    
+                setBulkProgress({
+                    done: Math.min(totalProcessed, users.length),
+                    total: users.length,
+                });
+    
+                /**
+                 * Pequeña pausa para no saturar backend/correos.
+                 */
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
+    
+            setBulkResults(visibleResults.slice(0, 150));
+    
+            await loadMembers();
+    
+            if (failedChunks.length > 0 || totalFailed > 0) {
+                setModalError(
+                    `Importación finalizada con novedades.\n` +
+                    `Procesados: ${users.length}\n` +
+                    `Exitosos: ${totalSuccessful}\n` +
+                    `Fallidos aproximados: ${totalFailed}\n\n` +
+                    failedChunks.slice(0, 10).join('\n') +
+                    (failedChunks.length > 10 ? `\n\nY ${failedChunks.length - 10} lotes adicionales con error.` : '')
+                );
+            } else {
+                showSuccess(`${totalSuccessful} de ${users.length} usuarios importados correctamente.`);
+            }
+    
+        } catch (e) {
+            console.error('Error general importación masiva:', e);
+    
+            setModalError(
+                e instanceof ApiError
+                    ? e.message
+                    : 'Error general en la importación masiva.'
+            );
+        } finally {
+            setSaving(false);
+            setBulkProgress(null);
+        }
     }
-}
 
     const filtered = members
         .filter(m => m.status === 'ACTIVE')
@@ -697,19 +811,24 @@ export default function AdminCorpMembers() {
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                                     <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-600">Resultados de importación</div>
                                     <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
-                                        {bulkResults.map((r, i) => (
-                                            <div key={i} className={`px-3 py-2 text-xs ${r.ok ? 'text-slate-600' : 'text-red-500 bg-red-50'}`}>
+                                    {bulkResults.length >= 50 && (
+                                        <div className="px-3 py-2 text-xs text-amber-600 bg-amber-50 border-t border-amber-100">
+                                            Solo se muestran los primeros 50 resultados para evitar sobrecargar la pantalla.
+                                        </div>
+                                    )}
+                                    {bulkResults.map((r, i) => (
+                                        <div key={i} className={`px-3 py-2 text-xs ${r.ok ? 'text-slate-600' : 'text-red-500 bg-red-50'}`}>
                                                 <div className="flex items-center justify-between">
                                                     <span className="truncate">{r.email}</span>
                                                     <span className={`font-bold shrink-0 ml-2 ${r.ok ? 'text-emerald-600' : 'text-red-500'}`}>
                                                         {r.ok ? (r.isNewUser ? '✓ Creado' : '✓ Vinculado') : `✗ ${r.error}`}
                                                     </span>
                                                 </div>
-                                                {r.ok && r.tempPassword && (
-                                                    <div className="mt-0.5 text-[10px] text-slate-400">Clave temporal: <span className="font-mono font-bold text-amber-600">{r.tempPassword}</span></div>
-                                                )}
-                                            </div>
-                                        ))}
+                                            {r.ok && r.tempPassword && (
+                                                <div className="mt-0.5 text-[10px] text-slate-400">Clave temporal: <span className="font-mono font-bold text-amber-600">{r.tempPassword}</span></div>
+                                            )}
+                                        </div>
+                                    ))}
                                     </div>
                                 </div>
                             )}
