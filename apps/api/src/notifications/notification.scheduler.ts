@@ -507,8 +507,7 @@ export class NotificationScheduler {
                   whatsappSentCount: totalWhatsappSent,
                   emailQueued: totalEmailQueued,
                   waGroupEnqueued: await this.enqueueWaGroupNotif(
-                    WhatsappGroupJobType.MATCH_REMINDER, match.id, league.id,
-                    `⏰ *Recordatorio de Partido* | ${league.name}\n⚽ ${home} vs ${away}\n\n¡Revisa tu pronóstico antes de que cierren las predicciones!`,
+                    WhatsappGroupJobType.MATCH_REMINDER, match.id, league.id, '',
                   ),
                 },
                 alreadySentCount: totalAlreadySent,
@@ -848,8 +847,7 @@ export class NotificationScheduler {
                     whatsappSentCount: totalWhatsappSent,
                     emailQueued: totalEmailQueued,
                     waGroupEnqueued: await this.enqueueWaGroupNotif(
-                      WhatsappGroupJobType.PREDICTION_CLOSED, match.id, league.id,
-                      `🔒 *Pronósticos Cerrados* | ${league.name}\n⚽ ${home} vs ${away}\n\n¡Ya no se pueden modificar los pronósticos. ¡Mucho éxito! 🤞`,
+                      WhatsappGroupJobType.PREDICTION_CLOSED, match.id, league.id, '',
                     ),
                   },
                   alreadySentCount: totalAlreadySent,
