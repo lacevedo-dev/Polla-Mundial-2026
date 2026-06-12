@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { CorpAppModule } from './corp-app.module';
 
 const DEFAULT_PRODUCTION_CORS_ORIGINS = [
@@ -48,7 +49,10 @@ async function bootstrap(): Promise<void> {
 
     console.info(`[corp-api] Iniciando (env=${nodeEnv}, port=${port}, corpDatabaseUrlConfigured=${databaseUrlConfigured ? 'yes' : 'no'})`);
 
-    const app = await NestFactory.create(CorpAppModule, { rawBody: true });
+    const app = await NestFactory.create(CorpAppModule, { rawBody: true, bodyParser: false });
+
+    app.use(json({ limit: '20mb' }));
+    app.use(urlencoded({ extended: true, limit: '20mb' }));
 
     app.useGlobalPipes(
         new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

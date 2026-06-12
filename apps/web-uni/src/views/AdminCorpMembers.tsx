@@ -86,6 +86,7 @@ export default function AdminCorpMembers() {
 
     const [resending, setResending] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
 
@@ -320,30 +321,41 @@ export default function AdminCorpMembers() {
     }
 
     setSaving(true);
+    setBulkProgress({ done: 0, total: users.length });
+
+    const CHUNK_SIZE = 500;
+    const allResults: any[] = [];
+    let totalSuccessful = 0;
 
     try {
-        const payload = {
-            users,
-            sharedTempPassword: bulkSharedPass?.trim() || undefined,
-            sendEmail: bulkSendEmail,
-        };
+        for (let i = 0; i < users.length; i += CHUNK_SIZE) {
+            const chunk = users.slice(i, i + CHUNK_SIZE);
+            const payload = {
+                users: chunk,
+                sharedTempPassword: bulkSharedPass?.trim() || undefined,
+                sendEmail: bulkSendEmail,
+            };
 
-        console.log('Payload importación masiva:', payload);
+            const res = await request<any>('/corp/members/bulk', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            });
 
-        const res = await request<any>('/corp/members/bulk', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        });
+            allResults.push(...(res.results || []));
+            totalSuccessful += res.successful || 0;
+            setBulkProgress({ done: Math.min(i + CHUNK_SIZE, users.length), total: users.length });
+        }
 
-        setBulkResults(res.results || []);
+        setBulkResults(allResults);
         await loadMembers();
 
-        showSuccess(`${res.successful || 0} de ${res.total || users.length} usuarios importados correctamente.`);
+        showSuccess(`${totalSuccessful} de ${users.length} usuarios importados correctamente.`);
     } catch (e) {
         console.error('Error importación masiva:', e);
         setModalError(e instanceof ApiError ? e.message : 'Error en importación masiva.');
     } finally {
         setSaving(false);
+        setBulkProgress(null);
     }
 }
 
@@ -702,8 +714,22 @@ export default function AdminCorpMembers() {
                                 </div>
                             )}
                         </div>
+                        {bulkProgress && (
+                            <div className="px-6 pb-2 shrink-0">
+                                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                                    <span>Importando usuarios...</span>
+                                    <span className="font-bold">{bulkProgress.done} / {bulkProgress.total}</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full transition-all duration-300"
+                                        style={{ width: `${Math.round((bulkProgress.done / bulkProgress.total) * 100)}%`, backgroundColor: 'var(--color-primary,#f59e0b)' }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-                            <button onClick={closeModal} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{bulkResults ? 'Cerrar' : 'Cancelar'}</button>
+                            <button onClick={closeModal} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{bulkResults ? 'Cerrar' : 'Cancelar'}</button>
                             {!bulkResults && (
                                 <button onClick={handleBulk} disabled={saving || !bulkText.trim()} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-black disabled:opacity-60 hover:brightness-90" style={{ backgroundColor: 'var(--color-primary,#f59e0b)' }}>
                                     {saving ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Importar
