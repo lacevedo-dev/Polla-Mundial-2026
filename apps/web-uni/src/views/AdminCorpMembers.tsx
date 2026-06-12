@@ -103,12 +103,21 @@ export default function AdminCorpMembers() {
         const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
         if (s) params.set('search', s);
         if (r) params.set('role', r);
-        request<{ data: Member[]; total: number; totalActive: number; roleCounts: Record<string, number> }>(`/corp/members?${params}`)
+        request<any>(`/corp/members?${params}`)
             .then(res => {
-                setMembers(res.data ?? []);
-                setTotal(res.total ?? 0);
-                setTotalActive(res.totalActive ?? 0);
-                setRoleCounts(res.roleCounts ?? {});
+                // Compatibilidad con la respuesta antigua (array) y la nueva (objeto paginado)
+                if (Array.isArray(res)) {
+                    const active = (res as Member[]).filter(m => m.status === 'ACTIVE');
+                    setMembers(active);
+                    setTotal(active.length);
+                    setTotalActive(active.length);
+                    setRoleCounts({});
+                } else {
+                    setMembers(res.data ?? []);
+                    setTotal(res.total ?? 0);
+                    setTotalActive(res.totalActive ?? 0);
+                    setRoleCounts(res.roleCounts ?? {});
+                }
             })
             .catch(() => { setMembers([]); setTotal(0); setTotalActive(0); })
             .finally(() => setLoading(false));
