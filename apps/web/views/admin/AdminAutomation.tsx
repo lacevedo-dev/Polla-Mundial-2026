@@ -163,12 +163,14 @@ const TYPE_LABELS: Record<string, string> = {
   MATCH_REMINDER: 'Recordatorio 1h',
   PREDICTION_CLOSED: 'Cierre predicciones',
   RESULT_PUBLISHED: 'Resultado publicado',
+  GOAL_SCORED: 'Gol en vivo',
 };
 
 const TYPE_BADGES: Record<string, string> = {
   MATCH_REMINDER: 'border-sky-200 bg-sky-50 text-sky-700',
   PREDICTION_CLOSED: 'border-amber-200 bg-amber-50 text-amber-700',
   RESULT_PUBLISHED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  GOAL_SCORED: 'border-rose-200 bg-rose-50 text-rose-700',
 };
 
 const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {

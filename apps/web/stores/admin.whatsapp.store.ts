@@ -11,7 +11,7 @@ export interface WhatsappGroup {
 
 export interface WhatsappGroupJob {
   id: string;
-  type: 'RESULT_REPORT' | 'PREDICTION_REPORT';
+  type: 'RESULT_REPORT' | 'PREDICTION_REPORT' | 'MATCH_REMINDER' | 'PREDICTION_CLOSED' | 'RESULT_NOTIFICATION' | 'GOAL_SCORED';
   status: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
   matchId: string;
   leagueId: string;

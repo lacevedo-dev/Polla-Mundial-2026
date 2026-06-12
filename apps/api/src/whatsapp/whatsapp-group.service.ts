@@ -190,6 +190,50 @@ export class WhatsappGroupService {
    * Encola una notificación de texto para los 3 tipos automáticos.
    * Guarda el caption preconstruido directamente en el job.
    */
+  /**
+   * Encola un gol en vivo. Dedupe por marcador para permitir múltiples goles por partido.
+   */
+  async enqueueGoalNotification(
+    matchId: string,
+    leagueId: string,
+    params: {
+      homeTeam: string;
+      awayTeam: string;
+      homeScore: number;
+      awayScore: number;
+      scoringTeam: string | null;
+      elapsed: number | null;
+      leagueName: string;
+    },
+  ): Promise<boolean> {
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true },
+    });
+    if (!league?.whatsappGroupId) return false;
+
+    const caption = buildGoalCaption(params);
+    const dedupeKey = `GOAL_SCORED:${matchId}:${leagueId}:${params.homeScore}-${params.awayScore}`;
+
+    try {
+      await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: WhatsappGroupJobType.GOAL_SCORED,
+          matchId,
+          leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey,
+          caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      return true;
+    } catch (error: any) {
+      if (error?.code === 'P2002') return false;
+      throw error;
+    }
+  }
+
   async enqueueNotification(
     type: WhatsappGroupJobType,
     matchId: string,
@@ -240,6 +284,16 @@ export class WhatsappGroupService {
         return buildPredictionClosedCaption(home, away, job.league.name);
       case WhatsappGroupJobType.RESULT_NOTIFICATION:
         return buildResultNotifCaption(home, away, match.homeScore, match.awayScore, job.league.name);
+      case WhatsappGroupJobType.GOAL_SCORED:
+        return buildGoalCaption({
+          homeTeam: home,
+          awayTeam: away,
+          homeScore: match.homeScore ?? 0,
+          awayScore: match.awayScore ?? 0,
+          scoringTeam: null,
+          elapsed: match.elapsed,
+          leagueName: job.league.name,
+        });
       default:
         return `Notificación | ${job.league.name}: ${home} vs ${away}`;
     }
@@ -341,6 +395,25 @@ function buildResultNotifCaption(
     `⚽ ${home} ${score} ${away}`,
     '',
     '¡El partido terminó! Los puntos serán calculados y el reporte completo llegará en breve.',
+  ].join('\n');
+}
+
+function buildGoalCaption(params: {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  scoringTeam: string | null;
+  elapsed: number | null;
+  leagueName: string;
+}): string {
+  const minute = params.elapsed ? ` ${params.elapsed}'` : '';
+  const score = `${params.homeScore} – ${params.awayScore}`;
+  return [
+    `⚽ *¡GOL!* | ${params.leagueName}`,
+    params.scoringTeam
+      ? `${params.scoringTeam} marca — ${params.homeTeam} ${score} ${params.awayTeam}${minute}`
+      : `${params.homeTeam} ${score} ${params.awayTeam}${minute}`,
   ].join('\n');
 }
 

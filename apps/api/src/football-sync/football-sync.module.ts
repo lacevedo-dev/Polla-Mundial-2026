@@ -18,6 +18,7 @@ import { SyncEventsService } from './services/sync-events.service';
 import { SyncOptimizationService } from './services/sync-optimization.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PredictionReportModule,
     PushNotificationsModule,
     forwardRef(() => NotificationsModule),
+    WhatsappModule,
   ],
   controllers: [FootballSyncController, AdminMonitoringController],
   providers: [

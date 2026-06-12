@@ -12,6 +12,7 @@ import { NotificationScheduler } from '../notifications/notification.scheduler';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
 const AUTO_TYPES = [
@@ -32,19 +33,25 @@ export class AdminAutomationController {
     private readonly observability: AutomationObservabilityService,
     private readonly notificationScheduler: NotificationScheduler,
     private readonly predictionReportScheduler: PredictionReportScheduler,
+    private readonly waWeb: WhatsappWebService,
   ) {}
 
   /** Estado de canales y schedulers */
   @Get('status')
   async getStatus() {
-    const [pushCount, notifLast24h, userWithPhone, emailBacklog] = await Promise.all([
+    const [pushCount, notifLast24h, userWithPhone, emailBacklog, leaguesWithWaGroup, pendingWaJobs] = await Promise.all([
       this.prisma.pushSubscription.count(),
       this.prisma.notification.count({
         where: { sentAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
       }),
       this.prisma.user.count({ where: { phone: { not: null }, status: USER_STATUS.ACTIVE } }),
       this.emailBacklogAudit.getAutomationStatus(),
+      this.prisma.league.count({ where: { whatsappGroupId: { not: null }, status: 'ACTIVE' } }),
+      this.prisma.whatsappGroupJob.count({ where: { status: 'PENDING' } }),
     ]);
+
+    const waWebStatus = this.waWeb.getStatus();
+    const waWebEnabled = this.config.get<string>('WHATSAPP_WEB_ENABLED') === 'true';
 
     const twilioSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
     const twilioToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
@@ -81,6 +88,17 @@ export class AdminAutomationController {
         enabled: !!smtpHost,
         description: smtpHost ? `SMTP: ${smtpHost}` : 'SMTP no configurado',
       },
+      waGroup: {
+        enabled: waWebEnabled && waWebStatus === 'CONNECTED',
+        description: !waWebEnabled
+          ? 'WHATSAPP_WEB_ENABLED no configurado'
+          : waWebStatus === 'CONNECTED'
+            ? `Sesión activa — ${leaguesWithWaGroup} liga(s) con grupo asignado${pendingWaJobs > 0 ? ` · ${pendingWaJobs} job(s) pendiente(s)` : ''}`
+            : `WhatsApp Web: ${waWebStatus} — conecta la sesión en Admin → WhatsApp`,
+        leaguesWithGroup: leaguesWithWaGroup,
+        pendingJobs: pendingWaJobs,
+        sessionStatus: waWebStatus,
+      },
     };
 
     const schedulers = [
@@ -92,7 +110,7 @@ export class AdminAutomationController {
         notifType: 'MATCH_REMINDER',
         icon: '⏰',
         audience: 'Todos los miembros activos de ligas con ese partido',
-        channels: ['inApp', 'push', 'whatsapp'],
+        channels: ['inApp', 'push', 'whatsapp', 'waGroup', 'email'],
       },
       {
         id: 'prediction_closing',
@@ -102,7 +120,7 @@ export class AdminAutomationController {
         notifType: 'PREDICTION_CLOSED',
         icon: '⚠️',
         audience: 'Miembros activos que aún no han pronosticado',
-        channels: ['inApp', 'push', 'whatsapp'],
+        channels: ['inApp', 'push', 'whatsapp', 'waGroup', 'email'],
       },
       {
         id: 'match_result',
@@ -112,7 +130,37 @@ export class AdminAutomationController {
         notifType: 'RESULT_PUBLISHED',
         icon: '✅',
         audience: 'Usuarios con predicción en el partido',
-        channels: ['inApp', 'push', 'whatsapp'],
+        channels: ['inApp', 'push', 'whatsapp', 'waGroup'],
+      },
+      {
+        id: 'live_goal',
+        name: 'Gol en vivo',
+        cron: 'Sync en vivo',
+        description: 'Al detectar cambio de marcador en partido LIVE — push, in-app y WA Grupo',
+        notifType: 'GOAL_SCORED',
+        icon: '⚽',
+        audience: 'Usuarios con predicción + grupos WA de ligas del partido',
+        channels: ['inApp', 'push', 'waGroup'],
+      },
+      {
+        id: 'prediction_report',
+        name: 'Reporte de pronósticos',
+        cron: '* * * * *',
+        description: 'Tras cierre de predicciones — imagen + PDF al grupo WA',
+        notifType: 'PREDICTION_CLOSED',
+        icon: '📋',
+        audience: 'Grupos WA de ligas con pronósticos cerrados',
+        channels: ['email', 'waGroup'],
+      },
+      {
+        id: 'result_report',
+        name: 'Reporte de resultados',
+        cron: '* * * * *',
+        description: 'Tras finalizar partido — imagen + PDF al grupo WA',
+        notifType: 'RESULT_PUBLISHED',
+        icon: '📊',
+        audience: 'Grupos WA de ligas con predicciones en el partido',
+        channels: ['email', 'waGroup'],
       },
       {
         id: 'smtp_backlog_audit',

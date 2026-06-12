@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
@@ -14,6 +14,7 @@ import { SyncEventsService } from './sync-events.service';
 import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import {
   MatchStatus,
   Phase,
@@ -53,6 +54,7 @@ export class MatchSyncService {
     private readonly footballConfigService: FootballConfigService,
     private readonly push: PushNotificationsService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -841,14 +843,21 @@ export class MatchSyncService {
     elapsed: number | null,
   ): Promise<void> {
     try {
-      // Only fetch userId to avoid loading unnecessary relation data
       const predictions = await this.prisma.prediction.findMany({
         where: { matchId },
-        select: { userId: true },
-        distinct: ['userId'], // Avoid duplicate notifications if user has multiple predictions
+        select: { userId: true, leagueId: true },
       });
 
       if (predictions.length === 0) return;
+
+      const leagueIds = [...new Set(predictions.map((p) => p.leagueId))];
+      const leagues = leagueIds.length > 0
+        ? await this.prisma.league.findMany({
+            where: { id: { in: leagueIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const leagueNameById = new Map(leagues.map((l) => [l.id, l.name]));
 
       const score = `${homeScore ?? '-'}-${awayScore ?? '-'}`;
       const minute = elapsed ? `${elapsed}'` : '';
@@ -862,13 +871,33 @@ export class MatchSyncService {
         ? `${goalTeamText} anotar${goalTeams.length > 1 ? 'ron' : ''} — ${homeTeamName} ${score} ${awayTeamName}${minute ? ` ${minute}` : ''}`
         : `${goalTeamText} marca${goalScorerTeam ? '' : 'n'} — ${homeTeamName} ${score} ${awayTeamName}${minute ? ` ${minute}` : ''}`;
 
+      const scoringTeam = goalScorerTeam ?? awayGoalScorerTeam;
+
+      if (this.waGroup && homeScore !== null && awayScore !== null) {
+        for (const leagueId of leagueIds) {
+          try {
+            await this.waGroup.enqueueGoalNotification(matchId, leagueId, {
+              homeTeam: homeTeamName,
+              awayTeam: awayTeamName,
+              homeScore,
+              awayScore,
+              scoringTeam,
+              elapsed,
+              leagueName: leagueNameById.get(leagueId) ?? 'Polla',
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`WA group goal enqueue failed for league ${leagueId}: ${message}`);
+          }
+        }
+      }
+
       // Send to all users with predictions for this match (limit to one notification per user per goal event)
       const notifiedUsers = new Set<string>();
       for (const prediction of predictions) {
         if (notifiedUsers.has(prediction.userId)) continue;
         notifiedUsers.add(prediction.userId);
 
-        // Send push notification
         await this.push.sendToUser(prediction.userId, {
           title,
           body,
@@ -877,7 +906,6 @@ export class MatchSyncService {
           data: { matchId, type: 'goal', homeScore, awayScore },
         });
 
-        // Create in-app notification (campana)
         await this.notifications.createInAppNotification({
           userId: prediction.userId,
           type: 'GOAL_SCORED',

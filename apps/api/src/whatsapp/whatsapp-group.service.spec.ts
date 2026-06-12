@@ -100,6 +100,51 @@ describe('WhatsappGroupService', () => {
     });
   });
 
+  describe('enqueueGoalNotification', () => {
+    it('skips when league has no whatsappGroupId', async () => {
+      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: null });
+
+      const ok = await service.enqueueGoalNotification('m1', 'l1', {
+        homeTeam: 'A',
+        awayTeam: 'B',
+        homeScore: 1,
+        awayScore: 0,
+        scoringTeam: 'A',
+        elapsed: 23,
+        leagueName: 'Liga',
+      });
+
+      expect(ok).toBe(false);
+      expect(mockPrisma.whatsappGroupJob.create).not.toHaveBeenCalled();
+    });
+
+    it('creates job with score-based dedupeKey', async () => {
+      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us' });
+      mockPrisma.whatsappGroupJob.create.mockResolvedValue({});
+
+      const ok = await service.enqueueGoalNotification('m1', 'l1', {
+        homeTeam: 'A',
+        awayTeam: 'B',
+        homeScore: 2,
+        awayScore: 1,
+        scoringTeam: 'A',
+        elapsed: 67,
+        leagueName: 'Liga',
+      });
+
+      expect(ok).toBe(true);
+      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: WhatsappGroupJobType.GOAL_SCORED,
+            dedupeKey: 'GOAL_SCORED:m1:l1:2-1',
+            groupId: 'g@g.us',
+          }),
+        }),
+      );
+    });
+  });
+
   describe('processJob', () => {
     const baseJob = {
       id: 'job1',

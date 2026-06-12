@@ -1,0 +1,5 @@
+-- Add GOAL_SCORED to WhatsappGroupJobType for live goal notifications in WA groups
+ALTER TABLE `WhatsappGroupJob`
+  MODIFY COLUMN `type`
+    ENUM('RESULT_REPORT','PREDICTION_REPORT','MATCH_REMINDER','PREDICTION_CLOSED','RESULT_NOTIFICATION','GOAL_SCORED')
+    NOT NULL;

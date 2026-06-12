@@ -1334,6 +1334,7 @@ enum WhatsappGroupJobType {
   MATCH_REMINDER
   PREDICTION_CLOSED
   RESULT_NOTIFICATION
+  GOAL_SCORED
 }
 
 enum WhatsappJobStatus {

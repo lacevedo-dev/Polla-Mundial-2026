@@ -18,6 +18,15 @@ const JOB_STATUS_LABEL: Record<string, { label: string; className: string }> = {
   FAILED:   { label: 'Fallido',   className: 'bg-rose-100 text-rose-700' },
 };
 
+const JOB_TYPE_LABEL: Record<string, string> = {
+  RESULT_REPORT: 'Reporte resultado',
+  PREDICTION_REPORT: 'Reporte pronósticos',
+  MATCH_REMINDER: 'Recordatorio 1h',
+  PREDICTION_CLOSED: 'Cierre predicciones',
+  RESULT_NOTIFICATION: 'Resultado final',
+  GOAL_SCORED: 'Gol en vivo',
+};
+
 const formatDate = (d: string) =>
   new Date(d).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -207,7 +216,7 @@ const AdminWhatsapp: React.FC = () => {
                         {jbadge.label}
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        {job.type === 'RESULT_REPORT' ? 'Resultado' : 'Cierre'}
+                        {JOB_TYPE_LABEL[job.type] ?? job.type}
                       </span>
                       {job.league && (
                         <span className="text-[11px] font-bold text-slate-700">
@@ -263,7 +272,8 @@ const AdminWhatsapp: React.FC = () => {
           <li>Escanéalo desde WhatsApp en tu teléfono → <strong>Dispositivos vinculados → Vincular dispositivo</strong>.</li>
           <li>Una vez conectado, pulsa <strong>Cargar grupos</strong> y copia el ID del grupo de cada polla.</li>
           <li>Asigna cada grupo a su liga correspondiente desde el panel de admin de liga o usando el botón de WhatsApp en la lista de partidos.</li>
-          <li>A partir de ese momento, al finalizar cada partido el sistema publicará automáticamente la imagen + PDF en el grupo.</li>
+          <li>A partir de ese momento el sistema publicará automáticamente en el grupo: recordatorio 1h, cierre de predicciones, goles en vivo, resultado final, reporte de pronósticos (imagen + PDF) y reporte de resultados (imagen + PDF).</li>
+          <li>Activa también <strong>Consultas de Eventos (goles/tarjetas)</strong> en Football Sync → Configuración para mejorar la precisión de los goles en vivo cuando hay varios en un mismo sync.</li>
         </ol>
       </div>
     </div>
