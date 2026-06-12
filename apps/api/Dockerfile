@@ -45,6 +45,9 @@ RUN npx prisma generate
 # Compilar NestJS (esto generará /dist)
 RUN npm run build
 
+# Verificar que puppeteer-core esté disponible para el workspace API
+RUN node -e "require('puppeteer-core'); console.log('puppeteer-core OK')"
+
 # ---- Etapa 2: Producción ----
 FROM node:22-alpine AS runner
 
@@ -66,6 +69,8 @@ ENV NODE_ENV=production
 
 # Copiar los node_modules base del workspace (dependencias izadas)
 COPY --from=builder /app/node_modules ./node_modules
+# Dependencias aisladas del workspace API (p. ej. puppeteer-core para WhatsApp)
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/package.json ./
 
 # Copiar la carpeta compartida ya construida/tipada
