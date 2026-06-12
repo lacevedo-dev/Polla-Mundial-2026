@@ -7,12 +7,15 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AdminAutomationOperationsQueryDto } from './dto/admin-automation-operations-query.dto';
 import { AdminAutomationRetryDto } from './dto/admin-automation-retry.dto';
+import { AdminAutomationRetryChannelDto } from './dto/admin-automation-retry-channel.dto';
 import { EmailBacklogAuditService } from '../email/email-backlog-audit.service';
 import { NotificationScheduler } from '../notifications/notification.scheduler';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
+import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
+import { AUTOMATION_STEP_TO_WA_JOB } from '../whatsapp/whatsapp-channel-status.util';
 import { USER_STATUS } from '../users/user-status.constants';
 
 const AUTO_TYPES = [
@@ -34,6 +37,7 @@ export class AdminAutomationController {
     private readonly notificationScheduler: NotificationScheduler,
     private readonly predictionReportScheduler: PredictionReportScheduler,
     private readonly waWeb: WhatsappWebService,
+    private readonly waGroup: WhatsappGroupService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -135,8 +139,8 @@ export class AdminAutomationController {
       {
         id: 'live_goal',
         name: 'Gol en vivo',
-        cron: 'Sync en vivo',
-        description: 'Al detectar cambio de marcador en partido LIVE — push, in-app y WA Grupo',
+        cron: 'Football Sync',
+        description: 'Depende del sync de partidos LIVE (cada ~5 min con partido en curso). No es un cron independiente — si el sync no corre a tiempo, el gol se puede perder.',
         notifType: 'GOAL_SCORED',
         icon: '⚽',
         audience: 'Usuarios con predicción + grupos WA de ligas del partido',
@@ -515,6 +519,26 @@ export class AdminAutomationController {
       await this.observability.failRun(runId, error, null, `Reintento manual falló: ${message}`);
       return { ok: false, runId, summary: message };
     }
+  }
+
+  /** Reintenta un canal específico (p. ej. WA Grupo) para un paso y liga. */
+  @Post('retry-channel')
+  async retryChannel(@Body() dto: AdminAutomationRetryChannelDto) {
+    if (dto.channel !== 'waGroup') {
+      throw new BadRequestException(`Canal no soportado: ${dto.channel}`);
+    }
+
+    const jobType = AUTOMATION_STEP_TO_WA_JOB[dto.step];
+    if (!jobType) {
+      throw new BadRequestException(`El step ${dto.step} no tiene envío a WA Grupo.`);
+    }
+
+    const result = await this.waGroup.retryStepDelivery(dto.matchId, dto.leagueId, jobType);
+    return {
+      ok: result.ok,
+      jobId: result.jobId ?? null,
+      summary: result.message,
+    };
   }
 
   /** Envía push de prueba al superadmin para validar configuración VAPID */

@@ -125,10 +125,13 @@ export class SyncPlanService {
       },
     });
 
-    // Calculate next sync time
+    // During live matches poll at min interval so goals are not missed between syncs.
+    const effectiveIntervalMinutes =
+      matches.live > 0 ? Math.min(intervalMinutes, minInterval) : intervalMinutes;
+
     const nextSyncIn = this.getSecondsUntilNextSync(
       plan.lastSyncAt,
-      intervalMinutes,
+      effectiveIntervalMinutes,
     );
 
     return {

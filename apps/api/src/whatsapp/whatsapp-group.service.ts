@@ -234,6 +234,67 @@ export class WhatsappGroupService {
     }
   }
 
+  async retryStepDelivery(
+    matchId: string,
+    leagueId: string,
+    type: WhatsappGroupJobType,
+  ): Promise<{ ok: boolean; message: string; jobId?: string }> {
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true, name: true },
+    });
+
+    if (!league?.whatsappGroupId) {
+      return {
+        ok: false,
+        message: `La liga "${league?.name ?? leagueId}" no tiene grupo de WhatsApp asignado.`,
+      };
+    }
+
+    if (!this.waWeb.isConnected()) {
+      return {
+        ok: false,
+        message: 'WhatsApp Web no está conectado. Ve a Admin → WhatsApp y escanea el QR.',
+      };
+    }
+
+    const dedupeKey = `${type}:${matchId}:${leagueId}`;
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return { ok: true, message: 'El mensaje ya fue enviado al grupo.', jobId: existing.id };
+    }
+
+    if (existing) {
+      await this.resetFailedJob(existing.id);
+    } else {
+      await this.enqueueManual(type, matchId, leagueId);
+    }
+
+    const job = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true },
+    });
+
+    if (!job) {
+      return { ok: false, message: 'No se pudo crear el job de reintento.' };
+    }
+
+    try {
+      await this.processJob(job.id);
+      return { ok: true, message: 'Mensaje reenviado al grupo de WhatsApp.', jobId: job.id };
+    } catch (error: any) {
+      return {
+        ok: false,
+        message: error?.message ?? 'Falló el reenvío al grupo de WhatsApp.',
+        jobId: job.id,
+      };
+    }
+  }
+
   async enqueueNotification(
     type: WhatsappGroupJobType,
     matchId: string,

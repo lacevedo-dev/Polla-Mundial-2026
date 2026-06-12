@@ -510,8 +510,15 @@ export class MatchSyncService {
       const awayGoalsDelta = Math.max(0, newAway - prevAway);
       const totalGoalsDelta = homeGoalsDelta + awayGoalsDelta;
 
-      // Send push notification for goals during live match — one notification per goal
-      if (scoreChanged && status === MatchStatus.LIVE && totalGoalsDelta > 0) {
+      const transitionedToFinished =
+        match.status !== MatchStatus.FINISHED && status === MatchStatus.FINISHED;
+
+      // Notify goals during LIVE syncs, or on first FINISHED sync if we missed the live window.
+      if (
+        scoreChanged &&
+        totalGoalsDelta > 0 &&
+        (status === MatchStatus.LIVE || transitionedToFinished)
+      ) {
         const elapsed = fixture.fixture.status.elapsed ?? null;
 
         // When multiple goals are detected in one sync gap and there is budget available,
@@ -729,8 +736,6 @@ export class MatchSyncService {
       if (transitionedToLive) {
         await this.autoActivateMatchInLeagues(match.id);
       }
-
-      const transitionedToFinished = match.status !== MatchStatus.FINISHED && status === MatchStatus.FINISHED;
 
       // When the match reaches FINISHED we must calculate points and enqueue the
       // result email even if the score was already present before the final status.

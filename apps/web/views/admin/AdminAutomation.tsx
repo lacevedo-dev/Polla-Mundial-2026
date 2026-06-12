@@ -71,6 +71,12 @@ interface ChannelBreakdown {
   emailQueued?: number;
   emailFailed?: number;
   waGroupEnqueued?: number;
+  waGroupSent?: number;
+  waGroupFailed?: number;
+  waGroupExpected?: number;
+  waGroupReason?: string | null;
+  waGroupJobId?: string | null;
+  waGroupLeagueId?: string | null;
 }
 
 interface OperationsStep {
@@ -151,6 +157,9 @@ interface IncidentInfo {
   match: OperationsMatch;
   step: OperationsStep;
   label: string;
+  channel?: string;
+  channelReason?: string | null;
+  leagueId?: string | null;
 }
 
 interface RetryResult {
@@ -194,22 +203,62 @@ const STEP_CHANNELS: Record<string, string[]> = {
 function getChannelCounters(
   ch: string,
   breakdown: ChannelBreakdown | undefined,
-): { sent: number; failed: number } | null {
+): { sent: number; failed: number; pending: number } | null {
   if (!breakdown) return null;
   switch (ch) {
     case 'push':
-      return { sent: breakdown.pushSent ?? 0, failed: breakdown.pushFailed ?? 0 };
+      return { sent: breakdown.pushSent ?? 0, failed: breakdown.pushFailed ?? 0, pending: 0 };
     case 'whatsapp':
-      return { sent: breakdown.whatsappSentCount ?? 0, failed: 0 };
-    case 'waGroup':
-      return { sent: breakdown.waGroupEnqueued ?? 0, failed: 0 };
+      return { sent: breakdown.whatsappSentCount ?? 0, failed: 0, pending: 0 };
+    case 'waGroup': {
+      const sent = breakdown.waGroupSent ?? 0;
+      const failed = breakdown.waGroupFailed ?? 0;
+      const pending = breakdown.waGroupEnqueued ?? 0;
+      return { sent, failed, pending };
+    }
     case 'email':
-      return { sent: breakdown.emailQueued ?? 0, failed: breakdown.emailFailed ?? 0 };
+      return { sent: breakdown.emailQueued ?? 0, failed: breakdown.emailFailed ?? 0, pending: 0 };
     case 'inApp':
-      return null; // inApp no genera counters explícitos
+      return null;
     default:
       return null;
   }
+}
+
+function getChannelReason(ch: string, breakdown: ChannelBreakdown | undefined): string | null {
+  if (!breakdown) return null;
+  if (ch === 'waGroup' && breakdown.waGroupReason) return breakdown.waGroupReason;
+  if (ch === 'push' && (breakdown.pushFailed ?? 0) > 0) {
+    return `Fallaron ${breakdown.pushFailed} notificación(es) push`;
+  }
+  if (ch === 'email' && (breakdown.emailFailed ?? 0) > 0) {
+    return `Fallaron ${breakdown.emailFailed} correo(s)`;
+  }
+  return null;
+}
+
+function channelHasFailure(
+  ch: string,
+  breakdown: ChannelBreakdown | undefined,
+  step: OperationsStep,
+): boolean {
+  const counters = getChannelCounters(ch, breakdown);
+  if (counters && counters.failed > 0) return true;
+  const reason = getChannelReason(ch, breakdown);
+  if (reason && ['SUCCESS', 'WARNING', 'FAILED', 'OVERDUE', 'MANUAL'].includes(step.status)) {
+    return true;
+  }
+  if (
+    ch === 'waGroup' &&
+    breakdown &&
+    (breakdown.waGroupExpected ?? 0) > 0 &&
+    (breakdown.waGroupSent ?? 0) === 0 &&
+    (breakdown.waGroupEnqueued ?? 0) === 0 &&
+    ['SUCCESS', 'WARNING', 'FAILED', 'OVERDUE', 'MANUAL'].includes(step.status)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -358,11 +407,13 @@ function ChannelTooltip({
   channel,
   counters,
   step,
+  reason,
   children,
 }: {
   channel: string;
-  counters: { sent: number; failed: number } | null;
+  counters: { sent: number; failed: number; pending?: number } | null;
   step: OperationsStep;
+  reason?: string | null;
   children: React.ReactNode;
 }) {
   const [showTooltip, setShowTooltip] = React.useState(false);
@@ -426,6 +477,17 @@ function ChannelTooltip({
                       <span className="font-bold text-red-400 tabular-nums">✗ {counters.failed}</span>
                     </div>
                   )}
+                  {(counters.pending ?? 0) > 0 && counters.failed === 0 && (
+                    <div className="flex items-center justify-between gap-3 py-0.5">
+                      <span className="text-slate-400 font-medium">Pendientes:</span>
+                      <span className="font-bold text-amber-400 tabular-nums">⏳ {counters.pending}</span>
+                    </div>
+                  )}
+                  {reason && (
+                    <p className="pt-1.5 mt-1.5 border-t border-slate-700/60 text-red-300 leading-snug">
+                      {reason}
+                    </p>
+                  )}
                   <div className="flex items-center justify-between gap-3 pt-1.5 mt-1.5 border-t border-slate-700/60">
                     <span className="text-slate-400 font-medium">Tasa éxito:</span>
                     <span className={`font-black tabular-nums ${parseInt(successRate) >= 90 ? 'text-emerald-400' : parseInt(successRate) >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
@@ -457,9 +519,9 @@ function ChannelTooltip({
                 Notificaciones push
               </p>
             )}
-            {channel === 'whatsapp' && (
+            {channel === 'waGroup' && (
               <p className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-slate-500">
-                Mensajes WhatsApp
+                Click para ver detalle y reenviar manualmente
               </p>
             )}
             {channel === 'inApp' && (
@@ -504,26 +566,36 @@ function StepCell({
   const handleChannelClick = (e: React.MouseEvent, channel: string) => {
     e.stopPropagation();
 
-    // Solo email tiene vista de logs por ahora
     if (channel === 'email') {
       const emailType = stepKeyToEmailType[step.key];
       if (emailType) {
         const params = new URLSearchParams({ type: emailType });
         if (match.id) params.set('matchId', match.id);
 
-        // Si hay fallos, navegar directamente a la vista de fallidos
         const counters = getChannelCounters(channel, breakdown);
         if (counters && counters.failed > 0 && e.shiftKey) {
-          // Shift+Click: Ver solo fallidos
           params.set('status', 'FAILED');
         }
 
         navigate(`/admin/email-logs?${params.toString()}`);
       }
+      return;
     }
 
-    // Para otros canales, podrías agregar más navegación en el futuro
-    // Por ejemplo: whatsapp logs, push notification logs, etc.
+    if (
+      channel === 'waGroup' &&
+      onIncident &&
+      channelHasFailure(channel, breakdown, step)
+    ) {
+      onIncident({
+        match,
+        step,
+        label: `${step.label} · WA Grupo`,
+        channel: 'waGroup',
+        channelReason: getChannelReason(channel, breakdown),
+        leagueId: breakdown?.waGroupLeagueId ?? step.leagues[0]?.leagueId ?? null,
+      });
+    }
   };
 
   return (
@@ -538,20 +610,19 @@ function StepCell({
         <div className="flex flex-col items-center gap-0.5">
           {channels.map((ch) => {
             const counters = getChannelCounters(ch, breakdown);
-            // Color del ícono: rojo si tiene fallas, verde si envió, gris si sin datos
-            const hasData   = counters && (counters.sent > 0 || counters.failed > 0);
-            const hasFailed = counters && counters.failed > 0;
-            const iconColor = hasFailed
+            const reason = getChannelReason(ch, breakdown);
+            const failed = channelHasFailure(ch, breakdown, step);
+            const hasData = counters && (counters.sent > 0 || counters.failed > 0);
+            const iconColor = failed
               ? 'text-red-500'
               : hasData
                 ? 'text-emerald-500'
                 : STEP_STATE_COLOR[step.status] ?? 'text-slate-300';
 
-            // Hacer los iconos de canales clickeables
-            const isClickable = ch === 'email'; // Por ahora solo email, expandir en el futuro
+            const isClickable = ch === 'email' || (ch === 'waGroup' && failed);
 
             return (
-              <ChannelTooltip key={ch} channel={ch} counters={counters} step={step}>
+              <ChannelTooltip key={ch} channel={ch} counters={counters} step={step} reason={reason}>
                 <div
                   className={`flex items-center gap-0.5 ${isClickable ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
                   onClick={isClickable ? (e) => handleChannelClick(e, ch) : undefined}
@@ -904,15 +975,27 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
   const [retryResult, setRetryResult] = useState<RetryResult | null>(null);
 
   const step = incident.step;
+  const breakdown = step.latestDetails?.channelBreakdown;
+  const isChannelRetry = incident.channel === 'waGroup' && !!incident.leagueId;
 
   const handleRetry = async () => {
     setRetrying(true);
     setRetryResult(null);
     try {
-      const result = await request<RetryResult>('/admin/automation/retry', {
-        method: 'POST',
-        body: JSON.stringify({ matchId: incident.match.id, step: step.key }),
-      });
+      const result = isChannelRetry
+        ? await request<RetryResult>('/admin/automation/retry-channel', {
+            method: 'POST',
+            body: JSON.stringify({
+              matchId: incident.match.id,
+              step: step.key,
+              leagueId: incident.leagueId,
+              channel: 'waGroup',
+            }),
+          })
+        : await request<RetryResult>('/admin/automation/retry', {
+            method: 'POST',
+            body: JSON.stringify({ matchId: incident.match.id, step: step.key }),
+          });
       setRetryResult(result);
       if (result.ok) setTimeout(() => { onRefresh(); }, 1500);
     } catch (err: unknown) {
@@ -929,7 +1012,9 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <AlertTriangle size={16} className="shrink-0 text-amber-500" />
-              <p className="text-sm font-black text-slate-900">Paso con problema</p>
+              <p className="text-sm font-black text-slate-900">
+                {incident.channel ? 'Canal con problema' : 'Paso con problema'}
+              </p>
               <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-700">{incident.label}</span>
             </div>
             <p className="mt-1 truncate text-xs text-slate-500">{incident.match.homeTeam} vs {incident.match.awayTeam}</p>
@@ -948,6 +1033,11 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
             </div>
             {step.errorMessage && (
               <p className="mt-2 text-red-600 font-semibold">{step.errorMessage}</p>
+            )}
+            {(incident.channelReason || breakdown?.waGroupReason) && (
+              <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-red-700 font-semibold">
+                {incident.channelReason || breakdown?.waGroupReason}
+              </p>
             )}
           </div>
 
@@ -988,11 +1078,15 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
           {!retryResult?.ok && (
             <button
               onClick={handleRetry}
-              disabled={retrying}
+              disabled={retrying || (isChannelRetry && !incident.leagueId)}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
             >
               <RotateCcw size={12} className={retrying ? 'animate-spin' : ''} />
-              {retrying ? 'Reintentando...' : 'Reintentar manualmente'}
+              {retrying
+                ? 'Reintentando...'
+                : isChannelRetry
+                  ? 'Reenviar a WA Grupo'
+                  : 'Reintentar manualmente'}
             </button>
           )}
           {retryResult?.ok && (

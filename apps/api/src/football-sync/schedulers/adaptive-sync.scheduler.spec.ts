@@ -17,6 +17,7 @@ describe('AdaptiveSyncScheduler', () => {
   const mockMatchSyncService = {
     syncTodayMatches: jest.fn(),
     syncTodayMatchesForTrigger: jest.fn(),
+    syncLiveMatches: jest.fn(),
   };
 
   const mockFootballConfigService = {
@@ -65,6 +66,10 @@ describe('AdaptiveSyncScheduler', () => {
     mockMatchSyncService.syncTodayMatchesForTrigger.mockResolvedValue({
       success: true,
       matchesUpdated: 2,
+    });
+    mockMatchSyncService.syncLiveMatches.mockResolvedValue({
+      success: true,
+      matchesUpdated: 1,
     });
   });
 

@@ -159,11 +159,22 @@ export class AdaptiveSyncScheduler {
         timestamp: new Date().toISOString(),
       });
 
-      const result = await this.matchSync.syncTodayMatchesForTrigger({
-        logType: SyncLogType.CRON_SYNC,
-        summaryLabel: 'Cron sync',
-        triggeredBy: 'scheduler',
-      });
+      const planBeforeSync = await this.syncPlan.calculateDailyPlan();
+      const useLiveEndpoint = planBeforeSync.hasLiveMatches;
+
+      const result = useLiveEndpoint
+        ? await this.matchSync.syncLiveMatches()
+        : await this.matchSync.syncTodayMatchesForTrigger({
+            logType: SyncLogType.CRON_SYNC,
+            summaryLabel: 'Cron sync',
+            triggeredBy: 'scheduler',
+          });
+
+      if (useLiveEndpoint) {
+        this.logger.log(
+          `Live endpoint sync: ${result.matchesUpdated} match(es) updated`,
+        );
+      }
 
       if (result.success) {
         this.logger.log(

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   AutomationRun,
   AutomationRunStatus,
@@ -9,6 +9,8 @@ import {
   SyncLogStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
+import { buildWaGroupChannelBreakdown } from '../whatsapp/whatsapp-channel-status.util';
 
 type StepState =
   | 'NOT_APPLICABLE'
@@ -55,7 +57,10 @@ type FinishRunInput = {
 export class AutomationObservabilityService {
   private readonly logger = new Logger(AutomationObservabilityService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly waWeb?: WhatsappWebService,
+  ) {}
 
   async startRun(input: StartRunInput): Promise<string | null> {
     try {
@@ -192,13 +197,15 @@ export class AutomationObservabilityService {
     }
 
     const matchIds = matches.map((match) => match.id);
-    const [activeLeagues, runs, syncLogs] = await Promise.all([
+    const waConnected = this.waWeb?.isConnected() ?? false;
+    const [activeLeagues, runs, syncLogs, waJobs] = await Promise.all([
       this.prisma.league.findMany({
         where: { status: 'ACTIVE' },
         select: {
           id: true,
           code: true,
           name: true,
+          whatsappGroupId: true,
           closePredictionMinutes: true,
           leagueTournaments: {
             select: { tournamentId: true },
@@ -224,7 +231,23 @@ export class AutomationObservabilityService {
         },
         orderBy: [{ createdAt: 'desc' }],
       }),
+      this.prisma.whatsappGroupJob.findMany({
+        where: { matchId: { in: matchIds } },
+        select: {
+          id: true,
+          status: true,
+          lastError: true,
+          leagueId: true,
+          sentAt: true,
+          updatedAt: true,
+          dedupeKey: true,
+        },
+      }),
     ]);
+
+    const waJobsByDedupeKey = new Map(
+      waJobs.map((job) => [job.dedupeKey, job]),
+    );
 
     const runsByMatch = new Map<string, Array<AutomationRun & { league: { id: string; code: string; name: string } | null }>>();
     for (const run of runs as Array<AutomationRun & { league: { id: string; code: string; name: string } | null }>) {
@@ -259,6 +282,7 @@ export class AutomationObservabilityService {
           id: league.id,
           code: league.code,
           name: league.name,
+          whatsappGroupId: league.whatsappGroupId,
           closePredictionMinutes: league.closePredictionMinutes ?? 15,
         }));
 
@@ -276,16 +300,60 @@ export class AutomationObservabilityService {
         AutomationStep.RESULT_NOTIFICATION,
         AutomationStep.PREDICTION_REPORT,
         AutomationStep.RESULT_REPORT,
-      ].map((step) =>
-        this.buildStepSummary({
+      ].map((step) => {
+        const summary = this.buildStepSummary({
           step,
           match,
           matchRuns,
           relevantLeagues,
           closeMinutes,
           now,
-        }),
-      );
+        });
+
+        const existingBreakdown =
+          summary.latestDetails &&
+          typeof summary.latestDetails === 'object' &&
+          summary.latestDetails !== null &&
+          'channelBreakdown' in summary.latestDetails
+            ? (summary.latestDetails as { channelBreakdown?: Record<string, unknown> })
+                .channelBreakdown
+            : undefined;
+
+        const waBreakdown = buildWaGroupChannelBreakdown({
+          step,
+          stepStatus: summary.status,
+          matchId: match.id,
+          relevantLeagues,
+          jobsByDedupeKey: waJobsByDedupeKey,
+          waConnected,
+          stepFinishedAt: summary.lastFinishedAt,
+          existing: existingBreakdown as Parameters<typeof buildWaGroupChannelBreakdown>[0]['existing'],
+        });
+
+        if (!waBreakdown) return summary;
+
+        const mergedDetails = {
+          ...(typeof summary.latestDetails === 'object' && summary.latestDetails !== null
+            ? summary.latestDetails
+            : {}),
+          channelBreakdown: {
+            ...(existingBreakdown ?? {}),
+            ...waBreakdown,
+          },
+        };
+
+        const waFailed = waBreakdown.waGroupFailed ?? 0;
+        const enrichedStatus =
+          waFailed > 0 && ['SUCCESS', 'WARNING', 'SKIPPED'].includes(summary.status)
+            ? 'WARNING'
+            : summary.status;
+
+        return {
+          ...summary,
+          status: enrichedStatus,
+          latestDetails: mergedDetails,
+        };
+      });
 
       return {
         id: match.id,
