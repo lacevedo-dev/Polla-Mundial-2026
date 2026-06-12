@@ -280,7 +280,7 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
   };
 
   const handleSave = async () => {
-    await updateMatch(match.id, { externalId, currentLinkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+    await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
     onOpenChange(false);
   };
 
@@ -292,7 +292,7 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
   const handleSync = async () => {
     if (!match?.externalId && !externalId.trim()) return;
     if (!match?.externalId && externalId.trim()) {
-      await updateMatch(match.id, { externalId, currentLinkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+      await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
     }
     await syncMatch(match.id);
     onOpenChange(false);

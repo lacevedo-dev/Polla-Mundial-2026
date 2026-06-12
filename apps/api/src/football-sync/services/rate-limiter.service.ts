@@ -75,7 +75,7 @@ export class RateLimiterService {
       await this.prisma.apiFootballRequest.create({
         data: {
           endpoint,
-          params: params as any,
+          params: JSON.stringify(params),
           responseStatus,
           matchesFetched,
         },

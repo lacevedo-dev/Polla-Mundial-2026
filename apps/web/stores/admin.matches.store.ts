@@ -126,7 +126,7 @@ interface AdminMatchesState {
     fetchTeams: () => Promise<void>;
     fetchTournaments: () => Promise<void>;
     createMatch: (data: Partial<AdminMatch>) => Promise<void>;
-    updateMatch: (id: string, data: Partial<AdminMatch>) => Promise<void>;
+    updateMatch: (id: string, data: Partial<AdminMatch> & { linkSource?: 'manual' | 'suggested' }) => Promise<void>;
     updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
     resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;

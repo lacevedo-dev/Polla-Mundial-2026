@@ -282,8 +282,9 @@ export class AdminMatchesController {
     async update(@Param('id') id: string, @Body() dto: AdminUpdateMatchDto, @CurrentUser() user: { id?: string }) {
         const match = await this.prisma.match.findUnique({ where: { id } });
         if (!match) throw new NotFoundException('Partido no encontrado');
+        const { linkSource, ...matchFields } = dto;
         const data = {
-            ...dto,
+            ...matchFields,
             ...(dto.externalId !== undefined ? { externalId: dto.externalId.trim() || null } : {}),
         };
         const updatedMatch = await this.prisma.match.update({
@@ -308,7 +309,7 @@ export class AdminMatchesController {
                         matchId: id,
                         previousExternalId: match.externalId,
                         externalId: updatedMatch.externalId,
-                        linkSource: dto.linkSource ?? 'manual',
+                        linkSource: linkSource ?? 'manual',
                     }),
                 },
             });

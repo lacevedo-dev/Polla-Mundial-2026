@@ -147,7 +147,7 @@ describe('RateLimiterService', () => {
         {
           data: {
             endpoint: '/fixtures',
-            params: { date: '2026-06-15' },
+            params: JSON.stringify({ date: '2026-06-15' }),
             responseStatus: 200,
             matchesFetched: 5,
           },

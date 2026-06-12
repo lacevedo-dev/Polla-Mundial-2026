@@ -149,7 +149,7 @@ export default function Login() {
                     </div>
                     <div className="border-t border-slate-800 pt-4 text-center text-xs text-slate-300">
                         ¿No tienes cuenta?{' '}
-                        <a href="https://pollacoopcanapro.atencionesvirtuales.com.co/login" className="font-bold text-amber-400 hover:underline">
+                        <a href="https://www.coopcanapro.coop" className="font-bold text-amber-400 hover:underline">
                             Contáctanos
                         </a>
                     </div>
