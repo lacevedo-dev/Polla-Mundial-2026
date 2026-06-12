@@ -33,7 +33,8 @@ export class TenantProvisioningService {
         const role = (dto.role ?? 'OWNER') as TenantRole;
         const sendEmail = dto.sendEmail !== false;
 
-        // Buscar usuario existente — documento es la clave única en contexto corporativo
+        // El documento es el identificador único de cada persona en el contexto corporativo.
+        // El email NO es único: varias personas pueden compartir la misma dirección.
         let existingUser: { id: string; name: string; email: string; documentNumber: string | null } | null = null;
 
         if (documentNumber) {
@@ -43,10 +44,6 @@ export class TenantProvisioningService {
             });
         }
 
-        if (existingUser && existingUser.email !== email) {
-            throw new BadRequestException('El número de documento ya está registrado con otro correo electrónico');
-        }
-
         let userId: string;
         let isNewUser = false;
         let tempPassword: string | undefined;
@@ -54,6 +51,7 @@ export class TenantProvisioningService {
         if (existingUser) {
             userId = existingUser.id;
             await this.limitsService.checkUserLimit(tenantId);
+
             // Si se pasa una contraseña temporal explícita, actualizarla y forzar cambio
             if (dto.tempPassword?.trim()) {
                 tempPassword = dto.tempPassword.trim();

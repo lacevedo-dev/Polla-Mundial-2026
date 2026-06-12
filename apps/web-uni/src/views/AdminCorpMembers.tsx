@@ -228,7 +228,6 @@ export default function AdminCorpMembers() {
         const users: any[] = [];
         const errors: string[] = [];
         const seenDocuments = new Set<string>();
-        const seenEmails = new Set<string>();
     
         lines.forEach((line, index) => {
             const lineNumber = index + 1;
@@ -286,13 +285,7 @@ export default function AdminCorpMembers() {
                 return;
             }
     
-            if (seenEmails.has(email)) {
-                errors.push(`Línea ${lineNumber}: correo duplicado en el archivo "${email}".`);
-                return;
-            }
-    
             seenDocuments.add(documentNumber);
-            seenEmails.add(email);
     
             let role = 'PLAYER';
             let tempPassword: string | undefined = undefined;
