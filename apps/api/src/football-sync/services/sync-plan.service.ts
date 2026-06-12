@@ -988,9 +988,12 @@ export class SyncPlanService {
 
   /**
    * Force-close stale matches that are still SCHEDULED/LIVE past their expected end:
-   * - Unlinked (no externalId): after 24h — can never be synced.
-   * - Linked (has externalId): after 370 min — past the carry-over hard cutoff,
-   *   the match is certainly over even if the sync never confirmed it.
+   * - Unlinked (no externalId): after 24h — can never be synced, so we also mark
+   *   resultNotificationSentAt to suppress the (impossible) result notification.
+   * - Linked (has externalId): after 200 min — past the carry-over hard cutoff,
+   *   the match is certainly over even if the sync never confirmed it. We leave
+   *   resultNotificationSentAt null so a later date-based sync can still reconcile
+   *   the real score, recompute points and publish the result + notification.
    * Returns the total number of matches closed.
    */
   async closeStaleUnlinkedMatches(): Promise<number> {
@@ -1006,8 +1009,11 @@ export class SyncPlanService {
     });
 
     // 200 min = 130 min match + 30 min extra time + 40 min buffer.
-    // Also set resultNotificationSentAt to suppress the result notification — these matches
-    // were force-closed without a real score, so sending "- - -" would be misleading.
+    // Linked matches CAN still be reconciled by the date-based sync, so we do NOT
+    // set resultNotificationSentAt here: leaving it null keeps the match eligible
+    // in the carry-over window so a later sync can fetch the real score, recompute
+    // points and finally publish the result. The notification scheduler is guarded
+    // to skip scoreless matches, so this never produces a misleading "- - -" alert.
     const linkedCutoff = new Date(Date.now() - 200 * 60 * 1000);
     const linked = await this.prisma.match.updateMany({
       where: {
@@ -1015,7 +1021,7 @@ export class SyncPlanService {
         externalId: { not: null },
         matchDate: { lt: linkedCutoff },
       },
-      data: { status: MatchStatus.FINISHED, resultNotificationSentAt: new Date() },
+      data: { status: MatchStatus.FINISHED },
     });
 
     if (unlinked.count > 0) {
@@ -1025,7 +1031,7 @@ export class SyncPlanService {
     }
     if (linked.count > 0) {
       this.logger.warn(
-        `[Stale Cleanup] Force-finished ${linked.count} linked match(es) past 370-min carry-over cutoff`,
+        `[Stale Cleanup] Force-finished ${linked.count} linked match(es) past 200-min carry-over cutoff`,
       );
     }
 

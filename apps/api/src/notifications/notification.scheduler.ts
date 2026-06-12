@@ -907,6 +907,10 @@ export class NotificationScheduler {
         where: {
           status: MatchStatus.FINISHED,
           resultNotificationSentAt: null,
+          // Never notify a match without a real score. Force-closed/stale matches
+          // are left scoreless on purpose; sending "- - -" would be misleading.
+          homeScore: { not: null },
+          awayScore: { not: null },
         },
         include: {
           homeTeam: true,
