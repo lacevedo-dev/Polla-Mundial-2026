@@ -4,12 +4,6 @@ import { ArrowLeft, AlertCircle, CheckCircle2, Loader2, Mail, ShieldAlert } from
 import { request, ApiError } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
 
-function deriveContactUrl(contactEmail?: string | null): string | null {
-    if (!contactEmail) return null;
-    const domain = contactEmail.split('@')[1];
-    return domain ? `www.${domain}` : null;
-}
-
 export default function ForgotPassword() {
     const tenant = useTenantStore((s) => s.tenant);
     const [identifier, setIdentifier] = useState('');
@@ -63,18 +57,17 @@ export default function ForgotPassword() {
                             <AlertCircle size={44} className="text-rose-400 mx-auto" />
                             <div className="text-sm text-slate-300 space-y-2">
                                 <p>La cédula <strong className="text-white">{identifier}</strong> no aparece registrada en la base de datos.</p>
-                                {(() => {
-                                    const contactUrl = deriveContactUrl(tenant?.contactEmail);
-                                    return contactUrl ? (
-                                        <p className="text-slate-400">Comuníquese con <span className="text-white font-semibold">{orgName}</span> en{' '}
-                                            <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primaryColor }}>
-                                                {contactUrl}
-                                            </a>.
-                                        </p>
-                                    ) : (
-                                        <p className="text-slate-400">Comuníquese con <span className="text-white font-semibold">{orgName}</span> para solicitar su registro.</p>
-                                    );
-                                })()}
+                                <p className="text-slate-400">
+                                    Si tiene alguna dificultad para ingresar o recuperar su clave, comuníquese con{' '}
+                                    <span className="text-white font-semibold">{orgName}</span> desde el chat de nuestra página web{' '}
+                                    <a href="https://www.coopcanapro.coop" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primaryColor }}>
+                                        www.coopcanapro.coop
+                                    </a>{' '}
+                                    o desde WhatsApp{' '}
+                                    <a href="https://wa.me/573183143799" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: primaryColor }}>
+                                        573183143799
+                                    </a>.
+                                </p>
                             </div>
                             <button onClick={() => { setNotFound(false); setError(null); }} className="block w-full rounded-xl py-3 text-center text-sm font-black text-white" style={{ backgroundColor: primaryColor }}>
                                 Intentar con otro documento

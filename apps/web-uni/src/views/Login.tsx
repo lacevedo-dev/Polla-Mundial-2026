@@ -6,12 +6,6 @@ import { useTenantStore } from '../stores/tenant.store';
 import { getRecaptchaToken } from '../recaptcha';
 import { ApiError } from '../api';
 
-function deriveContactUrl(contactEmail?: string | null): string | null {
-    if (!contactEmail) return null;
-    const domain = contactEmail.split('@')[1];
-    return domain ? `www.${domain}` : null;
-}
-
 export default function Login() {
     const navigate = useNavigate();
     const [params] = useSearchParams();
@@ -83,22 +77,21 @@ export default function Login() {
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="bg-slate-900/95 backdrop-blur-sm rounded-2xl p-6 space-y-4 border border-slate-800 shadow-2xl">
                     {notRegistered ? (
-                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm">
-                            {(() => {
-                                const contactUrl = deriveContactUrl(tenant?.contactEmail);
-                                return contactUrl ? (
-                                    <p>La cédula <strong>{identifier}</strong> no aparece registrada en la base de datos. Cualquier novedad, comuníquese con{' '}
-                                        <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="font-bold underline text-amber-400">
-                                            {orgName}
-                                        </a>{' '}en{' '}
-                                        <a href={`https://${contactUrl}`} target="_blank" rel="noopener noreferrer" className="font-bold underline text-amber-400">
-                                            {contactUrl}
-                                        </a>.
-                                    </p>
-                                ) : (
-                                    <p>La cédula <strong>{identifier}</strong> no aparece registrada en la base de datos. Cualquier novedad, comuníquese con <strong>{orgName}</strong> para solicitar su registro.</p>
-                                );
-                            })()}
+                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-sm space-y-2">
+                            <p className="text-rose-400">
+                                La cédula <strong className="text-white">{identifier}</strong> no aparece registrada en la base de datos.
+                            </p>
+                            <p className="text-rose-400/80">
+                                Si tiene alguna dificultad para ingresar o recuperar su clave, comuníquese con{' '}
+                                <span className="text-white font-semibold">{orgName}</span> desde el chat de nuestra página web{' '}
+                                <a href="https://www.coopcanapro.coop" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: primaryColor }}>
+                                    www.coopcanapro.coop
+                                </a>{' '}
+                                o desde WhatsApp{' '}
+                                <a href="https://wa.me/573183143799" target="_blank" rel="noopener noreferrer" className="underline font-semibold" style={{ color: primaryColor }}>
+                                    573183143799
+                                </a>.
+                            </p>
                         </div>
                     ) : error ? (
                         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-sm">
