@@ -8,7 +8,7 @@ import { usePredictionStore, type MatchViewModel } from '../stores/prediction.st
 import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
-import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
+import { useLiveSyncEvents, type MatchEventItem } from '../hooks/useLiveSyncEvents';
 import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
@@ -72,7 +72,6 @@ const Dashboard: React.FC = () => {
     const [scoringTab, setScoringTab] = useState<'resultado' | 'bonos' | 'desempate'>('resultado');
     const [currentTime, setCurrentTime] = useState(() => Date.now());
 
-    interface MatchEventItem { type: string; detail: string | null; playerName: string | null; assistName: string | null; minute: number; extraMin: number | null; }
     interface LiveStandingsData { hasLive: boolean; myProvisionalPosition: number | null; myPositionChange: number; myLivePoints: number; liveMatchCount: number; }
 
     const [matchEvents, setMatchEvents] = useState<Map<string, MatchEventItem[]>>(new Map());

@@ -53,7 +53,7 @@ export class MatchesController {
             select: {
                 id: true, type: true, detail: true,
                 playerName: true, assistName: true,
-                minute: true, extraMin: true,
+                minute: true, extraMin: true, teamId: true,
             },
         });
         return events;

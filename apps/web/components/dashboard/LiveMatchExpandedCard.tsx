@@ -5,6 +5,50 @@ import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { calcLivePoints } from '../../utils/dashboard';
 
+function partitionGoalsByTeam(
+    goals: MatchEventItem[],
+    homeTeamId: string,
+    awayTeamId: string,
+    finalHome: number,
+    finalAway: number,
+): { homeGoals: MatchEventItem[]; awayGoals: MatchEventItem[] } {
+    const sorted = [...goals].sort(
+        (a, b) => a.minute - b.minute || (a.extraMin ?? 0) - (b.extraMin ?? 0),
+    );
+    const homeGoals: MatchEventItem[] = [];
+    const awayGoals: MatchEventItem[] = [];
+    let runningHome = 0;
+    let runningAway = 0;
+
+    for (const goal of sorted) {
+        if (goal.teamId === homeTeamId) {
+            homeGoals.push(goal);
+            runningHome++;
+        } else if (goal.teamId === awayTeamId) {
+            awayGoals.push(goal);
+            runningAway++;
+        } else {
+            const canHome = runningHome < finalHome;
+            const canAway = runningAway < finalAway;
+            if (canHome && !canAway) {
+                homeGoals.push(goal);
+                runningHome++;
+            } else if (!canHome && canAway) {
+                awayGoals.push(goal);
+                runningAway++;
+            } else if (finalHome - runningHome >= finalAway - runningAway) {
+                homeGoals.push(goal);
+                runningHome++;
+            } else {
+                awayGoals.push(goal);
+                runningAway++;
+            }
+        }
+    }
+
+    return { homeGoals, awayGoals };
+}
+
 interface LiveStandingsData {
     myProvisionalPosition?: number | null;
     myPositionChange: number;
@@ -49,6 +93,13 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
 
     const expandedEvents = (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD'].includes(e.type));
     const goals = expandedEvents.filter((e) => e.type === 'GOAL');
+    const { homeGoals, awayGoals } = partitionGoalsByTeam(
+        goals,
+        expandedMatch.homeTeamId,
+        expandedMatch.awayTeamId,
+        expandedRealHome,
+        expandedRealAway,
+    );
 
     return (
         <AnimatePresence>
@@ -130,7 +181,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         <div className="mt-2 pt-2 border-t border-white/5">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
-                                    {goals.filter((_, idx) => idx % 2 === 0).map((e, i) => {
+                                    {homeGoals.map((e, i) => {
                                         const isOG = e.detail?.toLowerCase().includes('own goal');
                                         const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
                                         return (
@@ -144,7 +195,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                 </div>
                                 <div className="w-px bg-white/10 self-stretch mx-1" />
                                 <div className="flex flex-col items-end gap-0.5 min-w-0 flex-1">
-                                    {goals.filter((_, idx) => idx % 2 !== 0).map((e, i) => {
+                                    {awayGoals.map((e, i) => {
                                         const isOG = e.detail?.toLowerCase().includes('own goal');
                                         const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
                                         return (

@@ -2,6 +2,16 @@ import React from 'react';
 import { BASE_URL } from '../api';
 import { usePredictionStore, type LiveScoreUpdate } from '../stores/prediction.store';
 
+export interface MatchEventItem {
+    type: string;
+    detail: string | null;
+    playerName: string | null;
+    assistName: string | null;
+    minute: number;
+    extraMin: number | null;
+    teamId: string | null;
+}
+
 export interface LiveSyncState {
     isConnected: boolean;
     lastSyncAt: number | null;        // timestamp ms del último sync_completed

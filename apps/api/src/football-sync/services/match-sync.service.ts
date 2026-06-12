@@ -792,6 +792,23 @@ export class MatchSyncService {
       return { relevantEvents: 0, rawEvents: 0 };
     }
 
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        homeTeamId: true,
+        awayTeamId: true,
+        homeTeam: { select: { apiFootballTeamId: true } },
+        awayTeam: { select: { apiFootballTeamId: true } },
+      },
+    });
+
+    const resolveTeamId = (apiTeamId: number | undefined | null): string | null => {
+      if (!match || apiTeamId == null) return null;
+      if (match.homeTeam.apiFootballTeamId === apiTeamId) return match.homeTeamId;
+      if (match.awayTeam.apiFootballTeamId === apiTeamId) return match.awayTeamId;
+      return null;
+    };
+
     let relevantEvents = 0;
     for (const ev of events) {
       const type: string   = ev.type   ?? 'UNKNOWN';
@@ -800,6 +817,7 @@ export class MatchSyncService {
       const extraMin: number | null = ev.time?.extra ?? null;
       const playerName: string | null = ev.player?.name ?? null;
       const assistName: string | null = ev.assist?.name ?? null;
+      const teamId = resolveTeamId(ev.team?.id);
 
       // Only store goals and cards (skip substitutions to keep list clean)
       if (!['Goal', 'Card'].includes(type)) continue;
@@ -815,8 +833,8 @@ export class MatchSyncService {
               minute,
             },
           },
-          update: { detail, assistName, extraMin, updatedAt: new Date() },
-          create: { matchId, type: type.toUpperCase(), detail, minute, extraMin, playerName, assistName },
+          update: { detail, assistName, extraMin, teamId, updatedAt: new Date() },
+          create: { matchId, type: type.toUpperCase(), detail, minute, extraMin, playerName, assistName, teamId },
         });
       } catch {
         // Ignore constraint errors (duplicate event at same minute)
