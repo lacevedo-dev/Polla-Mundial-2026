@@ -1,0 +1,11 @@
+---
+description: Responder siempre en español
+alwaysApply: true
+---
+
+# Idioma: Español
+
+Responde **siempre en español** en todas las conversaciones de este proyecto, sin importar el idioma en que el usuario escriba.
+
+- Mensajes, explicaciones, comentarios y preguntas: en español.
+- El código en sí (variables, funciones, comentarios de código) sigue las convenciones del proyecto.
