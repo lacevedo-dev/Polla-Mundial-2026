@@ -41,6 +41,7 @@ interface SchedulerDef {
 interface AutomationStatus {
   channels: Record<string, ChannelInfo>;
   schedulers: SchedulerDef[];
+  channelOverrides: Record<string, Record<string, boolean>>;
   stats: { notifLast24h: number; pushSubscribers: number; usersWithPhone: number };
 }
 
@@ -924,7 +925,28 @@ function ChannelCard({ id, info }: { id: string; info: ChannelInfo }) {
   );
 }
 
-function SchedulerCard({ scheduler, channelStatus }: { scheduler: SchedulerDef; channelStatus: AutomationStatus['channels'] }) {
+function SchedulerCard({
+  scheduler,
+  channelStatus,
+  channelOverrides,
+  onToggleChannel,
+}: {
+  scheduler: SchedulerDef;
+  channelStatus: AutomationStatus['channels'];
+  channelOverrides: Record<string, Record<string, boolean>>;
+  onToggleChannel: (schedulerId: string, channel: string, enabled: boolean) => void;
+}) {
+  const [toggling, setToggling] = React.useState<string | null>(null);
+
+  const handleToggle = async (channel: string, currentEnabled: boolean) => {
+    setToggling(channel);
+    try {
+      await onToggleChannel(scheduler.id, channel, !currentEnabled);
+    } finally {
+      setToggling(null);
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -951,20 +973,55 @@ function SchedulerCard({ scheduler, channelStatus }: { scheduler: SchedulerDef; 
         <p><span className="font-semibold text-slate-700">Audiencia: </span>{text(scheduler.audience)}</p>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-200 pt-3">
-        {scheduler.channels.map((channel) => {
-          const active = channelStatus[channel]?.enabled ?? false;
-          const meta = CHANNEL_META[channel];
-          return (
-            <span
-              key={channel}
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${active ? 'border-lime-200 bg-lime-50 text-lime-700' : 'border-slate-200 bg-slate-100 text-slate-400 line-through'}`}
-            >
-              {meta?.icon}
-              {meta?.label ?? channel}
-            </span>
-          );
-        })}
+      <div className="mt-3 border-t border-slate-200 pt-3">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Canales</p>
+        <div className="flex flex-wrap gap-1.5">
+          {scheduler.channels.map((channel) => {
+            const sysEnabled = channelStatus[channel]?.enabled ?? false;
+            const overrideVal = channelOverrides[scheduler.id]?.[channel];
+            // Si hay override explícito usa ese; si no, hereda el estado del sistema
+            const manuallyDisabled = overrideVal === false;
+            const effectivelyActive = sysEnabled && !manuallyDisabled;
+            const meta = CHANNEL_META[channel];
+            const isLoading = toggling === channel;
+
+            // Solo los canales togglables (no inApp que siempre está activo)
+            const isTogglable = channel !== 'inApp';
+            const sysReason = !sysEnabled ? (channelStatus[channel]?.description ?? 'No configurado') : null;
+
+            let badgeClass: string;
+            let titleText: string;
+            if (!sysEnabled) {
+              badgeClass = 'border-slate-200 bg-slate-100 text-slate-400 line-through cursor-not-allowed';
+              titleText = `Sistema deshabilitado: ${sysReason}`;
+            } else if (manuallyDisabled) {
+              badgeClass = 'border-amber-200 bg-amber-50 text-amber-600 line-through cursor-pointer hover:bg-amber-100';
+              titleText = 'Deshabilitado manualmente — click para activar';
+            } else {
+              badgeClass = `border-lime-200 bg-lime-50 text-lime-700 ${isTogglable ? 'cursor-pointer hover:bg-lime-100' : 'cursor-default'}`;
+              titleText = isTogglable ? 'Activo — click para deshabilitar' : 'Siempre activo';
+            }
+
+            return (
+              <button
+                key={channel}
+                type="button"
+                disabled={!isTogglable || !sysEnabled || isLoading}
+                title={titleText}
+                onClick={isTogglable && sysEnabled ? () => handleToggle(channel, effectivelyActive) : undefined}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest transition-all disabled:cursor-not-allowed ${badgeClass} ${isLoading ? 'opacity-50' : ''}`}
+              >
+                {isLoading ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" /> : meta?.icon}
+                {meta?.label ?? channel}
+              </button>
+            );
+          })}
+        </div>
+        {scheduler.channels.some((ch) => channelOverrides[scheduler.id]?.[ch] === false) && (
+          <p className="mt-2 text-[10px] text-amber-600">
+            ⚠ Algunos canales están deshabilitados manualmente para este scheduler.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1113,6 +1170,20 @@ export default function AdminAutomation() {
   const [historySearch, setHistorySearch] = useState('');
   const [matrixSearch, setMatrixSearch] = useState('');
   const [incident, setIncident] = useState<IncidentInfo | null>(null);
+
+  const handleToggleChannel = async (schedulerId: string, channel: string, enabled: boolean) => {
+    try {
+      const result = await request<{ ok: boolean; overrides: Record<string, Record<string, boolean>> }>(
+        '/admin/automation/channel-overrides',
+        { method: 'PUT', body: JSON.stringify({ schedulerId, channel, enabled }) },
+      );
+      if (result.ok) {
+        setStatus((prev) => prev ? { ...prev, channelOverrides: result.overrides } : prev);
+      }
+    } catch (e) {
+      console.error('Error al actualizar override de canal', e);
+    }
+  };
 
   const loadBase = async () => {
     setLoading(true);
@@ -1395,7 +1466,13 @@ export default function AdminAutomation() {
       {tab === 'schedulers' && status && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {status.schedulers.map((scheduler) => (
-            <SchedulerCard key={scheduler.id} scheduler={scheduler} channelStatus={status.channels} />
+            <SchedulerCard
+              key={scheduler.id}
+              scheduler={scheduler}
+              channelStatus={status.channels}
+              channelOverrides={status.channelOverrides ?? {}}
+              onToggleChannel={handleToggleChannel}
+            />
           ))}
         </div>
       )}

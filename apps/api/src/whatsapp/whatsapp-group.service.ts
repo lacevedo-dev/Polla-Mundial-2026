@@ -11,6 +11,16 @@ import {
 } from '../prediction-report/prediction-report.service';
 import type { WhatsappReportEvent } from '../prediction-report/prediction-report.service';
 
+/** Mapeo de job type a schedulerId (mismo id que usa el frontend) */
+const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
+  [WhatsappGroupJobType.MATCH_REMINDER]:      'match_reminder',
+  [WhatsappGroupJobType.PREDICTION_CLOSED]:   'prediction_closing',
+  [WhatsappGroupJobType.RESULT_NOTIFICATION]: 'match_result',
+  [WhatsappGroupJobType.GOAL_SCORED]:         'live_goal',
+  [WhatsappGroupJobType.PREDICTION_REPORT]:   'prediction_report',
+  [WhatsappGroupJobType.RESULT_REPORT]:       'result_report',
+};
+
 @Injectable()
 export class WhatsappGroupService {
   private readonly logger = new Logger(WhatsappGroupService.name);
@@ -44,11 +54,27 @@ export class WhatsappGroupService {
    * Encola una publicación de WhatsApp si la liga tiene groupId configurado.
    * Usa dedupeKey para evitar dobles envíos. Es idempotente y best-effort.
    */
+  private async isChannelEnabledForType(type: WhatsappGroupJobType): Promise<boolean> {
+    const schedulerId = JOB_TYPE_TO_SCHEDULER[type];
+    if (!schedulerId) return true;
+    const row = await this.prisma.systemConfig.findUnique({
+      where: { key: 'automation:channel_overrides' },
+    });
+    if (!row) return true;
+    const overrides: Record<string, Record<string, boolean>> = JSON.parse(row.value);
+    return overrides[schedulerId]?.['waGroup'] !== false;
+  }
+
   async enqueueForLeague(
     type: WhatsappGroupJobType,
     matchId: string,
     leagueId: string,
   ): Promise<void> {
+    if (!(await this.isChannelEnabledForType(type))) {
+      this.logger.debug(`WA Grupo deshabilitado para ${type} por override de configuración`);
+      return;
+    }
+
     const league = await this.prisma.league.findUnique({
       where: { id: leagueId },
       select: { whatsappGroupId: true, name: true, code: true },

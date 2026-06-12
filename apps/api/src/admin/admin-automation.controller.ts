@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AutomationRunTrigger, AutomationStep, NotificationType, Prisma } from '@prisma/client';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
@@ -178,9 +178,17 @@ export class AdminAutomationController {
       },
     ];
 
+    const overridesRow = await this.prisma.systemConfig.findUnique({
+      where: { key: 'automation:channel_overrides' },
+    });
+    const channelOverrides: Record<string, Record<string, boolean>> = overridesRow
+      ? JSON.parse(overridesRow.value)
+      : {};
+
     return {
       channels,
       schedulers,
+      channelOverrides,
       stats: { notifLast24h, pushSubscribers: pushCount, usersWithPhone: userWithPhone },
       automation: {
         emailBacklogAudit: {
@@ -539,6 +547,43 @@ export class AdminAutomationController {
       jobId: result.jobId ?? null,
       summary: result.message,
     };
+  }
+
+  /** Lee los overrides de canal por scheduler */
+  @Get('channel-overrides')
+  async getChannelOverrides() {
+    const row = await this.prisma.systemConfig.findUnique({
+      where: { key: 'automation:channel_overrides' },
+    });
+    return row ? JSON.parse(row.value) : {};
+  }
+
+  /** Activa/desactiva un canal para un scheduler específico */
+  @Put('channel-overrides')
+  async setChannelOverride(
+    @Body() dto: { schedulerId: string; channel: string; enabled: boolean },
+  ) {
+    if (!dto.schedulerId || !dto.channel || typeof dto.enabled !== 'boolean') {
+      throw new BadRequestException('schedulerId, channel y enabled son requeridos');
+    }
+
+    const row = await this.prisma.systemConfig.findUnique({
+      where: { key: 'automation:channel_overrides' },
+    });
+    const current: Record<string, Record<string, boolean>> = row
+      ? JSON.parse(row.value)
+      : {};
+
+    if (!current[dto.schedulerId]) current[dto.schedulerId] = {};
+    current[dto.schedulerId][dto.channel] = dto.enabled;
+
+    await this.prisma.systemConfig.upsert({
+      where: { key: 'automation:channel_overrides' },
+      create: { key: 'automation:channel_overrides', value: JSON.stringify(current) },
+      update: { value: JSON.stringify(current) },
+    });
+
+    return { ok: true, overrides: current };
   }
 
   /** Envía push de prueba al superadmin para validar configuración VAPID */
