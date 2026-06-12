@@ -49,8 +49,8 @@ export class TenantProvisioningService {
         let tempPassword: string | undefined;
 
         if (existingUser) {
+            // Usuario ya existe — no suma al conteo, no validar límite
             userId = existingUser.id;
-            await this.limitsService.checkUserLimit(tenantId);
 
             // Si se pasa una contraseña temporal explícita, actualizarla y forzar cambio
             if (dto.tempPassword?.trim()) {
@@ -62,7 +62,7 @@ export class TenantProvisioningService {
                 });
             }
         } else {
-            // Validar límite ANTES de crear el user
+            // Usuario nuevo — validar límite antes de crear
             await this.limitsService.checkUserLimit(tenantId);
 
             tempPassword = dto.tempPassword?.trim() || this.generateTempPassword();
@@ -211,7 +211,7 @@ export class TenantProvisioningService {
 
         if (!dto.email) throw new BadRequestException('Se requiere un email válido');
 
-        const user = await this.prisma.user.findUnique({
+        const user = await this.prisma.user.findFirst({
             where: { email: dto.email },
             select: { id: true, name: true, documentNumber: true, email: true },
         });
