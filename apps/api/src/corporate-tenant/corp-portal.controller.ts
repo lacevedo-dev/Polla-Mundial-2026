@@ -652,36 +652,80 @@ export class CorpPortalController {
     }
 
     @Get('members')
-    async getMembers(@Req() req: any) {
+    async getMembers(
+        @Req() req: any,
+        @Query('page') pageStr?: string,
+        @Query('limit') limitStr?: string,
+        @Query('search') search?: string,
+        @Query('role') role?: string,
+    ) {
         const tenantId: string = req.tenantId;
         const tenantRole: string = req.tenantRole;
 
         if (!['OWNER', 'ADMIN', 'STAFF'].includes(tenantRole)) {
-            return [];
+            return { data: [], total: 0, totalActive: 0, page: 1, limit: 50, roleCounts: {} };
         }
 
-        const members = await this.prisma.tenantMember.findMany({
-            where: { tenantId },
-            include: {
-                user: { select: { id: true, name: true, email: true, username: true, documentNumber: true, avatar: true, mustChangePassword: true, emailVerified: true, createdAt: true } },
-            },
-            orderBy: { invitedAt: 'asc' },
-        });
+        const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
+        const limit = Math.min(200, Math.max(10, parseInt(limitStr ?? '50', 10) || 50));
+        const skip = (page - 1) * limit;
+        const searchTrim = search?.trim() ?? '';
 
-        return members.map((m) => ({
-            id: m.id,
-            userId: m.userId,
-            name: m.user.name,
-            email: m.user.email,
-            username: (m.user as any).documentNumber ?? m.user.username,
-            avatar: m.user.avatar,
-            mustChangePassword: m.user.mustChangePassword,
-            emailVerified: m.user.emailVerified,
-            role: m.role,
-            status: m.status,
-            joinedAt: m.joinedAt ?? m.invitedAt,
-            createdAt: m.user.createdAt,
-        }));
+        const baseWhere: any = { tenantId, status: 'ACTIVE' };
+        if (role) baseWhere.role = role;
+        if (searchTrim) {
+            baseWhere.user = {
+                OR: [
+                    { name: { contains: searchTrim } },
+                    { email: { contains: searchTrim } },
+                    { documentNumber: { contains: searchTrim } },
+                    { username: { contains: searchTrim } },
+                ],
+            };
+        }
+
+        const [members, total, roleCountsRaw] = await Promise.all([
+            this.prisma.tenantMember.findMany({
+                where: baseWhere,
+                include: {
+                    user: { select: { id: true, name: true, email: true, username: true, documentNumber: true, avatar: true, mustChangePassword: true, emailVerified: true, createdAt: true } },
+                },
+                orderBy: { invitedAt: 'asc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.tenantMember.count({ where: baseWhere }),
+            this.prisma.tenantMember.groupBy({
+                by: ['role'],
+                where: { tenantId, status: 'ACTIVE' },
+                _count: { role: true },
+            }),
+        ]);
+
+        const roleCounts = Object.fromEntries(roleCountsRaw.map((r) => [r.role, r._count.role]));
+        const totalActive = roleCountsRaw.reduce((sum, r) => sum + r._count.role, 0);
+
+        return {
+            data: members.map((m) => ({
+                id: m.id,
+                userId: m.userId,
+                name: m.user.name,
+                email: m.user.email,
+                username: (m.user as any).documentNumber ?? m.user.username,
+                avatar: m.user.avatar,
+                mustChangePassword: m.user.mustChangePassword,
+                emailVerified: m.user.emailVerified,
+                role: m.role,
+                status: m.status,
+                joinedAt: m.joinedAt ?? m.invitedAt,
+                createdAt: m.user.createdAt,
+            })),
+            total,
+            totalActive,
+            page,
+            limit,
+            roleCounts,
+        };
     }
 
     @UseGuards(TenantStaffGuard)

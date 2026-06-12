@@ -59,14 +59,21 @@ function Avatar({ member }: { member: Member }) {
     );
 }
 
+const PAGE_SIZE = 50;
+
 export default function AdminCorpMembers() {
     const authUser = useAuthStore((s) => s.user);
     const tenant = useTenantStore((s) => s.tenant);
     const callerIsStaff = authUser?.tenantRole === 'STAFF';
     const callerIsAdmin = authUser?.tenantRole === 'ADMIN' || authUser?.tenantRole === 'OWNER';
     const [members, setMembers] = useState<Member[]>([]);
+    const [total, setTotal] = useState(0);
+    const [totalActive, setTotalActive] = useState(0);
+    const [roleCounts, setRoleCounts] = useState<Record<string, number>>({});
+    const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
     const [success, setSuccess] = useState<string | null>(null);
     const [globalError, setGlobalError] = useState<string | null>(null);
@@ -89,16 +96,35 @@ export default function AdminCorpMembers() {
     const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    function loadMembers() {
+    function loadMembers(p = page, s = debouncedSearch, r = roleFilter) {
         setLoading(true);
-        request<Member[]>('/corp/members')
-            .then(setMembers)
-            .catch(() => setMembers([]))
+        const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
+        if (s) params.set('search', s);
+        if (r) params.set('role', r);
+        request<{ data: Member[]; total: number; totalActive: number; roleCounts: Record<string, number> }>(`/corp/members?${params}`)
+            .then(res => {
+                setMembers(res.data ?? []);
+                setTotal(res.total ?? 0);
+                setTotalActive(res.totalActive ?? 0);
+                setRoleCounts(res.roleCounts ?? {});
+            })
+            .catch(() => { setMembers([]); setTotal(0); setTotalActive(0); })
             .finally(() => setLoading(false));
     }
 
-    useEffect(() => { loadMembers(); }, []);
+    // Debounce búsqueda: resetear a página 1 tras 400ms sin escribir
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setDebouncedSearch(search);
+            setPage(1);
+        }, 400);
+        return () => clearTimeout(t);
+    }, [search]);
+
+    // Recargar cuando cambia página, búsqueda debounceada o filtro de rol
+    useEffect(() => { loadMembers(page, debouncedSearch, roleFilter); }, [page, debouncedSearch, roleFilter]);
 
     function showSuccess(msg: string) { setSuccess(msg); setTimeout(() => setSuccess(null), 4000); }
 
@@ -140,13 +166,7 @@ export default function AdminCorpMembers() {
             if (form.email.trim().toLowerCase() !== target.email.toLowerCase()) payload.email = form.email.trim();
             if (form.documentNumber.trim() !== target.username) payload.documentNumber = form.documentNumber.trim();
             await request(`/corp/members/${target.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-            setMembers(prev => prev.map(m => m.id === target.id ? {
-                ...m,
-                name: form.name.trim(),
-                email: form.email.trim().toLowerCase(),
-                username: form.documentNumber.trim(),
-                role: form.role,
-            } : m));
+            loadMembers();
             closeModal(); showSuccess('Usuario actualizado correctamente.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al actualizar.'); }
         finally { setSaving(false); }
@@ -157,7 +177,7 @@ export default function AdminCorpMembers() {
         setSaving(true); setModalError(null);
         try {
             await request(`/corp/members/${target.id}`, { method: 'DELETE' });
-            setMembers(prev => prev.filter(m => m.id !== target.id));
+            loadMembers();
             closeModal(); showSuccess('Miembro eliminado del equipo.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al eliminar.'); }
         finally { setSaving(false); }
@@ -466,15 +486,6 @@ export default function AdminCorpMembers() {
         }
     }
 
-    const filtered = members
-        .filter(m => m.status === 'ACTIVE')
-        .filter(m => !roleFilter || m.role === roleFilter)
-        .filter(m =>
-            m.name.toLowerCase().includes(search.toLowerCase()) ||
-            m.email.toLowerCase().includes(search.toLowerCase()) ||
-            m.username?.toLowerCase().includes(search.toLowerCase()),
-        );
-
     return (
         <CorpLayout>
             {/* Header */}
@@ -484,7 +495,7 @@ export default function AdminCorpMembers() {
                         <Users size={20} className="text-sky-600" />
                         <h1 className="text-2xl font-black text-slate-900">Gestión de usuarios</h1>
                     </div>
-                    <p className="text-slate-500 text-sm">{loading ? 'Cargando...' : `${members.filter(m => m.status === 'ACTIVE').length} miembro${members.length !== 1 ? 's' : ''} en ${orgName}`}</p>
+                    <p className="text-slate-500 text-sm">{loading ? 'Cargando...' : `${totalActive} miembro${totalActive !== 1 ? 's' : ''} en ${orgName}`}</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={handleSyncLeagues} disabled={syncing}
@@ -516,7 +527,7 @@ export default function AdminCorpMembers() {
                         className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent bg-white"
                         style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
                 </div>
-                <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
+                <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }}
                     className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none text-slate-600">
                     <option value="">Todos los roles</option>
                     <option value="OWNER">Propietario</option>
@@ -524,20 +535,20 @@ export default function AdminCorpMembers() {
                     <option value="STAFF">Usuario</option>
                     <option value="PLAYER">Jugador</option>
                 </select>
-                <button onClick={loadMembers} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600">
+                <button onClick={() => loadMembers()} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600">
                     <RefreshCw size={15} />
                 </button>
             </div>
 
             {/* Role badges */}
-            {!loading && members.length > 0 && (
+            {!loading && totalActive > 0 && (
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                     {(Object.keys(ROLE_CONFIG) as Array<keyof typeof ROLE_CONFIG>).map((role) => {
-                        const count = members.filter(m => m.role === role && m.status === 'ACTIVE').length;
+                        const count = roleCounts[role] ?? 0;
                         if (!count) return null;
                         const cfg = ROLE_CONFIG[role];
                         return (
-                            <button key={role} onClick={() => setRoleFilter(roleFilter === role ? '' : role)}
+                            <button key={role} onClick={() => { setRoleFilter(roleFilter === role ? '' : role); setPage(1); }}
                                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all ${roleFilter === role ? 'ring-2 ring-offset-1' : ''} ${cfg.bg} ${cfg.color}`}
                                 style={roleFilter === role ? { '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any : {}}>
                                 <cfg.icon size={10} />{count} {cfg.label}{count !== 1 ? 's' : ''}
@@ -551,18 +562,18 @@ export default function AdminCorpMembers() {
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="font-black text-slate-800 text-sm">Miembros activos</h2>
-                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{filtered.length}</span>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{total}</span>
                 </div>
                 {loading ? (
                     <div className="p-12 flex justify-center"><Loader2 size={24} className="animate-spin text-slate-300" /></div>
-                ) : !filtered.length ? (
+                ) : !members.length ? (
                     <div className="p-10 text-center">
                         <Users size={32} className="mx-auto mb-2 text-slate-200" />
-                        <p className="text-slate-400 text-sm">{search || roleFilter ? 'Sin resultados para esa búsqueda.' : 'Aún no hay miembros. ¡Crea el primero!'}</p>
+                        <p className="text-slate-400 text-sm">{debouncedSearch || roleFilter ? 'Sin resultados para esa búsqueda.' : 'Aún no hay miembros. ¡Crea el primero!'}</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-50">
-                        {filtered.map(member => {
+                        {members.map(member => {
                             const roleCfg = ROLE_CONFIG[member.role] ?? ROLE_CONFIG.PLAYER;
                             const RoleIcon = roleCfg.icon;
                             return (
@@ -614,6 +625,34 @@ export default function AdminCorpMembers() {
                     </div>
                 )}
             </div>
+
+            {/* Paginación */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                    <p className="text-xs text-slate-400">
+                        Página <span className="font-bold text-slate-600">{page}</span> de <span className="font-bold text-slate-600">{totalPages}</span>
+                        {' '}· <span className="font-bold text-slate-600">{total}</span> resultado{total !== 1 ? 's' : ''}
+                    </p>
+                    <div className="flex items-center gap-1">
+                        <button onClick={() => setPage(1)} disabled={page === 1 || loading}
+                            className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                            «
+                        </button>
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                            ‹ Anterior
+                        </button>
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                            Siguiente ›
+                        </button>
+                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}
+                            className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                            »
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ── Modal: Crear usuario ── */}
             {modal === 'create' && (
