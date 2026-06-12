@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useFootballSyncStore } from '../../stores/football-sync.store';
 import type { SyncMode, AdjustSensitivity, UpdateConfig, OptimizationSummary } from '../../types/football-sync';
-import { BASE_URL } from '../../api';
+import { request } from '../../api';
 
 // === HELPERS ===
 
@@ -167,14 +167,12 @@ const AdminSyncSettings: React.FC = () => {
   const loadMetrics = async () => {
     try {
       setLoadingMetrics(true);
-      const res = await fetch(`${BASE_URL}/admin/football/monitoring/optimization/summary`, {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        setSummary(await res.json());
-      }
+      const data = await request<OptimizationSummary>(
+        '/admin/football/monitoring/optimization/summary',
+      );
+      setSummary(data);
     } catch {
-      // silencioso
+      // silencioso — métricas opcionales en la vista de settings
     } finally {
       setLoadingMetrics(false);
     }
