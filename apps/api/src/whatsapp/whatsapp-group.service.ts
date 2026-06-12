@@ -90,44 +90,56 @@ export class WhatsappGroupService {
     });
 
     try {
-      let imageBuffer: Buffer;
-      let pdfBuffer: Buffer;
       let caption: string;
-      let pdfFilename: string;
 
-      if (job.type === WhatsappGroupJobType.RESULT_REPORT) {
-        const data = await this.reportService.getResultsDataForLeague(job.matchId, job.leagueId);
-        imageBuffer = await this.waImage.buildResultsCard({
-          match: data.match,
-          leagueName: job.league.name,
-          leagueCode: job.league.code,
-          results: data.results,
-          sentAt: new Date(),
+      // Types that require image + PDF (full report)
+      const isFullReport =
+        job.type === WhatsappGroupJobType.RESULT_REPORT ||
+        job.type === WhatsappGroupJobType.PREDICTION_REPORT;
+
+      if (isFullReport) {
+        let imageBuffer: Buffer;
+        let pdfBuffer: Buffer;
+        let pdfFilename: string;
+
+        if (job.type === WhatsappGroupJobType.RESULT_REPORT) {
+          const data = await this.reportService.getResultsDataForLeague(job.matchId, job.leagueId);
+          imageBuffer = await this.waImage.buildResultsCard({
+            match: data.match,
+            leagueName: job.league.name,
+            leagueCode: job.league.code,
+            results: data.results,
+            sentAt: new Date(),
+          });
+          pdfBuffer = await this.reportService.getResultsPdfBuffer(job.matchId, job.leagueId);
+          caption = buildResultCaption(data.match, job.league.name, data.results);
+          pdfFilename = `resultado_${slug(data.match.homeTeam)}_vs_${slug(data.match.awayTeam)}.pdf`;
+        } else {
+          const data = await this.reportService.getPredictionsDataForLeague(job.matchId, job.leagueId);
+          imageBuffer = await this.waImage.buildPredictionsCard({
+            match: data.match,
+            leagueName: job.league.name,
+            leagueCode: job.league.code,
+            predictors: data.predictors,
+            sentAt: new Date(),
+          });
+          pdfBuffer = await this.reportService.getPredictionsPdfBuffer(job.matchId, job.leagueId);
+          caption = buildPredictionsCaption(data.match, job.league.name, data.predictors.length);
+          pdfFilename = `pronosticos_${slug(data.match.homeTeam)}_vs_${slug(data.match.awayTeam)}.pdf`;
+        }
+
+        await this.waWeb.sendToGroup({
+          groupId: job.groupId,
+          caption,
+          imageBuffer,
+          pdfBuffer,
+          pdfFilename,
         });
-        pdfBuffer = await this.reportService.getResultsPdfBuffer(job.matchId, job.leagueId);
-        caption = buildResultCaption(data.match, job.league.name, data.results);
-        pdfFilename = `resultado_${slug(data.match.homeTeam)}_vs_${slug(data.match.awayTeam)}.pdf`;
       } else {
-        const data = await this.reportService.getPredictionsDataForLeague(job.matchId, job.leagueId);
-        imageBuffer = await this.waImage.buildPredictionsCard({
-          match: data.match,
-          leagueName: job.league.name,
-          leagueCode: job.league.code,
-          predictors: data.predictors,
-          sentAt: new Date(),
-        });
-        pdfBuffer = await this.reportService.getPredictionsPdfBuffer(job.matchId, job.leagueId);
-        caption = buildPredictionsCaption(data.match, job.league.name, data.predictors.length);
-        pdfFilename = `pronosticos_${slug(data.match.homeTeam)}_vs_${slug(data.match.awayTeam)}.pdf`;
+        // Text-only notification messages (no image/PDF)
+        caption = job.caption || await this.buildTextCaption(job);
+        await this.waWeb.sendTextToGroup(job.groupId, caption);
       }
-
-      await this.waWeb.sendToGroup({
-        groupId: job.groupId,
-        caption,
-        imageBuffer,
-        pdfBuffer,
-        pdfFilename,
-      });
 
       await this.prisma.whatsappGroupJob.update({
         where: { id: jobId },
@@ -172,6 +184,65 @@ export class WhatsappGroupService {
       where: { id: jobId },
       data: { status: WhatsappJobStatus.PENDING, lastError: null },
     });
+  }
+
+  /**
+   * Encola una notificación de texto para los 3 tipos automáticos.
+   * Guarda el caption preconstruido directamente en el job.
+   */
+  async enqueueNotification(
+    type: WhatsappGroupJobType,
+    matchId: string,
+    leagueId: string,
+    caption: string,
+  ): Promise<boolean> {
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true },
+    });
+    if (!league?.whatsappGroupId) return false;
+
+    const dedupeKey = `${type}:${matchId}:${leagueId}`;
+    await this.prisma.whatsappGroupJob.upsert({
+      where: { dedupeKey },
+      create: {
+        type,
+        matchId,
+        leagueId,
+        groupId: league.whatsappGroupId,
+        dedupeKey,
+        caption,
+        status: WhatsappJobStatus.PENDING,
+      },
+      update: {},
+    });
+    return true;
+  }
+
+  private async buildTextCaption(job: {
+    type: WhatsappGroupJobType;
+    matchId: string;
+    league: { name: string; code: string };
+  }): Promise<string> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: job.matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (!match) return `Notificación de partido | ${job.league.name}`;
+
+    const home = match.homeTeam.name;
+    const away = match.awayTeam.name;
+
+    switch (job.type) {
+      case WhatsappGroupJobType.MATCH_REMINDER:
+        return buildReminderCaption(home, away, match.matchDate, job.league.name);
+      case WhatsappGroupJobType.PREDICTION_CLOSED:
+        return buildPredictionClosedCaption(home, away, job.league.name);
+      case WhatsappGroupJobType.RESULT_NOTIFICATION:
+        return buildResultNotifCaption(home, away, match.homeScore, match.awayScore, job.league.name);
+      default:
+        return `Notificación | ${job.league.name}: ${home} vs ${away}`;
+    }
   }
 
   async enqueueManual(
@@ -232,6 +303,45 @@ function buildResultCaption(
   ]
     .filter((l) => l !== undefined)
     .join('\n');
+}
+
+function buildReminderCaption(home: string, away: string, matchDate: Date, leagueName: string): string {
+  const dateStr = new Date(matchDate).toLocaleString('es-CO', {
+    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+  return [
+    `⏰ *Recordatorio de Partido* | ${leagueName}`,
+    `⚽ ${home} vs ${away}`,
+    `📅 ${dateStr}`,
+    '',
+    '¡Revisa tu pronóstico antes de que cierren las predicciones!',
+  ].join('\n');
+}
+
+function buildPredictionClosedCaption(home: string, away: string, leagueName: string): string {
+  return [
+    `🔒 *Pronósticos Cerrados* | ${leagueName}`,
+    `⚽ ${home} vs ${away}`,
+    '',
+    'Ya no se pueden modificar los pronósticos. ¡Mucho éxito! 🤞',
+    '',
+    '_Los pronósticos completos se publicarán en el reporte adjunto_',
+  ].join('\n');
+}
+
+function buildResultNotifCaption(
+  home: string, away: string,
+  homeScore: number | null, awayScore: number | null,
+  leagueName: string,
+): string {
+  const score = homeScore !== null && awayScore !== null
+    ? `${homeScore} – ${awayScore}` : '? – ?';
+  return [
+    `🏁 *Resultado Final* | ${leagueName}`,
+    `⚽ ${home} ${score} ${away}`,
+    '',
+    '¡El partido terminó! Los puntos serán calculados y el reporte completo llegará en breve.',
+  ].join('\n');
 }
 
 function buildPredictionsCaption(

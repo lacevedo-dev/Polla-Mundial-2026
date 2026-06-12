@@ -4,6 +4,7 @@ import { AutomationObservabilityModule } from '../automation-observability/autom
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { FootballSyncModule } from '../football-sync/football-sync.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { NotificationsService } from './notifications.service';
 import { MatchAutomationSweepScheduler } from './match-automation-sweep.scheduler';
 import { NotificationScheduler } from './notification.scheduler';
@@ -19,6 +20,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PredictionReportModule,
     AutomationObservabilityModule,
     forwardRef(() => FootballSyncModule),
+    WhatsappModule,
   ],
   controllers: [NotificationsController],
   providers: [

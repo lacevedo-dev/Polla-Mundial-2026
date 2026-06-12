@@ -160,6 +160,18 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async sendTextToGroup(groupId: string, text: string): Promise<void> {
+    if (!this.isConnected() || !this.client) {
+      throw new Error('WhatsApp Web is not connected');
+    }
+    try {
+      await this.client.sendMessage(groupId, text);
+    } catch (e: any) {
+      this.logger.error(`sendTextToGroup error (${groupId}): ${e.message}`);
+      throw e;
+    }
+  }
+
   async sendToGroup(params: SendToGroupParams): Promise<void> {
     if (!this.isConnected() || !this.client) {
       throw new Error('WhatsApp Web is not connected');

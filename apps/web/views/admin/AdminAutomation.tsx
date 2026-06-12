@@ -70,6 +70,7 @@ interface ChannelBreakdown {
   whatsappSentCount?: number;
   emailQueued?: number;
   emailFailed?: number;
+  waGroupEnqueued?: number;
 }
 
 interface OperationsStep {
@@ -173,17 +174,18 @@ const TYPE_BADGES: Record<string, string> = {
 const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {
   inApp: { label: 'In-App', icon: <Bell size={14} /> },
   push: { label: 'Push', icon: <Smartphone size={14} /> },
-  whatsapp: { label: 'WhatsApp', icon: <MessageSquare size={14} /> },
+  whatsapp: { label: 'WA Personal', icon: <MessageSquare size={14} /> },
+  waGroup: { label: 'WA Grupo', icon: <MessageSquare size={14} className="text-emerald-600" /> },
   sms: { label: 'SMS', icon: <Phone size={14} /> },
   email: { label: 'Email', icon: <Send size={14} /> },
 };
 
 const STEP_CHANNELS: Record<string, string[]> = {
-  MATCH_REMINDER:       ['push', 'whatsapp', 'email'],
-  PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp', 'email'],
-  RESULT_NOTIFICATION:  ['push', 'whatsapp'],
-  PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp', 'email'],
-  RESULT_REPORT:        ['push', 'inApp', 'whatsapp', 'email'],
+  MATCH_REMINDER:       ['push', 'whatsapp', 'waGroup', 'email'],
+  PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
+  RESULT_NOTIFICATION:  ['push', 'whatsapp', 'waGroup'],
+  PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
+  RESULT_REPORT:        ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
 };
 
 // Cuántos se enviaron/fallaron por canal, extraído de latestDetails.channelBreakdown
@@ -197,6 +199,8 @@ function getChannelCounters(
       return { sent: breakdown.pushSent ?? 0, failed: breakdown.pushFailed ?? 0 };
     case 'whatsapp':
       return { sent: breakdown.whatsappSentCount ?? 0, failed: 0 };
+    case 'waGroup':
+      return { sent: breakdown.waGroupEnqueued ?? 0, failed: 0 };
     case 'email':
       return { sent: breakdown.emailQueued ?? 0, failed: breakdown.emailFailed ?? 0 };
     case 'inApp':

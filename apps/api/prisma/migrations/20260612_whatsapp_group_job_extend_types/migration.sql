@@ -1,0 +1,5 @@
+-- Extend WhatsappGroupJobType ENUM with notification types
+ALTER TABLE `WhatsappGroupJob`
+  MODIFY COLUMN `type`
+    ENUM('RESULT_REPORT','PREDICTION_REPORT','MATCH_REMINDER','PREDICTION_CLOSED','RESULT_NOTIFICATION')
+    NOT NULL;

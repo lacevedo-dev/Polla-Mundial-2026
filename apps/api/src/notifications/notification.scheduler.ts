@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { AutomationStep, EmailJobPriority, EmailJobType, MatchStatus, NotificationType } from '@prisma/client';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { AutomationStep, EmailJobPriority, EmailJobType, MatchStatus, NotificationType, WhatsappGroupJobType } from '@prisma/client';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import { SchedulerObservationOutcome } from '../common/scheduler-observability.util';
 import { EmailQueueService } from '../email/email-queue.service';
@@ -20,6 +20,7 @@ import {
 } from './match-automation-sweep-context';
 import { NotificationsService } from './notifications.service';
 import { TwilioService } from './twilio.service';
+import type { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
 
 @Injectable()
 export class NotificationScheduler {
@@ -35,6 +36,7 @@ export class NotificationScheduler {
     private readonly push: PushNotificationsService,
     private readonly notificationsService: NotificationsService,
     private readonly twilio: TwilioService,
+    @Optional() private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   /**
@@ -504,6 +506,10 @@ export class NotificationScheduler {
                   pushDevices: totalPushDevices,
                   whatsappSentCount: totalWhatsappSent,
                   emailQueued: totalEmailQueued,
+                  waGroupEnqueued: await this.enqueueWaGroupNotif(
+                    WhatsappGroupJobType.MATCH_REMINDER, match.id, league.id,
+                    `⏰ *Recordatorio de Partido* | ${league.name}\n⚽ ${home} vs ${away}\n\n¡Revisa tu pronóstico antes de que cierren las predicciones!`,
+                  ),
                 },
                 alreadySentCount: totalAlreadySent,
                 predictedUsers: predictedUserIds.size,
@@ -841,6 +847,10 @@ export class NotificationScheduler {
                     pushDevices: totalPushDevices,
                     whatsappSentCount: totalWhatsappSent,
                     emailQueued: totalEmailQueued,
+                    waGroupEnqueued: await this.enqueueWaGroupNotif(
+                      WhatsappGroupJobType.PREDICTION_CLOSED, match.id, league.id,
+                      `🔒 *Pronósticos Cerrados* | ${league.name}\n⚽ ${home} vs ${away}\n\n¡Ya no se pueden modificar los pronósticos. ¡Mucho éxito! 🤞`,
+                    ),
                   },
                   alreadySentCount: totalAlreadySent,
                   predictedUsers: predictedUserIds.size,
@@ -1072,6 +1082,16 @@ export class NotificationScheduler {
                 pushFailed,
                 pushDevices,
                 whatsappSentCount,
+                waGroupEnqueued: await (async () => {
+                  const leagueIds = [...new Set(match.predictions.map((p) => p.leagueId))];
+                  let count = 0;
+                  for (const leagueId of leagueIds) {
+                    const caption = `🏁 *Resultado Final* | ${match.homeTeam.name} ${match.homeScore} – ${match.awayScore} ${match.awayTeam.name}\n\n¡El partido terminó! Los puntos serán calculados y el reporte completo llegará en breve.`;
+                    const enqueued = await this.enqueueWaGroupNotif(WhatsappGroupJobType.RESULT_NOTIFICATION, match.id, leagueId, caption);
+                    count += enqueued;
+                  }
+                  return count;
+                })(),
               },
             },
           });
@@ -1092,6 +1112,22 @@ export class NotificationScheduler {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`sendMatchResultNotifications failed: ${message}`);
+    }
+  }
+
+  /** Best-effort WhatsApp group enqueue — never throws, returns 1 if enqueued, 0 if skipped/failed */
+  private async enqueueWaGroupNotif(
+    type: WhatsappGroupJobType,
+    matchId: string,
+    leagueId: string,
+    caption: string,
+  ): Promise<number> {
+    if (!this.waGroup) return 0;
+    try {
+      const ok = await this.waGroup.enqueueNotification(type, matchId, leagueId, caption);
+      return ok ? 1 : 0;
+    } catch {
+      return 0;
     }
   }
 

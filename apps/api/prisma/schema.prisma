@@ -1331,6 +1331,9 @@ model WhatsappGroupJob {
 enum WhatsappGroupJobType {
   RESULT_REPORT
   PREDICTION_REPORT
+  MATCH_REMINDER
+  PREDICTION_CLOSED
+  RESULT_NOTIFICATION
 }
 
 enum WhatsappJobStatus {
