@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -190,7 +190,7 @@ const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boole
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
         <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[1.75rem] bg-white p-6 shadow-2xl">
           <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Actualizar resultado</DialogPrimitive.Title>
-          <p className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</p>
+          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</DialogPrimitive.Description>
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{match?.homeTeam?.name}</label>
@@ -306,7 +306,7 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
         <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] bg-white p-6 shadow-2xl">
           <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Vinculo API-Football</DialogPrimitive.Title>
-          <p className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</p>
+          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</DialogPrimitive.Description>
 
           <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Fixture / External ID</label>
           <input value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="Ej: 123456" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400" />
@@ -498,7 +498,8 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
         <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] bg-white p-6 shadow-2xl">
-          <DialogPrimitive.Title className="mb-5 text-lg font-black text-slate-900">Crear partido</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Crear partido</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="sr-only">Formulario para crear un nuevo partido</DialogPrimitive.Description>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1206,7 +1207,7 @@ const AdminMatches: React.FC = () => {
       <DialogPrimitive.Root open={!!previewMatch} onOpenChange={(open) => { if (!open) { setPreviewMatch(null); setPreviewLeagues([]); setPreviewLeagueId(null); setPreviewHtml(null); setPreviewRecipients([]); setShowAllRecipients(false); } }}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-          <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 flex h-[90vh] w-[95vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
+          <DialogPrimitive.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-50 flex h-[90vh] w-[95vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl">
             {/* Header */}
             <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4 gap-4">
               <div className="flex-1 min-w-0">
