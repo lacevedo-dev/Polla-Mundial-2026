@@ -59,7 +59,7 @@ function Avatar({ member }: { member: Member }) {
     );
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 
 export default function AdminCorpMembers() {
     const authUser = useAuthStore((s) => s.user);
@@ -123,12 +123,15 @@ export default function AdminCorpMembers() {
             .finally(() => setLoading(false));
     }
 
-    // Debounce búsqueda: resetear a página 1 tras 400ms sin escribir
+    // Dispara la búsqueda — también llamado desde onBlur y onKeyDown(Enter)
+    function commitSearch() {
+        setDebouncedSearch(search);
+        setPage(1);
+    }
+
+    // Fallback: si el usuario deja de escribir 800ms sin tabular ni presionar Enter
     useEffect(() => {
-        const t = setTimeout(() => {
-            setDebouncedSearch(search);
-            setPage(1);
-        }, 400);
+        const t = setTimeout(commitSearch, 800);
         return () => clearTimeout(t);
     }, [search]);
 
@@ -532,7 +535,10 @@ export default function AdminCorpMembers() {
             <div className="flex gap-2 mb-4 flex-wrap">
                 <div className="relative flex-1 min-w-[180px]">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar nombre, email, usuario..."
+                    <input value={search} onChange={e => setSearch(e.target.value)}
+                        onBlur={commitSearch}
+                        onKeyDown={e => e.key === 'Enter' && commitSearch()}
+                        placeholder="Buscar nombre, email, usuario… (Enter para buscar)"
                         className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent bg-white"
                         style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
                 </div>
@@ -567,6 +573,26 @@ export default function AdminCorpMembers() {
                 </div>
             )}
 
+            {/* Paginación superior */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs text-slate-400">
+                        Página <span className="font-bold text-slate-600">{page}</span> de <span className="font-bold text-slate-600">{totalPages}</span>
+                        {' '}· <span className="font-bold text-slate-600">{total}</span> resultado{total !== 1 ? 's' : ''}
+                    </p>
+                    <div className="flex items-center gap-1">
+                        <button onClick={() => setPage(1)} disabled={page === 1 || loading}
+                            className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">«</button>
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">‹ Anterior</button>
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Siguiente ›</button>
+                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}
+                            className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">»</button>
+                    </div>
+                </div>
+            )}
+
             {/* Table */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
@@ -582,11 +608,13 @@ export default function AdminCorpMembers() {
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-50">
-                        {members.map(member => {
+                        {members.map((member, idx) => {
+                            const rowNumber = (page - 1) * PAGE_SIZE + idx + 1;
                             const roleCfg = ROLE_CONFIG[member.role] ?? ROLE_CONFIG.PLAYER;
                             const RoleIcon = roleCfg.icon;
                             return (
                                 <div key={member.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/70 transition-colors">
+                                    <span className="text-[11px] font-mono text-slate-300 w-8 text-right shrink-0 select-none">{rowNumber}</span>
                                     <Avatar member={member} />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
