@@ -11,23 +11,6 @@ import {
 const MEMBER_SEARCH_MIN_LEN = 2;
 const MEMBER_STATS_TTL_MS = 300_000;
 
-type MemberSearchRow = {
-    id: string;
-    userId: string;
-    role: TenantRole;
-    status: string;
-    invitedAt: Date;
-    joinedAt: Date | null;
-    name: string;
-    email: string;
-    username: string;
-    documentNumber: string | null;
-    avatar: string | null;
-    mustChangePassword: boolean;
-    emailVerified: boolean;
-    userCreatedAt: Date;
-};
-
 @Injectable()
 export class TenantService {
     private readonly slugCache = new Map<string, string | null>();
@@ -234,23 +217,24 @@ export class TenantService {
         const { tenantId, page, limit, role } = params;
         const searchTrim = this.normalizeMemberSearch(params.search ?? '');
         const skip = (page - 1) * limit;
+        const hasSearch = searchTrim.length >= MEMBER_SEARCH_MIN_LEN;
+        const isFiltered = Boolean(role || hasSearch);
 
-        if (searchTrim.length >= MEMBER_SEARCH_MIN_LEN) {
-            return this.listMembersPaginatedWithSearch({
-                tenantId,
-                page,
-                limit,
-                skip,
-                role,
-                search: searchTrim,
-            });
-        }
-
-        const isFiltered = Boolean(role);
         const where: Prisma.TenantMemberWhereInput = {
             tenantId,
             status: 'ACTIVE',
             ...(role && { role }),
+            ...(hasSearch && {
+                user: {
+                    OR: [
+                        { name: { contains: searchTrim } },
+                        { email: { contains: searchTrim } },
+                        { username: { contains: searchTrim } },
+                        { documentNumber: { contains: searchTrim } },
+                        { phone: { contains: searchTrim } },
+                    ],
+                },
+            }),
         };
 
         const memberSelect = {
@@ -269,120 +253,30 @@ export class TenantService {
             },
         } as const;
 
-        const rows = await this.prisma.tenantMember.findMany({
-            where,
-            include: memberSelect,
-            orderBy: [{ invitedAt: 'asc' }, { id: 'asc' }],
-            skip,
-            take: limit + 1,
-        });
+        const [rows, total] = await Promise.all([
+            this.prisma.tenantMember.findMany({
+                where,
+                include: memberSelect,
+                orderBy: [{ invitedAt: 'asc' }, { id: 'asc' }],
+                skip,
+                take: limit + 1,
+            }),
+            isFiltered
+                ? this.prisma.tenantMember.count({ where })
+                : Promise.resolve(0),
+        ]);
 
         const hasMore = rows.length > limit;
         const members = hasMore ? rows.slice(0, limit) : rows;
-
-        const total = isFiltered
-            ? await this.prisma.tenantMember.count({ where })
+        const resolvedTotal = isFiltered
+            ? total
             : (await this.getMembersRoleStats(tenantId)).totalActive;
 
-        return { members, total, page, limit, hasMore };
+        return { members, total: resolvedTotal, page, limit, hasMore };
     }
 
     private normalizeMemberSearch(raw: string): string {
         return raw.trim().replace(/\s+/g, ' ');
-    }
-
-    private buildMemberLikePattern(search: string): string {
-        const escaped = search.replace(/[%_\\]/g, (ch) => `\\${ch}`);
-        return `%${escaped}%`;
-    }
-
-    private mapMemberSearchRow(row: MemberSearchRow) {
-        return {
-            id: row.id,
-            userId: row.userId,
-            role: row.role,
-            status: row.status,
-            invitedAt: row.invitedAt,
-            joinedAt: row.joinedAt,
-            user: {
-                id: row.userId,
-                name: row.name,
-                email: row.email,
-                username: row.username,
-                documentNumber: row.documentNumber,
-                avatar: row.avatar,
-                mustChangePassword: row.mustChangePassword,
-                emailVerified: row.emailVerified,
-                createdAt: row.userCreatedAt,
-            },
-        };
-    }
-
-    private memberUserSearchSql(pattern: string) {
-        return Prisma.sql`(
-            u.name LIKE ${pattern}
-            OR u.email LIKE ${pattern}
-            OR u.username LIKE ${pattern}
-            OR IFNULL(u.documentNumber, '') LIKE ${pattern}
-            OR IFNULL(u.phone, '') LIKE ${pattern}
-        )`;
-    }
-
-    private async listMembersPaginatedWithSearch(params: {
-        tenantId: string;
-        page: number;
-        limit: number;
-        skip: number;
-        role?: TenantRole;
-        search: string;
-    }) {
-        const { tenantId, page, limit, skip, role, search } = params;
-        const pattern = this.buildMemberLikePattern(search);
-        const roleSql = role ? Prisma.sql`AND tm.role = ${role}` : Prisma.empty;
-        const userSearchSql = this.memberUserSearchSql(pattern);
-
-        const [rows, countRows] = await Promise.all([
-            this.prisma.$queryRaw<MemberSearchRow[]>`
-                SELECT
-                    tm.id AS id,
-                    tm.userId AS userId,
-                    tm.role AS role,
-                    tm.status AS status,
-                    tm.invitedAt AS invitedAt,
-                    tm.joinedAt AS joinedAt,
-                    u.name AS name,
-                    u.email AS email,
-                    u.username AS username,
-                    u.documentNumber AS documentNumber,
-                    u.avatar AS avatar,
-                    u.mustChangePassword AS mustChangePassword,
-                    u.emailVerified AS emailVerified,
-                    u.createdAt AS userCreatedAt
-                FROM TenantMember tm
-                INNER JOIN User u ON u.id = tm.userId
-                WHERE tm.tenantId = ${tenantId}
-                  AND tm.status = 'ACTIVE'
-                  ${roleSql}
-                  AND ${userSearchSql}
-                ORDER BY tm.invitedAt ASC, tm.id ASC
-                LIMIT ${limit + 1} OFFSET ${skip}
-            `,
-            this.prisma.$queryRaw<Array<{ c: bigint }>>`
-                SELECT COUNT(*) AS c
-                FROM TenantMember tm
-                INNER JOIN User u ON u.id = tm.userId
-                WHERE tm.tenantId = ${tenantId}
-                  AND tm.status = 'ACTIVE'
-                  ${roleSql}
-                  AND ${userSearchSql}
-            `,
-        ]);
-
-        const hasMore = rows.length > limit;
-        const members = (hasMore ? rows.slice(0, limit) : rows).map((row) => this.mapMemberSearchRow(row));
-        const total = Number(countRows[0]?.c ?? 0);
-
-        return { members, total, page, limit, hasMore };
     }
 
     async getStats(tenantId: string) {

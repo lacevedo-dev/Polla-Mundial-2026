@@ -133,6 +133,8 @@ export default function AdminCorpMembers() {
     const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
     const listAbortRef = useRef<AbortController | null>(null);
+    const fetchSeqRef = useRef(0);
+    const skipNextFetchEffectRef = useRef(false);
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const searchSkipDebounceRef = useRef(true);
     const initialLoadDone = useRef(false);
@@ -157,9 +159,10 @@ export default function AdminCorpMembers() {
         withStats?: boolean;
     } = {}) {
         const p = opts.p ?? page;
-        const s = opts.s ?? debouncedSearch;
+        const s = (opts.s ?? debouncedSearch).trim();
         const r = opts.r ?? roleFilter;
         const withStats = opts.withStats ?? false;
+        const seq = ++fetchSeqRef.current;
 
         listAbortRef.current?.abort();
         const ac = new AbortController();
@@ -172,7 +175,7 @@ export default function AdminCorpMembers() {
             page: String(p),
             limit: String(PAGE_SIZE),
         });
-        if (s.length >= MIN_SEARCH_LEN) params.set('search', s.trim());
+        if (s.length >= MIN_SEARCH_LEN) params.set('search', s);
         if (r) params.set('role', r);
         if (withStats) params.set('includeStats', 'true');
 
@@ -182,11 +185,23 @@ export default function AdminCorpMembers() {
                 ac.signal,
             );
 
+            if (seq !== fetchSeqRef.current) return;
+
             if (Array.isArray(res)) {
-                const active = res.filter(m => m.status === 'ACTIVE');
-                setMembers(active.slice(0, PAGE_SIZE));
+                let active = res.filter(m => m.status === 'ACTIVE');
+                if (s.length >= MIN_SEARCH_LEN) {
+                    const q = s.toLowerCase();
+                    active = active.filter(m =>
+                        m.name.toLowerCase().includes(q) ||
+                        m.email.toLowerCase().includes(q) ||
+                        (m.username ?? '').toLowerCase().includes(q),
+                    );
+                }
+                if (r) active = active.filter(m => m.role === r);
+                const start = (p - 1) * PAGE_SIZE;
+                setMembers(active.slice(start, start + PAGE_SIZE));
                 setTotal(active.length);
-                setHasMore(active.length > PAGE_SIZE);
+                setHasMore(start + PAGE_SIZE < active.length);
                 if (withStats) {
                     setTotalActive(active.length);
                     setRoleCounts({});
@@ -202,9 +217,13 @@ export default function AdminCorpMembers() {
             setGlobalError(null);
         } catch (err: unknown) {
             if (isAbortError(err)) return;
+            if (seq !== fetchSeqRef.current) return;
+            setMembers([]);
+            setTotal(0);
+            setHasMore(false);
             setGlobalError(err instanceof ApiError ? err.message : 'No se pudo cargar la lista de miembros.');
         } finally {
-            if (!ac.signal.aborted) {
+            if (seq === fetchSeqRef.current) {
                 setListLoading(false);
                 if (withStats) setStatsLoading(false);
             }
@@ -224,6 +243,8 @@ export default function AdminCorpMembers() {
         }
         setDebouncedSearch(trimmed);
         setPage(1);
+        skipNextFetchEffectRef.current = true;
+        fetchMembers({ p: 1, s: trimmed, r: roleFilter, withStats: false });
     }
 
     function clearFilters() {
@@ -241,11 +262,19 @@ export default function AdminCorpMembers() {
             return;
         }
 
+        if (skipNextFetchEffectRef.current) {
+            skipNextFetchEffectRef.current = false;
+            return;
+        }
+
         const withStats = !initialLoadDone.current;
         initialLoadDone.current = true;
         fetchMembers({ p: page, s: debouncedSearch, r: roleFilter, withStats });
 
-        return () => listAbortRef.current?.abort();
+        return () => {
+            fetchSeqRef.current += 1;
+            listAbortRef.current?.abort();
+        };
     }, [page, debouncedSearch, roleFilter, canManageMembers]);
 
     useEffect(() => {
@@ -786,11 +815,15 @@ export default function AdminCorpMembers() {
                 </div>
             )}
 
-            {/* Tabla */}
+            {/* Tabla de resultados */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden relative">
-                <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
-                    <h2 className="font-black text-slate-800 text-sm">Miembros activos</h2>
-                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{total.toLocaleString()}</span>
+                <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-2">
+                    <h2 className="font-black text-slate-800 text-sm">
+                        {hasActiveFilters ? 'Resultados filtrados' : 'Miembros activos'}
+                    </h2>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">
+                        {hasActiveFilters ? `${total.toLocaleString()} coincidencia${total !== 1 ? 's' : ''}` : total.toLocaleString()}
+                    </span>
                 </div>
                 {listLoading && members.length === 0 ? (
                     <div className="p-12 flex flex-col items-center justify-center gap-2">
