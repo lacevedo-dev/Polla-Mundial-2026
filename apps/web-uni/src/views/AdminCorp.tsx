@@ -4,6 +4,7 @@ import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRigh
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
+import { useAuthStore } from '../stores/auth.store';
 
 interface AdminStats {
     totalMembers: number;
@@ -25,11 +26,64 @@ interface ParticipationSummary {
 
 export default function AdminCorp() {
     const tenant = useTenantStore((s) => s.tenant);
+    const tenantRole = useAuthStore((s) => s.user?.tenantRole);
+    const isStaff = tenantRole === 'STAFF';
     const [stats, setStats] = useState<AdminStats | null>(null);
     const [participation, setParticipation] = useState<ParticipationSummary | null>(null);
     const [loading, setLoading] = useState(true);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
+
+    const quickActions = [
+        {
+            label: 'Partidos y puntajes',
+            desc: 'Revisar sync y recalcular puntos manualmente',
+            icon: Calculator,
+            link: '/admin/matches',
+            color: 'text-lime-700',
+            bg: 'bg-lime-50',
+        },
+        {
+            label: 'Seguimiento de participación',
+            desc: 'Quién pronostica vs. usuarios inscritos',
+            icon: Activity,
+            link: '/admin/participation',
+            color: 'text-violet-600',
+            bg: 'bg-violet-50',
+        },
+        {
+            label: 'Gestionar miembros',
+            desc: 'Ver, invitar y administrar usuarios',
+            icon: Users,
+            link: '/admin/members',
+            color: 'text-sky-600',
+            bg: 'bg-sky-50',
+        },
+        {
+            label: 'Gestionar pollas',
+            desc: 'Crear, editar y asignar torneos',
+            icon: Trophy,
+            link: '/admin/pollas',
+            color: 'text-amber-600',
+            bg: '',
+        },
+        {
+            label: 'Ver todas las pollas',
+            desc: 'Explorar todas las pollas del tenant',
+            icon: TrendingUp,
+            link: '/pollas',
+            color: 'text-violet-600',
+            bg: 'bg-violet-50',
+        },
+        {
+            label: 'Ranking general',
+            desc: 'Clasificación de todos los miembros',
+            icon: BarChart2,
+            link: '/ranking',
+            color: 'text-emerald-600',
+            bg: 'bg-emerald-50',
+        },
+    ].filter((item) => !isStaff || ['/admin/matches', '/admin/participation', '/admin/members'].includes(item.link));
 
     useEffect(() => {
         Promise.all([
@@ -92,6 +146,14 @@ export default function AdminCorp() {
                         link: '/admin/participation',
                     },
                     {
+                        label: 'Partidos y puntajes',
+                        value: 'Abrir',
+                        icon: Calculator,
+                        color: 'text-lime-700',
+                        bg: 'bg-lime-50',
+                        link: '/admin/matches',
+                    },
+                    {
                         label: 'Sin pronósticos',
                         value: loading ? '—' : (participation?.summary.neverPredicted ?? 0),
                         icon: TrendingUp,
@@ -127,56 +189,7 @@ export default function AdminCorp() {
                         <h2 className="font-black text-slate-900">Acciones rápidas</h2>
                     </div>
                     <div className="divide-y divide-slate-50">
-                        {[
-                            {
-                                label: 'Partidos y puntajes',
-                                desc: 'Revisar sync y recalcular puntos manualmente',
-                                icon: Calculator,
-                                link: '/admin/matches',
-                                color: 'text-lime-700',
-                                bg: 'bg-lime-50',
-                            },
-                            {
-                                label: 'Seguimiento de participación',
-                                desc: 'Quién pronostica vs. usuarios inscritos',
-                                icon: Activity,
-                                link: '/admin/participation',
-                                color: 'text-violet-600',
-                                bg: 'bg-violet-50',
-                            },
-                            {
-                                label: 'Gestionar miembros',
-                                desc: 'Ver, invitar y administrar usuarios',
-                                icon: Users,
-                                link: '/admin/members',
-                                color: 'text-sky-600',
-                                bg: 'bg-sky-50',
-                            },
-                            {
-                                label: 'Gestionar pollas',
-                                desc: 'Crear, editar y asignar torneos',
-                                icon: Trophy,
-                                link: '/admin/pollas',
-                                color: 'text-amber-600',
-                                bg: '',
-                            },
-                            {
-                                label: 'Ver todas las pollas',
-                                desc: 'Explorar todas las pollas del tenant',
-                                icon: TrendingUp,
-                                link: '/pollas',
-                                color: 'text-violet-600',
-                                bg: 'bg-violet-50',
-                            },
-                            {
-                                label: 'Ranking general',
-                                desc: 'Clasificación de todos los miembros',
-                                icon: BarChart2,
-                                link: '/ranking',
-                                color: 'text-emerald-600',
-                                bg: 'bg-emerald-50',
-                            },
-                        ].map(({ label, desc, icon: Icon, link, color, bg }) => (
+                        {quickActions.map(({ label, desc, icon: Icon, link, color, bg }) => (
                             <Link
                                 key={link}
                                 to={link}
@@ -198,6 +211,7 @@ export default function AdminCorp() {
                 </div>
 
                 {/* Top pollas */}
+                {!isStaff && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 className="font-black text-slate-900">Pollas del tenant</h2>
@@ -241,6 +255,7 @@ export default function AdminCorp() {
                         </div>
                     )}
                 </div>
+                )}
             </div>
         </CorpLayout>
     );

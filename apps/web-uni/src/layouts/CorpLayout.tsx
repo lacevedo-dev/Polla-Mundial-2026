@@ -392,9 +392,9 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                 })}
                 {(isAdmin || isStaff) && (
                     <Link
-                        to={isStaff ? '/admin/members' : '/admin'}
+                        to="/admin"
                         className="flex flex-col items-center gap-1 transition-colors"
-                        style={{ color: isActive('/admin') ? primaryColor : '#94a3b8' }}
+                        style={{ color: pathname.startsWith('/admin') ? primaryColor : '#94a3b8' }}
                     >
                         <Shield size={20} />
                         <span className="text-[10px] font-medium">Admin</span>
