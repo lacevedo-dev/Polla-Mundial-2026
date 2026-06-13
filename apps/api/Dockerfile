@@ -88,9 +88,11 @@ WORKDIR /app/apps/api
 
 # Directorio para la sesión persistente de WhatsApp Web (LocalAuth).
 # Monta un volumen Docker en esta ruta para que la sesión sobreviva redeployments.
-# En Dokploy: Volumes → Add → Host Path = /var/lib/dokploy/wwebjs/<appName>  →  Container Path = /data/wwebjs_auth
+# En Dokploy (sin duplicar el mismo Container Path):
+#   /var/lib/dokploy/wwebjs/<appName>  →  /data/wwebjs_auth
+#   /var/lib/dokploy/uploads/polla-api  →  /data/uploads
+# No usar VOLUME aquí: Dokploy monta bind paths y Swarm falla con "duplicate mount point".
 RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
-VOLUME ["/data/wwebjs_auth", "/data/uploads"]
 
 # Puerto donde corre NestJS según tu .env (ej. 3004)
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
