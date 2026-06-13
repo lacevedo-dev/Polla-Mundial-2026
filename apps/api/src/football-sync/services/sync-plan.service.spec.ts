@@ -13,6 +13,7 @@ describe('SyncPlanService', () => {
     dailySyncPlan: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn(),
     },
     match: {
@@ -556,6 +557,70 @@ describe('SyncPlanService', () => {
       expect(carryOverMatch.plannedRequests[0].type).toMatch(/^STATUS_/);
       expect(carryOverMatch.plannedRequests[0].executionState).toBe('enabled');
       expect(carryOverMatch.plannedRequests[0].optional).toBeUndefined();
+    });
+
+    it('redistributes global planned requests onto matches when reusing cached timeline', async () => {
+      const futureSlot = '2026-03-28T18:00:00.000Z';
+      const globalRequest = {
+        id: 'status-batch-1',
+        type: 'STATUS_BATCH' as const,
+        label: 'Consulta agrupada de estados del dia',
+        scheduledAt: futureSlot,
+        requestCost: 1,
+        matchIds: ['match-1'],
+        executionState: 'enabled' as const,
+      };
+
+      mockPrismaService.dailySyncPlan.findUnique.mockResolvedValue({
+        totalMatches: 1,
+        strategy: SyncStrategy.BALANCED,
+        intervalMinutes: 30,
+        plannedTimeline: {
+          date: '2026-03-28',
+          strategy: SyncStrategy.BALANCED,
+          intervalMinutes: 30,
+          requestsUsed: 77,
+          requestsBudget: 57,
+          requestsLimit: 134,
+          nextSyncAt: futureSlot,
+          matches: [
+            {
+              matchId: 'match-1',
+              trackingScope: 'TODAY',
+              homeTeam: 'Qatar',
+              awayTeam: 'Suiza',
+              matchDate: '2026-03-28T19:00:00.000Z',
+              status: MatchStatus.SCHEDULED,
+              externalId: '999',
+              syncSlots: [],
+              notificationSchedule: [],
+              plannedRequests: [],
+              lastSyncAt: null,
+              lastSyncStatus: 'SUCCESS',
+              requestsAssigned: 0,
+            },
+          ],
+          plannedRequests: [globalRequest],
+          requestLog: [],
+          totalSlotsPlanned: 1,
+          totalPlannedRequests: 1,
+        },
+      });
+      mockRateLimiter.getUsedRequestsToday.mockResolvedValue(77);
+      mockRateLimiter.getDailyLimit.mockResolvedValue(134);
+      mockPrismaService.match.count.mockResolvedValue(0);
+      jest.spyOn(service, 'calculateDailyPlan').mockResolvedValue({
+        ...mockPlan,
+        intervalMinutes: 30,
+      } as any);
+
+      const timeline = await service.getDetailedTimeline();
+
+      expect(timeline.plannedRequests).toHaveLength(1);
+      expect(timeline.matches[0].plannedRequests).toHaveLength(1);
+      expect(timeline.matches[0].plannedRequests[0].id).toBe('status-batch-1');
+      expect(timeline.matches[0].requestsAssigned).toBe(1);
+      expect(mockPrismaService.match.findMany).toHaveBeenCalled();
     });
   });
 });

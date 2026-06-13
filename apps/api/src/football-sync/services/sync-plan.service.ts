@@ -484,6 +484,7 @@ export class SyncPlanService {
       existingPlan &&
       cachedTimeline &&
       this.canReusePlan(existingPlan, plan) &&
+      this.canReuseCachedTimeline(cachedTimeline, used, available) &&
       cachedLiveCount === currentLiveCount
     ) {
       const freshMatches = await this.loadDisplayedMatchSlots(plan.intervalMinutes);
@@ -497,18 +498,23 @@ export class SyncPlanService {
 
         // nextSyncAt es temporal: recalcular siempre para no mostrar una hora pasada
         const nowIso = new Date().toISOString();
-        const cachedRequests: { scheduledAt: string }[] = cached.plannedRequests ?? [];
+        const cachedRequests: PlannedSyncRequest[] = cached.plannedRequests ?? [];
         const freshNextSyncAt = cachedRequests
           .map((r) => r.scheduledAt)
           .filter((s) => s > nowIso)
           .sort()[0] ?? null;
 
-        // Estados frescos desde DB + consultas/notificaciones del plan cacheado
+        // Estados frescos desde DB + notificaciones del plan cacheado
         const mergedMatches = this.mergeCachedMatchPlanning(freshMatches, cachedMatches);
+        // Consultas planeadas: siempre desde la lista global (evita partidos con 0 activos)
+        const matchesWithPlanning = this.applyPlannedRequestsToMatches(
+          mergedMatches,
+          cachedRequests,
+        );
 
         return {
           ...cached,
-          matches: mergedMatches,
+          matches: matchesWithPlanning,
           nextSyncAt: freshNextSyncAt,
           requestsUsed: used,
           requestsBudget: available,
@@ -937,6 +943,75 @@ export class SyncPlanService {
   }
 
   /**
+   * El presupuesto de requests cambia con cada sync; si el cache quedó obsoleto,
+   * hay que replanificar para distribuir créditos según el saldo actual.
+   */
+  private canReuseCachedTimeline(
+    cachedTimeline: DetailedSyncTimeline,
+    usedNow: number,
+    availableNow: number,
+  ): boolean {
+    const cachedUsed = cachedTimeline.requestsUsed ?? 0;
+    const cachedAvailable = cachedTimeline.requestsBudget ?? 0;
+
+    if (Math.abs(usedNow - cachedUsed) >= 3) {
+      this.logger.debug(
+        `Requests usados cambiaron: ${cachedUsed} → ${usedNow}`,
+      );
+      return false;
+    }
+
+    if (Math.abs(availableNow - cachedAvailable) >= 3) {
+      this.logger.debug(
+        `Presupuesto disponible cambió: ${cachedAvailable} → ${availableNow}`,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Asigna la lista global de consultas planeadas a cada partido monitoreado.
+   */
+  private applyPlannedRequestsToMatches(
+    matches: MatchSyncSlot[],
+    plannedRequests: PlannedSyncRequest[],
+  ): MatchSyncSlot[] {
+    const byMatch = new Map<string, PlannedSyncRequest[]>();
+
+    for (const request of plannedRequests) {
+      for (const matchId of request.matchIds) {
+        const list = byMatch.get(matchId) ?? [];
+        list.push(request);
+        byMatch.set(matchId, list);
+      }
+    }
+
+    return matches.map((match) => {
+      const planned = (byMatch.get(match.matchId) ?? []).sort((left, right) =>
+        left.scheduledAt.localeCompare(right.scheduledAt),
+      );
+      const activePlanned = planned.filter(isExecutableRequest);
+      const statusSlots = planned
+        .filter(
+          (request) =>
+            request.type === 'STATUS_BATCH' ||
+            request.type === 'STATUS_BATCH_WITH_CARRY_OVER' ||
+            request.type === 'LINK_AND_STATUS',
+        )
+        .map((request) => request.scheduledAt);
+
+      return {
+        ...match,
+        plannedRequests: planned,
+        syncSlots: statusSlots.length > 0 ? statusSlots : match.syncSlots,
+        requestsAssigned: activePlanned.length,
+      };
+    });
+  }
+
+  /**
    * Get today's date string (YYYY-MM-DD) in Colombia timezone (UTC-5)
    */
   private getToday(): string {
@@ -1237,14 +1312,10 @@ export class SyncPlanService {
 
       return {
         ...fresh,
-        plannedRequests: cached.plannedRequests ?? [],
-        notificationSchedule: cached.notificationSchedule ?? [],
-        syncSlots:
-          cached.syncSlots?.length > 0 ? cached.syncSlots : fresh.syncSlots,
-        requestsAssigned:
-          cached.requestsAssigned > 0
-            ? cached.requestsAssigned
-            : fresh.requestsAssigned,
+        notificationSchedule:
+          cached.notificationSchedule?.length > 0
+            ? cached.notificationSchedule
+            : fresh.notificationSchedule,
       };
     });
   }
