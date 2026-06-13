@@ -9,8 +9,8 @@ import {
 } from './dto/tenant.dto';
 
 const MEMBER_SEARCH_MIN_LEN = 2;
-const MEMBER_SEARCH_MAX_IDS = 2000;
-const MEMBER_STATS_TTL_MS = 60_000;
+const MEMBER_SEARCH_MAX_IDS = 500;
+const MEMBER_STATS_TTL_MS = 300_000;
 
 @Injectable()
 export class TenantService {
@@ -187,14 +187,17 @@ export class TenantService {
             return { totalActive: cached.totalActive, roleCounts: cached.roleCounts };
         }
 
-        const roleCountsRaw = await this.prisma.tenantMember.groupBy({
-            by: ['role'],
-            where: { tenantId, status: 'ACTIVE' },
-            _count: { role: true },
-        });
+        const roleCountsRaw = await this.prisma.$queryRaw<Array<{ role: TenantRole; c: bigint }>>(
+            Prisma.sql`
+                SELECT role, COUNT(*) AS c
+                FROM TenantMember
+                WHERE tenantId = ${tenantId} AND status = 'ACTIVE'
+                GROUP BY role
+            `,
+        );
 
-        const roleCounts = Object.fromEntries(roleCountsRaw.map((r) => [r.role, r._count.role]));
-        const totalActive = roleCountsRaw.reduce((sum, r) => sum + r._count.role, 0);
+        const roleCounts = Object.fromEntries(roleCountsRaw.map((r) => [r.role, Number(r.c)]));
+        const totalActive = roleCountsRaw.reduce((sum, r) => sum + Number(r.c), 0);
 
         this.memberStatsCache.set(tenantId, {
             expiresAt: now + MEMBER_STATS_TTL_MS,
@@ -215,6 +218,7 @@ export class TenantService {
         const { tenantId, page, limit, role } = params;
         const searchTrim = params.search?.trim() ?? '';
         const skip = (page - 1) * limit;
+        const isFiltered = Boolean(role || searchTrim.length >= MEMBER_SEARCH_MIN_LEN);
 
         const where: Prisma.TenantMemberWhereInput = {
             tenantId,
@@ -225,58 +229,68 @@ export class TenantService {
         if (searchTrim.length >= MEMBER_SEARCH_MIN_LEN) {
             const userIds = await this.resolveMemberSearchUserIds(tenantId, searchTrim);
             if (userIds.length === 0) {
-                return { members: [], total: 0, page, limit };
+                return { members: [], total: 0, page, limit, hasMore: false };
             }
             where.userId = { in: userIds };
         }
 
-        const [members, total] = await Promise.all([
-            this.prisma.tenantMember.findMany({
-                where,
-                include: {
-                    user: {
-                        select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                            username: true,
-                            documentNumber: true,
-                            avatar: true,
-                            mustChangePassword: true,
-                            emailVerified: true,
-                            createdAt: true,
-                        },
-                    },
+        const memberSelect = {
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    username: true,
+                    documentNumber: true,
+                    avatar: true,
+                    mustChangePassword: true,
+                    emailVerified: true,
+                    createdAt: true,
                 },
-                orderBy: { invitedAt: 'asc' },
-                skip,
-                take: limit,
-            }),
-            this.prisma.tenantMember.count({ where }),
-        ]);
+            },
+        } as const;
 
-        return { members, total, page, limit };
+        const rows = await this.prisma.tenantMember.findMany({
+            where,
+            include: memberSelect,
+            orderBy: [{ invitedAt: 'asc' }, { id: 'asc' }],
+            skip,
+            take: limit + 1,
+        });
+
+        const hasMore = rows.length > limit;
+        const members = hasMore ? rows.slice(0, limit) : rows;
+
+        let total: number;
+        if (isFiltered) {
+            total = await this.prisma.tenantMember.count({ where });
+        } else {
+            total = (await this.getMembersRoleStats(tenantId)).totalActive;
+        }
+
+        return { members, total, page, limit, hasMore };
     }
 
     private async resolveMemberSearchUserIds(tenantId: string, search: string): Promise<string[]> {
-        const rows = await this.prisma.user.findMany({
-            where: {
-                tenantMemberships: { some: { tenantId, status: 'ACTIVE' } },
-                OR: this.buildMemberSearchOr(search),
-            },
-            select: { id: true },
-            take: MEMBER_SEARCH_MAX_IDS,
-        });
-        return rows.map((r) => r.id);
-    }
-
-    private buildMemberSearchOr(search: string): Prisma.UserWhereInput[] {
-        return [
-            { documentNumber: { startsWith: search } },
-            { username: { startsWith: search } },
-            { email: { contains: search } },
-            { name: { contains: search } },
-        ];
+        const prefix = `${search}%`;
+        const contains = `%${search}%`;
+        const rows = await this.prisma.$queryRaw<Array<{ userId: string }>>(
+            Prisma.sql`
+                SELECT DISTINCT tm.userId AS userId
+                FROM TenantMember tm
+                INNER JOIN User u ON u.id = tm.userId
+                WHERE tm.tenantId = ${tenantId}
+                  AND tm.status = 'ACTIVE'
+                  AND (
+                    u.documentNumber LIKE ${prefix}
+                    OR u.username LIKE ${prefix}
+                    OR u.email LIKE ${contains}
+                    OR u.name LIKE ${contains}
+                  )
+                LIMIT ${MEMBER_SEARCH_MAX_IDS}
+            `,
+        );
+        return rows.map((r) => r.userId);
     }
 
     async getStats(tenantId: string) {

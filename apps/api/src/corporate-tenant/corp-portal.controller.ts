@@ -687,7 +687,7 @@ export class CorpPortalController {
             ? (role as TenantRole)
             : undefined;
 
-        const { members, total } = await this.tenantService.listMembersPaginated({
+        const { members, total, hasMore } = await this.tenantService.listMembersPaginated({
             tenantId,
             page,
             limit,
@@ -722,6 +722,7 @@ export class CorpPortalController {
             totalActive,
             page,
             limit,
+            hasMore,
             roleCounts,
         };
     }

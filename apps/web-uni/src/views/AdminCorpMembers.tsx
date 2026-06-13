@@ -54,24 +54,45 @@ function Avatar({ member }: { member: Member }) {
     return (
         <div className="w-9 h-9 rounded-full shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
             {avatarSrc
-                ? <img src={avatarSrc} alt={member.name} className="w-full h-full object-cover" />
+                ? <img src={avatarSrc} alt={member.name} className="w-full h-full object-cover" loading="lazy" />
                 : <span className="text-sm font-black text-slate-400">{member.name.charAt(0).toUpperCase()}</span>}
         </div>
     );
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 25;
 const MIN_SEARCH_LEN = 2;
+const REQUEST_TIMEOUT_MS = 45_000;
 
 type MemberListResponse = {
     data?: Member[];
     total?: number;
     totalActive?: number;
     roleCounts?: Record<string, number>;
+    hasMore?: boolean;
 };
 
 function isAbortError(err: unknown) {
     return err instanceof DOMException && err.name === 'AbortError';
+}
+
+async function membersRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
+    const timeoutCtrl = new AbortController();
+    const timer = setTimeout(() => timeoutCtrl.abort(), REQUEST_TIMEOUT_MS);
+    if (signal) {
+        signal.addEventListener('abort', () => timeoutCtrl.abort(), { once: true });
+    }
+    try {
+        return await request<T>(path, { signal: timeoutCtrl.signal });
+    } catch (err) {
+        if (isAbortError(err) && signal?.aborted) throw err;
+        if (isAbortError(err)) {
+            throw new ApiError('La consulta tardó demasiado. Intenta filtrar por nombre, email o documento.');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 export default function AdminCorpMembers() {
@@ -85,7 +106,9 @@ export default function AdminCorpMembers() {
     const [totalActive, setTotalActive] = useState(0);
     const [roleCounts, setRoleCounts] = useState<Record<string, number>>({});
     const [page, setPage] = useState(1);
-    const [loading, setLoading] = useState(true);
+    const [listLoading, setListLoading] = useState(true);
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [hasMore, setHasMore] = useState(false);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
@@ -110,88 +133,84 @@ export default function AdminCorpMembers() {
     const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
     const listAbortRef = useRef<AbortController | null>(null);
-    const statsAbortRef = useRef<AbortController | null>(null);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const initialLoadDone = useRef(false);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const rangeFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+    const rangeTo = Math.min(page * PAGE_SIZE, total);
 
     function applyMemberStats(res: Pick<MemberListResponse, 'totalActive' | 'roleCounts'>) {
         if (res.totalActive != null) setTotalActive(res.totalActive);
         if (res.roleCounts) setRoleCounts(res.roleCounts);
     }
 
-    async function loadMemberStats() {
-        statsAbortRef.current?.abort();
-        const ac = new AbortController();
-        statsAbortRef.current = ac;
+    async function fetchMembers(opts: {
+        p?: number;
+        s?: string;
+        r?: string;
+        withStats?: boolean;
+    } = {}) {
+        const p = opts.p ?? page;
+        const s = opts.s ?? debouncedSearch;
+        const r = opts.r ?? roleFilter;
+        const withStats = opts.withStats ?? false;
 
-        try {
-            const res = await request<{ totalActive: number; roleCounts: Record<string, number> }>(
-                '/corp/members/stats',
-                { signal: ac.signal },
-            );
-            applyMemberStats(res);
-            return;
-        } catch (err: unknown) {
-            if (isAbortError(err)) return;
-        }
-
-        // Fallback: API anterior sin endpoint dedicado de stats
-        try {
-            const res = await request<MemberListResponse>(
-                '/corp/members?page=1&limit=1&includeStats=true',
-                { signal: ac.signal },
-            );
-            if (!Array.isArray(res)) applyMemberStats(res);
-        } catch (err: unknown) {
-            if (!isAbortError(err)) {
-                console.warn('[AdminCorpMembers] No se pudieron cargar estadísticas de miembros', err);
-            }
-        }
-    }
-
-    function loadMembers(p = page, s = debouncedSearch, r = roleFilter) {
         listAbortRef.current?.abort();
         const ac = new AbortController();
         listAbortRef.current = ac;
 
-        setLoading(true);
-        const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
+        setListLoading(true);
+        if (withStats) setStatsLoading(true);
+
+        const params = new URLSearchParams({
+            page: String(p),
+            limit: String(PAGE_SIZE),
+        });
         if (s.length >= MIN_SEARCH_LEN) params.set('search', s);
         if (r) params.set('role', r);
+        if (withStats) params.set('includeStats', 'true');
 
-        return request<MemberListResponse | Member[]>(`/corp/members?${params}`, { signal: ac.signal })
-            .then(res => {
-                if (Array.isArray(res)) {
-                    const active = res.filter(m => m.status === 'ACTIVE');
-                    setMembers(active);
-                    setTotal(active.length);
+        try {
+            const res = await membersRequest<MemberListResponse | Member[]>(
+                `/corp/members?${params}`,
+                ac.signal,
+            );
+
+            if (Array.isArray(res)) {
+                const active = res.filter(m => m.status === 'ACTIVE');
+                setMembers(active.slice(0, PAGE_SIZE));
+                setTotal(active.length);
+                setHasMore(active.length > PAGE_SIZE);
+                if (withStats) {
                     setTotalActive(active.length);
                     setRoleCounts({});
-                } else {
-                    setMembers(res.data ?? []);
-                    setTotal(res.total ?? 0);
-                    if (res.totalActive != null || res.roleCounts) applyMemberStats(res);
                 }
-            })
-            .catch((err: unknown) => {
-                if (isAbortError(err)) return;
-                setMembers([]);
-                setTotal(0);
-                setGlobalError(err instanceof ApiError ? err.message : 'No se pudo cargar la lista de miembros.');
-                setTimeout(() => setGlobalError(null), 6000);
-            })
-            .finally(() => {
-                if (!ac.signal.aborted) setLoading(false);
-            });
+            } else {
+                setMembers(res.data ?? []);
+                setTotal(res.total ?? 0);
+                setHasMore(Boolean(res.hasMore));
+                if (withStats || res.totalActive != null || res.roleCounts) {
+                    applyMemberStats(res);
+                }
+            }
+            setGlobalError(null);
+        } catch (err: unknown) {
+            if (isAbortError(err)) return;
+            setGlobalError(err instanceof ApiError ? err.message : 'No se pudo cargar la lista de miembros.');
+        } finally {
+            if (!ac.signal.aborted) {
+                setListLoading(false);
+                if (withStats) setStatsLoading(false);
+            }
+        }
     }
 
-    function refreshMembersAndStats(p = page, s = debouncedSearch, r = roleFilter) {
-        loadMembers(p, s, r);
-        loadMemberStats();
+    function refreshAll() {
+        fetchMembers({ p: page, s: debouncedSearch, r: roleFilter, withStats: true });
     }
 
-    // Dispara la búsqueda — también llamado desde onBlur y onKeyDown(Enter)
     function commitSearch() {
         const trimmed = search.trim();
         if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LEN) return;
@@ -199,27 +218,27 @@ export default function AdminCorpMembers() {
         setPage(1);
     }
 
-    // Fallback: si el usuario deja de escribir 600ms sin tabular ni presionar Enter
-    useEffect(() => {
-        const t = setTimeout(commitSearch, 600);
-        return () => clearTimeout(t);
-    }, [search]);
-
     useEffect(() => {
         if (!canManageMembers) {
-            setLoading(false);
+            setListLoading(false);
+            setStatsLoading(false);
             return;
         }
-        loadMemberStats();
-        return () => statsAbortRef.current?.abort();
-    }, [canManageMembers]);
 
-    // Recargar listado cuando cambia página, búsqueda debounceada o filtro de rol
-    useEffect(() => {
-        if (!canManageMembers) return;
-        loadMembers(page, debouncedSearch, roleFilter);
+        const withStats = !initialLoadDone.current;
+        initialLoadDone.current = true;
+        fetchMembers({ p: page, s: debouncedSearch, r: roleFilter, withStats });
+
         return () => listAbortRef.current?.abort();
     }, [page, debouncedSearch, roleFilter, canManageMembers]);
+
+    useEffect(() => {
+        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = setTimeout(commitSearch, 700);
+        return () => {
+            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        };
+    }, [search]);
 
     function showSuccess(msg: string) { setSuccess(msg); setTimeout(() => setSuccess(null), 4000); }
 
@@ -242,8 +261,7 @@ export default function AdminCorpMembers() {
                 method: 'POST',
                 body: JSON.stringify({ documentNumber: form.documentNumber.trim(), name: form.name.trim(), email: form.email.trim(), role: form.role, tempPassword: form.tempPassword || undefined, sendEmail: form.sendEmail }),
             });
-            loadMembers();
-            loadMemberStats();
+            refreshAll();
             closeModal();
             showSuccess(form.sendEmail ? `Usuario creado y credenciales enviadas a ${form.email.trim()}.` : 'Usuario creado exitosamente.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al crear usuario.'); }
@@ -262,8 +280,7 @@ export default function AdminCorpMembers() {
             if (form.email.trim().toLowerCase() !== target.email.toLowerCase()) payload.email = form.email.trim();
             if (form.documentNumber.trim() !== target.username) payload.documentNumber = form.documentNumber.trim();
             await request(`/corp/members/${target.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-            loadMembers();
-            loadMemberStats();
+            refreshAll();
             closeModal(); showSuccess('Usuario actualizado correctamente.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al actualizar.'); }
         finally { setSaving(false); }
@@ -274,8 +291,7 @@ export default function AdminCorpMembers() {
         setSaving(true); setModalError(null);
         try {
             await request(`/corp/members/${target.id}`, { method: 'DELETE' });
-            loadMembers();
-            loadMemberStats();
+            refreshAll();
             closeModal(); showSuccess('Miembro eliminado del equipo.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al eliminar.'); }
         finally { setSaving(false); }
@@ -555,8 +571,7 @@ export default function AdminCorpMembers() {
     
             setBulkResults(visibleResults.slice(0, 150));
     
-            await loadMembers();
-            loadMemberStats();
+            await fetchMembers({ p: page, withStats: true });
     
             if (failedChunks.length > 0 || totalFailed > 0) {
                 setModalError(
@@ -602,7 +617,11 @@ export default function AdminCorpMembers() {
                         <Users size={20} className="text-sky-600" />
                         <h1 className="text-2xl font-black text-slate-900">Gestión de usuarios</h1>
                     </div>
-                    <p className="text-slate-500 text-sm">{loading ? 'Cargando...' : `${totalActive} miembro${totalActive !== 1 ? 's' : ''} en ${orgName}`}</p>
+                    <p className="text-slate-500 text-sm">
+                        {statsLoading && !totalActive
+                            ? 'Cargando resumen...'
+                            : `${totalActive.toLocaleString()} miembro${totalActive !== 1 ? 's' : ''} en ${orgName}`}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={handleSyncLeagues} disabled={syncing}
@@ -626,6 +645,27 @@ export default function AdminCorpMembers() {
             {success && <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-4 py-3 text-sm font-medium"><Check size={15} />{success}</div>}
             {globalError && <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium"><AlertTriangle size={15} />{globalError}</div>}
 
+            {/* Tarjetas resumen — datos cacheados, no bloquean el listado */}
+            {!statsLoading && totalActive > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                    <div className="bg-white rounded-xl border border-slate-100 px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total activos</p>
+                        <p className="text-lg font-black text-slate-800">{totalActive.toLocaleString()}</p>
+                    </div>
+                    {(Object.keys(ROLE_CONFIG) as Array<keyof typeof ROLE_CONFIG>).slice(0, 3).map((role) => {
+                        const count = roleCounts[role] ?? 0;
+                        if (!count) return null;
+                        const cfg = ROLE_CONFIG[role];
+                        return (
+                            <div key={role} className={`rounded-xl border border-slate-100 px-3 py-2.5 ${cfg.bg}`}>
+                                <p className={`text-[10px] font-bold uppercase tracking-wide ${cfg.color}`}>{cfg.label}s</p>
+                                <p className={`text-lg font-black ${cfg.color}`}>{count.toLocaleString()}</p>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
             {/* Filters */}
             <div className="flex gap-2 mb-4 flex-wrap">
                 <div className="relative flex-1 min-w-[180px]">
@@ -645,13 +685,13 @@ export default function AdminCorpMembers() {
                     <option value="STAFF">Usuario</option>
                     <option value="PLAYER">Jugador</option>
                 </select>
-                <button onClick={() => refreshMembersAndStats()} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600">
+                <button onClick={refreshAll} disabled={listLoading} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600 disabled:opacity-40">
                     <RefreshCw size={15} />
                 </button>
             </div>
 
-            {/* Role badges */}
-            {!loading && totalActive > 0 && (
+            {/* Resumen por rol — carga diferida, no bloquea la tabla */}
+            {!statsLoading && totalActive > 0 && (
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                     {(Object.keys(ROLE_CONFIG) as Array<keyof typeof ROLE_CONFIG>).map((role) => {
                         const count = roleCounts[role] ?? 0;
@@ -669,39 +709,52 @@ export default function AdminCorpMembers() {
             )}
 
             {/* Paginación superior */}
-            {totalPages > 1 && (
+            {(totalPages > 1 || total > 0) && (
                 <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-slate-400">
-                        Página <span className="font-bold text-slate-600">{page}</span> de <span className="font-bold text-slate-600">{totalPages}</span>
-                        {' '}· <span className="font-bold text-slate-600">{total}</span> resultado{total !== 1 ? 's' : ''}
+                        {total > 0 ? (
+                            <>Mostrando <span className="font-bold text-slate-600">{rangeFrom}–{rangeTo}</span> de <span className="font-bold text-slate-600">{total.toLocaleString()}</span></>
+                        ) : listLoading ? 'Cargando...' : 'Sin resultados'}
+                        {totalPages > 1 && (
+                            <> · Página <span className="font-bold text-slate-600">{page}</span> de <span className="font-bold text-slate-600">{totalPages}</span></>
+                        )}
                     </p>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => setPage(1)} disabled={page === 1 || loading}
+                        <button onClick={() => setPage(1)} disabled={page === 1 || listLoading}
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">«</button>
-                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || listLoading}
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">‹ Anterior</button>
-                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={(page >= totalPages && !hasMore) || listLoading}
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Siguiente ›</button>
-                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}
+                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || listLoading}
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">»</button>
                     </div>
                 </div>
             )}
 
-            {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            {/* Tabla */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden relative">
                 <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="font-black text-slate-800 text-sm">Miembros activos</h2>
-                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{total}</span>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">{total.toLocaleString()}</span>
                 </div>
-                {loading ? (
-                    <div className="p-12 flex justify-center"><Loader2 size={24} className="animate-spin text-slate-300" /></div>
+                {listLoading && members.length === 0 ? (
+                    <div className="p-12 flex flex-col items-center justify-center gap-2">
+                        <Loader2 size={24} className="animate-spin text-slate-300" />
+                        <p className="text-xs text-slate-400">Cargando usuarios...</p>
+                    </div>
                 ) : !members.length ? (
                     <div className="p-10 text-center">
                         <Users size={32} className="mx-auto mb-2 text-slate-200" />
                         <p className="text-slate-400 text-sm">{debouncedSearch || roleFilter ? 'Sin resultados para esa búsqueda.' : 'Aún no hay miembros. ¡Crea el primero!'}</p>
                     </div>
                 ) : (
+                    <>
+                    {listLoading && (
+                        <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
+                            <Loader2 size={22} className="animate-spin text-slate-400" />
+                        </div>
+                    )}
                     <div className="divide-y divide-slate-50">
                         {members.map((member, idx) => {
                             const rowNumber = (page - 1) * PAGE_SIZE + idx + 1;
@@ -755,30 +808,32 @@ export default function AdminCorpMembers() {
                             );
                         })}
                     </div>
+                    </>
                 )}
             </div>
 
-            {/* Paginación */}
-            {totalPages > 1 && (
+            {/* Paginación inferior */}
+            {(totalPages > 1 || total > 0) && (
                 <div className="flex items-center justify-between mt-4">
                     <p className="text-xs text-slate-400">
-                        Página <span className="font-bold text-slate-600">{page}</span> de <span className="font-bold text-slate-600">{totalPages}</span>
-                        {' '}· <span className="font-bold text-slate-600">{total}</span> resultado{total !== 1 ? 's' : ''}
+                        {total > 0 ? (
+                            <>Mostrando <span className="font-bold text-slate-600">{rangeFrom}–{rangeTo}</span> de <span className="font-bold text-slate-600">{total.toLocaleString()}</span></>
+                        ) : null}
                     </p>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => setPage(1)} disabled={page === 1 || loading}
+                        <button onClick={() => setPage(1)} disabled={page === 1 || listLoading}
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             «
                         </button>
-                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || listLoading}
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             ‹ Anterior
                         </button>
-                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}
+                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={(page >= totalPages && !hasMore) || listLoading}
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             Siguiente ›
                         </button>
-                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}
+                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || listLoading}
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             »
                         </button>
