@@ -267,10 +267,7 @@ export class SyncPlanService {
 
     const matches = await this.prisma.match.groupBy({
       by: ['status'],
-      where: {
-        ...this.buildTrackedMatchesWhere(todayStart, todayEnd),
-        status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
-      },
+      where: this.buildDisplayedMatchesWhere(todayStart, todayEnd),
       _count: true,
     });
 

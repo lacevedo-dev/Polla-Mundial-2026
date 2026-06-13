@@ -146,7 +146,9 @@ export class AdaptiveSyncScheduler {
   /**
    * Execute sync with locking mechanism
    */
-  private async executeSyncWithLock(trigger: 'adaptive' | 'yesterday_results' | 'peak_hours') {
+  private async executeSyncWithLock(
+    trigger: 'adaptive' | 'yesterday_results' | 'peak_hours' | 'manual',
+  ) {
     this.isSyncing = true;
     const startedAt = Date.now();
 
@@ -155,20 +157,29 @@ export class AdaptiveSyncScheduler {
       const todayMatchCount = await this.syncPlan.calculateDailyPlan().then(p => p.totalMatches).catch(() => 0);
       this.syncEvents.emit({
         type: 'sync_started',
-        data: { trigger: 'auto', matchCount: todayMatchCount },
+        data: { trigger: trigger === 'manual' ? 'manual' : 'auto', matchCount: todayMatchCount },
         timestamp: new Date().toISOString(),
       });
 
       const planBeforeSync = await this.syncPlan.calculateDailyPlan();
       const useLiveEndpoint = planBeforeSync.hasLiveMatches;
 
+      const manualSyncOptions = {
+        logType: SyncLogType.MANUAL_SYNC,
+        summaryLabel: 'Manual sync',
+        triggeredBy: 'manual',
+      } as const;
+      const cronSyncOptions = {
+        logType: SyncLogType.CRON_SYNC,
+        summaryLabel: 'Cron sync',
+        triggeredBy: 'scheduler',
+      } as const;
+
       const result = useLiveEndpoint
         ? await this.matchSync.syncLiveMatches()
-        : await this.matchSync.syncTodayMatchesForTrigger({
-            logType: SyncLogType.CRON_SYNC,
-            summaryLabel: 'Cron sync',
-            triggeredBy: 'scheduler',
-          });
+        : await this.matchSync.syncTodayMatchesForTrigger(
+            trigger === 'manual' ? manualSyncOptions : cronSyncOptions,
+          );
 
       if (useLiveEndpoint) {
         this.logger.log(
@@ -269,7 +280,7 @@ export class AdaptiveSyncScheduler {
     if (this.isSyncing) {
       return {
         success: false,
-        message: 'Sync already in progress',
+        message: 'Ya hay una sincronización en curso. Espera unos segundos e intenta de nuevo.',
       };
     }
 
@@ -277,7 +288,7 @@ export class AdaptiveSyncScheduler {
       if (!(await this.footballConfigService.isEnabled())) {
         return {
           success: false,
-          message: 'Football Sync is disabled',
+          message: 'Football Sync está deshabilitado en configuración.',
         };
       }
 
@@ -286,23 +297,19 @@ export class AdaptiveSyncScheduler {
       if (plan.requestBudget <= 0) {
         return {
           success: false,
-          message: 'No requests available for today',
+          message: 'No quedan requests disponibles para hoy.',
         };
       }
 
       this.logger.log('Manual sync triggered');
-      this.isSyncing = true;
-
-      const result = await this.matchSync.syncTodayMatchesForTrigger({
-        logType: SyncLogType.MANUAL_SYNC,
-        summaryLabel: 'Manual sync',
-        triggeredBy: 'manual',
-      });
+      const execution = await this.executeSyncWithLock('manual');
 
       return {
-        success: result.success,
-        message: result.error || 'Sync completed successfully',
-        matchesUpdated: result.matchesUpdated,
+        success: execution.success,
+        message: execution.success
+          ? `Sync completado — ${execution.matchesUpdated ?? 0} partido(s) actualizados`
+          : (execution.error ?? 'La sincronización falló'),
+        matchesUpdated: execution.matchesUpdated,
       };
     } catch (error) {
       this.logger.error(`Manual sync failed: ${error.message}`);
@@ -310,8 +317,6 @@ export class AdaptiveSyncScheduler {
         success: false,
         message: error.message,
       };
-    } finally {
-      this.isSyncing = false;
     }
   }
 

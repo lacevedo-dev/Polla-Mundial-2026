@@ -210,7 +210,13 @@ export class FootballSyncController {
     const result = await this.scheduler.triggerManualSync();
 
     if (!result.success) {
-      throw new HttpException(result.message, HttpStatus.BAD_REQUEST);
+      const status =
+        result.message.includes('sincronización en curso')
+          ? HttpStatus.CONFLICT
+          : result.message.includes('requests disponibles')
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.BAD_REQUEST;
+      throw new HttpException(result.message, status);
     }
 
     return {
