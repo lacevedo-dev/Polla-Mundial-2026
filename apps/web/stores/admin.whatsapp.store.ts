@@ -35,6 +35,7 @@ interface AdminWhatsappState {
   fetchStatus: () => Promise<void>;
   fetchQr: () => Promise<void>;
   disconnect: () => Promise<void>;
+  reinitialize: () => Promise<void>;
   fetchGroups: () => Promise<void>;
   fetchJobs: () => Promise<void>;
   retryJob: (jobId: string) => Promise<void>;
@@ -75,6 +76,16 @@ export const useAdminWhatsappStore = create<AdminWhatsappState>((set) => ({
     try {
       await request('/admin/whatsapp/disconnect', { method: 'POST' });
       set({ status: 'DISCONNECTED', qrDataUrl: null });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  reinitialize: async () => {
+    set({ isLoading: true });
+    try {
+      const data = await request<{ ok: boolean; status: WhatsappStatus }>('/admin/whatsapp/reinitialize', { method: 'POST' });
+      set({ status: data.status, qrDataUrl: null });
     } finally {
       set({ isLoading: false });
     }

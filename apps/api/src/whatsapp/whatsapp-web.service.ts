@@ -18,6 +18,9 @@ export interface SendToGroupParams {
   pdfFilename: string;
 }
 
+const RECONNECT_DELAY_MS = 10_000; // 10 s antes de reintentar tras desconexión
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 @Injectable()
 export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WhatsappWebService.name);
@@ -27,6 +30,8 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   private client: any = null;
   private status: WhatsappStatus = 'INITIALIZING';
   private qrDataUrl: string | null = null;
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly config: ConfigService) {
     this.enabled = this.config.get<string>('WHATSAPP_WEB_ENABLED') === 'true';
@@ -43,6 +48,7 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.client) {
       try {
         await this.client.destroy();
@@ -88,17 +94,20 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       this.client.on('ready', () => {
         this.status = 'CONNECTED';
         this.qrDataUrl = null;
+        this.reconnectAttempts = 0; // reset backoff al conectar exitosamente
         this.logger.log('WhatsApp Web session connected');
       });
 
       this.client.on('auth_failure', (msg: string) => {
         this.status = 'AUTH_FAILURE';
         this.logger.error(`WhatsApp Web auth failure: ${msg}`);
+        // Auth failure = sesión inválida; no reintentamos automáticamente
       });
 
       this.client.on('disconnected', (reason: string) => {
         this.status = 'DISCONNECTED';
         this.logger.warn(`WhatsApp Web disconnected: ${reason}`);
+        this.scheduleReconnect();
       });
 
       this.status = 'INITIALIZING';
@@ -106,7 +115,45 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     } catch (e: any) {
       this.status = 'DISCONNECTED';
       this.logger.error(`WhatsApp Web init failed: ${e.message}`);
+      this.scheduleReconnect();
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      this.logger.warn(
+        `WhatsApp Web: máximo de reconexiones alcanzado (${MAX_RECONNECT_ATTEMPTS}). Escanea el QR manualmente.`,
+      );
+      return;
+    }
+
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+    const delay = RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts); // backoff exponencial
+    this.reconnectAttempts++;
+    this.logger.log(
+      `WhatsApp Web: reintentando conexión en ${delay / 1000}s (intento ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
+    );
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.reinitialize();
+    }, delay);
+  }
+
+  /** Reinicializa el cliente (destruye el actual y crea uno nuevo con LocalAuth). */
+  async reinitialize(): Promise<void> {
+    if (!this.enabled) return;
+    this.logger.log('WhatsApp Web: reinicializando cliente...');
+    if (this.client) {
+      try {
+        await this.client.destroy();
+      } catch {
+        // ignore
+      }
+      this.client = null;
+    }
+    await this.initClient();
   }
 
   private async generateQrDataUrl(qr: string): Promise<void> {

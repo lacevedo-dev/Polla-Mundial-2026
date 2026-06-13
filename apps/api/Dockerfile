@@ -84,6 +84,12 @@ COPY --from=builder /app/apps/api/package.json ./apps/api/
 
 WORKDIR /app/apps/api
 
+# Directorio para la sesión persistente de WhatsApp Web (LocalAuth).
+# Monta un volumen Docker en esta ruta para que la sesión sobreviva redeployments.
+# En Dokploy: Volumes → Add → Host Path = /var/lib/dokploy/wwebjs/<appName>  →  Container Path = /data/wwebjs_auth
+RUN mkdir -p /data/wwebjs_auth
+VOLUME ["/data/wwebjs_auth"]
+
 # Puerto donde corre NestJS según tu .env (ej. 3004)
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
 EXPOSE 3000

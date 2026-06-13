@@ -33,7 +33,7 @@ const formatDate = (d: string) =>
 const AdminWhatsapp: React.FC = () => {
   const {
     status, qrDataUrl, groups, jobs, isLoading, error,
-    fetchStatus, fetchQr, disconnect, fetchGroups, fetchJobs,
+    fetchStatus, fetchQr, disconnect, reinitialize, fetchGroups, fetchJobs,
     retryJob, deleteJob,
   } = useAdminWhatsappStore();
 
@@ -54,9 +54,10 @@ const AdminWhatsapp: React.FC = () => {
     }
   }, [status, fetchQr]);
 
-  // Poll status every 5s while QR or initializing
+  // Poll status cada 5s mientras QR, iniciando o desconectado (para reflejar auto-reconexión)
   React.useEffect(() => {
-    if (!qrPolling && status !== 'INITIALIZING') return;
+    const shouldPoll = qrPolling || status === 'INITIALIZING' || status === 'DISCONNECTED';
+    if (!shouldPoll) return;
     const id = setInterval(() => { void fetchStatus(); }, 5000);
     return () => clearInterval(id);
   }, [qrPolling, status, fetchStatus]);
@@ -112,10 +113,20 @@ const AdminWhatsapp: React.FC = () => {
                     ? 'Sesión activa. Los reportes se publicarán automáticamente en los grupos configurados.'
                     : status === 'INITIALIZING'
                       ? 'Iniciando cliente WhatsApp Web, espera unos segundos…'
-                      : 'La sesión está desconectada. Recarga la página o reinicia el servicio para volver a conectar.'}
+                      : 'La sesión está desconectada. Usa "Reconectar" para restaurar la sesión guardada sin necesidad de escanear el QR.'}
             </p>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {(status === 'DISCONNECTED' || status === 'AUTH_FAILURE') && (
+                <button
+                  onClick={() => void reinitialize()}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                >
+                  {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Wifi size={13} />}
+                  Reconectar
+                </button>
+              )}
               {status === 'CONNECTED' && (
                 <button
                   onClick={() => void disconnect()}

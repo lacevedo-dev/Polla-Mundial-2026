@@ -33,6 +33,13 @@ export class AdminWhatsappController {
     return { status: this.waWeb.getStatus() };
   }
 
+  /** Fuerza reinicialización del cliente (útil tras desconexión manual) */
+  @Post('reinitialize')
+  async reinitialize() {
+    await this.waWeb.reinitialize();
+    return { ok: true, status: this.waWeb.getStatus() };
+  }
+
   /** QR como data URL para escanear con el teléfono */
   @Get('qr')
   getQr() {
