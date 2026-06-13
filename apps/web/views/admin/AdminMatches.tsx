@@ -1,6 +1,6 @@
 import React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, MessageCircle, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
+import { Calendar, ChevronDown, Download, Edit3, FileImage, Link2, Loader2, Mail, MailCheck, MessageCircle, Plus, RefreshCw, Search, Send, Share2, Trash2, Trophy, Unlink2, X } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
@@ -206,6 +206,59 @@ const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boole
           <div className="mt-6 flex gap-3">
             <button onClick={() => onOpenChange(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">Cancelar</button>
             <button onClick={handleSave} disabled={isSaving} className="flex-1 rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 disabled:opacity-60">{isSaving ? 'Guardando...' : 'Guardar resultado'}</button>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+};
+
+/** Convierte un Date UTC a string para datetime-local (hora Colombia COT = UTC-5) */
+function toLocalDateTimeInput(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  const cot = new Date(d.getTime() - 5 * 60 * 60 * 1000);
+  return cot.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
+}
+
+const RescheduleDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
+  const { updateMatch, isSaving } = useAdminMatchesStore();
+  const [localDate, setLocalDate] = React.useState('');
+
+  React.useEffect(() => {
+    if (match) setLocalDate(toLocalDateTimeInput(match.matchDate));
+  }, [match]);
+
+  const handleSave = async () => {
+    const utcIso = new Date(localDate).toISOString();
+    await updateMatch(match.id, { matchDate: utcIso });
+    onOpenChange(false);
+  };
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[1.75rem] bg-white p-6 shadow-2xl">
+          <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Reprogramar partido</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</DialogPrimitive.Description>
+          <div>
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Nueva fecha y hora <span className="font-normal normal-case tracking-normal text-slate-400">(hora Colombia COT)</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={localDate}
+              onChange={(e) => setLocalDate(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              UTC: {localDate ? new Date(localDate).toISOString() : '—'}
+            </p>
+          </div>
+          <div className="mt-6 flex gap-3">
+            <button onClick={() => onOpenChange(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">Cancelar</button>
+            <button onClick={handleSave} disabled={isSaving || !localDate} className="flex-1 rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 disabled:opacity-60">{isSaving ? 'Guardando...' : 'Reprogramar'}</button>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -490,7 +543,10 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
   const [form, setForm] = React.useState({ homeTeamId: '', awayTeamId: '', phase: 'GROUP', matchDate: '', venue: '', group: '' });
 
   const handleCreate = async () => {
-    await createMatch(form as any);
+    // datetime-local da la hora en tiempo local (COT). Convertir a UTC ISO antes de enviar
+    // para que el backend (Node.js) no lo interprete como UTC y guarde 5 horas de diferencia.
+    const matchDateUtc = form.matchDate ? new Date(form.matchDate).toISOString() : '';
+    await createMatch({ ...form, matchDate: matchDateUtc } as any);
     onOpenChange(false);
   };
 
@@ -531,7 +587,7 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Fecha y hora</label>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Fecha y hora <span className="font-normal normal-case tracking-normal text-slate-400">(hora Colombia COT)</span></label>
               <input type="datetime-local" value={form.matchDate} onChange={(e) => setForm({ ...form, matchDate: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
             </div>
             <div>
@@ -554,6 +610,7 @@ const AdminMatches: React.FC = () => {
   const { publishManual: waPublish } = useAdminWhatsappStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
+  const [rescheduleMatch, setRescheduleMatch] = React.useState<any>(null);
   const [showCreate, setShowCreate] = React.useState(false);
   const [showImportTournament, setShowImportTournament] = React.useState(false);
   const [recalculating, setRecalculating] = React.useState(false);
@@ -1072,11 +1129,12 @@ const AdminMatches: React.FC = () => {
                         <p><span className="font-black text-slate-800">Tipo de vínculo:</span> {match.currentLinkSource === 'suggested' ? 'Sugerido' : match.currentLinkSource === 'manual' ? 'Manual' : 'Sin dato'}</p>
                       </div>
                     </details>
-                    <div className="mt-4 grid grid-cols-6 gap-2">
+                    <div className="mt-4 grid grid-cols-7 gap-2">
                       <button onClick={() => setLinkMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Gestionar vínculo de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Link2 size={14} className="mx-auto" /></button>
                       <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} title={match.externalId ? 'Sincronizar' : 'Auto-vincular y sincronizar'} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
                       <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
                       <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
+                      <button onClick={() => setRescheduleMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-amber-600" aria-label={`Reprogramar ${match.homeTeam.name} vs ${match.awayTeam.name}`} title="Reprogramar / corregir fecha"><Calendar size={14} className="mx-auto" /></button>
                       <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
                       <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-rose-600" aria-label={`Eliminar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Trash2 size={14} className="mx-auto" /></button>
                     </div>
@@ -1185,6 +1243,7 @@ const AdminMatches: React.FC = () => {
                           <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title={match.externalId ? 'Sincronizar ahora' : 'Auto-vincular y sincronizar'}><RefreshCw size={14} /></button>
                           <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Ver y enviar correo de arranque"><Mail size={14} /></button>
                           <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Ver y enviar correo de cierre"><MailCheck size={14} /></button>
+                          <button onClick={() => setRescheduleMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Reprogramar / corregir fecha y hora"><Calendar size={14} /></button>
                           <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>
                           <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600" title="Eliminar"><Trash2 size={14} /></button>
                         </div>
@@ -1201,6 +1260,7 @@ const AdminMatches: React.FC = () => {
       <AdminPagination page={filters.page} limit={filters.limit} total={total} onPageChange={(p) => setFilters({ page: p })} />
 
       <ScoreDialog match={scoreMatch} open={!!scoreMatch} onOpenChange={(v) => { if (!v) setScoreMatch(null); }} />
+      <RescheduleDialog match={rescheduleMatch} open={!!rescheduleMatch} onOpenChange={(v) => { if (!v) setRescheduleMatch(null); }} />
       <LinkDialog match={linkMatch} open={!!linkMatch} onOpenChange={(v) => { if (!v) setLinkMatch(null); }} />
       <CreateMatchDialog open={showCreate} onOpenChange={setShowCreate} />
       {showImportTournament && (
