@@ -6,7 +6,7 @@ import {
     Trophy, BarChart2, Settings, PlusCircle, Send, Pencil,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { request, ApiError } from '../api';
+import { request, ApiError, resolveApiAssetUrl } from '../api';
 import { useAuthStore } from '../stores/auth.store';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -103,10 +103,11 @@ function Bell(props: any) { return <svg {...props} viewBox="0 0 24 24" fill="non
 // ─── Componente Avatar ────────────────────────────────────────────────────────
 
 function Avatar({ member }: { member: Member }) {
+    const avatarSrc = resolveApiAssetUrl(member.avatar);
     return (
         <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
-            {member.avatar
-                ? <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+            {avatarSrc
+                ? <img src={avatarSrc} alt={member.name} className="w-full h-full object-cover" />
                 : <span className="text-xs font-black text-slate-400">{member.name.charAt(0).toUpperCase()}</span>}
         </div>
     );

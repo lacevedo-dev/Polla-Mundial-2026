@@ -1,4 +1,4 @@
-import React from 'react';
+import { resolveApiAssetUrl } from '../api';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { TopRankEntry } from './types';
@@ -34,8 +34,8 @@ export function RankingTab({ topRanking }: { topRanking: TopRankEntry[] }) {
                                 {MEDAL[entry.rank] ?? `#${entry.rank}`}
                             </span>
                             <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
-                                {entry.avatar
-                                    ? <img src={entry.avatar} alt={entry.name} className="w-full h-full object-cover" />
+                                {resolveApiAssetUrl(entry.avatar)
+                                    ? <img src={resolveApiAssetUrl(entry.avatar)!} alt={entry.name} className="w-full h-full object-cover" />
                                     : <span className="text-xs font-black text-slate-400">{entry.name.charAt(0)}</span>}
                             </div>
                             <div className="flex-1 min-w-0">

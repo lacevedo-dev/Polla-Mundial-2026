@@ -31,6 +31,8 @@ export default function Login() {
             const user = await login(identifier.trim(), password, recaptchaToken);
             if (user.mustChangePassword) {
                 navigate('/change-password', { replace: true });
+            } else if (user.needsAvatarUpdate) {
+                navigate('/update-avatar', { replace: true });
             } else {
                 navigate(params.get('next') ?? '/', { replace: true });
             }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Medal, Trophy, Search } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { request } from '../api';
+import { request, resolveApiAssetUrl } from '../api';
 
 interface RankingEntry {
     rank: number;
@@ -99,8 +99,8 @@ export default function Ranking() {
                                 </div>
                                 <div className="flex items-center gap-2.5 min-w-0">
                                     <div className="w-7 h-7 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
-                                        {entry.avatar ? (
-                                            <img src={entry.avatar} alt={entry.name} className="w-full h-full object-cover" />
+                                        {resolveApiAssetUrl(entry.avatar) ? (
+                                            <img src={resolveApiAssetUrl(entry.avatar)!} alt={entry.name} className="w-full h-full object-cover" />
                                         ) : (
                                             <span className="text-xs font-black text-slate-400">{entry.name.charAt(0)}</span>
                                         )}

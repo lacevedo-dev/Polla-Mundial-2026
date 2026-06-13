@@ -68,24 +68,23 @@ export class AuthController {
         return this.authService.resendVerificationEmail(req.user.userId);
     }
 
-    // Ruta protegida para comprobar la sesión y obtener el perfil
     @UseGuards(JwtAuthGuard)
     @Get('profile')
     async getProfile(@Request() req) {
-        // req.user contiene lo dictado por el jwt.strategy (userId, username, email)
-        const user = await this.usersService.findById(req.user.userId);
-        if (!user) {
-            throw new Error('User not found');
-        }
-        const { passwordHash, ...result } = user;
-        // Attach per-user credit reset timestamp if present
         const creditResetsRecord = await (this.prisma as unknown as {
             systemConfig?: {
                 findUnique(args: { where: { key: string } }): Promise<{ value: string | null } | null>;
             };
         }).systemConfig?.findUnique({ where: { key: 'user_credit_resets' } });
-        const creditResetAt = parseSystemConfigValue<Record<string, string> | null>(creditResetsRecord?.value)?.[user.id] ?? null;
-        return { ...result, creditResetAt };
+        const creditResetAt = parseSystemConfigValue<Record<string, string> | null>(creditResetsRecord?.value)?.[req.user.userId] ?? null;
+        return this.authService.getProfileForUser(req.user.userId, creditResetAt);
+    }
+
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(JwtAuthGuard)
+    @Post('avatar/dismiss')
+    async dismissBrokenAvatar(@Request() req) {
+        return this.authService.dismissBrokenAvatar(req.user.userId);
     }
 
     /**

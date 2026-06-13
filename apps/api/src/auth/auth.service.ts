@@ -46,19 +46,108 @@ export class AuthService {
         }
 
         const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified, systemRole: user.systemRole };
+        const avatarState = await this.evaluateAvatarState(user.avatar);
         return {
             accessToken: this.jwtService.sign(payload),
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                username: user.username,
-                avatar: user.avatar,
-                plan: user.plan,
-                systemRole: user.systemRole,
-                emailVerified: user.emailVerified,
-                mustChangePassword: (user as any).mustChangePassword ?? false,
-            },
+            user: await this.buildSessionUserPayload(user, avatarState),
+        };
+    }
+
+    async getProfileForUser(userId: string, creditResetAt: string | null = null) {
+        const user = await this.usersService.findById(userId);
+        if (!user) {
+            throw new UnauthorizedException('Usuario no encontrado');
+        }
+
+        const { passwordHash: _, ...rest } = user as any;
+        const avatarState = await this.evaluateAvatarState(rest.avatar);
+
+        return {
+            ...rest,
+            avatar: avatarState.avatar,
+            needsAvatarUpdate: avatarState.needsAvatarUpdate,
+            creditResetAt,
+        };
+    }
+
+    async dismissBrokenAvatar(userId: string) {
+        const user = await this.usersService.findById(userId);
+        if (!user) {
+            throw new UnauthorizedException('Usuario no encontrado');
+        }
+
+        const avatarState = await this.evaluateAvatarState(user.avatar);
+        if (!avatarState.needsAvatarUpdate) {
+            return {
+                ok: true,
+                avatar: avatarState.avatar,
+                needsAvatarUpdate: false,
+            };
+        }
+
+        if (user.avatar && this.avatarStorageService.isLocalAvatarPath(user.avatar)) {
+            await this.avatarStorageService.remove(user.avatar).catch(() => undefined);
+        }
+
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { avatar: null },
+        });
+
+        return {
+            ok: true,
+            avatar: null,
+            needsAvatarUpdate: false,
+        };
+    }
+
+    private async evaluateAvatarState(avatar?: string | null): Promise<{
+        avatar: string | null;
+        needsAvatarUpdate: boolean;
+    }> {
+        const normalized = avatar?.trim() ?? null;
+        if (!normalized) {
+            return { avatar: null, needsAvatarUpdate: false };
+        }
+
+        if (this.avatarStorageService.isLocalAvatarPath(normalized)) {
+            const fileExists = await this.avatarStorageService.exists(normalized);
+            if (!fileExists) {
+                return { avatar: null, needsAvatarUpdate: true };
+            }
+            return { avatar: normalized, needsAvatarUpdate: false };
+        }
+
+        return { avatar: normalized, needsAvatarUpdate: false };
+    }
+
+    private async buildSessionUserPayload(
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            username: string;
+            avatar?: string | null;
+            plan?: string;
+            systemRole?: string;
+            emailVerified?: boolean;
+            mustChangePassword?: boolean;
+        },
+        avatarState?: { avatar: string | null; needsAvatarUpdate: boolean },
+    ) {
+        const resolvedAvatarState = avatarState ?? await this.evaluateAvatarState(user.avatar);
+
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            username: user.username,
+            avatar: resolvedAvatarState.avatar,
+            plan: user.plan,
+            systemRole: user.systemRole,
+            emailVerified: user.emailVerified,
+            mustChangePassword: user.mustChangePassword ?? false,
+            needsAvatarUpdate: resolvedAvatarState.needsAvatarUpdate,
         };
     }
 
@@ -406,6 +495,7 @@ export class AuthService {
         }
 
         if (!user) {
+            const localAvatar = await this.resolveOAuthAvatarUrl(avatar);
             const base = name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
             let username = base.slice(0, 15);
             const exists = await this.usersService.findByUsername(username);
@@ -417,11 +507,19 @@ export class AuthService {
                     email: email || `${providerId}@${provider}.oauth`,
                     username,
                     [providerField]: providerId,
-                    avatar: avatar ?? null,
+                    avatar: localAvatar,
                     emailVerified: true,
                     passwordHash: null,
                 },
             });
+        } else {
+            const localAvatar = await this.resolveOAuthAvatarForExistingUser(user, avatar);
+            if (localAvatar && localAvatar !== user.avatar) {
+                user = await this.prisma.user.update({
+                    where: { id: user.id },
+                    data: { avatar: localAvatar },
+                });
+            }
         }
 
         const { passwordHash: _, ...result } = user as any;
@@ -433,10 +531,38 @@ export class AuthService {
             systemRole: result.systemRole ?? 'USER',
         };
 
+        const avatarState = await this.evaluateAvatarState(result.avatar);
+
         return {
             accessToken: this.jwtService.sign(payload),
-            user: { ...result },
+            user: await this.buildSessionUserPayload(result, avatarState),
         };
+    }
+
+    /** Descarga avatar remoto de OAuth; si falla, devuelve null (sin URL externa en BD). */
+    private async resolveOAuthAvatarUrl(remoteUrl?: string): Promise<string | null> {
+        if (!remoteUrl?.trim()) return null;
+        return await this.avatarStorageService.saveFromUrl(remoteUrl.trim()) ?? null;
+    }
+
+    /**
+     * Para usuarios existentes: migra URLs externas a local en cada login OAuth.
+     * No reemplaza avatares subidos manualmente (ruta /uploads/avatars/).
+     */
+    private async resolveOAuthAvatarForExistingUser(
+        user: { avatar: string | null },
+        remoteUrl?: string,
+    ): Promise<string | null> {
+        const current = user.avatar?.trim() ?? null;
+        if (this.avatarStorageService.isLocalAvatarPath(current)) {
+            return current;
+        }
+        if (!remoteUrl?.trim()) {
+            return current;
+        }
+
+        const localPath = await this.avatarStorageService.saveFromUrl(remoteUrl.trim());
+        return localPath ?? current;
     }
 
     async updateProfile(
@@ -453,6 +579,10 @@ export class AuthService {
 
         let avatar: string | undefined;
         if (avatarFile) {
+            const currentUser = await this.usersService.findById(userId);
+            if (currentUser?.avatar && this.avatarStorageService.isLocalAvatarPath(currentUser.avatar)) {
+                await this.avatarStorageService.remove(currentUser.avatar).catch(() => undefined);
+            }
             avatar = await this.avatarStorageService.save(avatarFile);
         }
 
@@ -466,7 +596,12 @@ export class AuthService {
 
         const updated = await this.prisma.user.update({ where: { id: userId }, data: updateData });
         const { passwordHash: _, ...result } = updated as any;
-        return result;
+        const avatarState = await this.evaluateAvatarState(result.avatar);
+        return {
+            ...result,
+            avatar: avatarState.avatar,
+            needsAvatarUpdate: avatarState.needsAvatarUpdate,
+        };
     }
 
     private async wrapRegisterDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {

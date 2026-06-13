@@ -49,6 +49,8 @@ describe('AuthService.register', () => {
     const avatarStorageServiceMock = {
         save: jest.fn().mockResolvedValue('/uploads/avatars/saved-avatar.png'),
         remove: jest.fn().mockResolvedValue(undefined),
+        exists: jest.fn().mockResolvedValue(true),
+        isLocalAvatarPath: jest.fn((path?: string | null) => Boolean(path?.startsWith('/uploads/avatars/'))),
     };
 
     let authService: AuthService;
@@ -222,6 +224,8 @@ describe('AuthService.login reCAPTCHA', () => {
     const avatarStorageServiceMock = {
         save: jest.fn(),
         remove: jest.fn(),
+        exists: jest.fn().mockResolvedValue(true),
+        isLocalAvatarPath: jest.fn((path?: string | null) => Boolean(path?.startsWith('/uploads/avatars/'))),
     };
 
     let authService: AuthService;
@@ -343,5 +347,236 @@ describe('AuthService.login reCAPTCHA', () => {
             }),
         );
         expect(usersServiceMock.findByEmailOrUsername).toHaveBeenCalledWith('123');
+    });
+});
+
+describe('AuthService.validateOAuthUser', () => {
+    const usersServiceMock = {
+        findByEmail: jest.fn(),
+        findByUsername: jest.fn(),
+    };
+
+    const jwtServiceMock = {
+        sign: jest.fn().mockReturnValue('oauth-jwt'),
+    };
+
+    const emailServiceMock = {};
+
+    const prismaServiceMock = {
+        user: {
+            findFirst: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+        },
+    };
+
+    const avatarStorageServiceMock = {
+        save: jest.fn(),
+        saveFromUrl: jest.fn(),
+        remove: jest.fn(),
+        exists: jest.fn().mockResolvedValue(true),
+        isLocalAvatarPath: jest.fn((path?: string | null) => Boolean(path?.startsWith('/uploads/avatars/'))),
+    };
+
+    let authService: AuthService;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        authService = new AuthService(
+            usersServiceMock as any,
+            jwtServiceMock as any,
+            emailServiceMock as any,
+            prismaServiceMock as any,
+            avatarStorageServiceMock as any,
+        );
+    });
+
+    it('downloads avatar locally when registering a new OAuth user', async () => {
+        prismaServiceMock.user.findFirst.mockResolvedValue(null);
+        usersServiceMock.findByEmail.mockResolvedValue(null);
+        usersServiceMock.findByUsername.mockResolvedValue(null);
+        avatarStorageServiceMock.saveFromUrl.mockResolvedValue('/uploads/avatars/google.jpg');
+        prismaServiceMock.user.create.mockResolvedValue({
+            id: 'user-oauth-1',
+            name: 'Test User',
+            email: 'test@gmail.com',
+            username: 'testuser',
+            avatar: '/uploads/avatars/google.jpg',
+            emailVerified: true,
+            systemRole: 'USER',
+            passwordHash: null,
+        });
+
+        const result = await authService.validateOAuthUser({
+            provider: 'google',
+            providerId: 'google-123',
+            email: 'test@gmail.com',
+            name: 'Test User',
+            avatar: 'https://lh3.googleusercontent.com/a/photo',
+        });
+
+        expect(avatarStorageServiceMock.saveFromUrl).toHaveBeenCalledWith('https://lh3.googleusercontent.com/a/photo');
+        expect(prismaServiceMock.user.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    avatar: '/uploads/avatars/google.jpg',
+                }),
+            }),
+        );
+        expect(result.user.avatar).toBe('/uploads/avatars/google.jpg');
+    });
+
+    it('migrates external avatar URLs on subsequent OAuth logins', async () => {
+        prismaServiceMock.user.findFirst.mockResolvedValue({
+            id: 'user-oauth-1',
+            name: 'Test User',
+            email: 'test@gmail.com',
+            username: 'testuser',
+            avatar: 'https://lh3.googleusercontent.com/a/old-photo',
+            emailVerified: true,
+            systemRole: 'USER',
+            passwordHash: null,
+        });
+        avatarStorageServiceMock.saveFromUrl.mockResolvedValue('/uploads/avatars/migrated.jpg');
+        prismaServiceMock.user.update.mockResolvedValue({
+            id: 'user-oauth-1',
+            name: 'Test User',
+            email: 'test@gmail.com',
+            username: 'testuser',
+            avatar: '/uploads/avatars/migrated.jpg',
+            emailVerified: true,
+            systemRole: 'USER',
+            passwordHash: null,
+        });
+
+        const result = await authService.validateOAuthUser({
+            provider: 'google',
+            providerId: 'google-123',
+            email: 'test@gmail.com',
+            name: 'Test User',
+            avatar: 'https://lh3.googleusercontent.com/a/new-photo',
+        });
+
+        expect(avatarStorageServiceMock.saveFromUrl).toHaveBeenCalledWith('https://lh3.googleusercontent.com/a/new-photo');
+        expect(prismaServiceMock.user.update).toHaveBeenCalledWith({
+            where: { id: 'user-oauth-1' },
+            data: { avatar: '/uploads/avatars/migrated.jpg' },
+        });
+        expect(result.user.avatar).toBe('/uploads/avatars/migrated.jpg');
+    });
+
+    it('does not overwrite a manually uploaded local avatar on OAuth login', async () => {
+        prismaServiceMock.user.findFirst.mockResolvedValue({
+            id: 'user-oauth-1',
+            name: 'Test User',
+            email: 'test@gmail.com',
+            username: 'testuser',
+            avatar: '/uploads/avatars/custom.png',
+            emailVerified: true,
+            systemRole: 'USER',
+            passwordHash: null,
+        });
+
+        const result = await authService.validateOAuthUser({
+            provider: 'google',
+            providerId: 'google-123',
+            email: 'test@gmail.com',
+            name: 'Test User',
+            avatar: 'https://lh3.googleusercontent.com/a/photo',
+        });
+
+        expect(avatarStorageServiceMock.saveFromUrl).not.toHaveBeenCalled();
+        expect(prismaServiceMock.user.update).not.toHaveBeenCalled();
+        expect(result.user.avatar).toBe('/uploads/avatars/custom.png');
+    });
+});
+
+describe('AuthService.avatar validation', () => {
+    const bcryptMock = jest.requireMock('bcrypt') as { compare: jest.Mock };
+    const usersServiceMock = {
+        findByEmailOrUsername: jest.fn(),
+        findById: jest.fn(),
+    };
+
+    const jwtServiceMock = {
+        sign: jest.fn().mockReturnValue('jwt-token'),
+    };
+
+    const emailServiceMock = {};
+    const prismaServiceMock = {
+        user: {
+            update: jest.fn(),
+        },
+    };
+
+    const avatarStorageServiceMock = {
+        save: jest.fn(),
+        remove: jest.fn().mockResolvedValue(undefined),
+        exists: jest.fn(),
+        isLocalAvatarPath: jest.fn((path?: string | null) => Boolean(path?.startsWith('/uploads/avatars/'))),
+    };
+
+    let authService: AuthService;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        delete process.env.RECAPTCHA_SECRET_KEY;
+        delete process.env.RECAPTCHA_REQUIRED;
+        authService = new AuthService(
+            usersServiceMock as any,
+            jwtServiceMock as any,
+            emailServiceMock as any,
+            prismaServiceMock as any,
+            avatarStorageServiceMock as any,
+        );
+    });
+
+    it('flags missing local avatar files on login', async () => {
+        usersServiceMock.findByEmailOrUsername.mockResolvedValue({
+            id: 'user-1',
+            name: 'Ana Gomez',
+            email: 'ana@mail.com',
+            username: 'ana',
+            passwordHash: 'hashed-password',
+            avatar: '/uploads/avatars/missing.jpg',
+            plan: 'free',
+            systemRole: 'USER',
+            emailVerified: true,
+            mustChangePassword: false,
+        });
+        bcryptMock.compare.mockResolvedValue(true);
+        avatarStorageServiceMock.exists.mockResolvedValue(false);
+
+        const result = await authService.login({
+            identifier: 'ana',
+            password: 'secret',
+        });
+
+        expect(result.user.needsAvatarUpdate).toBe(true);
+        expect(result.user.avatar).toBeNull();
+    });
+
+    it('clears broken avatar reference when user dismisses update', async () => {
+        usersServiceMock.findById.mockResolvedValue({
+            id: 'user-1',
+            avatar: '/uploads/avatars/missing.jpg',
+        });
+        avatarStorageServiceMock.exists.mockResolvedValue(false);
+        prismaServiceMock.user.update.mockResolvedValue({
+            id: 'user-1',
+            avatar: null,
+        });
+
+        const result = await authService.dismissBrokenAvatar('user-1');
+
+        expect(prismaServiceMock.user.update).toHaveBeenCalledWith({
+            where: { id: 'user-1' },
+            data: { avatar: null },
+        });
+        expect(result).toEqual({
+            ok: true,
+            avatar: null,
+            needsAvatarUpdate: false,
+        });
     });
 });

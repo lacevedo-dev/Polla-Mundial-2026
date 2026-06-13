@@ -22,12 +22,37 @@ function getBaseUrl(): string {
 
 export const BASE_URL = getBaseUrl();
 
+function isAbsoluteAssetUrl(path: string): boolean {
+    return (
+        path.startsWith('http://') ||
+        path.startsWith('https://') ||
+        path.startsWith('data:') ||
+        path.startsWith('blob:')
+    );
+}
+
+/** Convierte rutas relativas del API (/uploads/...) a URL absoluta; URLs externas (Google, etc.) se devuelven igual. */
+export function resolveApiAssetUrl(rawPath?: string | null): string | undefined {
+    const normalizedPath = rawPath?.trim();
+    if (!normalizedPath) return undefined;
+
+    if (isAbsoluteAssetUrl(normalizedPath)) {
+        return normalizedPath;
+    }
+
+    if (normalizedPath.startsWith('/')) {
+        return `${BASE_URL}${normalizedPath}`;
+    }
+
+    return `${BASE_URL}/${normalizedPath.replace(/^\/+/, '')}`;
+}
+
 export function resolveCorpBrandingAssetUrl(rawPath?: string | null): string | undefined {
     const normalizedPath = rawPath?.trim();
     if (!normalizedPath) return undefined;
 
     if (!normalizedPath.startsWith('/uploads/branding/')) {
-        return normalizedPath;
+        return resolveApiAssetUrl(normalizedPath);
     }
 
     return `${BASE_URL}${normalizedPath}`;
@@ -70,7 +95,7 @@ function getHeaders(extra?: HeadersInit): Headers {
     return headers;
 }
 
-export async function uploadFile<T = unknown>(path: string, formData: FormData): Promise<T> {
+export async function uploadFile<T = unknown>(path: string, formData: FormData, method: 'POST' | 'PATCH' = 'POST'): Promise<T> {
     const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
     const headers = new Headers();
     const token = localStorage.getItem('corp_token');
@@ -78,35 +103,28 @@ export async function uploadFile<T = unknown>(path: string, formData: FormData):
     const slug = resolveTenantSlug();
     if (slug) headers.set('X-Tenant-Slug', slug);
 
-    console.log('[uploadFile] POST', url, 'token?', !!token, 'slug?', slug);
-
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
-        console.warn('[uploadFile] Timeout after 30s, aborting');
-        controller.abort();
-    }, 30000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     try {
-        const res = await fetch(url, { method: 'POST', body: formData, headers, signal: controller.signal });
+        const res = await fetch(url, { method, body: formData, headers, signal: controller.signal });
         clearTimeout(timeout);
-        console.log('[uploadFile] Response status:', res.status);
         if (!res.ok) {
             let msg = `HTTP ${res.status}`;
             try {
                 const body = await res.json();
                 msg = body?.message ?? body?.error ?? msg;
-            } catch (e) {
-                console.warn('[uploadFile] Could not parse error JSON:', e);
+            } catch {
+                /* ignore */
             }
             throw new ApiError(msg, { status: res.status });
         }
         return res.json() as Promise<T>;
-    } catch (err: any) {
+    } catch (err: unknown) {
         clearTimeout(timeout);
-        if (err.name === 'AbortError') {
+        if (err instanceof Error && err.name === 'AbortError') {
             throw new ApiError('La subida tardó demasiado. Verifica tu conexión o que el endpoint esté activo.', { status: 0 });
         }
-        console.error('[uploadFile] Fetch error:', err);
         throw err;
     }
 }

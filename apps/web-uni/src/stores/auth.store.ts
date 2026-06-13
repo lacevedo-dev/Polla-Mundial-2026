@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { request, ApiError } from '../api';
+import { request, ApiError, resolveApiAssetUrl } from '../api';
 
 export interface AuthUser {
     id: string;
@@ -11,12 +11,20 @@ export interface AuthUser {
     systemRole?: string;
     emailVerified?: boolean;
     mustChangePassword?: boolean;
+    needsAvatarUpdate?: boolean;
     tenantRole?: string;
 }
 
 interface LoginResponse {
     accessToken: string;
     user: AuthUser;
+}
+
+function normalizeAuthUser(user: AuthUser): AuthUser {
+    return {
+        ...user,
+        avatar: resolveApiAssetUrl(user.avatar) ?? user.avatar,
+    };
 }
 
 interface AuthStoreState {
@@ -27,6 +35,8 @@ interface AuthStoreState {
     logout: () => void;
     restoreSession: () => Promise<void>;
     setMustChangePassword: (value: boolean) => void;
+    setNeedsAvatarUpdate: (value: boolean) => void;
+    updateAvatarFromProfile: (avatar?: string | null, needsAvatarUpdate?: boolean) => void;
     setTenantRole: (role: string) => void;
 }
 
@@ -43,8 +53,9 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
                 body: JSON.stringify({ identifier, password, recaptchaToken }),
             });
             localStorage.setItem('corp_token', res.accessToken);
-            set({ user: res.user, isLoading: false });
-            return res.user;
+            const user = normalizeAuthUser(res.user);
+            set({ user, isLoading: false });
+            return user;
         } catch (err) {
             const msg = err instanceof ApiError ? err.message : 'Error al iniciar sesión';
             set({ error: msg, isLoading: false });
@@ -61,7 +72,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         const token = localStorage.getItem('corp_token');
         if (!token) return;
         try {
-            const user = await request<AuthUser>('/auth/profile');
+            const user = normalizeAuthUser(await request<AuthUser>('/auth/profile'));
             set({ user });
         } catch {
             localStorage.removeItem('corp_token');
@@ -72,6 +83,31 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     setMustChangePassword: (value) => {
         const user = get().user;
         if (user) set({ user: { ...user, mustChangePassword: value } });
+    },
+
+    setNeedsAvatarUpdate: (value) => {
+        const user = get().user;
+        if (user) {
+            set({
+                user: {
+                    ...user,
+                    needsAvatarUpdate: value,
+                    avatar: value ? null : user.avatar,
+                },
+            });
+        }
+    },
+
+    updateAvatarFromProfile: (avatar, needsAvatarUpdate = false) => {
+        const user = get().user;
+        if (!user) return;
+        set({
+            user: normalizeAuthUser({
+                ...user,
+                avatar,
+                needsAvatarUpdate,
+            }),
+        });
     },
 
     setTenantRole: (role) => {

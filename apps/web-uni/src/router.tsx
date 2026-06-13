@@ -12,6 +12,7 @@ const Ranking = React.lazy(() => import('./views/Ranking'));
 const JoinOrg = React.lazy(() => import('./views/JoinOrg'));
 const Onboarding = React.lazy(() => import('./views/Onboarding'));
 const ChangePassword = React.lazy(() => import('./views/ChangePassword'));
+const UpdateAvatar = React.lazy(() => import('./views/UpdateAvatar'));
 const AdminCorp = React.lazy(() => import('./views/AdminCorp'));
 const AdminCorpMembers = React.lazy(() => import('./views/AdminCorpMembers'));
 const AdminCorpLeagues = React.lazy(() => import('./views/AdminCorpLeagues'));
@@ -34,6 +35,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     // Si el admin corporativo aún no ha cambiado la contraseña temporal,
     // forzamos la pantalla de cambio antes de permitir el acceso al portal.
     if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
+    if (user.needsAvatarUpdate) return <Navigate to="/update-avatar" replace />;
     return <>{children}</>;
 }
 
@@ -77,6 +79,14 @@ export function AppRouter() {
                         element={
                             <RequireSession>
                                 <ChangePassword />
+                            </RequireSession>
+                        }
+                    />
+                    <Route
+                        path="/update-avatar"
+                        element={
+                            <RequireSession>
+                                <UpdateAvatar />
                             </RequireSession>
                         }
                     />

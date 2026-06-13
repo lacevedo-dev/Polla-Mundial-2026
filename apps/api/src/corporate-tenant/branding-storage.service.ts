@@ -9,11 +9,18 @@ export class BrandingUploadFile {
     buffer: Buffer;
 }
 
+function resolveUploadsRoot(): string {
+    if (process.env.UPLOADS_DIR?.trim()) {
+        return path.resolve(process.env.UPLOADS_DIR.trim());
+    }
+    return path.resolve(process.cwd(), 'uploads');
+}
+
 @Injectable()
 export class BrandingStorageService {
     private readonly uploadDir = process.env.BRANDING_UPLOAD_DIR?.trim()
         ? path.resolve(process.env.BRANDING_UPLOAD_DIR.trim())
-        : path.resolve(process.cwd(), 'uploads', 'branding');
+        : path.join(resolveUploadsRoot(), 'branding');
 
     async save(file: BrandingUploadFile): Promise<string> {
         const extension = path.extname(file.originalname || '').toLowerCase() || this.extensionFromMime(file.mimetype);

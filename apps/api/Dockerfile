@@ -66,7 +66,8 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
 
 # Setear entorno de producción
 ENV NODE_ENV=production \
-    WHATSAPP_SESSION_PATH=/data/wwebjs_auth
+    WHATSAPP_SESSION_PATH=/data/wwebjs_auth \
+    UPLOADS_DIR=/data/uploads
 
 # Copiar los node_modules base del workspace (dependencias izadas)
 COPY --from=builder /app/node_modules ./node_modules
@@ -88,8 +89,8 @@ WORKDIR /app/apps/api
 # Directorio para la sesión persistente de WhatsApp Web (LocalAuth).
 # Monta un volumen Docker en esta ruta para que la sesión sobreviva redeployments.
 # En Dokploy: Volumes → Add → Host Path = /var/lib/dokploy/wwebjs/<appName>  →  Container Path = /data/wwebjs_auth
-RUN mkdir -p /data/wwebjs_auth
-VOLUME ["/data/wwebjs_auth"]
+RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
+VOLUME ["/data/wwebjs_auth", "/data/uploads"]
 
 # Puerto donde corre NestJS según tu .env (ej. 3004)
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor

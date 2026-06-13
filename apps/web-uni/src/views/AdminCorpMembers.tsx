@@ -5,7 +5,7 @@ import {
     Send, KeyRound, EyeOff, Eye, RefreshCw, Hash,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { request, ApiError } from '../api';
+import { request, ApiError, resolveApiAssetUrl } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 
@@ -50,10 +50,11 @@ function CopyBtn({ value }: { value: string }) {
 }
 
 function Avatar({ member }: { member: Member }) {
+    const avatarSrc = resolveApiAssetUrl(member.avatar);
     return (
         <div className="w-9 h-9 rounded-full shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
-            {member.avatar
-                ? <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+            {avatarSrc
+                ? <img src={avatarSrc} alt={member.name} className="w-full h-full object-cover" />
                 : <span className="text-sm font-black text-slate-400">{member.name.charAt(0).toUpperCase()}</span>}
         </div>
     );

@@ -3,7 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -38,7 +38,9 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
       envFilePath: '.env',
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'uploads'),
+      rootPath: process.env.UPLOADS_DIR?.trim()
+        ? resolve(process.env.UPLOADS_DIR.trim())
+        : join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
     ScheduleModule.forRoot(),

@@ -8,7 +8,7 @@ import {
 import { CorpLayout } from '../layouts/CorpLayout';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
-import { request } from '../api';
+import { request, resolveApiAssetUrl } from '../api';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 
@@ -834,8 +834,8 @@ export default function Dashboard() {
                                                     {MEDAL[e.rank] ?? `#${e.rank}`}
                                                 </span>
                                                 <div className="w-7 h-7 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200">
-                                                    {e.avatar
-                                                        ? <img src={e.avatar} alt={e.name} className="w-full h-full object-cover" />
+                                                    {resolveApiAssetUrl(e.avatar)
+                                                        ? <img src={resolveApiAssetUrl(e.avatar)!} alt={e.name} className="w-full h-full object-cover" />
                                                         : <span className="text-[9px] font-black text-slate-500">{e.name.charAt(0).toUpperCase()}</span>
                                                     }
                                                 </div>
