@@ -179,6 +179,8 @@ model TenantMember {
   @@index([tenantId])
   @@index([userId])
   @@index([status])
+  @@index([tenantId, status])
+  @@index([tenantId, status, role])
 }
 
 model TenantSubscription {
