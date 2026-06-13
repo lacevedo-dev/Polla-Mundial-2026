@@ -134,9 +134,13 @@ export default function AdminCorpMembers() {
 
     const listAbortRef = useRef<AbortController | null>(null);
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchSkipDebounceRef = useRef(true);
     const initialLoadDone = useRef(false);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
+    const normalizedSearch = debouncedSearch.trim();
+    const searchPending = search.trim() !== debouncedSearch.trim();
+    const hasActiveFilters = normalizedSearch.length >= MIN_SEARCH_LEN || Boolean(roleFilter);
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const rangeFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
     const rangeTo = Math.min(page * PAGE_SIZE, total);
@@ -168,7 +172,7 @@ export default function AdminCorpMembers() {
             page: String(p),
             limit: String(PAGE_SIZE),
         });
-        if (s.length >= MIN_SEARCH_LEN) params.set('search', s);
+        if (s.length >= MIN_SEARCH_LEN) params.set('search', s.trim());
         if (r) params.set('role', r);
         if (withStats) params.set('includeStats', 'true');
 
@@ -212,10 +216,22 @@ export default function AdminCorpMembers() {
     }
 
     function commitSearch() {
-        const trimmed = search.trim();
-        if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LEN) return;
+        const trimmed = search.trim().replace(/\s+/g, ' ');
+        if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LEN) {
+            setGlobalError(`Escribe al menos ${MIN_SEARCH_LEN} caracteres para buscar.`);
+            setTimeout(() => setGlobalError(null), 4000);
+            return;
+        }
         setDebouncedSearch(trimmed);
         setPage(1);
+    }
+
+    function clearFilters() {
+        setSearch('');
+        setDebouncedSearch('');
+        setRoleFilter('');
+        setPage(1);
+        setGlobalError(null);
     }
 
     useEffect(() => {
@@ -233,8 +249,12 @@ export default function AdminCorpMembers() {
     }, [page, debouncedSearch, roleFilter, canManageMembers]);
 
     useEffect(() => {
+        if (searchSkipDebounceRef.current) {
+            searchSkipDebounceRef.current = false;
+            return;
+        }
         if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-        searchDebounceRef.current = setTimeout(commitSearch, 700);
+        searchDebounceRef.current = setTimeout(commitSearch, 500);
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
@@ -666,28 +686,62 @@ export default function AdminCorpMembers() {
                 </div>
             )}
 
-            {/* Filters */}
-            <div className="flex gap-2 mb-4 flex-wrap">
-                <div className="relative flex-1 min-w-[180px]">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input value={search} onChange={e => setSearch(e.target.value)}
-                        onBlur={commitSearch}
-                        onKeyDown={e => e.key === 'Enter' && commitSearch()}
-                        placeholder="Buscar nombre, email o documento (mín. 2 caracteres, Enter)"
-                        className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent bg-white"
-                        style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
+            {/* Filtros */}
+            <div className="bg-white rounded-2xl border border-slate-100 p-3 mb-4 shadow-sm">
+                <div className="flex gap-2 flex-wrap">
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && commitSearch()}
+                            placeholder="Nombre, email, documento, usuario o teléfono…"
+                            className="w-full pl-8 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent bg-white"
+                            style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
+                    </div>
+                    <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }}
+                        className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none text-slate-600 min-w-[140px]">
+                        <option value="">Todos los roles</option>
+                        <option value="OWNER">Propietario</option>
+                        <option value="ADMIN">Admin</option>
+                        <option value="STAFF">Usuario</option>
+                        <option value="PLAYER">Jugador</option>
+                    </select>
+                    <button type="button" onClick={commitSearch} disabled={listLoading}
+                        className="px-4 py-2.5 rounded-xl text-sm font-bold text-black hover:brightness-90 transition-all disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--color-primary,#f59e0b)' }}>
+                        Buscar
+                    </button>
+                    <button type="button" onClick={refreshAll} disabled={listLoading}
+                        className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600 disabled:opacity-40"
+                        title="Actualizar">
+                        <RefreshCw size={15} className={listLoading ? 'animate-spin' : ''} />
+                    </button>
                 </div>
-                <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }}
-                    className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none text-slate-600">
-                    <option value="">Todos los roles</option>
-                    <option value="OWNER">Propietario</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="STAFF">Usuario</option>
-                    <option value="PLAYER">Jugador</option>
-                </select>
-                <button onClick={refreshAll} disabled={listLoading} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600 disabled:opacity-40">
-                    <RefreshCw size={15} />
-                </button>
+                {(searchPending || hasActiveFilters) && (
+                    <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                        {searchPending && (
+                            <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
+                                Texto sin aplicar — Enter o Buscar
+                            </span>
+                        )}
+                        {normalizedSearch.length >= MIN_SEARCH_LEN && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">
+                                «{normalizedSearch}»
+                                <button type="button" onClick={() => { setSearch(''); setDebouncedSearch(''); setPage(1); }} className="hover:text-sky-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {roleFilter && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">
+                                {ROLE_CONFIG[roleFilter as Member['role']]?.label ?? roleFilter}
+                                <button type="button" onClick={() => { setRoleFilter(''); setPage(1); }} className="hover:text-violet-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {hasActiveFilters && (
+                            <button type="button" onClick={clearFilters} className="text-[11px] font-bold text-slate-400 hover:text-slate-600 underline">
+                                Limpiar filtros
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Resumen por rol — carga diferida, no bloquea la tabla */}
@@ -746,7 +800,11 @@ export default function AdminCorpMembers() {
                 ) : !members.length ? (
                     <div className="p-10 text-center">
                         <Users size={32} className="mx-auto mb-2 text-slate-200" />
-                        <p className="text-slate-400 text-sm">{debouncedSearch || roleFilter ? 'Sin resultados para esa búsqueda.' : 'Aún no hay miembros. ¡Crea el primero!'}</p>
+                        <p className="text-slate-400 text-sm">
+                            {hasActiveFilters
+                                ? 'Sin resultados para los filtros aplicados.'
+                                : 'Aún no hay miembros. ¡Crea el primero!'}
+                        </p>
                     </div>
                 ) : (
                     <>
