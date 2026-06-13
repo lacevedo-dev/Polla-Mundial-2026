@@ -72,6 +72,8 @@ export class NotificationScheduler {
     userContact?: { phone: string | null; countryCode: string | null } | null,
   ): Promise<NotificationDeliveryResult> {
     // Resolve contact: use pre-loaded value when provided, otherwise fetch individually.
+    // contact puede ser null si el usuario es inactivo o no tiene teléfono registrado —
+    // en ese caso se omite WA personal pero push e in-app se envían igualmente.
     const contact =
       userContact !== undefined
         ? userContact
@@ -80,21 +82,11 @@ export class NotificationScheduler {
             select: { phone: true, countryCode: true },
           });
 
-    if (!contact) {
-      return {
-        pushSent: 0,
-        pushFailed: 0,
-        pushDevices: 0,
-        whatsappSent: false,
-        skipped: true,
-      };
-    }
-
     const pushResult = await this.push.sendToUser(userId, { title, body, data });
 
     let whatsappSent = false;
     if (this.twilio.isEnabled()) {
-      if (contact.phone) {
+      if (contact?.phone) {
         const fullPhone = `${contact.countryCode ?? '+57'}${contact.phone}`;
         try {
           await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);
@@ -211,28 +203,29 @@ export class NotificationScheduler {
       );
     }
 
+    const leagueSelect = {
+      id: true,
+      members: { where: { status: 'ACTIVE' }, select: { userId: true } },
+    } as const;
+
     const [leaguesWithTournament, leaguesWithoutTournament] = await Promise.all([
       tournamentId
         ? this.prisma.league.findMany({
-            where: {
-              status: 'ACTIVE',
-              leagueTournaments: { some: { tournamentId } },
-            },
-            select: {
-              id: true,
-              members: { where: { status: 'ACTIVE' }, select: { userId: true } },
-            },
+            where: { status: 'ACTIVE', leagueTournaments: { some: { tournamentId } } },
+            select: leagueSelect,
           })
         : [],
+      // Ligas sin restricción de torneo: reciben todos los partidos independientemente del torneo.
+      // Si el partido no tiene tournamentId, también se incluyen ligas con torneos configurados
+      // ya que no hay forma de filtrarlas por torneo específico.
       this.prisma.league.findMany({
         where: {
           status: 'ACTIVE',
-          leagueTournaments: { none: {} },
+          ...(tournamentId
+            ? { leagueTournaments: { none: {} } }
+            : {}),
         },
-        select: {
-          id: true,
-          members: { where: { status: 'ACTIVE' }, select: { userId: true } },
-        },
+        select: leagueSelect,
       }),
     ]);
 
@@ -1326,6 +1319,11 @@ export class NotificationScheduler {
         match.id,
         userLeagues[0].leagueId,
       );
+    }
+
+    // Encolar notificación WA Grupo por cada liga (igual que el flujo automático)
+    for (const league of leagues) {
+      await this.enqueueWaGroupNotif(WhatsappGroupJobType.MATCH_REMINDER, match.id, league.id, '');
     }
   }
 
