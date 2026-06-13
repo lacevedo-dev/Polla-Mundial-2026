@@ -12,9 +12,10 @@ import { UpdateTenantBrandingDto } from './dto/tenant.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
 import { ParticipationService, ParticipationMemberFilter } from './participation.service';
+import { MatchOperationsService } from './match-operations.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus } from '@prisma/client';
+import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 class CreateCorpLeagueDto {
@@ -78,6 +79,7 @@ export class CorpPortalController {
         private readonly tenantService: TenantService,
         private readonly brandingStorage: BrandingStorageService,
         private readonly participationService: ParticipationService,
+        private readonly matchOperations: MatchOperationsService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -1000,5 +1002,35 @@ export class CorpPortalController {
             email: member.user.email,
             documentNumber: member.user.documentNumber ?? undefined,
         });
+    }
+
+    @UseGuards(TenantStaffGuard)
+    @Get('matches/operations')
+    async listMatchOperations(
+        @Req() req: any,
+        @Query('status') status?: string,
+        @Query('page') pageStr?: string,
+        @Query('limit') limitStr?: string,
+    ) {
+        const tenantId: string = req.tenantId;
+        const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
+        const limit = Math.min(100, Math.max(10, parseInt(limitStr ?? '25', 10) || 25));
+        const statusFilter = status && Object.values(MatchStatus).includes(status as MatchStatus)
+            ? (status as MatchStatus)
+            : undefined;
+
+        return this.matchOperations.listTenantMatches(tenantId, {
+            status: statusFilter,
+            page,
+            limit,
+        });
+    }
+
+    @UseGuards(TenantStaffGuard)
+    @Post('matches/:matchId/recalculate')
+    @HttpCode(HttpStatus.OK)
+    async recalculateMatch(@Req() req: any, @Param('matchId') matchId: string) {
+        const tenantId: string = req.tenantId;
+        return this.matchOperations.recalculateMatch(tenantId, matchId);
     }
 }

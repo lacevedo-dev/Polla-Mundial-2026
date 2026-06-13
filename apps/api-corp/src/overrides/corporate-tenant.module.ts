@@ -18,10 +18,12 @@ import { TenantStaffGuard } from '@corp-api/corporate-tenant/guards/tenant-staff
 import { CorpPortalController } from '@corp-api/corporate-tenant/corp-portal.controller';
 import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-storage.service';
 import { ParticipationService } from '@corp-api/corporate-tenant/participation.service';
+import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operations.service';
+import { PredictionsModule } from '@corp-api/predictions/predictions.module';
 import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-members-resend.controller';
 
 @Module({
-    imports: [PrismaModule, EmailModule],
+    imports: [PrismaModule, EmailModule, PredictionsModule],
     controllers: [
         TenantController,
         AdminTenantController,
@@ -35,6 +37,7 @@ import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-mem
         TenantLimitsService,
         BrandingStorageService,
         ParticipationService,
+        MatchOperationsService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,

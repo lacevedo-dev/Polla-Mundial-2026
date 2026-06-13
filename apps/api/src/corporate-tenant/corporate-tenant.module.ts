@@ -14,9 +14,11 @@ import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { CorpPortalController } from './corp-portal.controller';
 import { BrandingStorageService } from './branding-storage.service';
 import { ParticipationService } from './participation.service';
+import { MatchOperationsService } from './match-operations.service';
+import { PredictionsModule } from '../predictions/predictions.module';
 
 @Module({
-    imports: [PrismaModule],
+    imports: [PrismaModule, PredictionsModule],
     controllers: [
         TenantController,
         AdminTenantController,
@@ -31,6 +33,7 @@ import { ParticipationService } from './participation.service';
         TenantProvisioningService,
         BrandingStorageService,
         ParticipationService,
+        MatchOperationsService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,

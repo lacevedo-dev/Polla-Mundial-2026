@@ -1,7 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatchDto, UpdateMatchScoreDto } from './dto/match.dto';
-import { MatchStatus } from '@prisma/client';
+import { MatchStatus, Phase } from '@prisma/client';
 import { PredictionsService } from '../predictions/predictions.service';
 import { matchWithTeamsSelect, toMatchResponse } from './match-response.util';
 import { PredictionReportService } from '../prediction-report/prediction-report.service';
@@ -53,7 +53,7 @@ export class MatchesService {
     }
 
     async updateScore(id: string, updateScoreDto: UpdateMatchScoreDto) {
-        const match = await this.findOne(id);
+        await this.findOne(id);
 
         const updatedMatch = await this.prisma.match.update({
             where: { id },
@@ -65,16 +65,58 @@ export class MatchesService {
             select: matchWithTeamsSelect,
         });
 
-        // Disparar cálculo de puntos
-        await this.predictionsService.calculateMatchPoints(id);
-        await this.predictionsService.calculatePhaseBonuses(id).catch((error: Error) => {
-            this.logger.error(`Error calculating phase bonuses for match ${id}: ${error.message}`);
-        });
-        this.predictionReportService.sendMatchResultsReport(id).catch((error: Error) => {
-            this.logger.error(`Error sending results email for match ${id}: ${error.message}`);
-        });
+        await this.recalculateFinishedMatchScoring(id, { sendReport: true });
 
         return toMatchResponse(updatedMatch);
+    }
+
+    async recalculateFinishedMatchScoring(
+        matchId: string,
+        options: { sendReport?: boolean } = {},
+    ) {
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            select: {
+                id: true,
+                phase: true,
+                homeScore: true,
+                awayScore: true,
+                homeTeamId: true,
+                awayTeamId: true,
+                advancingTeamId: true,
+            },
+        });
+
+        if (!match) {
+            throw new NotFoundException(`Match with ID ${matchId} not found`);
+        }
+
+        if (match.homeScore === null || match.awayScore === null) {
+            throw new BadRequestException('El partido no tiene marcador registrado para calcular puntos.');
+        }
+
+        if (match.phase !== Phase.GROUP && match.homeScore !== match.awayScore) {
+            const advancingTeamId = match.homeScore > match.awayScore
+                ? match.homeTeamId
+                : match.awayTeamId;
+            if (advancingTeamId && match.advancingTeamId !== advancingTeamId) {
+                await this.prisma.match.update({
+                    where: { id: matchId },
+                    data: { advancingTeamId },
+                });
+            }
+        }
+
+        await this.predictionsService.calculateMatchPoints(matchId);
+        await this.predictionsService.calculatePhaseBonuses(matchId).catch((error: Error) => {
+            this.logger.error(`Error calculating phase bonuses for match ${matchId}: ${error.message}`);
+        });
+
+        if (options.sendReport) {
+            this.predictionReportService.sendMatchResultsReport(matchId).catch((error: Error) => {
+                this.logger.error(`Error sending results email for match ${matchId}: ${error.message}`);
+            });
+        }
     }
 
     async findByPhase(phase: any) {

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     Home, Trophy, BarChart2, LogOut, Menu, X,
-    Building2, Shield, Users, HelpCircle, Bell, BellOff, PlusCircle, Settings, ShieldCheck, Activity,
+    Building2, Shield, Users, HelpCircle, Bell, BellOff, PlusCircle, Settings, ShieldCheck, Activity, Calculator,
 } from 'lucide-react';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
 const ADMIN_NAV_ITEMS = [
     { path: '/admin', label: 'Panel Admin', icon: Shield },
     { path: '/admin/participation', label: 'Participación', icon: Activity },
+    { path: '/admin/matches', label: 'Partidos y puntajes', icon: Calculator },
     { path: '/admin/members', label: 'Gestión de usuarios', icon: Users },
     { path: '/admin/pollas', label: 'Gestionar Pollas', icon: PlusCircle },
     { path: '/admin/roles', label: 'Roles y Permisos', icon: ShieldCheck },
@@ -108,7 +109,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                             </p>
                             <nav className="space-y-1">
                                 {(isStaff
-                                    ? ADMIN_NAV_ITEMS.filter(i => i.path === '/admin/members' || i.path === '/admin/participation')
+                                    ? ADMIN_NAV_ITEMS.filter(i => ['/admin/members', '/admin/participation', '/admin/matches'].includes(i.path))
                                     : ADMIN_NAV_ITEMS
                                 ).map((item) => (
                                     <SidebarLink key={item.path} {...item} highlight />
@@ -302,7 +303,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                     Administración
                                 </p>
                                 {(isStaff
-                                    ? ADMIN_NAV_ITEMS.filter(i => i.path === '/admin/members' || i.path === '/admin/participation')
+                                    ? ADMIN_NAV_ITEMS.filter(i => ['/admin/members', '/admin/participation', '/admin/matches'].includes(i.path))
                                     : ADMIN_NAV_ITEMS
                                 ).map((item) => (
                                     <SidebarLink key={item.path} {...item} highlight />

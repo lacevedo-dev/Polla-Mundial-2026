@@ -391,8 +391,7 @@ export class AdminMatchesController {
     async recalculateOne(@Param('id') id: string) {
         const match = await this.prisma.match.findUnique({ where: { id } });
         if (!match) throw new NotFoundException('Partido no encontrado');
-        await this.predictionsService.calculateMatchPoints(id);
-        await this.predictionsService.calculatePhaseBonuses(id);
+        await this.matchesService.recalculateFinishedMatchScoring(id);
         return { ok: true, matchId: id };
     }
 

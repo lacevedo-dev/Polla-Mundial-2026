@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus, Activity } from 'lucide-react';
+import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus, Activity, Calculator } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
@@ -128,6 +128,14 @@ export default function AdminCorp() {
                     </div>
                     <div className="divide-y divide-slate-50">
                         {[
+                            {
+                                label: 'Partidos y puntajes',
+                                desc: 'Revisar sync y recalcular puntos manualmente',
+                                icon: Calculator,
+                                link: '/admin/matches',
+                                color: 'text-lime-700',
+                                bg: 'bg-lime-50',
+                            },
                             {
                                 label: 'Seguimiento de participación',
                                 desc: 'Quién pronostica vs. usuarios inscritos',
