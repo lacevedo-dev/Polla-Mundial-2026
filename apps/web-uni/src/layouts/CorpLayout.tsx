@@ -19,7 +19,7 @@ const NAV_ITEMS = [
 
 const ADMIN_NAV_ITEMS = [
     { path: '/admin', label: 'Panel Admin', icon: Shield },
-    { path: '/admin/members', label: 'Miembros', icon: Users },
+    { path: '/admin/members', label: 'Gestión de usuarios', icon: Users },
     { path: '/admin/pollas', label: 'Gestionar Pollas', icon: PlusCircle },
     { path: '/admin/roles', label: 'Roles y Permisos', icon: ShieldCheck },
     { path: '/admin/settings', label: 'Configuración', icon: Settings },

@@ -63,11 +63,23 @@ function Avatar({ member }: { member: Member }) {
 const PAGE_SIZE = 10;
 const MIN_SEARCH_LEN = 2;
 
+type MemberListResponse = {
+    data?: Member[];
+    total?: number;
+    totalActive?: number;
+    roleCounts?: Record<string, number>;
+};
+
+function isAbortError(err: unknown) {
+    return err instanceof DOMException && err.name === 'AbortError';
+}
+
 export default function AdminCorpMembers() {
     const authUser = useAuthStore((s) => s.user);
     const tenant = useTenantStore((s) => s.tenant);
     const callerIsStaff = authUser?.tenantRole === 'STAFF';
     const callerIsAdmin = authUser?.tenantRole === 'ADMIN' || authUser?.tenantRole === 'OWNER';
+    const canManageMembers = callerIsAdmin || callerIsStaff;
     const [members, setMembers] = useState<Member[]>([]);
     const [total, setTotal] = useState(0);
     const [totalActive, setTotalActive] = useState(0);
@@ -103,19 +115,39 @@ export default function AdminCorpMembers() {
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    function loadMemberStats() {
+    function applyMemberStats(res: Pick<MemberListResponse, 'totalActive' | 'roleCounts'>) {
+        if (res.totalActive != null) setTotalActive(res.totalActive);
+        if (res.roleCounts) setRoleCounts(res.roleCounts);
+    }
+
+    async function loadMemberStats() {
         statsAbortRef.current?.abort();
         const ac = new AbortController();
         statsAbortRef.current = ac;
 
-        request<{ totalActive: number; roleCounts: Record<string, number> }>('/corp/members/stats', { signal: ac.signal })
-            .then(res => {
-                setTotalActive(res.totalActive ?? 0);
-                setRoleCounts(res.roleCounts ?? {});
-            })
-            .catch((err: unknown) => {
-                if (err instanceof DOMException && err.name === 'AbortError') return;
-            });
+        try {
+            const res = await request<{ totalActive: number; roleCounts: Record<string, number> }>(
+                '/corp/members/stats',
+                { signal: ac.signal },
+            );
+            applyMemberStats(res);
+            return;
+        } catch (err: unknown) {
+            if (isAbortError(err)) return;
+        }
+
+        // Fallback: API anterior sin endpoint dedicado de stats
+        try {
+            const res = await request<MemberListResponse>(
+                '/corp/members?page=1&limit=1&includeStats=true',
+                { signal: ac.signal },
+            );
+            if (!Array.isArray(res)) applyMemberStats(res);
+        } catch (err: unknown) {
+            if (!isAbortError(err)) {
+                console.warn('[AdminCorpMembers] No se pudieron cargar estadísticas de miembros', err);
+            }
+        }
     }
 
     function loadMembers(p = page, s = debouncedSearch, r = roleFilter) {
@@ -128,21 +160,26 @@ export default function AdminCorpMembers() {
         if (s.length >= MIN_SEARCH_LEN) params.set('search', s);
         if (r) params.set('role', r);
 
-        return request<{ data?: Member[]; total?: number }>(`/corp/members?${params}`, { signal: ac.signal })
+        return request<MemberListResponse | Member[]>(`/corp/members?${params}`, { signal: ac.signal })
             .then(res => {
                 if (Array.isArray(res)) {
-                    const active = (res as Member[]).filter(m => m.status === 'ACTIVE');
+                    const active = res.filter(m => m.status === 'ACTIVE');
                     setMembers(active);
                     setTotal(active.length);
+                    setTotalActive(active.length);
+                    setRoleCounts({});
                 } else {
                     setMembers(res.data ?? []);
                     setTotal(res.total ?? 0);
+                    if (res.totalActive != null || res.roleCounts) applyMemberStats(res);
                 }
             })
             .catch((err: unknown) => {
-                if (err instanceof DOMException && err.name === 'AbortError') return;
+                if (isAbortError(err)) return;
                 setMembers([]);
                 setTotal(0);
+                setGlobalError(err instanceof ApiError ? err.message : 'No se pudo cargar la lista de miembros.');
+                setTimeout(() => setGlobalError(null), 6000);
             })
             .finally(() => {
                 if (!ac.signal.aborted) setLoading(false);
@@ -169,15 +206,20 @@ export default function AdminCorpMembers() {
     }, [search]);
 
     useEffect(() => {
+        if (!canManageMembers) {
+            setLoading(false);
+            return;
+        }
         loadMemberStats();
         return () => statsAbortRef.current?.abort();
-    }, []);
+    }, [canManageMembers]);
 
     // Recargar listado cuando cambia página, búsqueda debounceada o filtro de rol
     useEffect(() => {
+        if (!canManageMembers) return;
         loadMembers(page, debouncedSearch, roleFilter);
         return () => listAbortRef.current?.abort();
-    }, [page, debouncedSearch, roleFilter]);
+    }, [page, debouncedSearch, roleFilter, canManageMembers]);
 
     function showSuccess(msg: string) { setSuccess(msg); setTimeout(() => setSuccess(null), 4000); }
 
@@ -545,6 +587,14 @@ export default function AdminCorpMembers() {
 
     return (
         <CorpLayout>
+            {!canManageMembers ? (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+                    <AlertTriangle size={32} className="mx-auto mb-3 text-amber-500" />
+                    <h2 className="font-black text-slate-900 mb-1">Acceso restringido</h2>
+                    <p className="text-slate-500 text-sm">Tu rol no tiene permisos para gestionar usuarios de la organización.</p>
+                </div>
+            ) : (
+            <>
             {/* Header */}
             <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
                 <div>
@@ -971,6 +1021,8 @@ export default function AdminCorpMembers() {
                         </div>
                     </div>
                 </div>
+            )}
+            </>
             )}
         </CorpLayout>
     );
