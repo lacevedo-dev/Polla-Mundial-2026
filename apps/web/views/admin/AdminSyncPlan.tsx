@@ -462,6 +462,9 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
           ...previous.slice(0, 24),
         ]);
         setTimeline((previous) => patchTimelineFromEvent(previous, type, data));
+        if (type === 'sync_completed' || type === 'match_updated') {
+          void loadTimeline();
+        }
       });
     });
 
@@ -469,7 +472,7 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
       source.close();
       setSseConnected(false);
     };
-  }, []);
+  }, [loadTimeline]);
 
   const carryOverCount = timeline?.matches.filter((match) => match.trackingScope === 'CARRY_OVER').length ?? 0;
   const usagePct = timeline ? Math.round((timeline.requestsUsed / Math.max(1, timeline.requestsLimit)) * 100) : 0;

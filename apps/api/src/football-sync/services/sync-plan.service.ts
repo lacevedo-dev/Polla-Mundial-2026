@@ -472,8 +472,17 @@ export class SyncPlanService {
     ]);
     const available = limit - used;
 
+    const cachedLiveCount =
+      (existingPlan?.plannedTimeline as { matches?: { status: string }[] } | null)?.matches
+        ?.filter((m) => m.status === 'LIVE').length ?? 0;
+    const currentLiveCount = await this.countDisplayedLiveMatches();
+
     // Verificar si podemos reutilizar el plan persistido
-    if (existingPlan?.plannedTimeline && this.canReusePlan(existingPlan, plan)) {
+    if (
+      existingPlan?.plannedTimeline &&
+      this.canReusePlan(existingPlan, plan) &&
+      cachedLiveCount === currentLiveCount
+    ) {
       this.logger.debug('Reutilizando plan persistido - sin cambios significativos');
       const cached = existingPlan.plannedTimeline as any;
 
@@ -485,8 +494,12 @@ export class SyncPlanService {
         .filter((s) => s > nowIso)
         .sort()[0] ?? null;
 
+      // La lista de partidos y sus estados siempre se refresca desde DB
+      const freshMatches = await this.loadDisplayedMatchSlots(plan.intervalMinutes);
+
       return {
         ...cached,
+        matches: freshMatches,
         nextSyncAt: freshNextSyncAt,
         requestsUsed: used,
         requestsBudget: available,
@@ -500,7 +513,7 @@ export class SyncPlanService {
 
     const todayStart = this.getTodayStart();
     const todayEnd = this.getTodayEnd(todayStart);
-    const trackedMatchesWhere = this.buildTrackedMatchesWhere(todayStart, todayEnd);
+    const trackedMatchesWhere = this.buildDisplayedMatchesWhere(todayStart, todayEnd);
 
     const [matches, activeLeagues] = await Promise.all([
       this.prisma.match.findMany({
@@ -1056,6 +1069,139 @@ export class SyncPlanService {
       status === MatchStatus.CANCELLED ||
       status === MatchStatus.POSTPONED
     );
+  }
+
+  /**
+   * Partidos visibles en "Partidos monitoreados":
+   * - SCHEDULED/LIVE dentro de la ventana del día
+   * - Cualquier partido LIVE reciente (últimas 24h), aunque su matchDate esté fuera de ventana
+   */
+  private buildDisplayedMatchesWhere(todayStart: Date, todayEnd: Date) {
+    const tracked = this.buildTrackedMatchesWhere(todayStart, todayEnd);
+    const recentLiveCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    return {
+      OR: [
+        {
+          AND: [
+            tracked,
+            { status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] } },
+          ],
+        },
+        {
+          status: MatchStatus.LIVE,
+          matchDate: { gte: recentLiveCutoff },
+        },
+      ],
+    };
+  }
+
+  private async countDisplayedLiveMatches(): Promise<number> {
+    const todayStart = this.getTodayStart();
+    const todayEnd = this.getTodayEnd(todayStart);
+    return this.prisma.match.count({
+      where: {
+        ...this.buildDisplayedMatchesWhere(todayStart, todayEnd),
+        status: MatchStatus.LIVE,
+      },
+    });
+  }
+
+  private computeSyncSlots(
+    matchDate: Date,
+    status: MatchStatus,
+    trackingScope: MatchSyncSlot['trackingScope'],
+    intervalMs: number,
+    todayEnd: Date,
+    now: Date,
+  ): string[] {
+    if (this.isClosedStatus(status)) {
+      return [];
+    }
+
+    if (trackingScope === 'CARRY_OVER') {
+      return [now.toISOString()];
+    }
+
+    const slots: string[] = [];
+    const matchStart = matchDate;
+    const matchEnd = new Date(matchDate.getTime() + 130 * 60 * 1000);
+
+    if (now > matchEnd) {
+      return [now.toISOString()];
+    }
+
+    const origin = new Date(matchStart.getTime() - 5 * 60 * 1000);
+    let cursor = origin;
+
+    while (cursor <= matchEnd && cursor < todayEnd) {
+      if (cursor >= now) {
+        slots.push(cursor.toISOString());
+      }
+      cursor = new Date(cursor.getTime() + intervalMs);
+    }
+
+    return slots.slice(0, 30);
+  }
+
+  /** Refresca la lista de partidos monitoreados con estado actual desde DB. */
+  private async loadDisplayedMatchSlots(intervalMinutes: number): Promise<MatchSyncSlot[]> {
+    const todayStart = this.getTodayStart();
+    const todayEnd = this.getTodayEnd(todayStart);
+    const where = this.buildDisplayedMatchesWhere(todayStart, todayEnd);
+    const now = new Date();
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    const matches = await this.prisma.match.findMany({
+      where,
+      include: {
+        homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+        awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+        syncLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { createdAt: true, status: true },
+        },
+      },
+      orderBy: { matchDate: 'asc' },
+    });
+
+    matches.sort((a, b) => {
+      if (a.status === MatchStatus.LIVE && b.status !== MatchStatus.LIVE) return -1;
+      if (b.status === MatchStatus.LIVE && a.status !== MatchStatus.LIVE) return 1;
+      return a.matchDate.getTime() - b.matchDate.getTime();
+    });
+
+    return matches.map((m) => {
+      const trackingScope: MatchSyncSlot['trackingScope'] =
+        m.matchDate < todayStart ? 'CARRY_OVER' : 'TODAY';
+      const syncSlots = this.computeSyncSlots(
+        m.matchDate,
+        m.status,
+        trackingScope,
+        intervalMs,
+        todayEnd,
+        now,
+      );
+
+      return {
+        matchId: m.id,
+        trackingScope,
+        homeTeam: m.homeTeam.name,
+        awayTeam: m.awayTeam.name,
+        homeFlag: m.homeTeam.flagUrl,
+        awayFlag: m.awayTeam.flagUrl,
+        matchDate: m.matchDate.toISOString(),
+        status: m.status,
+        externalId: m.externalId,
+        syncSlots,
+        notificationSchedule: [],
+        plannedRequests: [],
+        lastSyncAt: m.syncLogs[0]?.createdAt?.toISOString() ?? null,
+        lastSyncStatus: m.syncLogs[0]?.status ?? null,
+        requestsAssigned: syncSlots.length,
+      };
+    });
   }
 
   private shouldPlanEventRequests(match: {
