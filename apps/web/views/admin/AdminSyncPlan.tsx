@@ -395,6 +395,8 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
   const [expandedMatch, setExpandedMatch] = React.useState<string | null>(null);
   const [sseConnected, setSseConnected] = React.useState(false);
   const [liveEvents, setLiveEvents] = React.useState<LiveEvent[]>([]);
+  const [syncing, setSyncing] = React.useState(false);
+  const [syncMsg, setSyncMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
 
   const loadTimeline = React.useCallback(async () => {
     try {
@@ -408,6 +410,23 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
       setLoading(false);
     }
   }, []);
+
+  const handleSyncNow = React.useCallback(async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const result = await request<{ message: string; matchesUpdated?: number }>(
+        '/admin/football/sync-today',
+        { method: 'POST' },
+      );
+      setSyncMsg({ ok: true, text: `Sync completado — ${result.matchesUpdated ?? 0} partido(s) actualizados` });
+      void loadTimeline();
+    } catch (e: any) {
+      setSyncMsg({ ok: false, text: e?.message ?? 'Error al ejecutar sync' });
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadTimeline]);
 
   React.useEffect(() => {
     void loadTimeline();
@@ -478,6 +497,15 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
             </div>
           )}
           <button
+            onClick={() => void handleSyncNow()}
+            disabled={syncing || loading}
+            title="Ejecutar una sincronización ahora mismo con API-Football"
+            className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+          >
+            <Zap size={13} className={syncing ? 'animate-pulse' : ''} />
+            {syncing ? 'Sincronizando...' : 'Sync ahora'}
+          </button>
+          <button
             onClick={() => void loadTimeline()}
             disabled={loading}
             className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
@@ -487,6 +515,12 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
           </button>
         </div>
       </div>
+
+      {syncMsg && (
+        <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-medium ${syncMsg.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+          {syncMsg.text}
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">

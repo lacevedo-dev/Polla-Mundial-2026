@@ -475,10 +475,18 @@ export class SyncPlanService {
     if (existingPlan?.plannedTimeline && this.canReusePlan(existingPlan, plan)) {
       this.logger.debug('Reutilizando plan persistido - sin cambios significativos');
       const cached = existingPlan.plannedTimeline as any;
-      
-      // Actualizar solo los valores dinámicos
+
+      // nextSyncAt es temporal: recalcular siempre para no mostrar una hora pasada
+      const nowIso = new Date().toISOString();
+      const cachedRequests: { scheduledAt: string }[] = cached.plannedRequests ?? [];
+      const freshNextSyncAt = cachedRequests
+        .map((r) => r.scheduledAt)
+        .filter((s) => s > nowIso)
+        .sort()[0] ?? null;
+
       return {
         ...cached,
+        nextSyncAt: freshNextSyncAt,
         requestsUsed: used,
         requestsBudget: available,
         requestsLimit: limit,
