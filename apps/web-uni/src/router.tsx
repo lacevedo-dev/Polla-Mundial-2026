@@ -20,6 +20,7 @@ const PollaDetail = React.lazy(() => import('./views/PollaDetail'));
 const Help = React.lazy(() => import('./views/Help'));
 const AdminCorpSettings = React.lazy(() => import('./views/AdminCorpSettings'));
 const AdminCorpRoles = React.lazy(() => import('./views/AdminCorpRoles'));
+const AdminCorpParticipation = React.lazy(() => import('./views/AdminCorpParticipation'));
 const ResetPassword = React.lazy(() => import('./views/ResetPassword'));
 
 const Loader = () => (
@@ -167,6 +168,14 @@ export function AppRouter() {
                         element={
                             <RequireAuth>
                                 <AdminCorpRoles />
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin/participation"
+                        element={
+                            <RequireAuth>
+                                <AdminCorpParticipation />
                             </RequireAuth>
                         }
                     />

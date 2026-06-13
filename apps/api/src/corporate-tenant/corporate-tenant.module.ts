@@ -13,6 +13,7 @@ import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { CorpPortalController } from './corp-portal.controller';
 import { BrandingStorageService } from './branding-storage.service';
+import { ParticipationService } from './participation.service';
 
 @Module({
     imports: [PrismaModule],
@@ -29,6 +30,7 @@ import { BrandingStorageService } from './branding-storage.service';
         TenantInvitationService,
         TenantProvisioningService,
         BrandingStorageService,
+        ParticipationService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,

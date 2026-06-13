@@ -11,6 +11,7 @@ import { TenantService } from './tenant.service';
 import { UpdateTenantBrandingDto } from './dto/tenant.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
+import { ParticipationService, ParticipationMemberFilter } from './participation.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus } from '@prisma/client';
@@ -76,6 +77,7 @@ export class CorpPortalController {
         private readonly provisioning: TenantProvisioningService,
         private readonly tenantService: TenantService,
         private readonly brandingStorage: BrandingStorageService,
+        private readonly participationService: ParticipationService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -663,6 +665,44 @@ export class CorpPortalController {
         return this.tenantService.getMembersRoleStats(tenantId);
     }
 
+    @UseGuards(TenantStaffGuard)
+    @Get('participation/members')
+    async getParticipationMembers(
+        @Req() req: any,
+        @Query('page') pageStr?: string,
+        @Query('limit') limitStr?: string,
+        @Query('search') search?: string,
+        @Query('leagueId') leagueId?: string,
+        @Query('filter') filter?: string,
+        @Query('role') role?: string,
+    ) {
+        const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
+        const limit = Math.min(100, Math.max(10, parseInt(limitStr ?? '50', 10) || 50));
+        const validFilters: ParticipationMemberFilter[] = [
+            'all', 'enrolled', 'with_predictions', 'without_predictions', 'pending',
+        ];
+        const roleFilter = role && Object.values(TenantRole).includes(role as TenantRole)
+            ? (role as TenantRole)
+            : undefined;
+
+        return this.participationService.getMembersParticipation(req.tenantId, {
+            page,
+            limit,
+            search,
+            leagueId,
+            filter: validFilters.includes(filter as ParticipationMemberFilter)
+                ? (filter as ParticipationMemberFilter)
+                : 'all',
+            role: roleFilter,
+        });
+    }
+
+    @UseGuards(TenantStaffGuard)
+    @Get('participation')
+    async getParticipation(@Req() req: any, @Query('leagueId') leagueId?: string) {
+        return this.participationService.getOverview(req.tenantId, leagueId);
+    }
+
     @Get('members')
     async getMembers(
         @Req() req: any,
@@ -924,6 +964,8 @@ export class CorpPortalController {
             update: { homeScore, awayScore, submittedAt: now },
             create: { userId, matchId, leagueId, homeScore, awayScore, submittedAt: now },
         });
+
+        this.participationService.invalidateOverviewCache(tenantId);
 
         return { ok: true, id: prediction.id };
     }

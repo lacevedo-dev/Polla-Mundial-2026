@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus } from 'lucide-react';
+import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus, Activity } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
@@ -13,16 +13,33 @@ interface AdminStats {
     tenantRole: string;
 }
 
+interface ParticipationSummary {
+    summary: {
+        membersWithPredictions: number;
+        enrolledMembers: number;
+        participationRate: number;
+        upcomingCoverageRate: number;
+        neverPredicted: number;
+    };
+}
+
 export default function AdminCorp() {
     const tenant = useTenantStore((s) => s.tenant);
     const [stats, setStats] = useState<AdminStats | null>(null);
+    const [participation, setParticipation] = useState<ParticipationSummary | null>(null);
     const [loading, setLoading] = useState(true);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
 
     useEffect(() => {
-        request<AdminStats>('/corp/dashboard')
-            .then(setStats)
+        Promise.all([
+            request<AdminStats>('/corp/dashboard'),
+            request<ParticipationSummary>('/corp/participation').catch(() => null),
+        ])
+            .then(([dash, part]) => {
+                setStats(dash);
+                setParticipation(part);
+            })
             .catch(() => setStats(null))
             .finally(() => setLoading(false));
     }, []);
@@ -67,12 +84,20 @@ export default function AdminCorp() {
                         link: '/ranking',
                     },
                     {
-                        label: 'Pronósticos pendientes',
-                        value: loading ? '—' : (stats?.predictionsPending ?? 0),
-                        icon: TrendingUp,
+                        label: 'Participación',
+                        value: loading ? '—' : `${participation?.summary.participationRate ?? 0}%`,
+                        icon: Activity,
                         color: 'text-violet-600',
                         bg: 'bg-violet-50',
-                        link: null,
+                        link: '/admin/participation',
+                    },
+                    {
+                        label: 'Sin pronósticos',
+                        value: loading ? '—' : (participation?.summary.neverPredicted ?? 0),
+                        icon: TrendingUp,
+                        color: 'text-amber-600',
+                        bg: 'bg-amber-50',
+                        link: '/admin/participation',
                     },
                 ].map(({ label, value, icon: Icon, color, bg, link, style }) => (
                     <div key={label} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
@@ -103,6 +128,14 @@ export default function AdminCorp() {
                     </div>
                     <div className="divide-y divide-slate-50">
                         {[
+                            {
+                                label: 'Seguimiento de participación',
+                                desc: 'Quién pronostica vs. usuarios inscritos',
+                                icon: Activity,
+                                link: '/admin/participation',
+                                color: 'text-violet-600',
+                                bg: 'bg-violet-50',
+                            },
                             {
                                 label: 'Gestionar miembros',
                                 desc: 'Ver, invitar y administrar usuarios',

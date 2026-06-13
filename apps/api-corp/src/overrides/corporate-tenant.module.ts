@@ -17,6 +17,7 @@ import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin
 import { TenantStaffGuard } from '@corp-api/corporate-tenant/guards/tenant-staff.guard';
 import { CorpPortalController } from '@corp-api/corporate-tenant/corp-portal.controller';
 import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-storage.service';
+import { ParticipationService } from '@corp-api/corporate-tenant/participation.service';
 import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-members-resend.controller';
 
 @Module({
@@ -33,6 +34,7 @@ import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-mem
         TenantService,
         TenantLimitsService,
         BrandingStorageService,
+        ParticipationService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,
