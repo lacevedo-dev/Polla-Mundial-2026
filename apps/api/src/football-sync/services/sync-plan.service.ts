@@ -373,10 +373,11 @@ export class SyncPlanService {
   async countPotentiallyLiveMatches(): Promise<number> {
     const now = new Date();
     const windowStart = new Date(now.getTime() - 130 * 60 * 1000); // match + 10min buffer
+    // Se incluyen partidos sin externalId para que partidos creados manualmente
+    // también activen el sync (el auto-link intentará vincularlos durante el proceso).
     return this.prisma.match.count({
       where: {
         status: MatchStatus.SCHEDULED,
-        externalId: { not: null },
         matchDate: { gte: windowStart, lte: now },
       },
     });

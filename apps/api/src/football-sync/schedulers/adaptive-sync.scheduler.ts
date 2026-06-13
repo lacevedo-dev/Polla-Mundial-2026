@@ -415,11 +415,13 @@ export class AdaptiveSyncScheduler {
   }
 
   private isPeakHoursWindow(now: Date): boolean {
-    const hour = now.getHours();
-    return hour >= 9 && hour <= 23;
+    // El servidor corre en UTC (Alpine Linux sin TZ). Convertir explícitamente a hora
+    // Colombia (UTC-5, sin DST) para no perder el rango nocturno 7pm-11pm COT.
+    const cotHour = new Date(now.getTime() - 5 * 60 * 60 * 1000).getUTCHours();
+    return cotHour >= 9 && cotHour <= 23;
   }
 
   private isPeakHoursBoundary(now: Date): boolean {
-    return now.getMinutes() % 5 === 0;
+    return now.getUTCMinutes() % 5 === 0;
   }
 }
