@@ -651,6 +651,18 @@ export class CorpPortalController {
         return { ok: true };
     }
 
+    @Get('members/stats')
+    async getMemberStats(@Req() req: any) {
+        const tenantId: string = req.tenantId;
+        const tenantRole: string = req.tenantRole;
+
+        if (!['OWNER', 'ADMIN', 'STAFF'].includes(tenantRole)) {
+            return { totalActive: 0, roleCounts: {} };
+        }
+
+        return this.tenantService.getMembersRoleStats(tenantId);
+    }
+
     @Get('members')
     async getMembers(
         @Req() req: any,
@@ -658,6 +670,7 @@ export class CorpPortalController {
         @Query('limit') limitStr?: string,
         @Query('search') search?: string,
         @Query('role') role?: string,
+        @Query('includeStats') includeStatsStr?: string,
     ) {
         const tenantId: string = req.tenantId;
         const tenantRole: string = req.tenantRole;
@@ -668,42 +681,27 @@ export class CorpPortalController {
 
         const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
         const limit = Math.min(200, Math.max(10, parseInt(limitStr ?? '50', 10) || 50));
-        const skip = (page - 1) * limit;
         const searchTrim = search?.trim() ?? '';
+        const includeStats = includeStatsStr === 'true' || includeStatsStr === '1';
+        const roleFilter = role && Object.values(TenantRole).includes(role as TenantRole)
+            ? (role as TenantRole)
+            : undefined;
 
-        const baseWhere: any = { tenantId, status: 'ACTIVE' };
-        if (role) baseWhere.role = role;
-        if (searchTrim) {
-            baseWhere.user = {
-                OR: [
-                    { name: { contains: searchTrim } },
-                    { email: { contains: searchTrim } },
-                    { documentNumber: { contains: searchTrim } },
-                    { username: { contains: searchTrim } },
-                ],
-            };
+        const { members, total } = await this.tenantService.listMembersPaginated({
+            tenantId,
+            page,
+            limit,
+            search: searchTrim || undefined,
+            role: roleFilter,
+        });
+
+        let totalActive = 0;
+        let roleCounts: Record<string, number> = {};
+        if (includeStats) {
+            const stats = await this.tenantService.getMembersRoleStats(tenantId);
+            totalActive = stats.totalActive;
+            roleCounts = stats.roleCounts;
         }
-
-        const [members, total, roleCountsRaw] = await Promise.all([
-            this.prisma.tenantMember.findMany({
-                where: baseWhere,
-                include: {
-                    user: { select: { id: true, name: true, email: true, username: true, documentNumber: true, avatar: true, mustChangePassword: true, emailVerified: true, createdAt: true } },
-                },
-                orderBy: { invitedAt: 'asc' },
-                skip,
-                take: limit,
-            }),
-            this.prisma.tenantMember.count({ where: baseWhere }),
-            this.prisma.tenantMember.groupBy({
-                by: ['role'],
-                where: { tenantId, status: 'ACTIVE' },
-                _count: { role: true },
-            }),
-        ]);
-
-        const roleCounts = Object.fromEntries(roleCountsRaw.map((r) => [r.role, r._count.role]));
-        const totalActive = roleCountsRaw.reduce((sum, r) => sum + r._count.role, 0);
 
         return {
             data: members.map((m) => ({
@@ -711,7 +709,7 @@ export class CorpPortalController {
                 userId: m.userId,
                 name: m.user.name,
                 email: m.user.email,
-                username: (m.user as any).documentNumber ?? m.user.username,
+                username: m.user.documentNumber ?? m.user.username,
                 avatar: m.user.avatar,
                 mustChangePassword: m.user.mustChangePassword,
                 emailVerified: m.user.emailVerified,
@@ -733,7 +731,7 @@ export class CorpPortalController {
     async createMember(@Req() req: any, @Body() dto: ProvisionMemberDto) {
         const tenantId: string = req.tenantId;
         try {
-            return await this.provisioning.provisionOwner(tenantId, {
+            const result = await this.provisioning.provisionOwner(tenantId, {
                 name: dto.name,
                 email: dto.email,
                 documentNumber: dto.documentNumber,
@@ -743,6 +741,8 @@ export class CorpPortalController {
                 role: dto.role ?? TenantRole.PLAYER,
                 sendEmail: dto.sendEmail !== false,
             });
+            this.tenantService.invalidateMembersStatsCache(tenantId);
+            return result;
         } catch (err: any) {
             const msg: string = err?.message ?? 'Error desconocido';
             const isHttp = err?.status && err?.response;
@@ -774,6 +774,7 @@ export class CorpPortalController {
             }
         }
         const successful = results.filter(r => r.ok).length;
+        if (successful > 0) this.tenantService.invalidateMembersStatsCache(tenantId);
         return { total: dto.users.length, successful, failed: dto.users.length - successful, results };
     }
 
@@ -824,6 +825,10 @@ export class CorpPortalController {
             }
         });
 
+        if (memberData.role !== undefined || memberData.status !== undefined) {
+            this.tenantService.invalidateMembersStatsCache(tenantId);
+        }
+
         return { ok: true };
     }
 
@@ -837,6 +842,7 @@ export class CorpPortalController {
         });
         if (!member) throw new NotFoundException('Miembro no encontrado');
         await this.prisma.tenantMember.delete({ where: { id: memberId } });
+        this.tenantService.invalidateMembersStatsCache(tenantId);
         return { ok: true };
     }
 

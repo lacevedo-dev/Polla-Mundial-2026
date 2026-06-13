@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Users, Search, Crown, Shield, User, Mail, Copy, Check,
     Plus, Pencil, Trash2, X, Loader2, AlertTriangle, Upload,
@@ -61,6 +61,7 @@ function Avatar({ member }: { member: Member }) {
 }
 
 const PAGE_SIZE = 10;
+const MIN_SEARCH_LEN = 2;
 
 export default function AdminCorpMembers() {
     const authUser = useAuthStore((s) => s.user);
@@ -96,48 +97,87 @@ export default function AdminCorpMembers() {
     const [syncing, setSyncing] = useState(false);
     const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
+    const listAbortRef = useRef<AbortController | null>(null);
+    const statsAbortRef = useRef<AbortController | null>(null);
+
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'la organización';
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+    function loadMemberStats() {
+        statsAbortRef.current?.abort();
+        const ac = new AbortController();
+        statsAbortRef.current = ac;
+
+        request<{ totalActive: number; roleCounts: Record<string, number> }>('/corp/members/stats', { signal: ac.signal })
+            .then(res => {
+                setTotalActive(res.totalActive ?? 0);
+                setRoleCounts(res.roleCounts ?? {});
+            })
+            .catch((err: unknown) => {
+                if (err instanceof DOMException && err.name === 'AbortError') return;
+            });
+    }
+
     function loadMembers(p = page, s = debouncedSearch, r = roleFilter) {
+        listAbortRef.current?.abort();
+        const ac = new AbortController();
+        listAbortRef.current = ac;
+
         setLoading(true);
         const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
-        if (s) params.set('search', s);
+        if (s.length >= MIN_SEARCH_LEN) params.set('search', s);
         if (r) params.set('role', r);
-        request<any>(`/corp/members?${params}`)
+
+        return request<{ data?: Member[]; total?: number }>(`/corp/members?${params}`, { signal: ac.signal })
             .then(res => {
-                // Compatibilidad con la respuesta antigua (array) y la nueva (objeto paginado)
                 if (Array.isArray(res)) {
                     const active = (res as Member[]).filter(m => m.status === 'ACTIVE');
                     setMembers(active);
                     setTotal(active.length);
-                    setTotalActive(active.length);
-                    setRoleCounts({});
                 } else {
                     setMembers(res.data ?? []);
                     setTotal(res.total ?? 0);
-                    setTotalActive(res.totalActive ?? 0);
-                    setRoleCounts(res.roleCounts ?? {});
                 }
             })
-            .catch(() => { setMembers([]); setTotal(0); setTotalActive(0); })
-            .finally(() => setLoading(false));
+            .catch((err: unknown) => {
+                if (err instanceof DOMException && err.name === 'AbortError') return;
+                setMembers([]);
+                setTotal(0);
+            })
+            .finally(() => {
+                if (!ac.signal.aborted) setLoading(false);
+            });
+    }
+
+    function refreshMembersAndStats(p = page, s = debouncedSearch, r = roleFilter) {
+        loadMembers(p, s, r);
+        loadMemberStats();
     }
 
     // Dispara la búsqueda — también llamado desde onBlur y onKeyDown(Enter)
     function commitSearch() {
-        setDebouncedSearch(search);
+        const trimmed = search.trim();
+        if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LEN) return;
+        setDebouncedSearch(trimmed);
         setPage(1);
     }
 
-    // Fallback: si el usuario deja de escribir 800ms sin tabular ni presionar Enter
+    // Fallback: si el usuario deja de escribir 600ms sin tabular ni presionar Enter
     useEffect(() => {
-        const t = setTimeout(commitSearch, 800);
+        const t = setTimeout(commitSearch, 600);
         return () => clearTimeout(t);
     }, [search]);
 
-    // Recargar cuando cambia página, búsqueda debounceada o filtro de rol
-    useEffect(() => { loadMembers(page, debouncedSearch, roleFilter); }, [page, debouncedSearch, roleFilter]);
+    useEffect(() => {
+        loadMemberStats();
+        return () => statsAbortRef.current?.abort();
+    }, []);
+
+    // Recargar listado cuando cambia página, búsqueda debounceada o filtro de rol
+    useEffect(() => {
+        loadMembers(page, debouncedSearch, roleFilter);
+        return () => listAbortRef.current?.abort();
+    }, [page, debouncedSearch, roleFilter]);
 
     function showSuccess(msg: string) { setSuccess(msg); setTimeout(() => setSuccess(null), 4000); }
 
@@ -161,6 +201,7 @@ export default function AdminCorpMembers() {
                 body: JSON.stringify({ documentNumber: form.documentNumber.trim(), name: form.name.trim(), email: form.email.trim(), role: form.role, tempPassword: form.tempPassword || undefined, sendEmail: form.sendEmail }),
             });
             loadMembers();
+            loadMemberStats();
             closeModal();
             showSuccess(form.sendEmail ? `Usuario creado y credenciales enviadas a ${form.email.trim()}.` : 'Usuario creado exitosamente.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al crear usuario.'); }
@@ -180,6 +221,7 @@ export default function AdminCorpMembers() {
             if (form.documentNumber.trim() !== target.username) payload.documentNumber = form.documentNumber.trim();
             await request(`/corp/members/${target.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
             loadMembers();
+            loadMemberStats();
             closeModal(); showSuccess('Usuario actualizado correctamente.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al actualizar.'); }
         finally { setSaving(false); }
@@ -191,6 +233,7 @@ export default function AdminCorpMembers() {
         try {
             await request(`/corp/members/${target.id}`, { method: 'DELETE' });
             loadMembers();
+            loadMemberStats();
             closeModal(); showSuccess('Miembro eliminado del equipo.');
         } catch (e) { setModalError(e instanceof ApiError ? e.message : 'Error al eliminar.'); }
         finally { setSaving(false); }
@@ -471,6 +514,7 @@ export default function AdminCorpMembers() {
             setBulkResults(visibleResults.slice(0, 150));
     
             await loadMembers();
+            loadMemberStats();
     
             if (failedChunks.length > 0 || totalFailed > 0) {
                 setModalError(
@@ -539,7 +583,7 @@ export default function AdminCorpMembers() {
                     <input value={search} onChange={e => setSearch(e.target.value)}
                         onBlur={commitSearch}
                         onKeyDown={e => e.key === 'Enter' && commitSearch()}
-                        placeholder="Buscar nombre, email, usuario… (Enter para buscar)"
+                        placeholder="Buscar nombre, email o documento (mín. 2 caracteres, Enter)"
                         className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent bg-white"
                         style={{ '--tw-ring-color': 'var(--color-primary,#f59e0b)' } as any} />
                 </div>
@@ -551,7 +595,7 @@ export default function AdminCorpMembers() {
                     <option value="STAFF">Usuario</option>
                     <option value="PLAYER">Jugador</option>
                 </select>
-                <button onClick={() => loadMembers()} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600">
+                <button onClick={() => refreshMembersAndStats()} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600">
                     <RefreshCw size={15} />
                 </button>
             </div>

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, TenantRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
     CreateTenantDto,
@@ -7,10 +8,18 @@ import {
     UpdateTenantConfigDto,
 } from './dto/tenant.dto';
 
+const MEMBER_SEARCH_MIN_LEN = 2;
+const MEMBER_SEARCH_MAX_IDS = 2000;
+const MEMBER_STATS_TTL_MS = 60_000;
+
 @Injectable()
 export class TenantService {
     private readonly slugCache = new Map<string, string | null>();
     private readonly domainCache = new Map<string, string | null>();
+    private readonly memberStatsCache = new Map<
+        string,
+        { expiresAt: number; totalActive: number; roleCounts: Record<string, number> }
+    >();
 
     constructor(private readonly prisma: PrismaService) {}
 
@@ -165,6 +174,109 @@ export class TenantService {
             },
             orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
         });
+    }
+
+    invalidateMembersStatsCache(tenantId: string) {
+        this.memberStatsCache.delete(tenantId);
+    }
+
+    async getMembersRoleStats(tenantId: string) {
+        const now = Date.now();
+        const cached = this.memberStatsCache.get(tenantId);
+        if (cached && cached.expiresAt > now) {
+            return { totalActive: cached.totalActive, roleCounts: cached.roleCounts };
+        }
+
+        const roleCountsRaw = await this.prisma.tenantMember.groupBy({
+            by: ['role'],
+            where: { tenantId, status: 'ACTIVE' },
+            _count: { role: true },
+        });
+
+        const roleCounts = Object.fromEntries(roleCountsRaw.map((r) => [r.role, r._count.role]));
+        const totalActive = roleCountsRaw.reduce((sum, r) => sum + r._count.role, 0);
+
+        this.memberStatsCache.set(tenantId, {
+            expiresAt: now + MEMBER_STATS_TTL_MS,
+            totalActive,
+            roleCounts,
+        });
+
+        return { totalActive, roleCounts };
+    }
+
+    async listMembersPaginated(params: {
+        tenantId: string;
+        page: number;
+        limit: number;
+        search?: string;
+        role?: TenantRole;
+    }) {
+        const { tenantId, page, limit, role } = params;
+        const searchTrim = params.search?.trim() ?? '';
+        const skip = (page - 1) * limit;
+
+        const where: Prisma.TenantMemberWhereInput = {
+            tenantId,
+            status: 'ACTIVE',
+            ...(role && { role }),
+        };
+
+        if (searchTrim.length >= MEMBER_SEARCH_MIN_LEN) {
+            const userIds = await this.resolveMemberSearchUserIds(tenantId, searchTrim);
+            if (userIds.length === 0) {
+                return { members: [], total: 0, page, limit };
+            }
+            where.userId = { in: userIds };
+        }
+
+        const [members, total] = await Promise.all([
+            this.prisma.tenantMember.findMany({
+                where,
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            username: true,
+                            documentNumber: true,
+                            avatar: true,
+                            mustChangePassword: true,
+                            emailVerified: true,
+                            createdAt: true,
+                        },
+                    },
+                },
+                orderBy: { invitedAt: 'asc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.tenantMember.count({ where }),
+        ]);
+
+        return { members, total, page, limit };
+    }
+
+    private async resolveMemberSearchUserIds(tenantId: string, search: string): Promise<string[]> {
+        const rows = await this.prisma.user.findMany({
+            where: {
+                tenantMemberships: { some: { tenantId, status: 'ACTIVE' } },
+                OR: this.buildMemberSearchOr(search),
+            },
+            select: { id: true },
+            take: MEMBER_SEARCH_MAX_IDS,
+        });
+        return rows.map((r) => r.id);
+    }
+
+    private buildMemberSearchOr(search: string): Prisma.UserWhereInput[] {
+        return [
+            { documentNumber: { startsWith: search } },
+            { username: { startsWith: search } },
+            { email: { contains: search } },
+            { name: { contains: search } },
+        ];
     }
 
     async getStats(tenantId: string) {
