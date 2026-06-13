@@ -4,7 +4,7 @@ import {
     Clock, Filter, Loader2, RefreshCw, Search, Target, TrendingUp, Users, XCircle,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { request, resolveApiAssetUrl } from '../api';
+import { request, resolveApiAssetUrl, ApiError } from '../api';
 
 interface ParticipationSummary {
     totalMembers: number;
@@ -122,6 +122,7 @@ export default function AdminCorpParticipation() {
     const [loadingOverview, setLoadingOverview] = useState(true);
     const [loadingMembers, setLoadingMembers] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [apiError, setApiError] = useState<string | null>(null);
 
     const [leagueId, setLeagueId] = useState('');
     const [filter, setFilter] = useState<string>('all');
@@ -149,9 +150,15 @@ export default function AdminCorpParticipation() {
 
     useEffect(() => {
         setLoadingOverview(true);
+        setApiError(null);
         loadOverview(leagueId || undefined)
             .then(setOverview)
-            .catch(() => setOverview(null))
+            .catch((err) => {
+                setOverview(null);
+                if (err instanceof ApiError && err.status === 404) {
+                    setApiError('El backend corporativo aún no tiene desplegados los endpoints de participación. Redespliega api-corp desde main.');
+                }
+            })
             .finally(() => setLoadingOverview(false));
     }, [leagueId, loadOverview]);
 
@@ -216,6 +223,13 @@ export default function AdminCorpParticipation() {
                     Actualizar
                 </button>
             </div>
+
+            {apiError && (
+                <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p className="font-bold">Backend desactualizado</p>
+                    <p className="mt-1">{apiError}</p>
+                </div>
+            )}
 
             {/* Filtro por polla */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-4 flex flex-wrap items-center gap-3">
