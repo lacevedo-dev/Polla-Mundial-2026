@@ -63,14 +63,34 @@ function Avatar({ member }: { member: Member }) {
 const PAGE_SIZE = 25;
 const MIN_SEARCH_LEN = 2;
 const REQUEST_TIMEOUT_MS = 45_000;
+const LIST_CACHE_TTL_MS = 90_000;
+const LIST_CACHE_MAX = 40;
 
 type MemberListResponse = {
     data?: Member[];
     total?: number;
+    totalExact?: boolean;
     totalActive?: number;
     roleCounts?: Record<string, number>;
     hasMore?: boolean;
 };
+
+type ListCacheEntry = {
+    members: Member[];
+    total: number;
+    totalExact: boolean;
+    hasMore: boolean;
+    ts: number;
+};
+
+function listCacheKey(p: number, s: string, r: string) {
+    return `${p}|${s}|${r}`;
+}
+
+function formatResultCount(total: number, totalExact: boolean, hasMore: boolean) {
+    if (!totalExact && hasMore) return `${total.toLocaleString()}+`;
+    return total.toLocaleString();
+}
 
 function isAbortError(err: unknown) {
     return err instanceof DOMException && err.name === 'AbortError';
@@ -109,6 +129,7 @@ export default function AdminCorpMembers() {
     const [listLoading, setListLoading] = useState(true);
     const [statsLoading, setStatsLoading] = useState(true);
     const [hasMore, setHasMore] = useState(false);
+    const [totalExact, setTotalExact] = useState(true);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
@@ -135,6 +156,7 @@ export default function AdminCorpMembers() {
     const listAbortRef = useRef<AbortController | null>(null);
     const fetchSeqRef = useRef(0);
     const skipNextFetchEffectRef = useRef(false);
+    const listCacheRef = useRef(new Map<string, ListCacheEntry>());
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const searchSkipDebounceRef = useRef(true);
     const initialLoadDone = useRef(false);
@@ -143,9 +165,36 @@ export default function AdminCorpMembers() {
     const normalizedSearch = debouncedSearch.trim();
     const searchPending = search.trim() !== debouncedSearch.trim();
     const hasActiveFilters = normalizedSearch.length >= MIN_SEARCH_LEN || Boolean(roleFilter);
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const totalPages = totalExact
+        ? Math.max(1, Math.ceil(total / PAGE_SIZE))
+        : Math.max(page, hasMore ? page + 1 : page);
     const rangeFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-    const rangeTo = Math.min(page * PAGE_SIZE, total);
+    const rangeTo = Math.min(page * PAGE_SIZE, totalExact ? total : (page - 1) * PAGE_SIZE + members.length);
+    const resultCountLabel = formatResultCount(total, totalExact, hasMore);
+
+    function invalidateListCache() {
+        listCacheRef.current.clear();
+    }
+
+    function trimListCache() {
+        if (listCacheRef.current.size <= LIST_CACHE_MAX) return;
+        const entries = [...listCacheRef.current.entries()].sort((a, b) => a[1].ts - b[1].ts);
+        for (let i = 0; i < entries.length - LIST_CACHE_MAX; i++) {
+            listCacheRef.current.delete(entries[i][0]);
+        }
+    }
+
+    function applyListResult(res: {
+        members: Member[];
+        total: number;
+        totalExact: boolean;
+        hasMore: boolean;
+    }) {
+        setMembers(res.members);
+        setTotal(res.total);
+        setTotalExact(res.totalExact);
+        setHasMore(res.hasMore);
+    }
 
     function applyMemberStats(res: Pick<MemberListResponse, 'totalActive' | 'roleCounts'>) {
         if (res.totalActive != null) setTotalActive(res.totalActive);
@@ -157,18 +206,34 @@ export default function AdminCorpMembers() {
         s?: string;
         r?: string;
         withStats?: boolean;
+        force?: boolean;
     } = {}) {
         const p = opts.p ?? page;
         const s = (opts.s ?? debouncedSearch).trim();
         const r = opts.r ?? roleFilter;
         const withStats = opts.withStats ?? false;
+        const force = opts.force ?? false;
         const seq = ++fetchSeqRef.current;
+        const cacheKey = listCacheKey(p, s, r);
+        const cached = listCacheRef.current.get(cacheKey);
+        const cacheFresh = !force && cached && Date.now() - cached.ts < LIST_CACHE_TTL_MS;
+
+        if (cacheFresh && cached) {
+            applyListResult(cached);
+            setListLoading(false);
+            if (!withStats) return;
+        }
 
         listAbortRef.current?.abort();
         const ac = new AbortController();
         listAbortRef.current = ac;
 
-        setListLoading(true);
+        if (cached && !cacheFresh) {
+            applyListResult(cached);
+            setListLoading(true);
+        } else if (!cacheFresh) {
+            setListLoading(true);
+        }
         if (withStats) setStatsLoading(true);
 
         const params = new URLSearchParams({
@@ -199,17 +264,31 @@ export default function AdminCorpMembers() {
                 }
                 if (r) active = active.filter(m => m.role === r);
                 const start = (p - 1) * PAGE_SIZE;
-                setMembers(active.slice(start, start + PAGE_SIZE));
-                setTotal(active.length);
-                setHasMore(start + PAGE_SIZE < active.length);
+                const slice = active.slice(start, start + PAGE_SIZE);
+                const legacyHasMore = start + PAGE_SIZE < active.length;
+                const listResult = {
+                    members: slice,
+                    total: active.length,
+                    totalExact: true,
+                    hasMore: legacyHasMore,
+                };
+                applyListResult(listResult);
+                listCacheRef.current.set(cacheKey, { ...listResult, ts: Date.now() });
+                trimListCache();
                 if (withStats) {
                     setTotalActive(active.length);
                     setRoleCounts({});
                 }
             } else {
-                setMembers(res.data ?? []);
-                setTotal(res.total ?? 0);
-                setHasMore(Boolean(res.hasMore));
+                const listResult = {
+                    members: res.data ?? [],
+                    total: res.total ?? 0,
+                    totalExact: res.totalExact ?? true,
+                    hasMore: Boolean(res.hasMore),
+                };
+                applyListResult(listResult);
+                listCacheRef.current.set(cacheKey, { ...listResult, ts: Date.now() });
+                trimListCache();
                 if (withStats || res.totalActive != null || res.roleCounts) {
                     applyMemberStats(res);
                 }
@@ -218,9 +297,12 @@ export default function AdminCorpMembers() {
         } catch (err: unknown) {
             if (isAbortError(err)) return;
             if (seq !== fetchSeqRef.current) return;
-            setMembers([]);
-            setTotal(0);
-            setHasMore(false);
+            if (!cached) {
+                setMembers([]);
+                setTotal(0);
+                setHasMore(false);
+                setTotalExact(true);
+            }
             setGlobalError(err instanceof ApiError ? err.message : 'No se pudo cargar la lista de miembros.');
         } finally {
             if (seq === fetchSeqRef.current) {
@@ -231,7 +313,8 @@ export default function AdminCorpMembers() {
     }
 
     function refreshAll() {
-        fetchMembers({ p: page, s: debouncedSearch, r: roleFilter, withStats: true });
+        invalidateListCache();
+        fetchMembers({ p: page, s: debouncedSearch, r: roleFilter, withStats: true, force: true });
     }
 
     function commitSearch() {
@@ -734,10 +817,12 @@ export default function AdminCorpMembers() {
                         <option value="STAFF">Usuario</option>
                         <option value="PLAYER">Jugador</option>
                     </select>
-                    <button type="button" onClick={commitSearch} disabled={listLoading}
-                        className="px-4 py-2.5 rounded-xl text-sm font-bold text-black hover:brightness-90 transition-all disabled:opacity-50"
+                    <button type="button" onClick={commitSearch}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold text-black hover:brightness-90 transition-all disabled:opacity-50"
                         style={{ backgroundColor: 'var(--color-primary,#f59e0b)' }}>
-                        Buscar
+                        {listLoading && hasActiveFilters ? (
+                            <><Loader2 size={14} className="animate-spin" /> Buscando…</>
+                        ) : 'Buscar'}
                     </button>
                     <button type="button" onClick={refreshAll} disabled={listLoading}
                         className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-slate-400 hover:text-slate-600 disabled:opacity-40"
@@ -796,7 +881,14 @@ export default function AdminCorpMembers() {
                 <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-slate-400">
                         {total > 0 ? (
-                            <>Mostrando <span className="font-bold text-slate-600">{rangeFrom}–{rangeTo}</span> de <span className="font-bold text-slate-600">{total.toLocaleString()}</span></>
+                            <>
+                                Mostrando <span className="font-bold text-slate-600">{rangeFrom}–{rangeTo}</span>
+                                {totalExact ? (
+                                    <> de <span className="font-bold text-slate-600">{resultCountLabel}</span></>
+                                ) : hasMore ? (
+                                    <> · <span className="font-bold text-slate-600">{resultCountLabel}</span> coincidencias (aprox.)</>
+                                ) : null}
+                            </>
                         ) : listLoading ? 'Cargando...' : 'Sin resultados'}
                         {totalPages > 1 && (
                             <> · Página <span className="font-bold text-slate-600">{page}</span> de <span className="font-bold text-slate-600">{totalPages}</span></>
@@ -809,7 +901,7 @@ export default function AdminCorpMembers() {
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">‹ Anterior</button>
                         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={(page >= totalPages && !hasMore) || listLoading}
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Siguiente ›</button>
-                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || listLoading}
+                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || listLoading || !totalExact}
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">»</button>
                     </div>
                 </div>
@@ -822,7 +914,7 @@ export default function AdminCorpMembers() {
                         {hasActiveFilters ? 'Resultados filtrados' : 'Miembros activos'}
                     </h2>
                     <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">
-                        {hasActiveFilters ? `${total.toLocaleString()} coincidencia${total !== 1 ? 's' : ''}` : total.toLocaleString()}
+                        {hasActiveFilters ? `${resultCountLabel} coincidencia${total !== 1 ? 's' : ''}` : total.toLocaleString()}
                     </span>
                 </div>
                 {listLoading && members.length === 0 ? (
@@ -924,7 +1016,7 @@ export default function AdminCorpMembers() {
                             className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             Siguiente ›
                         </button>
-                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || listLoading}
+                        <button onClick={() => setPage(totalPages)} disabled={page === totalPages || listLoading || !totalExact}
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             »
                         </button>

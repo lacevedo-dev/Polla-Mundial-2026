@@ -10,6 +10,8 @@ import {
 
 const MEMBER_SEARCH_MIN_LEN = 2;
 const MEMBER_STATS_TTL_MS = 300_000;
+const MEMBER_LIST_CACHE_TTL_MS = 90_000;
+const MEMBER_LIST_CACHE_MAX = 150;
 
 @Injectable()
 export class TenantService {
@@ -18,6 +20,38 @@ export class TenantService {
     private readonly memberStatsCache = new Map<
         string,
         { expiresAt: number; totalActive: number; roleCounts: Record<string, number> }
+    >();
+    private readonly memberListCache = new Map<
+        string,
+        {
+            expiresAt: number;
+            result: {
+                members: Array<{
+                    id: string;
+                    userId: string;
+                    role: TenantRole;
+                    status: string;
+                    invitedAt: Date;
+                    joinedAt: Date | null;
+                    user: {
+                        id: string;
+                        name: string;
+                        email: string;
+                        username: string;
+                        documentNumber: string;
+                        avatar: string | null;
+                        mustChangePassword: boolean;
+                        emailVerified: boolean;
+                        createdAt: Date;
+                    };
+                }>;
+                total: number;
+                totalExact: boolean;
+                page: number;
+                limit: number;
+                hasMore: boolean;
+            };
+        }
     >();
 
     constructor(private readonly prisma: PrismaService) {}
@@ -177,6 +211,45 @@ export class TenantService {
 
     invalidateMembersStatsCache(tenantId: string) {
         this.memberStatsCache.delete(tenantId);
+        this.invalidateMembersListCache(tenantId);
+    }
+
+    invalidateMembersListCache(tenantId: string) {
+        for (const key of this.memberListCache.keys()) {
+            if (key.startsWith(`${tenantId}|`)) this.memberListCache.delete(key);
+        }
+    }
+
+    private trimMemberListCache() {
+        if (this.memberListCache.size <= MEMBER_LIST_CACHE_MAX) return;
+        const entries = [...this.memberListCache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+        for (let i = 0; i < entries.length - MEMBER_LIST_CACHE_MAX; i++) {
+            this.memberListCache.delete(entries[i][0]);
+        }
+    }
+
+    private buildMemberUserSearchFilter(searchTrim: string): Prisma.UserWhereInput {
+        if (searchTrim.includes('@')) {
+            return { email: { contains: searchTrim } };
+        }
+        if (/^\d+$/.test(searchTrim)) {
+            return {
+                OR: [
+                    { documentNumber: { contains: searchTrim } },
+                    { username: { contains: searchTrim } },
+                    { phone: { contains: searchTrim } },
+                ],
+            };
+        }
+        return {
+            OR: [
+                { name: { contains: searchTrim } },
+                { email: { contains: searchTrim } },
+                { username: { contains: searchTrim } },
+                { documentNumber: { contains: searchTrim } },
+                { phone: { contains: searchTrim } },
+            ],
+        };
     }
 
     async getMembersRoleStats(tenantId: string) {
@@ -218,23 +291,19 @@ export class TenantService {
         const searchTrim = this.normalizeMemberSearch(params.search ?? '');
         const skip = (page - 1) * limit;
         const hasSearch = searchTrim.length >= MEMBER_SEARCH_MIN_LEN;
-        const isFiltered = Boolean(role || hasSearch);
+
+        const cacheKey = `${tenantId}|${page}|${limit}|${searchTrim}|${role ?? ''}`;
+        const now = Date.now();
+        const cached = this.memberListCache.get(cacheKey);
+        if (cached && cached.expiresAt > now) {
+            return cached.result;
+        }
 
         const where: Prisma.TenantMemberWhereInput = {
             tenantId,
             status: 'ACTIVE',
             ...(role && { role }),
-            ...(hasSearch && {
-                user: {
-                    OR: [
-                        { name: { contains: searchTrim } },
-                        { email: { contains: searchTrim } },
-                        { username: { contains: searchTrim } },
-                        { documentNumber: { contains: searchTrim } },
-                        { phone: { contains: searchTrim } },
-                    ],
-                },
-            }),
+            ...(hasSearch && { user: this.buildMemberUserSearchFilter(searchTrim) }),
         };
 
         const memberSelect = {
@@ -253,26 +322,35 @@ export class TenantService {
             },
         } as const;
 
-        const [rows, total] = await Promise.all([
-            this.prisma.tenantMember.findMany({
-                where,
-                include: memberSelect,
-                orderBy: [{ invitedAt: 'asc' }, { id: 'asc' }],
-                skip,
-                take: limit + 1,
-            }),
-            isFiltered
-                ? this.prisma.tenantMember.count({ where })
-                : Promise.resolve(0),
-        ]);
+        const rows = await this.prisma.tenantMember.findMany({
+            where,
+            include: memberSelect,
+            orderBy: [{ invitedAt: 'asc' }, { id: 'asc' }],
+            skip,
+            take: limit + 1,
+        });
 
         const hasMore = rows.length > limit;
         const members = hasMore ? rows.slice(0, limit) : rows;
-        const resolvedTotal = isFiltered
-            ? total
-            : (await this.getMembersRoleStats(tenantId)).totalActive;
 
-        return { members, total: resolvedTotal, page, limit, hasMore };
+        let total: number;
+        let totalExact: boolean;
+        if (hasSearch) {
+            // Evita COUNT con LIKE '%…%' sobre ~10k filas (muy lento en MySQL).
+            total = skip + members.length + (hasMore ? 1 : 0);
+            totalExact = !hasMore;
+        } else if (role) {
+            total = await this.prisma.tenantMember.count({ where });
+            totalExact = true;
+        } else {
+            total = (await this.getMembersRoleStats(tenantId)).totalActive;
+            totalExact = true;
+        }
+
+        const result = { members, total, totalExact, page, limit, hasMore };
+        this.memberListCache.set(cacheKey, { expiresAt: now + MEMBER_LIST_CACHE_TTL_MS, result });
+        this.trimMemberListCache();
+        return result;
     }
 
     private normalizeMemberSearch(raw: string): string {
