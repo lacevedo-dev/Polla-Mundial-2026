@@ -1,4 +1,4 @@
-import { resolveApiAssetUrl } from '../api';
+import { resolveApiAssetUrl } from '../../api';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { TopRankEntry } from './types';
