@@ -474,36 +474,52 @@ export class SyncPlanService {
         ?.filter((m) => m.status === 'LIVE').length ?? 0;
     const currentLiveCount = await this.countDisplayedLiveMatches();
 
+    const cachedTimeline = existingPlan?.plannedTimeline as DetailedSyncTimeline | null;
+    const cachedMatches = cachedTimeline?.matches ?? [];
+
     // Verificar si podemos reutilizar el plan persistido
     if (
-      existingPlan?.plannedTimeline &&
+      cachedTimeline &&
       this.canReusePlan(existingPlan, plan) &&
       cachedLiveCount === currentLiveCount
     ) {
-      this.logger.debug('Reutilizando plan persistido - sin cambios significativos');
-      const cached = existingPlan.plannedTimeline as any;
-
-      // nextSyncAt es temporal: recalcular siempre para no mostrar una hora pasada
-      const nowIso = new Date().toISOString();
-      const cachedRequests: { scheduledAt: string }[] = cached.plannedRequests ?? [];
-      const freshNextSyncAt = cachedRequests
-        .map((r) => r.scheduledAt)
-        .filter((s) => s > nowIso)
-        .sort()[0] ?? null;
-
-      // La lista de partidos y sus estados siempre se refresca desde DB
       const freshMatches = await this.loadDisplayedMatchSlots(plan.intervalMinutes);
+      const freshIds = freshMatches.map((m) => m.matchId).sort().join(',');
+      const cachedIds = cachedMatches.map((m) => m.matchId).sort().join(',');
 
-      return {
-        ...cached,
-        matches: freshMatches,
-        nextSyncAt: freshNextSyncAt,
-        requestsUsed: used,
-        requestsBudget: available,
-        requestsLimit: limit,
-        strategy: plan.strategy,
-        intervalMinutes: plan.intervalMinutes,
-      };
+      // Si cambió el set de partidos, regenerar para distribuir créditos correctamente
+      if (freshIds === cachedIds) {
+        this.logger.debug('Reutilizando plan persistido - sin cambios significativos');
+        const cached = cachedTimeline;
+
+        // nextSyncAt es temporal: recalcular siempre para no mostrar una hora pasada
+        const nowIso = new Date().toISOString();
+        const cachedRequests: { scheduledAt: string }[] = cached.plannedRequests ?? [];
+        const freshNextSyncAt = cachedRequests
+          .map((r) => r.scheduledAt)
+          .filter((s) => s > nowIso)
+          .sort()[0] ?? null;
+
+        // Estados frescos desde DB + consultas/notificaciones del plan cacheado
+        const mergedMatches = this.mergeCachedMatchPlanning(freshMatches, cachedMatches);
+
+        return {
+          ...cached,
+          matches: mergedMatches,
+          nextSyncAt: freshNextSyncAt,
+          requestsUsed: used,
+          requestsBudget: available,
+          requestsLimit: limit,
+          strategy: plan.strategy,
+          intervalMinutes: plan.intervalMinutes,
+        };
+      }
+
+      this.logger.log(
+        `Regenerando plan — partidos monitoreados cambiaron (${cachedIds} → ${freshIds})`,
+      );
+    } else if (cachedTimeline && this.canReusePlan(existingPlan, plan)) {
+      this.logger.log('Regenerando plan — cambió el conteo de partidos en vivo');
     }
 
     this.logger.log('Regenerando plan completo - cambios detectados o plan nuevo');
@@ -1197,6 +1213,31 @@ export class SyncPlanService {
         lastSyncAt: m.syncLogs[0]?.createdAt?.toISOString() ?? null,
         lastSyncStatus: m.syncLogs[0]?.status ?? null,
         requestsAssigned: syncSlots.length,
+      };
+    });
+  }
+
+  /** Combina estado actual del partido (DB) con la planeación cacheada (consultas y notificaciones). */
+  private mergeCachedMatchPlanning(
+    freshMatches: MatchSyncSlot[],
+    cachedMatches: MatchSyncSlot[],
+  ): MatchSyncSlot[] {
+    const cachedById = new Map(cachedMatches.map((m) => [m.matchId, m]));
+
+    return freshMatches.map((fresh) => {
+      const cached = cachedById.get(fresh.matchId);
+      if (!cached) return fresh;
+
+      return {
+        ...fresh,
+        plannedRequests: cached.plannedRequests ?? [],
+        notificationSchedule: cached.notificationSchedule ?? [],
+        syncSlots:
+          cached.syncSlots?.length > 0 ? cached.syncSlots : fresh.syncSlots,
+        requestsAssigned:
+          cached.requestsAssigned > 0
+            ? cached.requestsAssigned
+            : fresh.requestsAssigned,
       };
     });
   }
