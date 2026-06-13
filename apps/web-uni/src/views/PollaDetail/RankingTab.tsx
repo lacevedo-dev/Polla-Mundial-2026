@@ -44,7 +44,6 @@ export function RankingTab({ topRanking }: { topRanking: TopRankEntry[] }) {
                                     {entry.name}
                                     {entry.isMe && <span className="text-xs opacity-60 ml-1">(tú)</span>}
                                 </p>
-                                {entry.username && <p className="text-[10px] text-slate-400">@{entry.username}</p>}
                             </div>
                             <span className="text-sm font-black text-slate-700 shrink-0">{entry.totalPoints} pts</span>
                         </div>
