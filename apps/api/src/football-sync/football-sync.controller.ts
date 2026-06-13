@@ -179,6 +179,28 @@ export class FootballSyncController {
     };
   }
 
+  /** Diagnóstico de tiempo del servidor — útil para detectar desfase de timezone */
+  @Get('debug/server-time')
+  @ApiOperation({ summary: 'Retorna la hora actual del servidor en múltiples formatos' })
+  async debugServerTime() {
+    const now = new Date();
+    const cotOffset = -5 * 60; // Colombia UTC-5, sin DST
+    const cotMs = now.getTime() + cotOffset * 60 * 1000;
+    const cotNow = new Date(cotMs);
+
+    const bogotaDateKey = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    return {
+      serverUtcIso:      now.toISOString(),
+      serverUtcMs:       now.getTime(),
+      serverLocalStr:    now.toString(),          // refleja el TZ del proceso Node
+      serverLocalHours:  now.getHours(),          // la hora que usa isPeakHoursWindow()
+      cotIso:            cotNow.toISOString().replace('Z', '-05:00'),
+      cotDateKey:        bogotaDateKey,           // la clave "hoy" que usa el plan
+      processTimezone:   process.env.TZ ?? '(no TZ env var — Node usa UTC por defecto)',
+    };
+  }
+
   /**
    * Manually trigger a sync
    */
