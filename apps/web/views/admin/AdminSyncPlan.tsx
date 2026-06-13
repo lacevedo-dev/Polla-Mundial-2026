@@ -20,6 +20,7 @@ import {
   Info,
 } from 'lucide-react';
 import { BASE_URL, request } from '../../api';
+import { TeamFlagImg } from '../../components/TeamFlagImg';
 
 interface NotifSchedule {
   type: 'MATCH_REMINDER' | 'PREDICTION_CLOSED' | 'RESULT_PUBLISHED';
@@ -52,6 +53,8 @@ interface MatchSlot {
   awayTeam: string;
   homeFlag?: string | null;
   awayFlag?: string | null;
+  homeTeamCode?: string | null;
+  awayTeamCode?: string | null;
   matchDate: string;
   status: string;
   externalId: string | null;
@@ -381,11 +384,15 @@ function HeatmapChart({ buckets, plannedRequests }: { buckets: HourBucket[]; pla
   );
 }
 
-function Flag({ url, name }: { url?: string | null; name: string }) {
-  if (!url) {
-    return <div className="h-4 w-6 rounded bg-slate-200" aria-hidden="true" />;
-  }
-  return <img src={url} alt={name} className="h-4 w-6 rounded border border-slate-200 object-cover" />;
+function Flag({ url, code, name }: { url?: string | null; code?: string | null; name: string }) {
+  return (
+    <TeamFlagImg
+      flagUrl={url}
+      code={code}
+      name={name}
+      className="h-4 w-6 shrink-0 rounded border border-slate-200 bg-slate-100 object-cover"
+    />
+  );
 }
 
 const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
@@ -396,8 +403,27 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
   const [sseConnected, setSseConnected] = React.useState(false);
   const [liveEvents, setLiveEvents] = React.useState<LiveEvent[]>([]);
   const [syncing, setSyncing] = React.useState(false);
+  const [backgroundSyncing, setBackgroundSyncing] = React.useState(false);
   const [syncMsg, setSyncMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
   const timelineReloadTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadSchedulerStatus = async () => {
+      try {
+        const status = await request<{ isSyncing: boolean }>('/admin/football/status');
+        if (!cancelled) setBackgroundSyncing(status.isSyncing);
+      } catch {
+        // ignorar: el botón sigue usable si el status no responde
+      }
+    };
+    void loadSchedulerStatus();
+    const interval = window.setInterval(() => void loadSchedulerStatus(), 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const loadTimeline = React.useCallback(async () => {
     try {
@@ -480,6 +506,11 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
           { type, summary: eventSummary(type, data), ts: new Date().toLocaleTimeString('es-CO') },
           ...previous.slice(0, 24),
         ]);
+        if (type === 'sync_started') {
+          setBackgroundSyncing(true);
+        } else if (type === 'sync_completed' || type === 'sync_failed') {
+          setBackgroundSyncing(false);
+        }
         setTimeline((previous) => patchTimelineFromEvent(previous, type, data));
         if (type === 'sync_completed') {
           void loadTimeline();
@@ -497,6 +528,7 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
 
   const carryOverCount = timeline?.matches.filter((match) => match.trackingScope === 'CARRY_OVER').length ?? 0;
   const usagePct = timeline ? Math.round((timeline.requestsUsed / Math.max(1, timeline.requestsLimit)) * 100) : 0;
+  const syncInProgress = syncing || backgroundSyncing;
 
   return (
     <div className={embedded ? 'space-y-6' : 'min-h-screen bg-slate-50 px-4 py-6 md:px-6 lg:px-8'}>
@@ -522,12 +554,12 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
           )}
           <button
             onClick={() => void handleSyncNow()}
-            disabled={syncing || loading}
-            title="Ejecutar una sincronización ahora mismo con API-Football"
+            disabled={syncInProgress || loading}
+            title={backgroundSyncing ? 'Hay una sincronización automática en curso' : 'Ejecutar una sincronización ahora mismo con API-Football'}
             className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
           >
-            <Zap size={13} className={syncing ? 'animate-pulse' : ''} />
-            {syncing ? 'Sincronizando...' : 'Sync ahora'}
+            <Zap size={13} className={syncInProgress ? 'animate-pulse' : ''} />
+            {syncInProgress ? 'Sincronizando...' : 'Sync ahora'}
           </button>
           <button
             onClick={() => void loadTimeline()}
@@ -659,11 +691,11 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
                   className="flex w-full items-center gap-3 p-4 text-left hover:bg-slate-50"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <Flag url={match.homeFlag} name={match.homeTeam} />
+                    <Flag url={match.homeFlag} code={match.homeTeamCode} name={match.homeTeam} />
                     <span className="truncate text-sm font-bold text-slate-900">{match.homeTeam}</span>
                     <span className="text-xs font-black text-slate-400">vs</span>
                     <span className="truncate text-sm font-bold text-slate-900">{match.awayTeam}</span>
-                    <Flag url={match.awayFlag} name={match.awayTeam} />
+                    <Flag url={match.awayFlag} code={match.awayTeamCode} name={match.awayTeam} />
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {match.trackingScope === 'CARRY_OVER' && (

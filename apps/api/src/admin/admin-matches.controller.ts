@@ -1,7 +1,8 @@
 import {
     Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards,
-    NotFoundException, ParseIntPipe, DefaultValuePipe, BadRequestException,
+    NotFoundException, ParseIntPipe, DefaultValuePipe, BadRequestException, ConflictException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Phase, MatchStatus, SyncLogStatus } from '@prisma/client';
 import { IsOptional, IsEnum, IsString, IsNumber, IsDateString } from 'class-validator';
@@ -277,28 +278,57 @@ export class AdminMatchesController {
         return this.matchesService.create(dto as any);
     }
 
+    private normalizeExternalId(externalId?: string) {
+        if (externalId === undefined) return undefined;
+        const normalized = String(externalId).trim();
+        return normalized || null;
+    }
+
     @Patch(':id')
     @ApiOperation({ summary: 'Update match details' })
     async update(@Param('id') id: string, @Body() dto: AdminUpdateMatchDto, @CurrentUser() user: { id?: string }) {
         const match = await this.prisma.match.findUnique({ where: { id } });
         if (!match) throw new NotFoundException('Partido no encontrado');
         const { linkSource, ...matchFields } = dto;
+        const normalizedExternalId = this.normalizeExternalId(dto.externalId);
+
+        if (normalizedExternalId) {
+            const duplicate = await this.prisma.match.findFirst({
+                where: { externalId: normalizedExternalId, NOT: { id } },
+                select: { id: true, homeTeam: { select: { name: true } }, awayTeam: { select: { name: true } } },
+            });
+            if (duplicate) {
+                throw new ConflictException(
+                    `El fixture ${normalizedExternalId} ya está vinculado a ${duplicate.homeTeam.name} vs ${duplicate.awayTeam.name}`,
+                );
+            }
+        }
+
         const data = {
             ...matchFields,
-            ...(dto.externalId !== undefined ? { externalId: dto.externalId.trim() || null } : {}),
+            ...(dto.externalId !== undefined ? { externalId: normalizedExternalId } : {}),
         };
-        const updatedMatch = await this.prisma.match.update({
-            where: { id },
-            data: data as any,
-            include: {
-                homeTeam: true,
-                awayTeam: true,
-                syncLogs: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 1,
+
+        let updatedMatch;
+        try {
+            updatedMatch = await this.prisma.match.update({
+                where: { id },
+                data: data as any,
+                include: {
+                    homeTeam: true,
+                    awayTeam: true,
+                    syncLogs: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                    },
                 },
-            },
-        });
+            });
+        } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                throw new ConflictException('Ese fixture ya está vinculado a otro partido');
+            }
+            throw error;
+        }
 
         if (dto.externalId !== undefined && match.externalId !== updatedMatch.externalId && user?.id) {
             await this.prisma.auditLog.create({

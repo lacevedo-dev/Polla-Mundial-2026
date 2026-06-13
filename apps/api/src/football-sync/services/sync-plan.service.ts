@@ -13,6 +13,8 @@ export interface MatchSyncSlot {
   awayTeam: string;
   homeFlag?: string | null;
   awayFlag?: string | null;
+  homeTeamCode?: string | null;
+  awayTeamCode?: string | null;
   matchDate: string;
   status: string;
   externalId: string | null;
@@ -679,6 +681,8 @@ export class SyncPlanService {
         awayTeam: m.awayTeam.name,
         homeFlag: m.homeTeam.flagUrl,
         awayFlag: m.awayTeam.flagUrl,
+        homeTeamCode: m.homeTeam.code,
+        awayTeamCode: m.awayTeam.code,
         matchDate: m.matchDate.toISOString(),
         status: m.status,
         externalId: m.externalId,
@@ -1205,6 +1209,8 @@ export class SyncPlanService {
         awayTeam: m.awayTeam.name,
         homeFlag: m.homeTeam.flagUrl,
         awayFlag: m.awayTeam.flagUrl,
+        homeTeamCode: m.homeTeam.code,
+        awayTeamCode: m.awayTeam.code,
         matchDate: m.matchDate.toISOString(),
         status: m.status,
         externalId: m.externalId,

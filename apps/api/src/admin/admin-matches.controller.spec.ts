@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminMatchesController } from './admin-matches.controller';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,6 +11,7 @@ describe('AdminMatchesController', () => {
       findMany: jest.fn(),
       count: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     },
@@ -136,5 +137,25 @@ describe('AdminMatchesController', () => {
 
     expect(prismaMock.match.findMany).not.toHaveBeenCalled();
     expect(prismaMock.match.count).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate externalId before updating Prisma', async () => {
+    prismaMock.match.findUnique.mockResolvedValue({
+      id: 'match-1',
+      externalId: null,
+      homeTeamId: 'team-1',
+      awayTeamId: 'team-2',
+    });
+    prismaMock.match.findFirst.mockResolvedValue({
+      id: 'match-2',
+      homeTeam: { name: 'Team A' },
+      awayTeam: { name: 'Team B' },
+    });
+
+    await expect(
+      controller.update('match-1', { externalId: 'fixture-duplicate' }, { id: 'admin-1' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prismaMock.match.update).not.toHaveBeenCalled();
   });
 });

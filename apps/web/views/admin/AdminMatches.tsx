@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/admin/ConfirmDialog';
 import AdminPagination from '../../components/admin/AdminPagination';
 import StatusBadge from '../../components/admin/StatusBadge';
 import TournamentImportModal from '../../components/admin/TournamentImportModal';
+import { TeamFlagImg } from '../../components/TeamFlagImg';
 import { useAdminMatchesStore } from '../../stores/admin.matches.store';
 import type { AdminMatch, AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
 import { useAdminWhatsappStore } from '../../stores/admin.whatsapp.store';
@@ -86,12 +87,6 @@ export const groupAdminMatchesByDate = (matches: AdminMatch[]) => {
   return groups;
 };
 
-function resolveFlagUrl(flagUrl?: string | null, code?: string | null): string {
-  if (flagUrl) return flagUrl;
-  if (code) return `https://flagcdn.com/w80/${code.toLowerCase()}.png`;
-  return '';
-}
-
 const STATUS_CARD_BORDER: Record<string, string> = {
   LIVE: 'border-l-rose-500',
   FINISHED: 'border-l-emerald-400',
@@ -133,14 +128,13 @@ const summaryCardClassName = (active: boolean, tone: 'emerald' | 'rose' | 'amber
 };
 
 const MatchupRow: React.FC<{ match: any; showScore?: boolean }> = ({ match, showScore = false }) => {
-  const homeFlag = resolveFlagUrl(match.homeTeam?.flagUrl, match.homeTeam?.code);
-  const awayFlag = resolveFlagUrl(match.awayTeam?.flagUrl, match.awayTeam?.code);
   const hasScore = showScore && match.homeScore != null;
   const isLive = match.status === 'LIVE';
+  const flagClass = 'h-6 w-9 shrink-0 rounded object-cover border border-slate-200 shadow-sm bg-slate-100';
   return (
     <div className="flex items-center gap-2 min-w-0">
       <div className="flex flex-1 items-center gap-2 min-w-0">
-        {homeFlag && <img src={homeFlag} alt={match.homeTeam?.name} className="h-6 w-9 shrink-0 rounded object-cover border border-slate-200 shadow-sm" />}
+        <TeamFlagImg flagUrl={match.homeTeam?.flagUrl} code={match.homeTeam?.code} name={match.homeTeam?.name ?? ''} className={flagClass} />
         <div className="min-w-0">
           <p className="text-sm font-black text-slate-900 truncate leading-tight">{match.homeTeam?.name}</p>
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{match.homeTeam?.code}</p>
@@ -162,7 +156,7 @@ const MatchupRow: React.FC<{ match: any; showScore?: boolean }> = ({ match, show
           <p className="text-sm font-black text-slate-900 truncate leading-tight">{match.awayTeam?.name}</p>
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{match.awayTeam?.code}</p>
         </div>
-        {awayFlag && <img src={awayFlag} alt={match.awayTeam?.name} className="h-6 w-9 shrink-0 rounded object-cover border border-slate-200 shadow-sm" />}
+        <TeamFlagImg flagUrl={match.awayTeam?.flagUrl} code={match.awayTeam?.code} name={match.awayTeam?.name ?? ''} className={flagClass} />
       </div>
     </div>
   );
@@ -213,12 +207,20 @@ const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boole
   );
 };
 
-/** Convierte un Date UTC a string para datetime-local (hora Colombia COT = UTC-5) */
+/** Convierte UTC a valor datetime-local en hora Colombia (COT, UTC-5). */
 function toLocalDateTimeInput(date: Date | string | null | undefined): string {
   if (!date) return '';
   const d = new Date(date);
-  const cot = new Date(d.getTime() - 5 * 60 * 60 * 1000);
-  return cot.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
+  const cotMs = d.getTime() - 5 * 60 * 60 * 1000;
+  return new Date(cotMs).toISOString().slice(0, 16);
+}
+
+/** Convierte datetime-local (COT) a ISO UTC. */
+function cotLocalInputToUtcIso(localDate: string): string {
+  const [datePart, timePart] = localDate.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = timePart.split(':').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour + 5, minute)).toISOString();
 }
 
 const RescheduleDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
@@ -230,9 +232,12 @@ const RescheduleDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: 
   }, [match]);
 
   const handleSave = async () => {
-    const utcIso = new Date(localDate).toISOString();
-    await updateMatch(match.id, { matchDate: utcIso });
-    onOpenChange(false);
+    try {
+      await updateMatch(match.id, { matchDate: cotLocalInputToUtcIso(localDate) });
+      onOpenChange(false);
+    } catch {
+      // El store ya registra el error; evitar promesa rechazada sin manejar.
+    }
   };
 
   return (
@@ -253,7 +258,7 @@ const RescheduleDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: 
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <p className="mt-1.5 text-[11px] text-slate-400">
-              UTC: {localDate ? new Date(localDate).toISOString() : '—'}
+              UTC: {localDate ? cotLocalInputToUtcIso(localDate) : '—'}
             </p>
           </div>
           <div className="mt-6 flex gap-3">
@@ -334,22 +339,37 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
   };
 
   const handleSave = async () => {
-    await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
-    onOpenChange(false);
+    try {
+      setLocalError(null);
+      await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+      onOpenChange(false);
+    } catch (error: any) {
+      setLocalError(error?.message || 'No se pudo guardar el vínculo');
+    }
   };
 
   const handleUnlink = async () => {
-    await updateMatch(match.id, { externalId: '' });
-    onOpenChange(false);
+    try {
+      setLocalError(null);
+      await updateMatch(match.id, { externalId: '' });
+      onOpenChange(false);
+    } catch (error: any) {
+      setLocalError(error?.message || 'No se pudo desvincular el partido');
+    }
   };
 
   const handleSync = async () => {
     if (!match?.externalId && !externalId.trim()) return;
-    if (!match?.externalId && externalId.trim()) {
-      await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+    try {
+      setLocalError(null);
+      if (!match?.externalId && externalId.trim()) {
+        await updateMatch(match.id, { externalId, linkSource: selectedCandidate === externalId ? 'suggested' : 'manual' });
+      }
+      await syncMatch(match.id);
+      onOpenChange(false);
+    } catch (error: any) {
+      setLocalError(error?.message || 'No se pudo sincronizar el partido');
     }
-    await syncMatch(match.id);
-    onOpenChange(false);
   };
 
   const syncBadge = getSyncBadge(match?.lastSyncStatus);
