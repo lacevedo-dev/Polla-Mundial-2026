@@ -30,7 +30,10 @@ export class AdminWhatsappController {
   /** Estado de la sesión WhatsApp Web */
   @Get('status')
   getStatus() {
-    return { status: this.waWeb.getStatus() };
+    return {
+      status: this.waWeb.getStatus(),
+      session: this.waWeb.getSessionInfo(),
+    };
   }
 
   /** Fuerza reinicialización del cliente (útil tras desconexión manual) */

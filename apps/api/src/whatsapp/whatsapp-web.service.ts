@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
 import * as path from 'path';
 
 export type WhatsappStatus = 'DISABLED' | 'INITIALIZING' | 'QR_READY' | 'CONNECTED' | 'DISCONNECTED' | 'AUTH_FAILURE';
@@ -18,8 +19,16 @@ export interface SendToGroupParams {
   pdfFilename: string;
 }
 
-const RECONNECT_DELAY_MS = 10_000; // 10 s antes de reintentar tras desconexión
-const MAX_RECONNECT_ATTEMPTS = 5;
+export interface WhatsappSessionInfo {
+  sessionPath: string;
+  sessionExists: boolean;
+  reconnectAttempts: number;
+  lastDisconnectReason: string | null;
+}
+
+const RECONNECT_DELAY_MS = 10_000;
+const MAX_RECONNECT_ATTEMPTS = 12;
+const PRODUCTION_SESSION_PATH = '/data/wwebjs_auth';
 
 @Injectable()
 export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
@@ -32,10 +41,17 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   private qrDataUrl: string | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private initializing = false;
+  private lastDisconnectReason: string | null = null;
 
   constructor(private readonly config: ConfigService) {
     this.enabled = this.config.get<string>('WHATSAPP_WEB_ENABLED') === 'true';
-    this.sessionPath = this.config.get<string>('WHATSAPP_SESSION_PATH') ?? path.join(process.cwd(), '.wwebjs_auth');
+    const configuredPath = this.config.get<string>('WHATSAPP_SESSION_PATH')?.trim();
+    this.sessionPath =
+      configuredPath ||
+      (process.env.NODE_ENV === 'production'
+        ? PRODUCTION_SESSION_PATH
+        : path.join(process.cwd(), '.wwebjs_auth'));
   }
 
   async onModuleInit(): Promise<void> {
@@ -44,11 +60,16 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug('WhatsApp Web disabled (WHATSAPP_WEB_ENABLED != true)');
       return;
     }
+
+    this.ensureSessionDirectory();
+    this.logger.log(
+      `WhatsApp Web session path: ${this.sessionPath} (persisted=${this.hasPersistedSession()})`,
+    );
     await this.initClient();
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.clearReconnectTimer();
     if (this.client) {
       try {
         await this.client.destroy();
@@ -58,9 +79,36 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async initClient(): Promise<void> {
+  private ensureSessionDirectory(): void {
     try {
-      // Dynamic require — optional dependency, fails gracefully
+      fs.mkdirSync(this.sessionPath, { recursive: true });
+    } catch (e: any) {
+      this.logger.error(`No se pudo crear el directorio de sesión ${this.sessionPath}: ${e.message}`);
+    }
+  }
+
+  private hasPersistedSession(): boolean {
+    try {
+      if (!fs.existsSync(this.sessionPath)) return false;
+      const entries = fs.readdirSync(this.sessionPath);
+      return entries.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private async initClient(): Promise<void> {
+    if (this.initializing) return;
+    this.initializing = true;
+
+    try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
       (this as any)._MessageMedia = MessageMedia;
@@ -69,6 +117,12 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
 
       this.client = new Client({
         authStrategy: new LocalAuth({ dataPath: this.sessionPath }),
+        // Evita desconexiones por cambios de versión de WhatsApp Web
+        webVersionCache: {
+          type: 'remote',
+          remotePath:
+            'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+        },
         puppeteer: {
           headless: true,
           executablePath: executablePath ?? undefined,
@@ -80,6 +134,7 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
             '--no-first-run',
             '--no-zygote',
             '--disable-gpu',
+            '--single-process',
           ],
         },
       });
@@ -94,19 +149,32 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       this.client.on('ready', () => {
         this.status = 'CONNECTED';
         this.qrDataUrl = null;
-        this.reconnectAttempts = 0; // reset backoff al conectar exitosamente
+        this.reconnectAttempts = 0;
+        this.lastDisconnectReason = null;
         this.logger.log('WhatsApp Web session connected');
+      });
+
+      this.client.on('authenticated', () => {
+        this.logger.log('WhatsApp Web authenticated — sesión guardada en disco');
       });
 
       this.client.on('auth_failure', (msg: string) => {
         this.status = 'AUTH_FAILURE';
+        this.clearReconnectTimer();
         this.logger.error(`WhatsApp Web auth failure: ${msg}`);
-        // Auth failure = sesión inválida; no reintentamos automáticamente
       });
 
       this.client.on('disconnected', (reason: string) => {
         this.status = 'DISCONNECTED';
+        this.lastDisconnectReason = reason;
         this.logger.warn(`WhatsApp Web disconnected: ${reason}`);
+
+        // LOGOUT = desvinculado desde el teléfono; requiere escanear QR de nuevo
+        if (reason === 'LOGOUT') {
+          this.clearReconnectTimer();
+          return;
+        }
+
         this.scheduleReconnect();
       });
 
@@ -116,20 +184,25 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       this.status = 'DISCONNECTED';
       this.logger.error(`WhatsApp Web init failed: ${e.message}`);
       this.scheduleReconnect();
+    } finally {
+      this.initializing = false;
     }
   }
 
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this.logger.warn(
-        `WhatsApp Web: máximo de reconexiones alcanzado (${MAX_RECONNECT_ATTEMPTS}). Escanea el QR manualmente.`,
+        `WhatsApp Web: máximo de reconexiones alcanzado (${MAX_RECONNECT_ATTEMPTS}). Usa "Reconectar" en el panel.`,
       );
       return;
     }
 
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.clearReconnectTimer();
 
-    const delay = RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts); // backoff exponencial
+    const delay = Math.min(
+      RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts),
+      5 * 60 * 1000,
+    );
     this.reconnectAttempts++;
     this.logger.log(
       `WhatsApp Web: reintentando conexión en ${delay / 1000}s (intento ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
@@ -141,18 +214,24 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     }, delay);
   }
 
-  /** Reinicializa el cliente (destruye el actual y crea uno nuevo con LocalAuth). */
+  /** Reinicializa el cliente reutilizando la sesión guardada en disco. */
   async reinitialize(): Promise<void> {
-    if (!this.enabled) return;
+    if (!this.enabled || this.initializing) return;
     this.logger.log('WhatsApp Web: reinicializando cliente...');
+
+    this.clearReconnectTimer();
+
     if (this.client) {
       try {
+        // destroy() cierra Chromium pero LocalAuth conserva los archivos en sessionPath
         await this.client.destroy();
       } catch {
         // ignore
       }
       this.client = null;
     }
+
+    this.status = 'INITIALIZING';
     await this.initClient();
   }
 
@@ -170,6 +249,15 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     return this.status;
   }
 
+  getSessionInfo(): WhatsappSessionInfo {
+    return {
+      sessionPath: this.sessionPath,
+      sessionExists: this.hasPersistedSession(),
+      reconnectAttempts: this.reconnectAttempts,
+      lastDisconnectReason: this.lastDisconnectReason,
+    };
+  }
+
   isConnected(): boolean {
     return this.status === 'CONNECTED';
   }
@@ -179,6 +267,9 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   }
 
   async disconnect(): Promise<void> {
+    this.clearReconnectTimer();
+    this.reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
+
     if (!this.client) return;
     try {
       await this.client.logout();
@@ -230,7 +321,6 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      // Send image with caption
       const imageMedia = new MessageMedia(
         'image/png',
         params.imageBuffer.toString('base64'),
@@ -238,7 +328,6 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       );
       await this.client.sendMessage(params.groupId, imageMedia, { caption: params.caption });
 
-      // Send PDF as document
       const pdfMedia = new MessageMedia(
         'application/pdf',
         params.pdfBuffer.toString('base64'),

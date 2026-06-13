@@ -32,7 +32,7 @@ const formatDate = (d: string) =>
 
 const AdminWhatsapp: React.FC = () => {
   const {
-    status, qrDataUrl, groups, jobs, isLoading, error,
+    status, session, qrDataUrl, groups, jobs, isLoading, error,
     fetchStatus, fetchQr, disconnect, reinitialize, fetchGroups, fetchJobs,
     retryJob, deleteJob,
   } = useAdminWhatsappStore();
@@ -108,13 +108,51 @@ const AdminWhatsapp: React.FC = () => {
               {status === 'DISABLED'
                 ? 'Activa WHATSAPP_WEB_ENABLED=true en las variables de entorno para habilitar esta función.'
                 : status === 'QR_READY'
-                  ? 'Escanea el código QR con tu teléfono → WhatsApp → Dispositivos vinculados → Vincular dispositivo.'
+                  ? session?.sessionExists
+                    ? 'Hay datos de sesión en disco pero WhatsApp pide un nuevo escaneo. Si esto se repite tras cada reinicio del servidor, verifica el volumen persistente en Dokploy.'
+                    : 'Escanea el código QR con tu teléfono → WhatsApp → Dispositivos vinculados → Vincular dispositivo.'
                   : status === 'CONNECTED'
                     ? 'Sesión activa. Los reportes se publicarán automáticamente en los grupos configurados.'
                     : status === 'INITIALIZING'
                       ? 'Iniciando cliente WhatsApp Web, espera unos segundos…'
-                      : 'La sesión está desconectada. Usa "Reconectar" para restaurar la sesión guardada sin necesidad de escanear el QR.'}
+                      : session?.lastDisconnectReason === 'LOGOUT'
+                        ? 'WhatsApp cerró la sesión desde el teléfono (desvinculación). Escanea el QR de nuevo.'
+                        : 'La sesión está desconectada. Usa "Reconectar" para restaurar la sesión guardada sin necesidad de escanear el QR.'}
             </p>
+
+            {session && (
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-600 space-y-1">
+                <p>
+                  <span className="font-bold text-slate-500">Ruta sesión:</span>{' '}
+                  <code className="font-mono text-[10px]">{session.sessionPath}</code>
+                </p>
+                <p>
+                  <span className="font-bold text-slate-500">Sesión en disco:</span>{' '}
+                  <span className={session.sessionExists ? 'font-bold text-emerald-700' : 'font-bold text-rose-600'}>
+                    {session.sessionExists ? 'Sí (persistida)' : 'No — se pierde al reiniciar el contenedor'}
+                  </span>
+                </p>
+                {session.lastDisconnectReason && (
+                  <p>
+                    <span className="font-bold text-slate-500">Última desconexión:</span>{' '}
+                    <code className="font-mono text-[10px]">{session.lastDisconnectReason}</code>
+                  </p>
+                )}
+                {session.reconnectAttempts > 0 && (
+                  <p>
+                    <span className="font-bold text-slate-500">Reintentos auto-reconexión:</span>{' '}
+                    {session.reconnectAttempts}
+                  </p>
+                )}
+                {!session.sessionExists && status !== 'DISABLED' && (
+                  <p className="pt-1 text-rose-700">
+                    Configura en Dokploy un volumen: Host → <code className="font-mono">/var/lib/dokploy/wwebjs/polla-backend</code>
+                    {' '}→ Contenedor → <code className="font-mono">/data/wwebjs_auth</code>
+                    {' '}y la variable <code className="font-mono">WHATSAPP_SESSION_PATH=/data/wwebjs_auth</code>.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
               {(status === 'DISCONNECTED' || status === 'AUTH_FAILURE') && (
@@ -278,7 +316,8 @@ const AdminWhatsapp: React.FC = () => {
       <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
         <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Configuración inicial</p>
         <ol className="space-y-2 text-sm text-slate-600 list-decimal list-inside">
-          <li>Agrega <code className="rounded bg-white px-1 py-0.5 text-xs border border-slate-200">WHATSAPP_WEB_ENABLED=true</code> y <code className="rounded bg-white px-1 py-0.5 text-xs border border-slate-200">WHATSAPP_SESSION_PATH=/data/wwebjs</code> en las variables de entorno de Dokploy.</li>
+          <li>Agrega <code className="rounded bg-white px-1 py-0.5 text-xs border border-slate-200">WHATSAPP_WEB_ENABLED=true</code> y <code className="rounded bg-white px-1 py-0.5 text-xs border border-slate-200">WHATSAPP_SESSION_PATH=/data/wwebjs_auth</code> en las variables de entorno de Dokploy.</li>
+          <li>Monta un volumen persistente en Dokploy: Host <code className="rounded bg-white px-1 py-0.5 text-xs border border-slate-200">/var/lib/dokploy/wwebjs/polla-backend</code> → Contenedor <code className="rounded bg-white px-1 py-0.5 text-xs border border-slate-200">/data/wwebjs_auth</code>. Sin esto la sesión se borra en cada redeploy.</li>
           <li>Reinicia el contenedor. En esta pantalla aparecerá un código QR.</li>
           <li>Escanéalo desde WhatsApp en tu teléfono → <strong>Dispositivos vinculados → Vincular dispositivo</strong>.</li>
           <li>Una vez conectado, pulsa <strong>Cargar grupos</strong> y copia el ID del grupo de cada polla.</li>

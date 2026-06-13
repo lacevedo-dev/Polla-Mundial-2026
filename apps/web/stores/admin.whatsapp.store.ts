@@ -3,6 +3,13 @@ import { request } from '../api';
 
 export type WhatsappStatus = 'DISABLED' | 'INITIALIZING' | 'QR_READY' | 'CONNECTED' | 'DISCONNECTED' | 'AUTH_FAILURE';
 
+export interface WhatsappSessionInfo {
+  sessionPath: string;
+  sessionExists: boolean;
+  reconnectAttempts: number;
+  lastDisconnectReason: string | null;
+}
+
 export interface WhatsappGroup {
   id: string;
   name: string;
@@ -26,6 +33,7 @@ export interface WhatsappGroupJob {
 
 interface AdminWhatsappState {
   status: WhatsappStatus | null;
+  session: WhatsappSessionInfo | null;
   qrDataUrl: string | null;
   groups: WhatsappGroup[];
   jobs: WhatsappGroupJob[];
@@ -47,6 +55,7 @@ interface AdminWhatsappState {
 
 export const useAdminWhatsappStore = create<AdminWhatsappState>((set) => ({
   status: null,
+  session: null,
   qrDataUrl: null,
   groups: [],
   jobs: [],
@@ -55,8 +64,8 @@ export const useAdminWhatsappStore = create<AdminWhatsappState>((set) => ({
 
   fetchStatus: async () => {
     try {
-      const data = await request<{ status: WhatsappStatus }>('/admin/whatsapp/status');
-      set({ status: data.status });
+      const data = await request<{ status: WhatsappStatus; session?: WhatsappSessionInfo }>('/admin/whatsapp/status');
+      set({ status: data.status, session: data.session ?? null });
     } catch (e: any) {
       set({ error: e.message });
     }

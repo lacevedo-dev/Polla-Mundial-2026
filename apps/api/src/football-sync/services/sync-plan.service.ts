@@ -479,6 +479,7 @@ export class SyncPlanService {
 
     // Verificar si podemos reutilizar el plan persistido
     if (
+      existingPlan &&
       cachedTimeline &&
       this.canReusePlan(existingPlan, plan) &&
       cachedLiveCount === currentLiveCount
@@ -518,7 +519,7 @@ export class SyncPlanService {
       this.logger.log(
         `Regenerando plan — partidos monitoreados cambiaron (${cachedIds} → ${freshIds})`,
       );
-    } else if (cachedTimeline && this.canReusePlan(existingPlan, plan)) {
+    } else if (existingPlan && cachedTimeline && this.canReusePlan(existingPlan, plan)) {
       this.logger.log('Regenerando plan — cambió el conteo de partidos en vivo');
     }
 

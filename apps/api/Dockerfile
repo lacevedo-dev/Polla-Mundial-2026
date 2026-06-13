@@ -65,7 +65,8 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Setear entorno de producción
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    WHATSAPP_SESSION_PATH=/data/wwebjs_auth
 
 # Copiar los node_modules base del workspace (dependencias izadas)
 COPY --from=builder /app/node_modules ./node_modules
