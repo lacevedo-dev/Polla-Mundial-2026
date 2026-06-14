@@ -160,7 +160,7 @@ export default function AdminCorpMatches() {
                         <h1 className="text-2xl font-black text-slate-900">Partidos y puntajes</h1>
                     </div>
                     <p className="text-slate-500 text-sm">
-                        Marcadores sincronizados desde el servidor central. Recalcula puntos manualmente si hace falta.
+                        Los puntos se calculan automáticamente al sincronizar el marcador final. Usa recálculo manual solo si hace falta corregir.
                     </p>
                 </div>
                 <button

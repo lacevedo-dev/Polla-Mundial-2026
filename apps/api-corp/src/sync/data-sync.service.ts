@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { PrismaService } from '../overrides/prisma.service';
 import axios, { AxiosError } from 'axios';
 
@@ -13,7 +14,10 @@ export class DataSyncService implements OnModuleInit {
     private readonly mainApiUrl: string;
     private readonly internalApiKey: string;
 
-    constructor(private readonly prisma: PrismaService) {
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly predictionsService: PredictionsService,
+    ) {
         this.mainApiUrl = process.env.MAIN_API_URL?.trim() || 'http://localhost:3000';
         this.internalApiKey = process.env.INTERNAL_API_KEY?.trim() || '';
 
@@ -181,7 +185,7 @@ export class DataSyncService implements OnModuleInit {
                 await this.upsertCorporateTenant(tenant);
                 counts.tenants += 1;
 
-                // Branding y configuración del portal son datos locales de api-corp.
+                // Branding y configuraci?n del portal son datos locales de api-corp.
                 // No se sincronizan desde el API principal para no sobrescribir
                 // cambios hechos por el administrador en /admin/settings.
                 for (const member of tenant.members ?? []) {
@@ -439,10 +443,10 @@ export class DataSyncService implements OnModuleInit {
         }
     }
 
-    /** Sincroniza partidos cada 10 minutos. */
+    /** Sincroniza partidos cada 10 minutos y punt?a pron?sticos cuando el marcador final llega. */
     @Cron(CronExpression.EVERY_10_MINUTES)
-    async syncMatches(): Promise<{ synced: number; skipped: number }> {
-        if (!this.internalApiKey) return { synced: 0, skipped: 0 };
+    async syncMatches(): Promise<{ synced: number; skipped: number; scored: number }> {
+        if (!this.internalApiKey) return { synced: 0, skipped: 0, scored: 0 };
 
         try {
             this.logger.log('Sincronizando partidos...');
@@ -463,6 +467,7 @@ export class DataSyncService implements OnModuleInit {
             const matches = Array.isArray(response.data) ? response.data : [];
             let synced = 0;
             let skipped = 0;
+            const scoreCandidates = new Set<string>();
 
             for (const match of matches) {
                 const matchDate = match.matchDate ?? match.date;
@@ -470,6 +475,11 @@ export class DataSyncService implements OnModuleInit {
                     skipped += 1;
                     continue;
                 }
+
+                const existing = await this.prisma.match.findUnique({
+                    where: { id: match.id },
+                    select: { status: true, homeScore: true, awayScore: true },
+                });
 
                 await this.prisma.match.upsert({
                     where: { id: match.id },
@@ -522,14 +532,102 @@ export class DataSyncService implements OnModuleInit {
                     } as any,
                 });
                 synced += 1;
+
+                const isFinished = match.status === 'FINISHED'
+                    && match.homeScore != null
+                    && match.awayScore != null;
+                if (isFinished) {
+                    const transitionedToFinished = existing?.status !== 'FINISHED';
+                    const scoreChanged = existing?.homeScore !== match.homeScore
+                        || existing?.awayScore !== match.awayScore;
+                    if (!existing || transitionedToFinished || scoreChanged) {
+                        scoreCandidates.add(match.id);
+                    }
+                }
             }
 
-            this.logger.log(`${synced} partidos sincronizados${skipped ? ` (${skipped} omitidos por datos incompletos)` : ''}`);
-            return { synced, skipped };
+            let scored = 0;
+            for (const matchId of scoreCandidates) {
+                if (await this.scoreFinishedMatch(matchId)) scored += 1;
+            }
+            scored += await this.scoreBacklogFinishedMatches(30);
+
+            this.logger.log(
+                `${synced} partidos sincronizados${skipped ? ` (${skipped} omitidos por datos incompletos)` : ''}` +
+                `${scored ? `, ${scored} partido(s) puntuados` : ''}`,
+            );
+            return { synced, skipped, scored };
         } catch (error) {
             this.logger.error('Error sincronizando partidos:', this.formatError(error));
-            return { synced: 0, skipped: 0 };
+            return { synced: 0, skipped: 0, scored: 0 };
         }
+    }
+
+    /** Puntúa pronósticos corporativos de un partido finalizado (idempotente). */
+    private async scoreFinishedMatch(matchId: string): Promise<boolean> {
+        try {
+            const match = await this.prisma.match.findUnique({
+                where: { id: matchId },
+                select: {
+                    id: true,
+                    phase: true,
+                    status: true,
+                    homeScore: true,
+                    awayScore: true,
+                    homeTeamId: true,
+                    awayTeamId: true,
+                    advancingTeamId: true,
+                },
+            });
+
+            if (!match || match.status !== 'FINISHED') return false;
+            if (match.homeScore === null || match.awayScore === null) return false;
+
+            const unscored = await this.prisma.prediction.count({
+                where: { matchId, points: null },
+            });
+            if (unscored === 0) return false;
+
+            if (match.phase !== 'GROUP' && match.homeScore !== match.awayScore) {
+                const advancingTeamId = match.homeScore > match.awayScore
+                    ? match.homeTeamId
+                    : match.awayTeamId;
+                if (advancingTeamId && match.advancingTeamId !== advancingTeamId) {
+                    await this.prisma.match.update({
+                        where: { id: matchId },
+                        data: { advancingTeamId },
+                    });
+                }
+            }
+
+            await this.predictionsService.calculateMatchPoints(matchId);
+            await this.predictionsService.calculatePhaseBonuses(matchId);
+            this.logger.log(`Puntos calculados para partido ${matchId} (${unscored} pronóstico(s) pendiente(s))`);
+            return true;
+        } catch (error) {
+            this.logger.error(`Error calculando puntos del partido ${matchId}:`, this.formatError(error));
+            return false;
+        }
+    }
+
+    /** Recupera partidos ya finalizados en BD corp con pronósticos sin puntuar. */
+    private async scoreBacklogFinishedMatches(limit: number): Promise<number> {
+        const pending = await this.prisma.match.findMany({
+            where: {
+                status: 'FINISHED',
+                homeScore: { not: null },
+                awayScore: { not: null },
+                predictions: { some: { points: null } },
+            },
+            select: { id: true },
+            take: limit,
+        });
+
+        let scored = 0;
+        for (const { id } of pending) {
+            if (await this.scoreFinishedMatch(id)) scored += 1;
+        }
+        return scored;
     }
 
     /** Sincronizacion inicial/manual completa. La data corporativa solo se sincroniza aqui, no por cron. */
