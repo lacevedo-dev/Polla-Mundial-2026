@@ -899,14 +899,6 @@ export class PredictionsService {
     }
 
     async getCorpTenantUserBreakdown(tenantId: string, userId: string) {
-        const membership = await this.prisma.tenantMember.findFirst({
-            where: { tenantId, userId, status: 'ACTIVE' },
-            select: { id: true },
-        });
-        if (!membership) {
-            throw new NotFoundException('Usuario no encontrado en la organización');
-        }
-
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
             select: { id: true, username: true, name: true, avatar: true },
@@ -915,25 +907,34 @@ export class PredictionsService {
             throw new NotFoundException('Usuario no encontrado');
         }
 
+        const leagueIds = (
+            await this.prisma.league.findMany({
+                where: { tenantId },
+                select: { id: true },
+            })
+        ).map((league) => league.id);
+
+        const predictionWhere = leagueIds.length
+            ? { userId, leagueId: { in: leagueIds }, points: { not: null } }
+            : { userId, league: { tenantId }, points: { not: null } };
+
         const predictions = await this.prisma.prediction.findMany({
-            where: {
-                userId,
-                league: { tenantId },
-                points: { not: null },
-            },
+            where: predictionWhere,
             orderBy: { submittedAt: 'desc' },
             include: {
                 league: { select: { id: true, name: true } },
                 match: {
                     include: {
-                        homeTeam: { select: { id: true, name: true, shortCode: true, code: true } },
-                        awayTeam: { select: { id: true, name: true, shortCode: true, code: true } },
+                        homeTeam: { select: matchTeamSelect },
+                        awayTeam: { select: matchTeamSelect },
                     },
                 },
             },
         });
 
-        const summary = predictions.reduce<LeaderboardSummaryStats>(
+        const scoredPredictions = predictions.filter((prediction) => (prediction.points ?? 0) > 0);
+
+        const summary = scoredPredictions.reduce<LeaderboardSummaryStats>(
             (acc, prediction) => {
                 acc.points += prediction.points ?? 0;
                 const detail = this.parsePointDetail(prediction.pointDetail);
@@ -947,16 +948,13 @@ export class PredictionsService {
             { points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0 },
         );
 
-        const teamLabel = (team: { name: string; shortCode?: string | null; code?: string | null }) =>
-            team.shortCode || team.code || team.name;
-
         return {
             user,
             summary: {
                 ...summary,
                 phaseBonusPoints: 0,
             },
-            matches: predictions.map((prediction) => ({
+            matches: scoredPredictions.map((prediction) => ({
                 id: prediction.id,
                 leagueId: prediction.leagueId,
                 leagueName: prediction.league.name,
@@ -973,10 +971,11 @@ export class PredictionsService {
                     matchDate: prediction.match.matchDate,
                     phase: prediction.match.phase,
                     group: prediction.match.group,
+                    venue: prediction.match.venue,
                     homeScore: prediction.match.homeScore,
                     awayScore: prediction.match.awayScore,
-                    homeTeam: teamLabel(prediction.match.homeTeam),
-                    awayTeam: teamLabel(prediction.match.awayTeam),
+                    homeTeam: prediction.match.homeTeam,
+                    awayTeam: prediction.match.awayTeam,
                 },
             })),
             bonuses: [],

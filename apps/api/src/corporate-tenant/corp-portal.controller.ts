@@ -371,11 +371,20 @@ export class CorpPortalController {
 
         const userIds = members.map((m) => m.userId);
 
+        const leagueIds = (
+            await this.prisma.league.findMany({
+                where: { tenantId },
+                select: { id: true },
+            })
+        ).map((league) => league.id);
+
         const scores = await this.prisma.prediction.groupBy({
             by: ['userId'],
             where: {
                 userId: { in: userIds },
-                league: { tenantId },
+                ...(leagueIds.length
+                    ? { leagueId: { in: leagueIds } }
+                    : { league: { tenantId } }),
             },
             _sum: { points: true },
         });

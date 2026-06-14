@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Medal, Search, Trophy } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { request, resolveApiAssetUrl } from '../api';
+import { request, resolveApiAssetUrl, ApiError } from '../api';
+import { buildPointsResume, PointsBreakdown } from '../components/PointsBreakdown';
+import { Tooltip } from '../components/Tooltip';
 import {
-    buildPointsResume,
-    PointsBreakdown,
-    type PointDetail,
-} from '../components/PointsBreakdown';
+    toCorpRankingBreakdown,
+    type CorpRankingBreakdown,
+    type CorpRankingBreakdownApiResponse,
+} from '../utils/rankingBreakdown';
 
 interface RankingEntry {
     rank: number;
@@ -16,40 +18,6 @@ interface RankingEntry {
     avatar: string | null;
     totalPoints: number;
     isMe: boolean;
-}
-
-interface BreakdownMatch {
-    id: string;
-    leagueId: string;
-    leagueName: string;
-    points: number;
-    submittedAt: string;
-    pointDetail: PointDetail | null;
-    prediction: { homeScore: number; awayScore: number };
-    match: {
-        id: string;
-        matchDate: string;
-        phase: string;
-        group: string | null;
-        homeScore: number | null;
-        awayScore: number | null;
-        homeTeam: string;
-        awayTeam: string;
-    };
-}
-
-interface RankingBreakdown {
-    user: { id: string; name: string; username: string; avatar: string | null };
-    summary: {
-        points: number;
-        exactCount: number;
-        winnerCount: number;
-        goalCount: number;
-        uniqueCount: number;
-        phaseBonusPoints: number;
-    };
-    matches: BreakdownMatch[];
-    bonuses: Array<{ id: string; phase: string; points: number; awardedAt: string }>;
 }
 
 const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
@@ -62,8 +30,116 @@ const POINTS_LEGEND = [
     { code: 'Pu', label: 'Predicción única' },
 ] as const;
 
-function formatMatchDate(iso: string) {
-    return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+function BreakdownPanel({
+    entry,
+    breakdown,
+    loading,
+    error,
+    onRetry,
+}: {
+    entry: RankingEntry;
+    breakdown?: CorpRankingBreakdown;
+    loading: boolean;
+    error: string | null;
+    onRetry: () => void;
+}) {
+    if (loading && !breakdown) {
+        return (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Loader2 size={16} className="animate-spin" /> Cargando detalle…
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                <p>{error}</p>
+                <button type="button" onClick={onRetry} className="mt-2 text-xs font-bold underline">
+                    Reintentar
+                </button>
+            </div>
+        );
+    }
+
+    if (!breakdown || (!breakdown.matches.length && !breakdown.bonuses.length)) {
+        if (entry.totalPoints > 0) {
+            return (
+                <p className="text-sm text-slate-500">
+                    Hay {entry.totalPoints} pts en el ranking, pero aún no hay detalle partido a partido disponible.
+                </p>
+            );
+        }
+        return <p className="text-sm text-slate-500">Sin pronósticos puntuados todavía.</p>;
+    }
+
+    return (
+        <>
+            <p className="text-sm font-semibold text-slate-600 mb-3">
+                {buildPointsResume(breakdown.summary)}
+            </p>
+            <div className="space-y-2">
+                {breakdown.matches.map((match) => (
+                    <div key={match.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <img src={match.homeFlag} alt="" className="h-5 w-7 rounded object-cover" />
+                                    <span className="text-[10px] font-black uppercase text-slate-500">{match.homeTeamCode}</span>
+                                    <span className="text-[10px] font-bold text-slate-300">vs</span>
+                                    <img src={match.awayFlag} alt="" className="h-5 w-7 rounded object-cover" />
+                                    <span className="text-[10px] font-black uppercase text-slate-500">{match.awayTeamCode}</span>
+                                </div>
+                                <p className="truncate text-sm font-black text-slate-900">
+                                    {match.homeTeam} vs {match.awayTeam}
+                                </p>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                                    {match.displayDate} · {match.group ? `Grupo ${match.group}` : match.phase} · {match.leagueName}
+                                </p>
+                                <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                    Pronóstico {match.predictionHome}–{match.predictionAway}
+                                    {typeof match.resultHome === 'number' && typeof match.resultAway === 'number' && (
+                                        <> · Resultado {match.resultHome}–{match.resultAway}</>
+                                    )}
+                                </p>
+                                <p className="mt-2 text-[11px] font-semibold text-slate-600">{match.summaryLabel}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                                {match.pointDetail ? (
+                                    <Tooltip content={<PointsBreakdown detail={match.pointDetail} />}>
+                                        <div className="cursor-help">
+                                            <p className="text-lg font-black text-lime-600 underline decoration-dotted decoration-2 underline-offset-4">
+                                                {match.points}
+                                            </p>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">pts</p>
+                                        </div>
+                                    </Tooltip>
+                                ) : (
+                                    <>
+                                        <p className="text-lg font-black text-lime-600">{match.points}</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">pts</p>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            {breakdown.bonuses.length > 0 && (
+                <div className="mt-3 space-y-2">
+                    {breakdown.bonuses.map((bonus) => (
+                        <div key={bonus.id} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-black text-amber-900">Bono de fase</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">{bonus.phase}</p>
+                            </div>
+                            <p className="text-lg font-black text-amber-700">+{bonus.points}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </>
+    );
 }
 
 export default function Ranking() {
@@ -71,7 +147,8 @@ export default function Ranking() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-    const [breakdowns, setBreakdowns] = useState<Record<string, RankingBreakdown>>({});
+    const [breakdowns, setBreakdowns] = useState<Record<string, CorpRankingBreakdown>>({});
+    const [breakdownErrors, setBreakdownErrors] = useState<Record<string, string>>({});
     const [loadingBreakdownId, setLoadingBreakdownId] = useState<string | null>(null);
 
     useEffect(() => {
@@ -81,14 +158,22 @@ export default function Ranking() {
             .finally(() => setLoading(false));
     }, []);
 
-    const loadBreakdown = useCallback(async (userId: string) => {
-        if (breakdowns[userId]) return;
+    const loadBreakdown = useCallback(async (userId: string, force = false) => {
+        if (!force && breakdowns[userId]) return;
         setLoadingBreakdownId(userId);
+        setBreakdownErrors((prev) => {
+            const next = { ...prev };
+            delete next[userId];
+            return next;
+        });
         try {
-            const data = await request<RankingBreakdown>(`/corp/ranking/user/${userId}/breakdown`);
-            setBreakdowns((prev) => ({ ...prev, [userId]: data }));
-        } catch {
-            /* ignore */
+            const data = await request<CorpRankingBreakdownApiResponse>(`/corp/ranking/user/${userId}/breakdown`);
+            setBreakdowns((prev) => ({ ...prev, [userId]: toCorpRankingBreakdown(data) }));
+        } catch (err) {
+            const message = err instanceof ApiError
+                ? err.message
+                : 'No se pudo cargar el detalle de puntos.';
+            setBreakdownErrors((prev) => ({ ...prev, [userId]: message }));
         } finally {
             setLoadingBreakdownId(null);
         }
@@ -140,7 +225,7 @@ export default function Ranking() {
             <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Cómo leer los puntos</p>
                 <p className="mt-1 text-xs text-slate-500">
-                    Toca un participante para ver partido a partido por qué sumó puntos.
+                    Toca un participante para ver partido a partido por qué sumó puntos. Pasa el cursor sobre los puntos para el desglose técnico.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                     {POINTS_LEGEND.map((item) => (
@@ -186,7 +271,6 @@ export default function Ranking() {
                     <div className="divide-y divide-slate-50">
                         {filtered.map((entry) => {
                             const expanded = expandedUserId === entry.userId;
-                            const breakdown = breakdowns[entry.userId];
                             return (
                                 <div key={entry.userId}>
                                     <button
@@ -224,52 +308,13 @@ export default function Ranking() {
 
                                     {expanded && (
                                         <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-4">
-                                            {loadingBreakdownId === entry.userId && !breakdown ? (
-                                                <div className="flex items-center gap-2 text-sm text-slate-500">
-                                                    <Loader2 size={16} className="animate-spin" /> Cargando detalle…
-                                                </div>
-                                            ) : !breakdown || breakdown.matches.length === 0 ? (
-                                                <p className="text-sm text-slate-500">Sin pronósticos puntuados todavía.</p>
-                                            ) : (
-                                                <>
-                                                    <p className="text-sm font-semibold text-slate-600 mb-3">
-                                                        {buildPointsResume(breakdown.summary)}
-                                                    </p>
-                                                    <div className="space-y-2">
-                                                        {breakdown.matches.map((row) => (
-                                                            <div key={row.id} className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                                    <div className="min-w-0">
-                                                                        <p className="text-sm font-black text-slate-900 truncate">
-                                                                            {row.match.homeTeam} vs {row.match.awayTeam}
-                                                                        </p>
-                                                                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                                                                            {formatMatchDate(row.match.matchDate)}
-                                                                            {row.match.group ? ` · Grupo ${row.match.group}` : ` · ${row.match.phase}`}
-                                                                            {' · '}{row.leagueName}
-                                                                        </p>
-                                                                        <p className="mt-1 text-[11px] text-slate-500">
-                                                                            Pronóstico {row.prediction.homeScore}–{row.prediction.awayScore}
-                                                                            {row.match.homeScore != null && row.match.awayScore != null && (
-                                                                                <> · Resultado {row.match.homeScore}–{row.match.awayScore}</>
-                                                                            )}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="shrink-0 text-right">
-                                                                        <p className="text-lg font-black text-lime-600">{row.points}</p>
-                                                                        <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
-                                                                    </div>
-                                                                </div>
-                                                                {row.pointDetail && (
-                                                                    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                                                        <PointsBreakdown detail={row.pointDetail} light />
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </>
-                                            )}
+                                            <BreakdownPanel
+                                                entry={entry}
+                                                breakdown={breakdowns[entry.userId]}
+                                                loading={loadingBreakdownId === entry.userId}
+                                                error={breakdownErrors[entry.userId] ?? null}
+                                                onRetry={() => void loadBreakdown(entry.userId, true)}
+                                            />
                                         </div>
                                     )}
                                 </div>
