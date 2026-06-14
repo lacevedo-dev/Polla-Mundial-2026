@@ -5,6 +5,7 @@ import {
     Send, KeyRound, EyeOff, Eye, RefreshCw, Hash,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
+import { AdminSubNav } from '../components/AdminSubNav';
 import { request, ApiError, resolveApiAssetUrl } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -742,6 +743,7 @@ export default function AdminCorpMembers() {
                 </div>
             ) : (
             <>
+            <AdminSubNav />
             {/* Header */}
             <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
                 <div>

@@ -897,4 +897,89 @@ export class PredictionsService {
             standings: standings.slice(0, 10), // top 10 provisional
         };
     }
+
+    async getCorpTenantUserBreakdown(tenantId: string, userId: string) {
+        const membership = await this.prisma.tenantMember.findFirst({
+            where: { tenantId, userId, status: 'ACTIVE' },
+            select: { id: true },
+        });
+        if (!membership) {
+            throw new NotFoundException('Usuario no encontrado en la organización');
+        }
+
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, username: true, name: true, avatar: true },
+        });
+        if (!user) {
+            throw new NotFoundException('Usuario no encontrado');
+        }
+
+        const predictions = await this.prisma.prediction.findMany({
+            where: {
+                userId,
+                league: { tenantId },
+                points: { not: null },
+            },
+            orderBy: { submittedAt: 'desc' },
+            include: {
+                league: { select: { id: true, name: true } },
+                match: {
+                    include: {
+                        homeTeam: { select: { id: true, name: true, shortCode: true, code: true } },
+                        awayTeam: { select: { id: true, name: true, shortCode: true, code: true } },
+                    },
+                },
+            },
+        });
+
+        const summary = predictions.reduce<LeaderboardSummaryStats>(
+            (acc, prediction) => {
+                acc.points += prediction.points ?? 0;
+                const detail = this.parsePointDetail(prediction.pointDetail);
+                if (!detail) return acc;
+                if (detail.type === 'EXACT_SCORE') acc.exactCount += 1;
+                if (detail.type === 'CORRECT_WINNER' || detail.type === 'CORRECT_WINNER_GOAL') acc.winnerCount += 1;
+                if (detail.type === 'TEAM_GOALS' || detail.type === 'CORRECT_WINNER_GOAL') acc.goalCount += 1;
+                if ((detail.uniqueBonus ?? 0) > 0) acc.uniqueCount += 1;
+                return acc;
+            },
+            { points: 0, exactCount: 0, winnerCount: 0, goalCount: 0, uniqueCount: 0 },
+        );
+
+        const teamLabel = (team: { name: string; shortCode?: string | null; code?: string | null }) =>
+            team.shortCode || team.code || team.name;
+
+        return {
+            user,
+            summary: {
+                ...summary,
+                phaseBonusPoints: 0,
+            },
+            matches: predictions.map((prediction) => ({
+                id: prediction.id,
+                leagueId: prediction.leagueId,
+                leagueName: prediction.league.name,
+                points: prediction.points ?? 0,
+                submittedAt: prediction.submittedAt,
+                pointDetail: this.parsePointDetail(prediction.pointDetail),
+                prediction: {
+                    homeScore: prediction.homeScore,
+                    awayScore: prediction.awayScore,
+                    advanceTeamId: prediction.advanceTeamId,
+                },
+                match: {
+                    id: prediction.match.id,
+                    matchDate: prediction.match.matchDate,
+                    phase: prediction.match.phase,
+                    group: prediction.match.group,
+                    homeScore: prediction.match.homeScore,
+                    awayScore: prediction.match.awayScore,
+                    homeTeam: teamLabel(prediction.match.homeTeam),
+                    awayTeam: teamLabel(prediction.match.awayTeam),
+                },
+            })),
+            bonuses: [],
+        };
+    }
 }

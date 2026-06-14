@@ -4,6 +4,7 @@ import {
     Search, Trophy, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
+import { AdminSubNav } from '../components/AdminSubNav';
 import { request, ApiError } from '../api';
 import { useAuthStore } from '../stores/auth.store';
 
@@ -153,6 +154,7 @@ export default function AdminCorpMatches() {
 
     return (
         <CorpLayout>
+            <AdminSubNav />
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
