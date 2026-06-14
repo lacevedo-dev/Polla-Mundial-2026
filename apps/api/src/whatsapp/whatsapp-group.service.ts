@@ -230,6 +230,9 @@ export class WhatsappGroupService {
       scoringTeam: string | null;
       elapsed: number | null;
       leagueName: string;
+      scorerName?: string | null;
+      assistName?: string | null;
+      goalDetail?: string | null;
     },
   ): Promise<boolean> {
     const league = await this.prisma.league.findUnique({
@@ -514,15 +517,46 @@ function buildGoalCaption(params: {
   scoringTeam: string | null;
   elapsed: number | null;
   leagueName: string;
+  scorerName?: string | null;
+  assistName?: string | null;
+  goalDetail?: string | null;
 }): string {
   const minute = params.elapsed ? ` ${params.elapsed}'` : '';
   const score = `${params.homeScore} – ${params.awayScore}`;
+  const scorerLine = formatGoalScorerLine({
+    scoringTeam: params.scoringTeam,
+    scorerName: params.scorerName ?? null,
+    assistName: params.assistName ?? null,
+    goalDetail: params.goalDetail ?? null,
+  });
+
   return [
     `⚽ *¡GOL!* | ${params.leagueName}`,
-    params.scoringTeam
-      ? `${params.scoringTeam} marca — ${params.homeTeam} ${score} ${params.awayTeam}${minute}`
-      : `${params.homeTeam} ${score} ${params.awayTeam}${minute}`,
+    `${scorerLine} — ${params.homeTeam} ${score} ${params.awayTeam}${minute}`,
   ].join('\n');
+}
+
+function formatGoalScorerLine(params: {
+  scoringTeam: string | null;
+  scorerName: string | null;
+  assistName: string | null;
+  goalDetail: string | null;
+}): string {
+  if (params.goalDetail === 'Own Goal' && params.scorerName) {
+    return `Autogol de ${params.scorerName}`;
+  }
+
+  if (params.scorerName) {
+    const assist = params.assistName ? ` (asist. ${params.assistName})` : '';
+    const penalty = params.goalDetail === 'Penalty' ? ' (penalti)' : '';
+    return `${params.scorerName}${assist}${penalty}`;
+  }
+
+  if (params.scoringTeam) {
+    return params.scoringTeam;
+  }
+
+  return 'Gol anotado';
 }
 
 function buildPredictionsCaption(

@@ -509,6 +509,7 @@ export class MatchSyncService {
       const homeGoalsDelta = Math.max(0, newHome - prevHome);
       const awayGoalsDelta = Math.max(0, newAway - prevAway);
       const totalGoalsDelta = homeGoalsDelta + awayGoalsDelta;
+      let cachedFixtureEvents: any[] | undefined;
 
       const transitionedToFinished =
         match.status !== MatchStatus.FINISHED && status === MatchStatus.FINISHED;
@@ -521,45 +522,43 @@ export class MatchSyncService {
       ) {
         const elapsed = fixture.fixture.status.elapsed ?? null;
 
-        // When multiple goals are detected in one sync gap and there is budget available,
-        // fetch the real event timeline so we can notify with accurate order and minutes.
-        let goalEvents: Array<{ isHomeGoal: boolean; minute: number; playerName: string | null }> = [];
-        if (totalGoalsDelta > 1 && fixture.fixture.id && options.eventSyncEnabled !== false) {
+        // When goals are detected, fetch the event timeline (if enabled) to identify
+        // scorers and minutes — applies to single or multiple goals in one sync gap.
+        let goalEvents: ParsedGoalEvent[] = [];
+        if (
+          totalGoalsDelta >= 1 &&
+          fixture.fixture.id &&
+          options.eventSyncEnabled !== false
+        ) {
           const canSpendExtra = await this.rateLimiter.canMakeRequest();
           if (canSpendExtra) {
             try {
               const eventsResponse = await this.apiClient.getFixtureEvents(fixture.fixture.id);
               await this.rateLimiter.logRequest(
                 '/fixtures/events',
-                { fixture: fixture.fixture.id, source: 'multi-goal-gap' },
+                { fixture: fixture.fixture.id, source: 'live-goal' },
                 200,
                 undefined,
               );
               await this.syncPlan.incrementRequestsUsed(1);
 
-              const rawEvents: any[] = eventsResponse?.response ?? [];
-              const homeTeamId = fixture.teams.home.id;
-              goalEvents = rawEvents
-                .filter((ev) => ev.type === 'Goal' && ev.detail !== 'Missed Penalty')
-                .sort((a, b) => (a.time?.elapsed ?? 0) - (b.time?.elapsed ?? 0))
-                // Only new goals (minutes after last known sync scope)
-                .slice(-totalGoalsDelta)
-                .map((ev) => ({
-                  isHomeGoal: ev.team?.id === homeTeamId,
-                  minute: ev.time?.elapsed ?? 0,
-                  playerName: ev.player?.name ?? null,
-                }));
+              cachedFixtureEvents = eventsResponse?.response ?? [];
+              goalEvents = this.parseGoalEventsFromResponse(
+                cachedFixtureEvents,
+                fixture.teams.home.id,
+                totalGoalsDelta,
+              );
 
               this.logger.log(
-                `Multi-goal gap sync for match ${match.id}: fetched ${goalEvents.length} goal event(s) (${totalGoalsDelta} gap)`,
+                `Goal event sync for match ${match.id}: ${goalEvents.length}/${totalGoalsDelta} goal(s) resolved from API events`,
               );
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
-              this.logger.warn(`Multi-goal event fetch failed for match ${match.id}: ${msg}`);
+              this.logger.warn(`Goal event fetch failed for match ${match.id}: ${msg}`);
             }
           } else {
             this.logger.warn(
-              `Multi-goal gap (${totalGoalsDelta}) for match ${match.id}: skipping extra event fetch — no budget`,
+              `Goal delta (${totalGoalsDelta}) for match ${match.id}: skipping event fetch — no budget`,
             );
           }
         }
@@ -569,7 +568,6 @@ export class MatchSyncService {
         let runAway = prevAway;
 
         if (goalEvents.length === totalGoalsDelta) {
-          // Use real event order from API
           for (const goal of goalEvents) {
             if (goal.isHomeGoal) runHome++;
             else runAway++;
@@ -582,6 +580,11 @@ export class MatchSyncService {
               goal.isHomeGoal ? fixture.teams.home.name : null,
               goal.isHomeGoal ? null : fixture.teams.away.name,
               goal.minute,
+              {
+                scorerName: goal.playerName,
+                assistName: goal.assistName,
+                goalDetail: goal.detail,
+              },
             );
           }
         } else {
@@ -675,28 +678,49 @@ export class MatchSyncService {
       const shouldSyncEvents =
         options.eventSyncEnabled &&
         !match.eventsNoDataAt &&
-        (shouldSyncHalftimeEvents || (isFinalStatus && !wasFinalStatus));
+        (shouldSyncHalftimeEvents ||
+          (isFinalStatus && !wasFinalStatus) ||
+          cachedFixtureEvents !== undefined);
 
       if (shouldSyncEvents && fixture.fixture.id) {
-        const canSpendEventRequest = await this.rateLimiter.canMakeRequest();
-        if (!canSpendEventRequest) {
-          this.logger.warn(
-            `Skipping fixture events for match ${match.id}: no request budget available`,
-          );
-        } else {
+        if (cachedFixtureEvents !== undefined) {
           try {
-            const eventSyncResult = await this.syncMatchEvents(fixture.fixture.id, match.id);
+            const eventSyncResult = await this.syncMatchEvents(
+              fixture.fixture.id,
+              match.id,
+              cachedFixtureEvents,
+            );
             if (eventSyncResult.relevantEvents === 0) {
               await this.prisma.match.update({
                 where: { id: match.id },
-                data: {
-                  eventsNoDataAt: new Date(),
-                },
+                data: { eventsNoDataAt: new Date() },
               });
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             this.logger.warn(`Event sync failed for match ${match.id}: ${message}`);
+          }
+        } else {
+          const canSpendEventRequest = await this.rateLimiter.canMakeRequest();
+          if (!canSpendEventRequest) {
+            this.logger.warn(
+              `Skipping fixture events for match ${match.id}: no request budget available`,
+            );
+          } else {
+            try {
+              const eventSyncResult = await this.syncMatchEvents(fixture.fixture.id, match.id);
+              if (eventSyncResult.relevantEvents === 0) {
+                await this.prisma.match.update({
+                  where: { id: match.id },
+                  data: {
+                    eventsNoDataAt: new Date(),
+                  },
+                });
+              }
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              this.logger.warn(`Event sync failed for match ${match.id}: ${message}`);
+            }
           }
         }
       }
@@ -780,6 +804,25 @@ export class MatchSyncService {
     }
   }
 
+  private parseGoalEventsFromResponse(
+    rawEvents: any[],
+    homeTeamApiId: number,
+    count: number,
+  ): ParsedGoalEvent[] {
+    return rawEvents
+      .filter((ev) => ev.type === 'Goal' && ev.detail !== 'Missed Penalty')
+      .sort((a, b) => (a.time?.elapsed ?? 0) - (b.time?.elapsed ?? 0))
+      .slice(-count)
+      .map((ev) => ({
+        isHomeGoal: ev.team?.id === homeTeamApiId,
+        minute: ev.time?.elapsed ?? 0,
+        extraMin: ev.time?.extra ?? null,
+        playerName: ev.player?.name ?? null,
+        assistName: ev.assist?.name ?? null,
+        detail: ev.detail ?? null,
+      }));
+  }
+
   /**
    * Sync goals, cards and substitutions for a live match.
    * Uses upsert keyed on (matchId, type, playerName, minute) to avoid duplicates.
@@ -787,12 +830,15 @@ export class MatchSyncService {
   private async syncMatchEvents(
     fixtureId: number,
     matchId: string,
+    preloadedEvents?: any[],
   ): Promise<{
     relevantEvents: number;
     rawEvents: number;
   }> {
-    const response = await this.apiClient.getFixtureEvents(fixtureId);
-    const events: any[] = response?.response ?? [];
+    const events: any[] =
+      preloadedEvents ??
+      (await this.apiClient.getFixtureEvents(fixtureId))?.response ??
+      [];
     if (!events.length) {
       return { relevantEvents: 0, rawEvents: 0 };
     }
@@ -861,9 +907,14 @@ export class MatchSyncService {
     awayTeamName: string,
     homeScore: number | null,
     awayScore: number | null,
-    goalScorerTeam: string | null, // null if no goal for this team
+    goalScorerTeam: string | null,
     awayGoalScorerTeam: string | null,
     elapsed: number | null,
+    scorerInfo?: {
+      scorerName: string | null;
+      assistName: string | null;
+      goalDetail: string | null;
+    },
   ): Promise<void> {
     try {
       const predictions = await this.prisma.prediction.findMany({
@@ -882,19 +933,19 @@ export class MatchSyncService {
         : [];
       const leagueNameById = new Map(leagues.map((l) => [l.id, l.name]));
 
-      const score = `${homeScore ?? '-'}-${awayScore ?? '-'}`;
-      const minute = elapsed ? `${elapsed}'` : '';
-      const goalTeams: string[] = [];
-      if (goalScorerTeam) goalTeams.push(goalScorerTeam);
-      if (awayGoalScorerTeam) goalTeams.push(awayGoalScorerTeam);
-      const goalTeamText = goalTeams.join(' y ');
-
-      const title = '⚽ ¡GOL!';
-      const body = goalTeams.length === 2
-        ? `${goalTeamText} anotar${goalTeams.length > 1 ? 'ron' : ''} — ${homeTeamName} ${score} ${awayTeamName}${minute ? ` ${minute}` : ''}`
-        : `${goalTeamText} marca${goalScorerTeam ? '' : 'n'} — ${homeTeamName} ${score} ${awayTeamName}${minute ? ` ${minute}` : ''}`;
-
       const scoringTeam = goalScorerTeam ?? awayGoalScorerTeam;
+      const { title, body, minuteLabel } = buildGoalNotificationText({
+        homeTeamName,
+        awayTeamName,
+        homeScore,
+        awayScore,
+        goalScorerTeam,
+        awayGoalScorerTeam,
+        elapsed,
+        scorerName: scorerInfo?.scorerName ?? null,
+        assistName: scorerInfo?.assistName ?? null,
+        goalDetail: scorerInfo?.goalDetail ?? null,
+      });
 
       if (this.waGroup && homeScore !== null && awayScore !== null) {
         for (const leagueId of leagueIds) {
@@ -907,6 +958,9 @@ export class MatchSyncService {
               scoringTeam,
               elapsed,
               leagueName: leagueNameById.get(leagueId) ?? 'Polla',
+              scorerName: scorerInfo?.scorerName ?? null,
+              assistName: scorerInfo?.assistName ?? null,
+              goalDetail: scorerInfo?.goalDetail ?? null,
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -915,7 +969,6 @@ export class MatchSyncService {
         }
       }
 
-      // Send to all users with predictions for this match (limit to one notification per user per goal event)
       const notifiedUsers = new Set<string>();
       for (const prediction of predictions) {
         if (notifiedUsers.has(prediction.userId)) continue;
@@ -926,7 +979,14 @@ export class MatchSyncService {
           body,
           tag: `goal-${matchId}-${Date.now()}`,
           requireInteraction: false,
-          data: { matchId, type: 'goal', homeScore, awayScore },
+          data: {
+            matchId,
+            type: 'goal',
+            homeScore,
+            awayScore,
+            scorerName: scorerInfo?.scorerName ?? null,
+            elapsed,
+          },
         });
 
         await this.notifications.createInAppNotification({
@@ -934,7 +994,17 @@ export class MatchSyncService {
           type: 'GOAL_SCORED',
           title,
           body,
-          data: { matchId, homeScore, awayScore, elapsed },
+          data: {
+            matchId,
+            homeScore,
+            awayScore,
+            elapsed,
+            scorerName: scorerInfo?.scorerName ?? null,
+            assistName: scorerInfo?.assistName ?? null,
+            goalDetail: scorerInfo?.goalDetail ?? null,
+            scoringTeam,
+            minute: minuteLabel,
+          },
         });
       }
     } catch (error) {
@@ -1608,4 +1678,65 @@ export class MatchSyncService {
       );
     }
   }
+}
+
+type ParsedGoalEvent = {
+  isHomeGoal: boolean;
+  minute: number;
+  extraMin: number | null;
+  playerName: string | null;
+  assistName: string | null;
+  detail: string | null;
+};
+
+function buildGoalNotificationText(params: {
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  goalScorerTeam: string | null;
+  awayGoalScorerTeam: string | null;
+  elapsed: number | null;
+  scorerName: string | null;
+  assistName: string | null;
+  goalDetail: string | null;
+}): { title: string; body: string; minuteLabel: string | null } {
+  const score = `${params.homeScore ?? '-'}-${params.awayScore ?? '-'}`;
+  const minuteLabel = params.elapsed != null ? `${params.elapsed}'` : null;
+  const minuteSuffix = minuteLabel ? ` ${minuteLabel}` : '';
+
+  const scorerLine = formatGoalScorerLine({
+    scoringTeam: params.goalScorerTeam ?? params.awayGoalScorerTeam,
+    scorerName: params.scorerName,
+    assistName: params.assistName,
+    goalDetail: params.goalDetail,
+  });
+
+  const title = params.scorerName ? `⚽ ¡GOL de ${params.scorerName}!` : '⚽ ¡GOL!';
+  const body = `${scorerLine} — ${params.homeTeamName} ${score} ${params.awayTeamName}${minuteSuffix}`;
+
+  return { title, body, minuteLabel };
+}
+
+function formatGoalScorerLine(params: {
+  scoringTeam: string | null;
+  scorerName: string | null;
+  assistName: string | null;
+  goalDetail: string | null;
+}): string {
+  if (params.goalDetail === 'Own Goal' && params.scorerName) {
+    return `Autogol de ${params.scorerName}`;
+  }
+
+  if (params.scorerName) {
+    const assist = params.assistName ? ` (asist. ${params.assistName})` : '';
+    const penalty = params.goalDetail === 'Penalty' ? ' (penalti)' : '';
+    return `${params.scorerName}${assist}${penalty}`;
+  }
+
+  if (params.scoringTeam) {
+    return params.scoringTeam;
+  }
+
+  return 'Gol';
 }

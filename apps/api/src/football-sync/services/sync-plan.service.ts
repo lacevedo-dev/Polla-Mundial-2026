@@ -783,7 +783,7 @@ export class SyncPlanService {
           executionState: eventSyncEnabled ? 'enabled' : 'disabled_by_config',
           disabledReason: eventSyncEnabled ? undefined : 'event_sync_disabled',
           notes:
-            'Consulta de eventos reservada para el entretiempo. Solo se agenda si sobra presupuesto y no se reintenta para el fixture si devuelve sin eventos útiles.',
+            'Consulta de eventos reservada para el entretiempo. Al detectar un gol en vivo también se consulta /fixtures/events (si hay presupuesto) para identificar al goleador en push, campana y WA Grupo.',
           priority: 2,
         });
         eventCandidates.push({
