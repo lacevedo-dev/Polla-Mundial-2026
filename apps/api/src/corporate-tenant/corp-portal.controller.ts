@@ -308,7 +308,6 @@ export class CorpPortalController {
                 rank: i + 1,
                 userId: p.userId,
                 name: userMap.get(p.userId)?.name ?? 'â€”',
-                username: (userMap.get(p.userId) as any)?.documentNumber ?? userMap.get(p.userId)?.username ?? '',
                 avatar: userMap.get(p.userId)?.avatar ?? null,
                 totalPoints: p._sum.points ?? 0,
                 isMe: p.userId === userId,
@@ -395,7 +394,6 @@ export class CorpPortalController {
             .map((m) => ({
                 userId: m.userId,
                 name: m.user.name,
-                username: (m.user as any).documentNumber ?? m.user.username,
                 avatar: m.user.avatar,
                 totalPoints: scoreMap.get(m.userId) ?? 0,
                 isMe: m.userId === userId,
