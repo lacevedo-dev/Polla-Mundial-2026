@@ -71,6 +71,7 @@ interface ChannelBreakdown {
   whatsappSentCount?: number;
   emailQueued?: number;
   emailFailed?: number;
+  inAppSent?: number;
   waGroupEnqueued?: number;
   waGroupSent?: number;
   waGroupFailed?: number;
@@ -220,7 +221,7 @@ function getChannelCounters(
     case 'email':
       return { sent: breakdown.emailQueued ?? 0, failed: breakdown.emailFailed ?? 0, pending: 0 };
     case 'inApp':
-      return null;
+      return { sent: breakdown.inAppSent ?? 0, failed: 0, pending: 0 };
     default:
       return null;
   }
@@ -551,7 +552,15 @@ function StepCell({
   match: OperationsMatch;
 }) {
   const navigate = useNavigate();
-  const canRetry = step.status === 'FAILED' || step.status === 'OVERDUE';
+  const canRetry =
+    step.status === 'FAILED' ||
+    step.status === 'OVERDUE' ||
+    step.status === 'WARNING' ||
+    step.status === 'MANUAL' ||
+    (step.status === 'SUCCESS' &&
+      (STEP_CHANNELS[step.key] ?? []).some((ch) =>
+        channelHasFailure(ch, breakdown, step),
+      ));
   const channels = STEP_CHANNELS[step.key] ?? [];
   const breakdown = step.latestDetails?.channelBreakdown;
 
@@ -1147,9 +1156,17 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
             </button>
           )}
           {retryResult?.ok && (
-            <button onClick={() => { onClose(); onRefresh(); }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700">
-              <CheckCircle2 size={12} /> Actualizar panel
-            </button>
+            <>
+              <button
+                onClick={() => { setRetryResult(null); }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+              >
+                <RotateCcw size={12} /> Reintentar otra vez
+              </button>
+              <button onClick={() => { onClose(); onRefresh(); }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700">
+                <CheckCircle2 size={12} /> Actualizar panel
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -10,6 +10,9 @@ const mockPrisma = {
   league: {
     findUnique: jest.fn(),
   },
+  systemConfig: {
+    findUnique: jest.fn(),
+  },
   whatsappGroupJob: {
     upsert: jest.fn(),
     findUnique: jest.fn(),
@@ -55,6 +58,7 @@ describe('WhatsappGroupService', () => {
     service = module.get<WhatsappGroupService>(WhatsappGroupService);
 
     jest.clearAllMocks();
+    mockPrisma.systemConfig.findUnique.mockResolvedValue(null);
   });
 
   describe('enqueueForLeague', () => {

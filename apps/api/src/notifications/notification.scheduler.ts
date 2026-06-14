@@ -243,27 +243,10 @@ export class NotificationScheduler {
   async sendMatchReminders(
     context?: MatchAutomationSweepContext,
   ): Promise<SchedulerObservationOutcome> {
-    const execution = await tryRunExclusiveBackgroundJob(
-      NotificationScheduler.BACKGROUND_DB_JOB_KEY,
-      'sendMatchReminders',
-      () => this.runSendMatchReminders(context),
-    );
-    if (!execution.ran) {
-      logExclusiveBackgroundJobSkip(
-        this.logger,
-        'sendMatchReminders',
-        execution,
-      );
-      return {
-        status: 'skipped',
-        summary: {
-          reason: 'background_lock',
-          lockHolder: execution.skip.holder,
-          heldMs: execution.skip.heldMs,
-          skipCount: execution.skip.skipCount,
-        },
-      };
-    }
+    // Sin lock compartido con sync: el sweep ya serializa tareas y el lock
+    // background-db-job provocaba omisiones silenciosas cuando syncTodayMatches
+    // estaba en curso durante la ventana de 55–65 min.
+    await this.runSendMatchReminders(context);
 
     return {
       status: 'completed',
@@ -387,8 +370,9 @@ export class NotificationScheduler {
             NotificationType.MATCH_REMINDER,
             title,
             body,
-            { 
-              matchId: match.id, 
+            {
+              matchId: match.id,
+              leagueId: userLeagues[0].leagueId,
               leagueIds: userLeagues.map(ul => ul.leagueId),
               totalPollas,
               pollasPending,
@@ -474,6 +458,12 @@ export class NotificationScheduler {
           });
 
           try {
+            const waGroupEnqueued = await this.enqueueWaGroupNotif(
+              WhatsappGroupJobType.MATCH_REMINDER,
+              match.id,
+              league.id,
+              '',
+            );
 
             await this.observability.finishRun(runId, {
               status:
@@ -499,9 +489,8 @@ export class NotificationScheduler {
                   pushDevices: totalPushDevices,
                   whatsappSentCount: totalWhatsappSent,
                   emailQueued: totalEmailQueued,
-                  waGroupEnqueued: await this.enqueueWaGroupNotif(
-                    WhatsappGroupJobType.MATCH_REMINDER, match.id, league.id, '',
-                  ),
+                  inAppSent: totalDelivered,
+                  waGroupEnqueued: waGroupEnqueued,
                 },
                 alreadySentCount: totalAlreadySent,
                 predictedUsers: predictedUserIds.size,
@@ -532,27 +521,7 @@ export class NotificationScheduler {
   async sendPredictionClosingAlerts(
     context?: MatchAutomationSweepContext,
   ): Promise<SchedulerObservationOutcome> {
-    const execution = await tryRunExclusiveBackgroundJob(
-      NotificationScheduler.BACKGROUND_DB_JOB_KEY,
-      'sendPredictionClosingAlerts',
-      () => this.runSendPredictionClosingAlerts(context),
-    );
-    if (!execution.ran) {
-      logExclusiveBackgroundJobSkip(
-        this.logger,
-        'sendPredictionClosingAlerts',
-        execution,
-      );
-      return {
-        status: 'skipped',
-        summary: {
-          reason: 'background_lock',
-          lockHolder: execution.skip.holder,
-          heldMs: execution.skip.heldMs,
-          skipCount: execution.skip.skipCount,
-        },
-      };
-    }
+    await this.runSendPredictionClosingAlerts(context);
 
     return {
       status: 'completed',
@@ -1183,7 +1152,22 @@ export class NotificationScheduler {
   // ─── Métodos de reintento manual ─────────────────────────────────────────────
 
   /** Fuerza el envío del recordatorio de partido para un matchId y leagueId opcionales */
-  async retryReminderForMatch(matchId: string, leagueId?: string): Promise<void> {
+  async retryReminderForMatch(
+    matchId: string,
+    leagueId?: string,
+  ): Promise<MatchReminderRetrySummary> {
+    const summary: MatchReminderRetrySummary = {
+      usersNotified: 0,
+      pushSent: 0,
+      pushFailed: 0,
+      pushDevices: 0,
+      whatsappSent: 0,
+      waGroupSent: 0,
+      waGroupFailed: 0,
+      emailQueued: 0,
+      audienceCount: 0,
+    };
+
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
       select: {
@@ -1196,7 +1180,7 @@ export class NotificationScheduler {
         predictions: { select: { userId: true, leagueId: true } },
       },
     });
-    if (!match) return;
+    if (!match) return summary;
 
     const leagues = leagueId
       ? await this.prisma.league.findMany({
@@ -1210,7 +1194,6 @@ export class NotificationScheduler {
 
     // Agrupar usuarios por partido para evitar notificaciones duplicadas
     const userLeaguesMap = new Map<string, Array<{ leagueId: string; hasPrediction: boolean }>>();
-    const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
 
     // Construir mapa de usuarios con sus pollas para este partido
     for (const league of leagues) {
@@ -1231,6 +1214,7 @@ export class NotificationScheduler {
 
     // Obtener contactos de usuarios
     const allUserIds = [...userLeaguesMap.keys()];
+    summary.audienceCount = allUserIds.length;
     const userContacts = await this.fetchActiveUserContacts(allUserIds);
 
     // Enviar una notificación por usuario (agrupada)
@@ -1256,13 +1240,14 @@ export class NotificationScheduler {
         }
       }
 
-      await this.notifyUser(
+      const delivery = await this.notifyUser(
         userId,
         NotificationType.MATCH_REMINDER,
         title,
         body,
         {
           matchId: match.id,
+          leagueId: userLeagues[0].leagueId,
           leagueIds: userLeagues.map(ul => ul.leagueId),
           totalPollas,
           pollasPending,
@@ -1271,6 +1256,11 @@ export class NotificationScheduler {
         `[MANUAL] Partido en ~60 min: ${home} vs ${away}`,
         userContacts.get(userId) ?? null,
       );
+      summary.usersNotified++;
+      summary.pushSent += delivery.pushSent;
+      summary.pushFailed += delivery.pushFailed;
+      summary.pushDevices += delivery.pushDevices;
+      if (delivery.whatsappSent) summary.whatsappSent++;
 
       // Obtener datos completos de las pollas con participantes
       const leagueData = await this.getLeagueDataForUser(
@@ -1319,12 +1309,32 @@ export class NotificationScheduler {
         match.id,
         userLeagues[0].leagueId,
       );
+      summary.emailQueued++;
     }
 
-    // Encolar notificación WA Grupo por cada liga (igual que el flujo automático)
+    // Reenvío inmediato a WA Grupo por liga (procesa el job en el acto si hay sesión)
     for (const league of leagues) {
-      await this.enqueueWaGroupNotif(WhatsappGroupJobType.MATCH_REMINDER, match.id, league.id, '');
+      if (!this.waGroup) {
+        summary.waGroupFailed++;
+        continue;
+      }
+      try {
+        const result = await this.waGroup.retryStepDelivery(
+          match.id,
+          league.id,
+          WhatsappGroupJobType.MATCH_REMINDER,
+        );
+        if (result.ok) {
+          summary.waGroupSent++;
+        } else {
+          summary.waGroupFailed++;
+        }
+      } catch {
+        summary.waGroupFailed++;
+      }
     }
+
+    return summary;
   }
 
   /** Fuerza el envío del cierre de predicciones para un matchId y leagueId opcionales */
@@ -1513,4 +1523,16 @@ type NotificationDeliveryResult = {
   pushDevices: number;
   whatsappSent: boolean;
   skipped: boolean;
+};
+
+export type MatchReminderRetrySummary = {
+  usersNotified: number;
+  pushSent: number;
+  pushFailed: number;
+  pushDevices: number;
+  whatsappSent: number;
+  waGroupSent: number;
+  waGroupFailed: number;
+  emailQueued: number;
+  audienceCount: number;
 };

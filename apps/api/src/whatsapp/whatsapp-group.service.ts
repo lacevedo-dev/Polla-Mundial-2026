@@ -327,6 +327,11 @@ export class WhatsappGroupService {
     leagueId: string,
     caption: string,
   ): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(type))) {
+      this.logger.debug(`WA Grupo deshabilitado para ${type} por override de configuración`);
+      return false;
+    }
+
     const league = await this.prisma.league.findUnique({
       where: { id: leagueId },
       select: { whatsappGroupId: true },
@@ -334,9 +339,26 @@ export class WhatsappGroupService {
     if (!league?.whatsappGroupId) return false;
 
     const dedupeKey = `${type}:${matchId}:${leagueId}`;
-    await this.prisma.whatsappGroupJob.upsert({
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
       where: { dedupeKey },
-      create: {
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return true;
+    }
+
+    if (existing?.status === WhatsappJobStatus.FAILED) {
+      await this.resetFailedJob(existing.id);
+      return true;
+    }
+
+    if (existing) {
+      return true;
+    }
+
+    await this.prisma.whatsappGroupJob.create({
+      data: {
         type,
         matchId,
         leagueId,
@@ -345,7 +367,6 @@ export class WhatsappGroupService {
         caption,
         status: WhatsappJobStatus.PENDING,
       },
-      update: {},
     });
     return true;
   }

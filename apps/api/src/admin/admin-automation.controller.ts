@@ -9,7 +9,7 @@ import { AdminAutomationOperationsQueryDto } from './dto/admin-automation-operat
 import { AdminAutomationRetryDto } from './dto/admin-automation-retry.dto';
 import { AdminAutomationRetryChannelDto } from './dto/admin-automation-retry-channel.dto';
 import { EmailBacklogAuditService } from '../email/email-backlog-audit.service';
-import { NotificationScheduler } from '../notifications/notification.scheduler';
+import { NotificationScheduler, type MatchReminderRetrySummary } from '../notifications/notification.scheduler';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
@@ -423,7 +423,7 @@ export class AdminAutomationController {
       return {
         ...n,
         matchId:     (parsed.matchId as string)   ?? null,
-        leagueId:    (parsed.leagueId as string)  ?? null,
+        leagueId:    (parsed.leagueId as string) ?? (Array.isArray(parsed.leagueIds) ? (parsed.leagueIds[0] as string) : null) ?? null,
         trigger:     (parsed._trigger as string)  ?? null,
         pushSent:    typeof parsed._pushSent    === 'number' ? parsed._pushSent    as number : null,
         pushFailed:  typeof parsed._pushFailed  === 'number' ? parsed._pushFailed  as number : null,
@@ -497,9 +497,44 @@ export class AdminAutomationController {
 
     try {
       switch (dto.step) {
-        case AutomationStep.MATCH_REMINDER:
-          await this.notificationScheduler.retryReminderForMatch(dto.matchId, dto.leagueId);
-          break;
+        case AutomationStep.MATCH_REMINDER: {
+          const delivery = await this.notificationScheduler.retryReminderForMatch(
+            dto.matchId,
+            dto.leagueId,
+          );
+          const ok = this.isMatchReminderRetrySuccessful(delivery);
+          await this.observability.finishRun(runId, {
+            status: ok
+              ? delivery.pushFailed > 0 || delivery.waGroupFailed > 0
+                ? 'WARNING'
+                : 'SUCCESS'
+              : 'FAILED',
+            summary: this.buildMatchReminderRetrySummary(label, delivery),
+            deliveredCount: delivery.usersNotified,
+            failedCount: delivery.pushFailed + delivery.waGroupFailed,
+            warningCount: delivery.pushFailed + delivery.waGroupFailed,
+            details: {
+              channelBreakdown: {
+                pushSent: delivery.pushSent,
+                pushFailed: delivery.pushFailed,
+                pushDevices: delivery.pushDevices,
+                whatsappSentCount: delivery.whatsappSent,
+                emailQueued: delivery.emailQueued,
+                inAppSent: delivery.usersNotified,
+                waGroupSent: delivery.waGroupSent,
+                waGroupFailed: delivery.waGroupFailed,
+              },
+              audienceCount: delivery.audienceCount,
+            },
+          });
+
+          return {
+            ok,
+            runId,
+            summary: this.buildMatchReminderRetrySummary(label, delivery),
+            delivery,
+          };
+        }
         case AutomationStep.PREDICTION_CLOSING:
           await this.notificationScheduler.retryClosingForMatch(dto.matchId, dto.leagueId);
           break;
@@ -601,5 +636,39 @@ export class AdminAutomationController {
         ? `✓ Push enviado al usuario actual a ${result.sent}/${result.devices} dispositivo(s).`
         : `✗ Falló en ${result.failed} dispositivo(s). Verifica VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY.`,
     };
+  }
+
+  private isMatchReminderRetrySuccessful(delivery: MatchReminderRetrySummary): boolean {
+    if (delivery.audienceCount === 0) return false;
+    return (
+      delivery.usersNotified > 0 ||
+      delivery.waGroupSent > 0 ||
+      delivery.pushSent > 0
+    );
+  }
+
+  private buildMatchReminderRetrySummary(
+    label: string,
+    delivery: MatchReminderRetrySummary,
+  ): string {
+    if (delivery.audienceCount === 0) {
+      return `No hay miembros activos en las ligas de ${label}.`;
+    }
+
+    const parts = [
+      `${delivery.usersNotified} in-app`,
+      `${delivery.pushSent}/${delivery.pushDevices} push`,
+      `${delivery.waGroupSent} WA grupo`,
+    ];
+
+    if (delivery.pushFailed > 0 || delivery.waGroupFailed > 0) {
+      return `Reintento parcial para ${label}: ${parts.join(', ')}. Fallos: push ${delivery.pushFailed}, WA grupo ${delivery.waGroupFailed}.`;
+    }
+
+    if (delivery.usersNotified === 0 && delivery.waGroupSent === 0) {
+      return `Reintento sin entregas para ${label}. Revisa canales y suscripciones push.`;
+    }
+
+    return `Reintento completado para ${label}: ${parts.join(', ')}.`;
   }
 }

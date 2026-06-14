@@ -5,15 +5,53 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Parsea el campo JSON `data` de una notificación.
- * data = JSON.stringify({ matchId, leagueId, ... })
  */
-function parseData(data: string | null): { matchId?: string; leagueId?: string } {
+function parseData(data: string | null): {
+  matchId?: string;
+  leagueId?: string;
+  leagueIds?: string[];
+} {
   if (!data) return {};
   try {
-    return JSON.parse(data) as { matchId?: string; leagueId?: string };
+    const parsed = JSON.parse(data) as {
+      matchId?: string;
+      leagueId?: string;
+      leagueIds?: string[];
+    };
+    const leagueIds = Array.isArray(parsed.leagueIds)
+      ? parsed.leagueIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
+    const leagueId =
+      typeof parsed.leagueId === 'string'
+        ? parsed.leagueId
+        : leagueIds?.[0];
+
+    return {
+      matchId: parsed.matchId,
+      leagueId,
+      leagueIds,
+    };
   } catch {
     return {};
   }
+}
+
+function notificationBelongsToTenant(
+  leagueId: string | undefined,
+  leagueIds: string[] | undefined,
+  tenantLeagueIds: string[],
+): boolean {
+  const relevantIds = leagueIds?.length
+    ? leagueIds
+    : leagueId
+      ? [leagueId]
+      : [];
+
+  if (relevantIds.length === 0) {
+    return true;
+  }
+
+  return relevantIds.some((id) => tenantLeagueIds.includes(id));
 }
 
 @Controller('notifications')
@@ -78,11 +116,12 @@ export class NotificationsController {
     const deduplicated: typeof raw = [];
 
     for (const n of raw) {
-      const { matchId, leagueId } = parseData(n.data);
+      const { matchId, leagueId, leagueIds } = parseData(n.data);
 
-      // Filtrar por tenant: si se pasa tenantSlug y la notificación tiene leagueId,
-      // solo incluir si esa liga pertenece al tenant
-      if (tenantLeagueIds !== undefined && leagueId && !tenantLeagueIds.includes(leagueId)) {
+      if (
+        tenantLeagueIds !== undefined &&
+        !notificationBelongsToTenant(leagueId, leagueIds, tenantLeagueIds)
+      ) {
         continue;
       }
 
