@@ -552,17 +552,17 @@ function StepCell({
   match: OperationsMatch;
 }) {
   const navigate = useNavigate();
+  const breakdown = step.latestDetails?.channelBreakdown;
+  const channels = STEP_CHANNELS[step.key] ?? [];
   const canRetry =
     step.status === 'FAILED' ||
     step.status === 'OVERDUE' ||
     step.status === 'WARNING' ||
     step.status === 'MANUAL' ||
     (step.status === 'SUCCESS' &&
-      (STEP_CHANNELS[step.key] ?? []).some((ch) =>
+      channels.some((ch) =>
         channelHasFailure(ch, breakdown, step),
       ));
-  const channels = STEP_CHANNELS[step.key] ?? [];
-  const breakdown = step.latestDetails?.channelBreakdown;
 
   // Mapeo de step keys a EmailJobType
   const stepKeyToEmailType: Record<string, string> = {
