@@ -251,12 +251,65 @@ const PHASE_META = [
 
 const EXPANDED_PHASE_GROUPS = PHASE_META.map(({ id, phase, label }) => ({ id, phase, label }));
 
+/** Catálogo local por si el API aún no expone stepCatalog (deploy pendiente). */
+const FALLBACK_STEP_CATALOG: StepCatalogEntry[] = [
+  { key: 'MATCH_REMINDER', phase: 'PRE_MATCH', label: 'Recordatorio T-60', shortLabel: 'T-60', description: '', schedulerId: 'match_reminder', channels: ['push', 'inApp', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'ESCALATION_T45', phase: 'PRE_MATCH', label: 'Escalada T-45', shortLabel: 'T-45', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'ESCALATION_T30', phase: 'PRE_MATCH', label: 'Escalada T-30', shortLabel: 'T-30', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'ESCALATION_FINAL', phase: 'PRE_MATCH', label: 'Escalada final', shortLabel: 'T-f', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'PREDICTION_CLOSING', phase: 'PRE_MATCH', label: 'Cierre predicciones', shortLabel: 'Cierre', description: '', schedulerId: 'prediction_closing', channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'MATCH_START', phase: 'LIVE', label: 'Inicio partido', shortLabel: 'Inicio', description: '', schedulerId: 'live_match_start', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'HALFTIME', phase: 'LIVE', label: 'Medio tiempo', shortLabel: 'HT', description: '', schedulerId: 'live_halftime', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'SECOND_HALF_START', phase: 'LIVE', label: '2.ª parte', shortLabel: '2H', description: '', schedulerId: 'live_second_half', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'MATCH_LIVE_END', phase: 'LIVE', label: 'Fin partido (live)', shortLabel: 'Fin', description: '', schedulerId: 'live_match_end', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'GOAL_IMPACT', phase: 'LIVE', label: 'Impacto gol (WA)', shortLabel: 'Imp.G', description: '', schedulerId: 'live_goal_impact', channels: ['waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'RESULT_NOTIFICATION', phase: 'POST_MATCH', label: 'Resultado personal', shortLabel: 'Result.', description: '', schedulerId: 'match_result', channels: ['push', 'whatsapp', 'waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'PREDICTION_REPORT', phase: 'POST_MATCH', label: 'Reporte predicciones', shortLabel: 'P.Rep', description: '', schedulerId: 'prediction_report', channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'RESULT_REPORT', phase: 'POST_MATCH', label: 'Reporte resultados', shortLabel: 'Rep.F', description: '', schedulerId: 'result_report', channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+];
+
+function resolveStepCatalog(status: AutomationStatus | null): StepCatalogEntry[] {
+  const fromApi = status?.stepCatalog;
+  if (fromApi && fromApi.length > 0) return fromApi;
+
+  const flags = status?.featureFlags;
+  return FALLBACK_STEP_CATALOG.map((step) => {
+    const flagActive = !step.requiresFlag || flags?.[step.requiresFlag]?.enabled === true;
+    return { ...step, flagActive, operational: step.enabled && flagActive };
+  });
+}
+
 function buildMatrixGridColumns(stepCount: number): string {
   return `minmax(0,1.55fr) auto auto auto repeat(${Math.max(stepCount, 1)}, minmax(3.25rem, 1fr)) 1.2rem`;
 }
 
-function getVisibleSteps(catalog: StepCatalogEntry[] | undefined): StepCatalogEntry[] {
-  return (catalog ?? []).filter((step) => step.enabled);
+function getVisibleSteps(catalog: StepCatalogEntry[]): StepCatalogEntry[] {
+  const enabled = catalog.filter((step) => step.enabled);
+  return enabled.length > 0 ? enabled : catalog;
+}
+
+function findStepForMatch(match: OperationsMatch, stepKey: string, catalogEntry: StepCatalogEntry): OperationsStep {
+  const existing = match.steps.find((s) => s.key === stepKey);
+  if (existing) return existing;
+  return {
+    key: stepKey,
+    label: catalogEntry.label,
+    status: 'NOT_APPLICABLE',
+    trigger: 'SCHEDULER',
+    leagues: [],
+    latestDetails: null,
+  };
+}
+
+function stepCanRetry(step: OperationsStep, stepChannels: string[]): boolean {
+  const breakdown = step.latestDetails?.channelBreakdown;
+  return (
+    step.status === 'FAILED' ||
+    step.status === 'OVERDUE' ||
+    step.status === 'WARNING' ||
+    step.status === 'MANUAL' ||
+    (step.status === 'SUCCESS' && stepChannels.some((ch) => channelHasFailure(ch, breakdown, step)))
+  );
 }
 
 function getStepChannels(catalog: StepCatalogEntry[] | undefined, stepKey: string): string[] {
@@ -655,15 +708,18 @@ function StepCell({
   const navigate = useNavigate();
   const breakdown = step.latestDetails?.channelBreakdown;
   const channels = stepChannels;
-  const canRetry =
-    step.status === 'FAILED' ||
-    step.status === 'OVERDUE' ||
-    step.status === 'WARNING' ||
-    step.status === 'MANUAL' ||
-    (step.status === 'SUCCESS' &&
-      channels.some((ch) =>
-        channelHasFailure(ch, breakdown, step),
-      ));
+  const canRetry = stepCanRetry(step, channels);
+  const openStepDetail = onIncident
+    ? (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onIncident({
+          match,
+          step,
+          label: step.label,
+          leagueId: step.leagues[0]?.leagueId ?? null,
+        });
+      }
+    : undefined;
 
   // Mapeo de step keys a EmailJobType
   const stepKeyToEmailType: Record<string, string> = {
@@ -711,17 +767,9 @@ function StepCell({
 
   return (
     <div
-      className={`flex flex-col items-center gap-1 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
-      onClick={canRetry && onIncident ? (e) => {
-        e.stopPropagation();
-        onIncident({
-          match,
-          step,
-          label: step.label,
-          leagueId: step.leagues[0]?.leagueId ?? null,
-        });
-      } : undefined}
-      title={canRetry && onIncident ? 'Click para ver detalle y reintentar' : undefined}
+      className={`flex flex-col items-center gap-1 ${onIncident ? 'cursor-pointer hover:opacity-90' : ''}`}
+      onClick={openStepDetail}
+      title={onIncident ? 'Click: ver mensaje, probar o reenviar' : undefined}
     >
       <StatusDot state={step.status} />
 
@@ -792,9 +840,9 @@ function MatrixRow({
   gridColumns: string;
   stepCatalog: StepCatalogEntry[];
 }) {
-  const orderedSteps = visibleSteps
-    .map((catalogStep) => match.steps.find((s) => s.key === catalogStep.key))
-    .filter(Boolean) as OperationsStep[];
+  const orderedSteps = visibleSteps.map((catalogStep) =>
+    findStepForMatch(match, catalogStep.key, catalogStep),
+  );
   const matchTitle = formatMatchTitle(match);
   const matchSubtitle = formatMatchSubtitle(match);
 
@@ -886,16 +934,19 @@ function MatrixRow({
 
             {/* Pasos por fase */}
             {EXPANDED_PHASE_GROUPS.map((phase) => {
-              const phaseStepKeys = stepCatalog
-                .filter((entry) => entry.phase === phase.phase)
-                .map((entry) => entry.key);
-              const phaseSteps = match.steps.filter((s) => phaseStepKeys.includes(s.key));
-              if (phaseSteps.length === 0) return null;
+              const phaseCatalogSteps = visibleSteps.filter((entry) => entry.phase === phase.phase);
+              if (phaseCatalogSteps.length === 0) return null;
+              const phaseSteps = phaseCatalogSteps.map((entry) =>
+                findStepForMatch(match, entry.key, entry),
+              );
               return (
                 <div key={phase.id}>
                   <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{phase.label}</p>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {phaseSteps.map((step) => (
+                    {phaseSteps.map((step) => {
+                      const channels = getStepChannels(stepCatalog, step.key);
+                      const retryable = stepCanRetry(step, channels);
+                      return (
                       <div key={step.key} className="rounded-xl border border-slate-200 bg-white p-3">
                         <div className="flex items-center gap-2 mb-2">
                           <StatusDot state={step.status} />
@@ -930,25 +981,45 @@ function MatrixRow({
                           </div>
                         )}
                         {onIncident && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onIncident({
-                                match,
-                                step,
-                                label: step.label,
-                                leagueId: step.leagues[0]?.leagueId ?? null,
-                              });
-                            }}
-                            className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white hover:text-slate-900"
-                          >
-                            <MessageSquare size={10} />
-                            Ver mensaje
-                          </button>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onIncident({
+                                  match,
+                                  step,
+                                  label: step.label,
+                                  leagueId: step.leagues[0]?.leagueId ?? null,
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white hover:text-slate-900"
+                            >
+                              <MessageSquare size={10} />
+                              Probar / ver mensaje
+                            </button>
+                            {retryable && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onIncident({
+                                    match,
+                                    step,
+                                    label: `${step.label} · reenvío`,
+                                    leagueId: step.leagues[0]?.leagueId ?? null,
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-800 transition hover:bg-amber-100"
+                              >
+                                <RotateCcw size={10} />
+                                Reenviar
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-                    ))}
+                    );})}
                   </div>
                 </div>
               );
@@ -1488,10 +1559,10 @@ function IncidentModal({
             </div>
           )}
 
-          {(stepChannels.includes('waGroup') || stepChannels.includes('push')) && (
+          {(stepChannels.length > 0 || preview) && (
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vista previa del mensaje</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Prueba del servicio (vista previa)</p>
                 <div className="flex gap-1">
                   {(['waGroup', 'push', 'inApp'] as const)
                     .filter((ch) => stepChannels.includes(ch))
@@ -1806,7 +1877,9 @@ export default function AdminAutomation() {
     },
   ];
 
-  const visibleSteps = useMemo(() => getVisibleSteps(status?.stepCatalog), [status?.stepCatalog]);
+  const resolvedStepCatalog = useMemo(() => resolveStepCatalog(status), [status]);
+  const visibleSteps = useMemo(() => getVisibleSteps(resolvedStepCatalog), [resolvedStepCatalog]);
+  const usingFallbackCatalog = !status?.stepCatalog?.length;
   const matrixGridColumns = useMemo(
     () => buildMatrixGridColumns(visibleSteps.length),
     [visibleSteps.length],
@@ -1853,7 +1926,7 @@ export default function AdminAutomation() {
           incident={incident}
           onClose={() => setIncident(null)}
           onRefresh={loadBase}
-          stepCatalog={status?.stepCatalog}
+          stepCatalog={resolvedStepCatalog}
         />
       )}
       <div className="mx-auto max-w-7xl">
@@ -1958,7 +2031,17 @@ export default function AdminAutomation() {
           </div>
 
           {filteredMatches.length > 0 ? (
-            <div className="overflow-x-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500">
+                Cada columna es un paso de automatización. Click en la celda → <strong>probar mensaje</strong> o <strong>reenviar</strong> si hubo error.
+                Desplaza horizontalmente si no ves todas las fases.
+              </p>
+              {usingFallbackCatalog && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Mostrando catálogo de pasos por defecto — redeploy del API para sincronizar toggles de Config pasos.
+                </p>
+              )}
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div
                 className="grid border-b border-slate-100 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest"
                 style={{ gridTemplateColumns: matrixGridColumns }}
@@ -1997,10 +2080,11 @@ export default function AdminAutomation() {
                     onIncident={setIncident}
                     visibleSteps={visibleSteps}
                     gridColumns={matrixGridColumns}
-                    stepCatalog={status?.stepCatalog ?? []}
+                    stepCatalog={resolvedStepCatalog}
                   />
                 ))}
               </div>
+            </div>
             </div>
           ) : !loading ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
@@ -2092,7 +2176,7 @@ export default function AdminAutomation() {
       {tab === 'config' && status && (
         <div className="space-y-4">
           <StepConfigMatrix
-            stepCatalog={status.stepCatalog ?? []}
+            stepCatalog={resolvedStepCatalog}
             channelStatus={status.channels}
             channelOverrides={status.channelOverrides ?? {}}
             timingHints={status.timingHints}
