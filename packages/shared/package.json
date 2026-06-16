@@ -2,7 +2,11 @@
     "name": "@polla-2026/shared",
     "version": "1.0.0",
     "private": true,
-    "main": "./types/index.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    },
     "devDependencies": {
         "typescript": "^5.0.0"
     }

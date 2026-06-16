@@ -36,13 +36,17 @@ RUN npm ci --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetc
 COPY apps/api ./apps/api
 COPY packages/shared ./packages/shared
 
+# Compilar paquete shared (runtime Node requiere JS, no .ts)
+WORKDIR /app/packages/shared
+RUN npm run build
+
 # Generar cliente Prisma
 WORKDIR /app/apps/api
 # Prevenir fallo del COPY en runner creando anticipadamente la carpeta vacía si fue izada por npm
 RUN mkdir -p /app/apps/api/node_modules
 RUN npx prisma generate
 
-# Compilar NestJS (esto generará /dist)
+# Compilar NestJS (prebuild compila @polla-2026/shared)
 RUN npm run build
 
 # Verificar que puppeteer-core esté disponible para el workspace API
