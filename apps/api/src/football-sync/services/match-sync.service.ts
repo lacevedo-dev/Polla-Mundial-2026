@@ -1137,6 +1137,32 @@ export class MatchSyncService {
     fixtureId: number,
   ): Promise<string> {
     const canonical = WORLD_CUP_TEAM_CATALOG_BY_API_ID.get(fixtureTeam.id);
+
+    if (canonical) {
+      const catalogTeam = await this.prisma.team.findUnique({
+        where: { code: canonical.code },
+      });
+      if (catalogTeam) {
+        await this.claimApiFootballTeamId(fixtureTeam.id, catalogTeam.id);
+        try {
+          await this.refreshTeamDisplayFields(catalogTeam.id, fixtureTeam, canonical);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `Fixture ${fixtureId} ${side} team metadata refresh skipped for ${catalogTeam.name} using catalog code=${canonical.code}: ${message}`,
+          );
+        }
+
+        if (catalogTeam.id !== currentTeam.id) {
+          this.logger.warn(
+            `Fixture ${fixtureId} ${side} team remapped from ${currentTeam.name} to ${catalogTeam.name} using apiFootballTeamId=${fixtureTeam.id}`,
+          );
+        }
+
+        return catalogTeam.id;
+      }
+    }
+
     const directMatch = await this.prisma.team.findUnique({
       where: { apiFootballTeamId: fixtureTeam.id },
     });
@@ -1161,17 +1187,8 @@ export class MatchSyncService {
     }
 
     if (canonical && this.matchesCanonicalTeam(currentTeam, canonical)) {
-      await this.prisma.team.update({
-        where: { id: currentTeam.id },
-        data: {
-          apiFootballTeamId: canonical.apiFootballTeamId,
-          shortCode: canonical.shortCode,
-          flagUrl: fixtureTeam.logo || canonical.flagUrl,
-          code: canonical.code,
-          name: canonical.name,
-          group: canonical.group,
-        },
-      });
+      await this.claimApiFootballTeamId(fixtureTeam.id, currentTeam.id);
+      await this.refreshTeamDisplayFields(currentTeam.id, fixtureTeam, canonical);
       return currentTeam.id;
     }
 
@@ -1186,27 +1203,73 @@ export class MatchSyncService {
     return currentTeam.id;
   }
 
+  /** Evita duplicados: solo un Team puede tener un apiFootballTeamId. */
+  private async claimApiFootballTeamId(
+    apiFootballTeamId: number,
+    targetTeamId: string,
+  ): Promise<void> {
+    await this.prisma.team.updateMany({
+      where: {
+        apiFootballTeamId,
+        id: { not: targetTeamId },
+      },
+      data: { apiFootballTeamId: null },
+    });
+  }
+
   private async refreshTeamDisplayFields(
     teamId: string,
     fixtureTeam: ApiFootballFixtureTeam,
     canonical?: (typeof WORLD_CUP_TEAM_CATALOG)[number],
   ): Promise<void> {
-    const data: Prisma.TeamUpdateInput = {
-      apiFootballTeamId: fixtureTeam.id,
-      flagUrl: fixtureTeam.logo,
-    };
-
-    if (canonical) {
-      data.shortCode = canonical.shortCode;
-      data.code = canonical.code;
-      data.group = canonical.group;
-      data.name = canonical.name;
-    }
-
+    const data = await this.buildTeamDisplayUpdateData(teamId, fixtureTeam, canonical);
     await this.prisma.team.update({
       where: { id: teamId },
       data,
     });
+  }
+
+  private async buildTeamDisplayUpdateData(
+    teamId: string,
+    fixtureTeam: ApiFootballFixtureTeam,
+    canonical?: (typeof WORLD_CUP_TEAM_CATALOG)[number],
+  ): Promise<Prisma.TeamUpdateInput> {
+    const data: Prisma.TeamUpdateInput = {
+      flagUrl: fixtureTeam.logo || canonical?.flagUrl,
+    };
+
+    const apiIdConflict = await this.prisma.team.findFirst({
+      where: { apiFootballTeamId: fixtureTeam.id, id: { not: teamId } },
+      select: { id: true },
+    });
+    if (!apiIdConflict) {
+      data.apiFootballTeamId = fixtureTeam.id;
+    }
+
+    if (!canonical) return data;
+
+    data.shortCode = canonical.shortCode;
+    data.group = canonical.group;
+
+    const [nameConflict, codeConflict] = await Promise.all([
+      this.prisma.team.findFirst({
+        where: { name: canonical.name, id: { not: teamId } },
+        select: { id: true },
+      }),
+      this.prisma.team.findFirst({
+        where: { code: canonical.code, id: { not: teamId } },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!nameConflict) {
+      data.name = canonical.name;
+    }
+    if (!codeConflict) {
+      data.code = canonical.code;
+    }
+
+    return data;
   }
 
   private matchesCanonicalTeam(

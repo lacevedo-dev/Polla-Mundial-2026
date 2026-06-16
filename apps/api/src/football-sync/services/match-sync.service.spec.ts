@@ -25,7 +25,9 @@ describe('MatchSyncService', () => {
     team: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       create: jest.fn(),
     },
   };
@@ -100,6 +102,8 @@ describe('MatchSyncService', () => {
 
     service = module.get<MatchSyncService>(MatchSyncService);
     mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+    mockPrismaService.team.findFirst.mockResolvedValue(null);
+    mockPrismaService.team.updateMany.mockResolvedValue({ count: 0 });
   });
 
   afterEach(() => {
@@ -702,6 +706,7 @@ describe('MatchSyncService', () => {
     const result = await service.syncTodayMatches();
 
     expect(result.success).toBe(true);
+    expect(mockPrismaService.team.updateMany).toHaveBeenCalled();
     expect(mockPrismaService.match.update).toHaveBeenCalledWith({
       where: { id: 'match-1' },
       data: expect.objectContaining({
@@ -711,6 +716,90 @@ describe('MatchSyncService', () => {
         awayScore: 0,
       }),
     });
+  });
+
+  it('prefers catalog team over duplicate apiFootballTeamId row (France vs Francia)', async () => {
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: { id: 1489383, status: { short: 'NS' } },
+          teams: {
+            home: { id: 2, name: 'France', logo: 'https://media.api-sports.io/football/teams/2.png', winner: null },
+            away: { id: 10, name: 'England', logo: 'https://media.api-sports.io/football/teams/10.png', winner: null },
+          },
+          goals: { home: null, away: null },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-fra-eng',
+      externalId: '1489383',
+      homeTeamId: 'team-france-dup',
+      awayTeamId: 'team-eng',
+      homeScore: null,
+      awayScore: null,
+      homeTeam: {
+        id: 'team-france-dup',
+        name: 'France',
+        code: 'FRA2',
+        shortCode: null,
+        apiFootballTeamId: 2,
+        flagUrl: null,
+        group: null,
+      },
+      awayTeam: {
+        id: 'team-eng',
+        name: 'Inglaterra',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 10,
+        flagUrl: null,
+        group: 'C',
+      },
+    });
+    mockPrismaService.team.findUnique
+      .mockResolvedValueOnce({
+        id: 'team-fra',
+        name: 'Francia',
+        code: 'FRA',
+        shortCode: 'FRA',
+        apiFootballTeamId: null,
+        flagUrl: 'https://flagcdn.com/w80/fr.png',
+        group: 'B',
+      })
+      .mockResolvedValueOnce({
+        id: 'team-eng',
+        name: 'Inglaterra',
+        code: 'ENG',
+        shortCode: 'ENG',
+        apiFootballTeamId: 10,
+        flagUrl: null,
+        group: 'C',
+      });
+    mockPrismaService.team.findFirst.mockResolvedValue(null);
+    mockPrismaService.team.update.mockResolvedValue({});
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-fra-eng',
+      status: MatchStatus.SCHEDULED,
+    });
+
+    await service.syncTodayMatches();
+
+    expect(mockPrismaService.team.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ apiFootballTeamId: 2 }),
+        data: { apiFootballTeamId: null },
+      }),
+    );
+    expect(mockPrismaService.match.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ homeTeamId: 'team-fra' }),
+      }),
+    );
   });
 
   it('returns ranked fixture candidates for an unlinked match', async () => {
@@ -900,13 +989,13 @@ describe('MatchSyncService', () => {
       });
     mockPrismaService.team.findUnique
       .mockResolvedValueOnce({
-        id: 'team-kor-api',
-        name: 'South Korea',
-        code: 'SOU',
-        shortCode: 'SOU',
-        apiFootballTeamId: 17,
-        flagUrl: 'https://media.api-sports.io/football/teams/17.png',
-        group: null,
+        id: 'team-kor-local',
+        name: 'República de Corea',
+        code: 'KOR',
+        shortCode: 'KOR',
+        apiFootballTeamId: null,
+        flagUrl: 'https://flagcdn.com/w80/kr.png',
+        group: 'A',
       })
       .mockResolvedValueOnce({
         id: 'team-cze-api',
@@ -917,13 +1006,11 @@ describe('MatchSyncService', () => {
         flagUrl: 'https://media.api-sports.io/football/teams/770.png',
         group: null,
       });
-    mockPrismaService.team.update
-      .mockRejectedValueOnce(new Error('Unique constraint failed on Team.code'))
-      .mockResolvedValueOnce({});
+    mockPrismaService.team.update.mockResolvedValue({});
     mockPrismaService.match.update.mockResolvedValue({
       id: 'match-kor-cze',
       status: MatchStatus.SCHEDULED,
-      homeTeamId: 'team-kor-api',
+      homeTeamId: 'team-kor-local',
       awayTeamId: 'team-cze-api',
     });
 
@@ -933,7 +1020,6 @@ describe('MatchSyncService', () => {
       expect.objectContaining({
         where: { id: 'match-kor-cze' },
         data: expect.objectContaining({
-          homeTeamId: 'team-kor-api',
           awayTeamId: 'team-cze-api',
           status: MatchStatus.SCHEDULED,
           statusShort: 'NS',
