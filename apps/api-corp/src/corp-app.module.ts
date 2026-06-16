@@ -10,6 +10,7 @@ import { AuthModule } from '@corp-api/auth/auth.module';
 import { EmailModule } from '@corp-api/email/email.module';
 import { UsersModule } from '@corp-api/users/users.module';
 import { PushNotificationsModule } from '@corp-api/push-notifications/push-notifications.module';
+import { PredictionsModule } from '@corp-api/predictions/predictions.module';
 import { CorporateTenantModule } from '@corp-api/corporate-tenant/corporate-tenant.module';
 
 // Módulos propios del backend corporativo
@@ -33,6 +34,9 @@ import { NotificationsModule } from './notifications/notifications.module';
         UsersModule,
         AuthModule,
         PushNotificationsModule,
+
+        // Expone /predictions/* (leaderboard breakdown fallback en web-uni)
+        PredictionsModule,
 
         // Módulo corporativo principal
         CorporateTenantModule,

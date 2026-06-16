@@ -9,10 +9,26 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
     >;
 };
 
-function isBreakdownRouteMissing(err: unknown): boolean {
+function isRouteNotFound(err: unknown): boolean {
     if (!(err instanceof ApiError)) return false;
     if (err.status === 404) return true;
-    return err.message.includes('Cannot GET') && err.message.includes('/breakdown');
+    return err.message.includes('Cannot GET');
+}
+
+function isBreakdownRouteMissing(err: unknown): boolean {
+    return isRouteNotFound(err);
+}
+
+function isPredictionsRouteMissing(err: unknown): boolean {
+    if (!(err instanceof ApiError)) return false;
+    return err.status === 404 && err.message.includes('Cannot GET');
+}
+
+function isParticipantMissing(err: unknown): boolean {
+    if (!(err instanceof ApiError)) return false;
+    if (err.status !== 404) return false;
+    const msg = err.message.toLowerCase();
+    return msg.includes('participante') || msg.includes('not found') || msg.includes('no encontrado');
 }
 
 function mergeBreakdowns(
@@ -50,12 +66,15 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
     }
 
     const parts: CorpRankingBreakdownApiResponse[] = [];
+    let predictionsRouteMissing = false;
+    let participantMissingInAllLeagues = true;
 
     for (const league of leagues) {
         try {
             const data = await request<LeaderboardBreakdownResponse>(
                 `/predictions/leaderboard/${league.id}/user/${userId}`,
             );
+            participantMissingInAllLeagues = false;
             parts.push({
                 user: data.user,
                 summary: data.summary,
@@ -69,12 +88,30 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
                     })),
             });
         } catch (err) {
+            if (isPredictionsRouteMissing(err)) {
+                predictionsRouteMissing = true;
+                break;
+            }
+            if (isParticipantMissing(err)) continue;
             if (err instanceof ApiError && err.status === 404) continue;
             throw err;
         }
     }
 
+    if (predictionsRouteMissing) {
+        throw new ApiError(
+            'El backend corporativo aún no expone el desglose de ranking. Redespliega api-corp y reinicia el contenedor.',
+            { status: 404 },
+        );
+    }
+
     if (!parts.length) {
+        if (participantMissingInAllLeagues) {
+            throw new ApiError(
+                'Este participante no tiene pronósticos puntuados en las pollas del tenant.',
+                { status: 404 },
+            );
+        }
         throw new ApiError('No se pudo cargar el detalle de puntos para este participante.', { status: 404 });
     }
 
