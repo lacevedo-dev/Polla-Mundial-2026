@@ -99,4 +99,4 @@ RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
 EXPOSE 3000
 
 # Arrancar el servidor (migraciones se aplican manualmente en prod, no en cada deploy)
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/apps/api/src/main.js"]
