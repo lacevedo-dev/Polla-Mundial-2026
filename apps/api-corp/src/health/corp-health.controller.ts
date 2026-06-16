@@ -12,6 +12,7 @@ export class CorpHealthController {
             status: db.ok ? 'ok' : 'degraded',
             service: 'api-corp',
             version: process.env.npm_package_version ?? '0.0.1',
+            buildMarker: 'ranking-corp-native-v1',
             timestamp: new Date().toISOString(),
             database: db.ok ? 'connected' : 'error',
             mainApiUrl: process.env.MAIN_API_URL ?? 'not configured',
