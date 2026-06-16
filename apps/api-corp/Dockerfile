@@ -44,7 +44,7 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
-RUN mkdir -p /app/apps/api-corp/node_modules
+RUN mkdir -p /app/apps/api-corp/node_modules /app/apps/api-corp/uploads/branding
 RUN npm run build
 
 # ---- Etapa 2: Producción ----
