@@ -6,6 +6,7 @@ import {
     Zap, Radio, X,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
+import { ScoringRulesCard } from '../components/ScoringRulesCard';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 import { request, resolveApiAssetUrl } from '../api';
@@ -662,29 +663,8 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            {/* Reglas de puntos — colapsable */}
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b border-slate-50">
-                                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Reglas de puntos</h3>
-                                </div>
-                                <div className="p-3 space-y-1.5">
-                                    {(leagueDetail.scoringRules.length > 0
-                                        ? leagueDetail.scoringRules.map(r => ({ label: r.description ?? r.ruleType, pts: r.points, icon: '' }))
-                                        : [
-                                            { label: 'Marcador exacto', pts: 5, icon: '🎯' },
-                                            { label: 'Ganador + gol', pts: 3, icon: '✅' },
-                                            { label: 'Solo ganador', pts: 2, icon: '☑' },
-                                            { label: 'Solo gol acertado', pts: 1, icon: '⚽' },
-                                        ] as any[]
-                                    ).map((r: any) => (
-                                        <div key={r.label} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
-                                            {r.icon && <span className="text-sm shrink-0">{r.icon}</span>}
-                                            <p className="text-[11px] font-black text-slate-800 flex-1 truncate">{r.label}</p>
-                                            <span className="text-sm font-black shrink-0" style={{ color: 'var(--color-primary,#f59e0b)' }}>{r.pts}pts</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            {/* Reglas de puntos — colapsable con desempate */}
+                            <ScoringRulesCard defaultTab="resultado" />
                         </div>
 
                         {/* ══ COLUMNA CENTRAL: En vivo + Próximos partidos + Predicciones recientes ══ */}

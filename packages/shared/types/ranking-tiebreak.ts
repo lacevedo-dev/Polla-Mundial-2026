@@ -117,8 +117,28 @@ export function formatTiebreakNote(higher: TiebreakStats, lower: TiebreakStats):
 
     const resolution = getTiebreakResolution(higher, lower);
     if (!resolution) {
-        return 'Empate total — misma posición';
+        return 'Empate total — misma posición que el anterior';
     }
 
-    return `Desempate por ${resolution.label.toLowerCase()} (${resolution.detail})`;
+    return `Por debajo del anterior: ${resolution.label.toLowerCase()} (${resolution.detail})`;
 }
+
+export function formatTiebreakAdvantage(higher: TiebreakStats, lower: TiebreakStats): string | null {
+    if (higher.points !== lower.points) return null;
+
+    const resolution = getTiebreakResolution(higher, lower);
+    if (!resolution) {
+        return 'Empate total — comparte posición con el siguiente';
+    }
+
+    return `Por encima del siguiente: ${resolution.label.toLowerCase()} (${resolution.detail})`;
+}
+
+export const TIEBREAK_ROW_METRICS = [
+    { id: 'points', icon: '🏅', label: 'Pts', getValue: (s: TiebreakStats) => String(s.points) },
+    { id: 'champion', icon: '🏆', label: 'Campeón', getValue: (s: TiebreakStats) => (s.hasChampion ? 'Sí' : 'No') },
+    { id: 'exact', icon: '🎯', label: 'Exactos', getValue: (s: TiebreakStats) => String(s.exactCount) },
+    { id: 'winner', icon: '✅', label: 'Ganadores', getValue: (s: TiebreakStats) => String(s.winnerCount) },
+    { id: 'goals', icon: '⚽', label: 'Goles', getValue: (s: TiebreakStats) => String(s.goalCount) },
+    { id: 'unique', icon: '⭐', label: 'Únicas', getValue: (s: TiebreakStats) => String(s.uniqueCount) },
+] as const;

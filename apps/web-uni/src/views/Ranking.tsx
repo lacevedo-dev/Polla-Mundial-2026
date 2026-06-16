@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, Medal, Search, Trophy } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, resolveApiAssetUrl } from '../api';
 import { RankingSkeleton } from '../components/RankingSkeleton';
-import { ScoringRulesCard } from '../components/ScoringRulesCard';
+import { RankingTiebreakSummary } from '../components/RankingTiebreakSummary';
 import { useRankingStore } from '../stores/ranking.store';
 import type {
     CorpRankingEntry,
@@ -130,6 +130,17 @@ export default function Ranking() {
         [entries],
     );
 
+    const entryNeighbors = useMemo(() => {
+        const map = new Map<string, { previous: CorpRankingEntry | null; next: CorpRankingEntry | null }>();
+        entries.forEach((entry, index) => {
+            map.set(entry.userId, {
+                previous: index > 0 ? entries[index - 1] : null,
+                next: index < entries.length - 1 ? entries[index + 1] : null,
+            });
+        });
+        return map;
+    }, [entries]);
+
     const toggleBreakdown = useCallback(async (entry: CorpRankingEntry) => {
         if (expandedUserId === entry.userId) {
             setExpandedUserId(null);
@@ -207,24 +218,22 @@ export default function Ranking() {
                 </div>
             )}
 
-            <div className="grid gap-4 mb-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Cómo leer los puntos</p>
-                    <p className="text-xs text-slate-500 mt-1 mb-2">
-                        Toca un participante para ver el detalle partido a partido. Resumen de aciertos en cada fila.
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                        {POINTS_LEGEND.map((item) => (
-                            <span
-                                key={item.code}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-500"
-                            >
-                                {item.code}: {item.label}
-                            </span>
-                        ))}
-                    </div>
+            <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 mb-4 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Cómo leer el ranking</p>
+                <p className="text-xs text-slate-500 mt-1 mb-2">
+                    Cada fila muestra los 6 criterios de desempate. Si hay empate en puntos, se explica por qué uno queda arriba del otro.
+                    Toca un participante para ver el detalle partido a partido.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                    {POINTS_LEGEND.map((item) => (
+                        <span
+                            key={item.code}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-500"
+                        >
+                            {item.code}: {item.label}
+                        </span>
+                    ))}
                 </div>
-                <ScoringRulesCard />
             </div>
 
             {myEntry && tournamentStarted && (
@@ -277,22 +286,23 @@ export default function Ranking() {
                         {filtered.map((entry) => {
                             const expanded = expandedUserId === entry.userId;
                             const cacheKey = `${data?.category ?? category}:${entry.userId}`;
+                            const neighbors = entryNeighbors.get(entry.userId);
                             return (
                                 <div key={entry.userId}>
                                     <button
                                         type="button"
                                         onClick={() => void toggleBreakdown(entry)}
-                                        className={`w-full grid grid-cols-[2.5rem_1fr_auto_2rem] gap-2 px-4 py-3 items-center text-left transition-colors ${
+                                        className={`w-full grid grid-cols-[2.5rem_1fr_auto_2rem] gap-2 px-4 py-3 items-start text-left transition-colors ${
                                             entry.isMe ? '' : 'hover:bg-slate-50'
                                         }`}
                                         style={entry.isMe
                                             ? { backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 8%, white)' }
                                             : undefined}
                                     >
-                                        <div className="text-sm font-black text-slate-500">
+                                        <div className="text-sm font-black text-slate-500 pt-0.5">
                                             {MEDAL[entry.rank] ?? entry.rank}
                                         </div>
-                                        <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="flex items-start gap-2.5 min-w-0">
                                             <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
                                                 <img
                                                     src={resolveApiAssetUrl(entry.avatar) ?? avatarFallback(entry.name)}
@@ -313,17 +323,14 @@ export default function Ranking() {
                                                     )}
                                                     {entry.isMe && <span className="ml-1 text-[10px] font-black opacity-70">(tú)</span>}
                                                 </p>
-                                                <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                                                    {buildPointsResume(entry)}
-                                                </p>
-                                                {entry.tieBreakNote && (
-                                                    <p className="text-[9px] text-slate-400 mt-0.5 leading-snug">
-                                                        {entry.tieBreakNote}
-                                                    </p>
-                                                )}
+                                                <RankingTiebreakSummary
+                                                    entry={entry}
+                                                    previous={neighbors?.previous ?? null}
+                                                    next={neighbors?.next ?? null}
+                                                />
                                             </div>
                                         </div>
-                                        <div className="text-right shrink-0">
+                                        <div className="text-right shrink-0 pt-0.5">
                                             <p
                                                 className="text-sm font-black"
                                                 style={entry.isMe
@@ -336,7 +343,7 @@ export default function Ranking() {
                                                 <p className="text-[9px] font-bold text-amber-600">+{entry.phaseBonusPoints} bono</p>
                                             )}
                                         </div>
-                                        <div className="flex justify-center text-slate-300">
+                                        <div className="flex justify-center text-slate-300 pt-1">
                                             {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                         </div>
                                     </button>
