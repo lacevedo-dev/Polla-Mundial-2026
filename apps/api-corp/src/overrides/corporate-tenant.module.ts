@@ -20,6 +20,7 @@ import { CorpPortalController } from '@corp-api/corporate-tenant/corp-portal.con
 import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-storage.service';
 import { ParticipationService } from '@corp-api/corporate-tenant/participation.service';
 import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operations.service';
+import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.service';
 import { PredictionsModule } from '@corp-api/predictions/predictions.module';
 import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-members-resend.controller';
 
@@ -39,6 +40,7 @@ import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-mem
         BrandingStorageService,
         ParticipationService,
         MatchOperationsService,
+        CorpRankingService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,

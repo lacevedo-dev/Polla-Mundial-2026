@@ -15,6 +15,7 @@ import { CorpPortalController } from './corp-portal.controller';
 import { BrandingStorageService } from './branding-storage.service';
 import { ParticipationService } from './participation.service';
 import { MatchOperationsService } from './match-operations.service';
+import { CorpRankingService } from './corp-ranking.service';
 import { PredictionsModule } from '../predictions/predictions.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { PredictionsModule } from '../predictions/predictions.module';
         BrandingStorageService,
         ParticipationService,
         MatchOperationsService,
+        CorpRankingService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,

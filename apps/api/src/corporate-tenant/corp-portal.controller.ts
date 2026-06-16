@@ -13,6 +13,7 @@ import { UpdateMemberDto } from './dto/update-member.dto';
 import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
 import { ParticipationService, ParticipationMemberFilter } from './participation.service';
 import { MatchOperationsService } from './match-operations.service';
+import { CorpRankingService } from './corp-ranking.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
@@ -80,6 +81,7 @@ export class CorpPortalController {
         private readonly brandingStorage: BrandingStorageService,
         private readonly participationService: ParticipationService,
         private readonly matchOperations: MatchOperationsService,
+        private readonly corpRanking: CorpRankingService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -213,7 +215,7 @@ export class CorpPortalController {
 
         const teamSelect = { id: true, name: true, flagUrl: true, shortCode: true, code: true };
 
-        const [leagueMatchRows, predictionRows, memberPoints] = await Promise.all([
+        const [leagueMatchRows, predictionRows, rankingSnapshot] = await Promise.all([
             this.prisma.leagueMatch.findMany({
                 where: { leagueId },
                 include: {
@@ -244,23 +246,10 @@ export class CorpPortalController {
                     },
                 },
             }),
-            this.prisma.prediction.groupBy({
-                by: ['userId'],
-                where: { leagueId },
-                _sum: { points: true },
-                orderBy: { _sum: { points: 'desc' } },
-            }),
+            this.corpRanking.getLeagueRankingSnapshot(leagueId, userId),
         ]);
 
-        const userIdsList = memberPoints.map((p) => p.userId);
-        const users = await this.prisma.user.findMany({
-            where: { id: { in: userIdsList } },
-            select: { id: true, name: true, username: true, documentNumber: true, avatar: true },
-        });
-        const userMap = new Map(users.map((u) => [u.id, u]));
-
-        const myPoints = memberPoints.find((p) => p.userId === userId)?._sum.points ?? 0;
-        const myRank = memberPoints.filter((p) => (p._sum.points ?? 0) > myPoints).length + 1;
+        const { entries: topRanking, myPoints, myRank } = rankingSnapshot;
 
         return {
             id: league.id,
@@ -271,7 +260,7 @@ export class CorpPortalController {
             maxParticipants: league.maxParticipants,
             closePredictionMinutes: league.closePredictionMinutes,
             myPoints,
-            myRank,
+            myRank: myRank ?? 0,
             scoringRules: league.scoringRules.map((r) => ({
                 ruleType: r.ruleType,
                 points: r.points,
@@ -302,15 +291,7 @@ export class CorpPortalController {
                 myAway: p.awayScore,
                 points: p.points,
             })),
-            topRanking: memberPoints.map((p, i) => ({
-                rank: i + 1,
-                userId: p.userId,
-                name: userMap.get(p.userId)?.name ?? 'â€”',
-                username: (userMap.get(p.userId) as any)?.documentNumber ?? userMap.get(p.userId)?.username ?? '',
-                avatar: userMap.get(p.userId)?.avatar ?? null,
-                totalPoints: p._sum.points ?? 0,
-                isMe: p.userId === userId,
-            })),
+            topRanking,
         };
     }
 
@@ -355,44 +336,18 @@ export class CorpPortalController {
         }));
     }
 
+    @Get('ranking/users/:userId')
+    async getRankingUserBreakdown(
+        @Req() req: any,
+        @Param('userId') targetUserId: string,
+        @Query('category') category?: string,
+    ) {
+        return this.corpRanking.getUserBreakdown(req.tenantId, targetUserId, category);
+    }
+
     @Get('ranking')
-    async getRanking(@Req() req: any) {
-        const tenantId: string = req.tenantId;
-        const userId: string = req.user.userId;
-
-        const members = await this.prisma.tenantMember.findMany({
-            where: { tenantId, status: 'ACTIVE' },
-            include: {
-                user: { select: { id: true, name: true, username: true, avatar: true } },
-            },
-        });
-
-        const userIds = members.map((m) => m.userId);
-
-        const scores = await this.prisma.prediction.groupBy({
-            by: ['userId'],
-            where: {
-                userId: { in: userIds },
-                league: { tenantId },
-            },
-            _sum: { points: true },
-        });
-
-        const scoreMap = new Map(scores.map((s) => [s.userId, s._sum.points ?? 0]));
-
-        const ranking = members
-            .map((m) => ({
-                userId: m.userId,
-                name: m.user.name,
-                username: (m.user as any).documentNumber ?? m.user.username,
-                avatar: m.user.avatar,
-                totalPoints: scoreMap.get(m.userId) ?? 0,
-                isMe: m.userId === userId,
-            }))
-            .sort((a, b) => b.totalPoints - a.totalPoints)
-            .map((u, i) => ({ ...u, rank: i + 1 }));
-
-        return ranking;
+    async getRanking(@Req() req: any, @Query('category') category?: string) {
+        return this.corpRanking.getRankingPayload(req.tenantId, req.user.userId, category);
     }
 
     @Get('tournaments')
