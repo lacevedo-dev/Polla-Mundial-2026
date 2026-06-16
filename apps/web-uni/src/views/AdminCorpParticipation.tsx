@@ -5,6 +5,10 @@ import {
     Clock, Filter, Loader2, RefreshCw, Search, Target, TrendingUp, Users, XCircle, Calculator,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
+import {
+    ParticipationBreakdownChart,
+    buildParticipationSegments,
+} from '../components/ParticipationBreakdownChart';
 import { request, resolveApiAssetUrl, ApiError } from '../api';
 
 interface ParticipationSummary {
@@ -202,6 +206,22 @@ export default function AdminCorpParticipation() {
 
     const summary = overview?.summary;
     const totalPages = Math.max(1, Math.ceil(membersTotal / PAGE_SIZE));
+    const selectedLeague = leagueId
+        ? overview?.leagues.find((league) => league.id === leagueId)
+        : undefined;
+    const chartSegments = summary
+        ? buildParticipationSegments(summary, selectedLeague)
+        : [];
+    const chartCenterLabel = selectedLeague
+        ? `${selectedLeague.participationRate}%`
+        : summary
+            ? `${summary.participationRate}%`
+            : '0%';
+    const chartCenterSub = selectedLeague
+        ? `${selectedLeague.predictedCount} de ${selectedLeague.enrolledCount} inscritos`
+        : summary
+            ? `${summary.membersWithPredictions} de ${summary.enrolledMembers} inscritos`
+            : undefined;
 
     return (
         <CorpLayout>
@@ -316,35 +336,57 @@ export default function AdminCorpParticipation() {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                {/* Por polla */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 lg:items-stretch">
+                {/* Por polla + gráfico */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[420px] lg:min-h-[480px]">
+                    <div className="px-5 py-4 border-b border-slate-100 shrink-0">
                         <h2 className="font-black text-slate-900 flex items-center gap-2">
                             <BarChart2 size={16} className="text-violet-600" />
                             Participación por polla
                         </h2>
                     </div>
                     {loadingOverview ? (
-                        <div className="p-8 flex justify-center">
+                        <div className="flex-1 flex items-center justify-center p-8">
                             <Loader2 size={24} className="animate-spin text-slate-300" />
                         </div>
                     ) : !overview?.leagues.length ? (
-                        <div className="p-8 text-center text-slate-400 text-sm">No hay pollas activas.</div>
-                    ) : (
-                        <div className="divide-y divide-slate-50">
-                            {overview.leagues.map((l) => (
-                                <div key={l.id} className="px-5 py-3.5 flex items-center gap-3">
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-slate-800 text-sm truncate">{l.name}</p>
-                                        <p className="text-xs text-slate-400">
-                                            {l.predictedCount} de {l.enrolledCount} usuarios con pronósticos
-                                        </p>
-                                    </div>
-                                    <CoverageBar rate={l.participationRate} />
-                                </div>
-                            ))}
+                        <div className="flex-1 flex items-center justify-center p-8 text-center text-slate-400 text-sm">
+                            No hay pollas activas.
                         </div>
+                    ) : (
+                        <>
+                            <div className="divide-y divide-slate-50 shrink-0 max-h-[168px] overflow-y-auto">
+                                {overview.leagues.map((l) => {
+                                    const isSelected = leagueId === l.id;
+                                    return (
+                                        <button
+                                            key={l.id}
+                                            type="button"
+                                            onClick={() => { setLeagueId(isSelected ? '' : l.id); setPage(1); }}
+                                            className={`w-full px-5 py-3.5 flex items-center gap-3 text-left transition-colors ${
+                                                isSelected ? 'bg-violet-50/80' : 'hover:bg-slate-50/80'
+                                            }`}
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-slate-800 text-sm truncate">{l.name}</p>
+                                                <p className="text-xs text-slate-400">
+                                                    {l.predictedCount} de {l.enrolledCount} usuarios con pronósticos
+                                                </p>
+                                            </div>
+                                            <CoverageBar rate={l.participationRate} />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="flex-1 border-t border-slate-100 px-4 py-4 sm:px-5 sm:py-5 bg-gradient-to-b from-white to-slate-50/40">
+                                <ParticipationBreakdownChart
+                                    segments={chartSegments}
+                                    centerLabel={chartCenterLabel}
+                                    centerSub={chartCenterSub}
+                                    title={selectedLeague ? selectedLeague.name : 'Vista global del tenant'}
+                                />
+                            </div>
+                        </>
                     )}
                 </div>
 
