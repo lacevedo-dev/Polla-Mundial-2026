@@ -7,6 +7,8 @@
 # ---- Etapa 1: Build ----
 FROM node:22-alpine AS builder
 
+ARG GIT_COMMIT=unknown
+
 WORKDIR /app
 
 RUN apk add --no-cache openssl build-base python3
@@ -45,16 +47,19 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules
-RUN npm run build
+RUN echo "api-corp build commit=${GIT_COMMIT}" && npm run build
 
 # ---- Etapa 2: Producción ----
 FROM node:22-alpine AS runner
+
+ARG GIT_COMMIT=unknown
 
 WORKDIR /app
 
 RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
+ENV BUILD_GIT_COMMIT=${GIT_COMMIT}
 
 # Dependencias hoisted
 COPY --from=builder /app/node_modules ./node_modules

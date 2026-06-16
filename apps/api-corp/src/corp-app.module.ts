@@ -18,6 +18,7 @@ import { FootballProxyModule } from './football-proxy/football-proxy.module';
 import { CorpHealthModule } from './health/corp-health.module';
 import { DataSyncModule } from './sync/data-sync.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { CorpApiRankingModule } from './ranking/corp-api-ranking.module';
 
 @Module({
     imports: [
@@ -40,6 +41,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 
         // Módulo corporativo principal
         CorporateTenantModule,
+
+        // Desglose de ranking (controlador nativo api-corp)
+        CorpApiRankingModule,
 
         // Módulo nuevo: proxy de datos de fútbol desde el VPS principal
         FootballProxyModule,

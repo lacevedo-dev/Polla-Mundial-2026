@@ -9,14 +9,15 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
     >;
 };
 
+const BREAKDOWN_PATHS = [
+    (userId: string) => `/corp/ranking/user/${userId}/breakdown`,
+    (userId: string) => `/corp/ranking-breakdown/${userId}`,
+] as const;
+
 function isRouteNotFound(err: unknown): boolean {
     if (!(err instanceof ApiError)) return false;
     if (err.status === 404) return true;
     return err.message.includes('Cannot GET');
-}
-
-function isBreakdownRouteMissing(err: unknown): boolean {
-    return isRouteNotFound(err);
 }
 
 function isPredictionsRouteMissing(err: unknown): boolean {
@@ -100,7 +101,7 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
 
     if (predictionsRouteMissing) {
         throw new ApiError(
-            'El backend corporativo aún no expone el desglose de ranking. Redespliega api-corp y reinicia el contenedor.',
+            'El backend corporativo aún no expone el desglose de ranking. Verifica /health (buildGitCommit) y reinicia el contenedor api-corp.',
             { status: 404 },
         );
     }
@@ -118,11 +119,19 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
     return mergeBreakdowns(parts);
 }
 
-export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
-    try {
-        return await request<CorpRankingBreakdownApiResponse>(`/corp/ranking/user/${userId}/breakdown`);
-    } catch (err) {
-        if (!isBreakdownRouteMissing(err)) throw err;
-        return fetchBreakdownViaLeagues(userId);
+async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBreakdownApiResponse | null> {
+    for (const buildPath of BREAKDOWN_PATHS) {
+        try {
+            return await request<CorpRankingBreakdownApiResponse>(buildPath(userId));
+        } catch (err) {
+            if (!isRouteNotFound(err)) throw err;
+        }
     }
+    return null;
+}
+
+export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
+    const direct = await fetchCorpBreakdownDirect(userId);
+    if (direct) return direct;
+    return fetchBreakdownViaLeagues(userId);
 }

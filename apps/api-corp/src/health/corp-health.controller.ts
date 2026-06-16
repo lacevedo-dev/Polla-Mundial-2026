@@ -12,6 +12,15 @@ export class CorpHealthController {
             status: db.ok ? 'ok' : 'degraded',
             service: 'api-corp',
             version: process.env.npm_package_version ?? '0.0.1',
+            buildGitCommit: process.env.BUILD_GIT_COMMIT ?? 'unknown',
+            features: {
+                rankingBreakdown: true,
+                rankingBreakdownRoutes: [
+                    'GET /corp/ranking/user/:userId/breakdown',
+                    'GET /corp/ranking-breakdown/:userId',
+                    'GET /predictions/leaderboard/:leagueId/user/:userId',
+                ],
+            },
             timestamp: new Date().toISOString(),
             database: db.ok ? 'connected' : 'error',
             mainApiUrl: process.env.MAIN_API_URL ?? 'not configured',
