@@ -19,6 +19,7 @@ import { CorpHealthModule } from './health/corp-health.module';
 import { DataSyncModule } from './sync/data-sync.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CorpDeployModule } from './deploy/corp-deploy.module';
+import { CorpRankingDetailModule } from './corp-ranking-detail/corp-ranking-detail.module';
 
 @Module({
     imports: [
@@ -41,6 +42,9 @@ import { CorpDeployModule } from './deploy/corp-deploy.module';
 
         // Módulo corporativo principal (/corp/ranking, /corp/ranking/user/:id/breakdown, …)
         CorporateTenantModule,
+
+        // Desglose de ranking (GET /corp/member-points/:userId)
+        CorpRankingDetailModule,
 
         // Probe público de versión desplegada (/api-corp-version)
         CorpDeployModule,

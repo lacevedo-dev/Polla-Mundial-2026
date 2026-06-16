@@ -17,6 +17,7 @@ export class CorpHealthController {
             version: process.env.npm_package_version ?? '0.0.1',
             buildGitCommit: resolveCorpBuildCommit(),
             builtAt: buildInfo?.builtAt ?? null,
+            deployStamp: process.env.CORP_DEPLOY_STAMP ?? null,
             features: rankingBreakdown
                 ? {
                     rankingBreakdown: true,

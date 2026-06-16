@@ -65,6 +65,7 @@ RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV BUILD_GIT_COMMIT=${GIT_COMMIT}
+ENV CORP_DEPLOY_STAMP=ranking-breakdown-v4
 
 # Dependencias hoisted
 COPY --from=builder /app/node_modules ./node_modules

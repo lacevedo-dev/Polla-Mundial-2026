@@ -9,7 +9,12 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
     >;
 };
 
+type LeagueDetailWithBreakdown = {
+    memberPointsBreakdown?: CorpRankingBreakdownApiResponse;
+};
+
 const BREAKDOWN_PATHS = [
+    (userId: string) => `/corp/member-points/${userId}`,
     (userId: string) =>
         `/corp/ranking?breakdownUserId=${encodeURIComponent(userId)}`,
     (userId: string) => `/corp/ranking/user/${userId}/breakdown`,
@@ -20,6 +25,10 @@ function isBreakdownPayload(data: unknown): data is CorpRankingBreakdownApiRespo
     if (!data || typeof data !== 'object') return false;
     const record = data as Record<string, unknown>;
     return Array.isArray(record.matches) && record.summary !== undefined && record.user !== undefined;
+}
+
+function isRankingListPayload(data: unknown): boolean {
+    return Array.isArray(data);
 }
 
 function isRouteNotFound(err: unknown): boolean {
@@ -66,6 +75,38 @@ function mergeBreakdowns(
     }
 
     return { user, summary, matches, bonuses };
+}
+
+async function fetchBreakdownViaLeagueDetails(userId: string): Promise<CorpRankingBreakdownApiResponse | null> {
+    const leagues = await request<CorpLeagueSummary[]>('/corp/leagues');
+    if (!leagues.length) return null;
+
+    const parts: CorpRankingBreakdownApiResponse[] = [];
+
+    for (const league of leagues) {
+        try {
+            const detail = await request<LeagueDetailWithBreakdown>(
+                `/corp/leagues/${league.id}?scoredForUserId=${encodeURIComponent(userId)}`,
+            );
+            const breakdown = detail.memberPointsBreakdown;
+            if (!breakdown?.matches?.length) continue;
+            parts.push({
+                user: breakdown.user,
+                summary: breakdown.summary,
+                bonuses: breakdown.bonuses,
+                matches: breakdown.matches.map((match) => ({
+                    ...match,
+                    leagueName: match.leagueName || league.name,
+                })),
+            });
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) continue;
+            throw err;
+        }
+    }
+
+    if (!parts.length) return null;
+    return mergeBreakdowns(parts);
 }
 
 async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBreakdownApiResponse | null> {
@@ -126,6 +167,9 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
             if (isBreakdownPayload(data)) {
                 return data;
             }
+            if (buildPath(userId).includes('breakdownUserId') && isRankingListPayload(data)) {
+                break;
+            }
         } catch (err) {
             if (!isRouteNotFound(err)) throw err;
         }
@@ -134,12 +178,15 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
 }
 
 const STALE_BACKEND_MESSAGE =
-    'El backend api-corp en api-polla-coop no se ha actualizado. En Dokploy despliega la app Backend ' +
-    '(dominio api-polla-coop), con Clean Cache, y confirma que /health incluye buildGitCommit.';
+    'El backend api-corp sigue desactualizado: /health no muestra deployStamp. ' +
+    'En Dokploy redeploy de la app Backend (api-polla-coop) con Clean Cache.';
 
 export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
     const direct = await fetchCorpBreakdownDirect(userId);
     if (direct) return direct;
+
+    const viaLeagueDetails = await fetchBreakdownViaLeagueDetails(userId);
+    if (viaLeagueDetails) return viaLeagueDetails;
 
     const viaLeagues = await fetchBreakdownViaLeagues(userId);
     if (viaLeagues) return viaLeagues;

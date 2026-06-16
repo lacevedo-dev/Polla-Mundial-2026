@@ -22,6 +22,8 @@ else
     echo "[entrypoint] Volumen de branding ya tiene contenido — se conserva."
 fi
 
+echo "[entrypoint] CORP_DEPLOY_STAMP=${CORP_DEPLOY_STAMP:-unset}"
+
 if [ -f /app/apps/api-corp/.build-info.json ]; then
     echo "[entrypoint] Build info: $(cat /app/apps/api-corp/.build-info.json)"
 else

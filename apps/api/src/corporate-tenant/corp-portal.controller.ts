@@ -199,9 +199,14 @@ export class CorpPortalController {
     }
 
     @Get('leagues/:id')
-    async getLeagueDetail(@Req() req: any, @Param('id') leagueId: string) {
+    async getLeagueDetail(
+        @Req() req: any,
+        @Param('id') leagueId: string,
+        @Query('scoredForUserId') scoredForUserId?: string,
+    ) {
         const tenantId: string = req.tenantId;
-        const userId: string = req.user.userId;
+        const sessionUserId: string = req.user.userId;
+        const viewingUserId = scoredForUserId?.trim() || sessionUserId;
 
         const league = await this.prisma.league.findFirst({
             where: { id: leagueId, tenantId },
@@ -224,7 +229,7 @@ export class CorpPortalController {
                             homeTeam: { select: teamSelect },
                             awayTeam: { select: teamSelect },
                             predictions: {
-                                where: { userId, leagueId },
+                                where: { userId: viewingUserId, leagueId },
                                 select: { homeScore: true, awayScore: true, points: true },
                                 take: 1,
                             },
@@ -234,7 +239,7 @@ export class CorpPortalController {
                 orderBy: { match: { matchDate: 'asc' } },
             }),
             this.prisma.prediction.findMany({
-                where: { userId, leagueId },
+                where: { userId: viewingUserId, leagueId },
                 orderBy: { submittedAt: 'desc' },
                 take: 5,
                 include: {
@@ -261,8 +266,30 @@ export class CorpPortalController {
         });
         const userMap = new Map(users.map((u) => [u.id, u]));
 
-        const myPoints = memberPoints.find((p) => p.userId === userId)?._sum.points ?? 0;
+        const myPoints = memberPoints.find((p) => p.userId === sessionUserId)?._sum.points ?? 0;
         const myRank = memberPoints.filter((p) => (p._sum.points ?? 0) > myPoints).length + 1;
+
+        let memberPointsBreakdown: Awaited<ReturnType<PredictionsService['getCorpTenantUserBreakdown']>> | null = null;
+        if (scoredForUserId?.trim()) {
+            const breakdown = await this.predictionsService.getCorpTenantUserBreakdown(
+                tenantId,
+                scoredForUserId.trim(),
+            );
+            const matches = breakdown.matches.filter((match) => match.leagueId === leagueId);
+            memberPointsBreakdown = {
+                user: breakdown.user,
+                summary: {
+                    points: matches.reduce((sum, match) => sum + match.points, 0),
+                    exactCount: 0,
+                    winnerCount: 0,
+                    goalCount: 0,
+                    uniqueCount: 0,
+                    phaseBonusPoints: 0,
+                },
+                matches,
+                bonuses: [],
+            };
+        }
 
         return {
             id: league.id,
@@ -310,8 +337,9 @@ export class CorpPortalController {
                 name: userMap.get(p.userId)?.name ?? 'â€”',
                 avatar: userMap.get(p.userId)?.avatar ?? null,
                 totalPoints: p._sum.points ?? 0,
-                isMe: p.userId === userId,
+                isMe: p.userId === sessionUserId,
             })),
+            ...(memberPointsBreakdown ? { memberPointsBreakdown } : {}),
         };
     }
 
