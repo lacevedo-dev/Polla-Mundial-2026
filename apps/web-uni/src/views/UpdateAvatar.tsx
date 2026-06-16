@@ -4,6 +4,7 @@ import { Camera, CheckCircle2, Loader2, ShieldAlert, User } from 'lucide-react';
 import { uploadFile, request, ApiError, resolveApiAssetUrl } from '../api';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenantStore } from '../stores/tenant.store';
+import { getHomeRoute } from '../utils/tenantRole';
 
 export default function UpdateAvatar() {
     const navigate = useNavigate();
@@ -59,7 +60,7 @@ export default function UpdateAvatar() {
             );
             updateAvatarFromProfile(updated.avatar, updated.needsAvatarUpdate ?? false);
             setSuccess(true);
-            setTimeout(() => navigate('/', { replace: true }), 1500);
+            setTimeout(() => navigate(getHomeRoute(user), { replace: true }), 1500);
         } catch (err) {
             setError(err instanceof ApiError ? err.message : 'No se pudo actualizar la foto');
         } finally {
@@ -73,7 +74,7 @@ export default function UpdateAvatar() {
         try {
             await request('/auth/avatar/dismiss', { method: 'POST' });
             setNeedsAvatarUpdate(false);
-            navigate('/', { replace: true });
+            navigate(getHomeRoute(user), { replace: true });
         } catch (err) {
             setError(err instanceof ApiError ? err.message : 'No se pudo continuar sin foto');
         } finally {

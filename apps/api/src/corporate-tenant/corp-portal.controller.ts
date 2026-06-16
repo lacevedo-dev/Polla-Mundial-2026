@@ -622,7 +622,7 @@ export class CorpPortalController {
         return this.tenantService.getMembersRoleStats(tenantId);
     }
 
-    @UseGuards(TenantStaffGuard)
+    @UseGuards(TenantAdminGuard)
     @Get('participation/members')
     async getParticipationMembers(
         @Req() req: any,
@@ -654,7 +654,7 @@ export class CorpPortalController {
         });
     }
 
-    @UseGuards(TenantStaffGuard)
+    @UseGuards(TenantAdminGuard)
     @Get('participation')
     async getParticipation(@Req() req: any, @Query('leagueId') leagueId?: string) {
         return this.participationService.getOverview(req.tenantId, leagueId);
@@ -729,6 +729,10 @@ export class CorpPortalController {
     @Post('members')
     async createMember(@Req() req: any, @Body() dto: ProvisionMemberDto) {
         const tenantId: string = req.tenantId;
+        const callerRole: string = req.tenantRole;
+        if (callerRole === 'STAFF' && dto.role && ['OWNER', 'ADMIN', 'STAFF'].includes(dto.role)) {
+            throw new ForbiddenException('El rol Usuario solo puede asignar el rol Jugador');
+        }
         try {
             const result = await this.provisioning.provisionOwner(tenantId, {
                 name: dto.name,
@@ -959,7 +963,7 @@ export class CorpPortalController {
         });
     }
 
-    @UseGuards(TenantStaffGuard)
+    @UseGuards(TenantAdminGuard)
     @Get('matches/operations')
     async listMatchOperations(
         @Req() req: any,
@@ -981,7 +985,7 @@ export class CorpPortalController {
         });
     }
 
-    @UseGuards(TenantStaffGuard)
+    @UseGuards(TenantAdminGuard)
     @Post('matches/:matchId/recalculate')
     @HttpCode(HttpStatus.OK)
     async recalculateMatch(@Req() req: any, @Param('matchId') matchId: string) {

@@ -27,8 +27,9 @@ export class AuthController {
 
     @HttpCode(HttpStatus.OK)
     @Post('login')
-    async login(@Body() loginDto: LoginDto) {
-        return this.authService.login(loginDto);
+    async login(@Body() loginDto: LoginDto, @Request() req) {
+        const tenantKey = req.headers['x-tenant-slug'] as string | undefined;
+        return this.authService.login(loginDto, tenantKey);
     }
 
     @Post('register')
@@ -82,7 +83,9 @@ export class AuthController {
             };
         }).systemConfig?.findUnique({ where: { key: 'user_credit_resets' } });
         const creditResetAt = parseSystemConfigValue<Record<string, string> | null>(creditResetsRecord?.value)?.[user.id] ?? null;
-        return { ...result, creditResetAt };
+        const tenantKey = req.headers['x-tenant-slug'] as string | undefined;
+        const tenantRole = await this.authService.resolveTenantRole(user.id, tenantKey);
+        return { ...result, creditResetAt, tenantRole };
     }
 
     @UseGuards(JwtAuthGuard)

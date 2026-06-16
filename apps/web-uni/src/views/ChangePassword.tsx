@@ -4,6 +4,7 @@ import { Eye, EyeOff, KeyRound, Loader2, CheckCircle2, ShieldAlert } from 'lucid
 import { request, ApiError } from '../api';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenantStore } from '../stores/tenant.store';
+import { getHomeRoute } from '../utils/tenantRole';
 
 export default function ChangePassword() {
     const navigate = useNavigate();
@@ -46,7 +47,7 @@ export default function ChangePassword() {
             });
             setMustChangePassword(false);
             setSuccess(true);
-            setTimeout(() => navigate('/', { replace: true }), 1800);
+            setTimeout(() => navigate(getHomeRoute(user), { replace: true }), 1800);
         } catch (err) {
             setError(err instanceof ApiError ? err.message : 'No se pudo cambiar la contraseña');
         } finally {

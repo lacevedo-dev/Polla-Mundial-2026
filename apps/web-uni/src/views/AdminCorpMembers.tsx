@@ -36,7 +36,7 @@ const ROLE_DESCS: Record<Member['role'], string> = {
 const ROLE_CONFIG = {
     OWNER: { label: 'Propietario', icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50' },
     ADMIN: { label: 'Admin', icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50' },
-    STAFF: { label: 'Usuario', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50' },
+    STAFF: { label: 'Staff', icon: Users, color: 'text-sky-600', bg: 'bg-sky-50' },
     PLAYER: { label: 'Jugador', icon: User, color: 'text-slate-500', bg: 'bg-slate-100' },
 };
 
@@ -756,12 +756,14 @@ export default function AdminCorpMembers() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    {!callerIsStaff && (
                     <button onClick={handleSyncLeagues} disabled={syncing}
                         title="Enrola a todos los miembros activos en todas las pollas del tenant"
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
                         {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                         Sincronizar pollas
                     </button>
+                    )}
                     <button onClick={() => { setBulkText(''); setBulkSharedPass(''); setBulkSendEmail(true); setBulkResults(null); setModalError(null); setModal('bulk'); }}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors">
                         <Upload size={14} /> Importar
@@ -814,7 +816,7 @@ export default function AdminCorpMembers() {
                         <option value="">Todos los roles</option>
                         <option value="OWNER">Propietario</option>
                         <option value="ADMIN">Admin</option>
-                        <option value="STAFF">Usuario</option>
+                        <option value="STAFF">Staff</option>
                         <option value="PLAYER">Jugador</option>
                     </select>
                     <button type="button" onClick={commitSearch}
@@ -1050,7 +1052,7 @@ export default function AdminCorpMembers() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
                                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Member['role'] }))} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
                                     <option value="PLAYER">Jugador</option>
-                                    {!callerIsStaff && <option value="STAFF">Usuario (Staff)</option>}
+                                    {!callerIsStaff && <option value="STAFF">Staff</option>}
                                     {!callerIsStaff && <option value="ADMIN">Administrador</option>}
                                     {!callerIsStaff && <option value="OWNER">Propietario</option>}
                                 </select>
@@ -1140,7 +1142,7 @@ export default function AdminCorpMembers() {
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Rol</label>
                                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Member['role'] }))} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
                                     <option value="PLAYER">Jugador</option>
-                                    {!callerIsStaff && <option value="STAFF">Usuario (Staff)</option>}
+                                    {!callerIsStaff && <option value="STAFF">Staff</option>}
                                     {!callerIsStaff && <option value="ADMIN">Administrador</option>}
                                     {!callerIsStaff && <option value="OWNER">Propietario</option>}
                                 </select>

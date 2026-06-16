@@ -33,7 +33,7 @@ export class AuthService {
         return null;
     }
 
-    async login(loginDto: LoginDto) {
+    async login(loginDto: LoginDto, tenantKey?: string) {
         await this.verifyRecaptcha(loginDto.recaptchaToken, 'login');
         const exists = await this.usersService.findByDocumentNumber(loginDto.identifier);
         if (!exists) {
@@ -44,6 +44,7 @@ export class AuthService {
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
+        const tenantRole = await this.resolveTenantRole(user.id, tenantKey);
         const payload = { username: user.username, sub: user.id, email: user.email, emailVerified: user.emailVerified, systemRole: user.systemRole };
         return {
             accessToken: this.jwtService.sign(payload),
@@ -57,6 +58,7 @@ export class AuthService {
                 systemRole: user.systemRole,
                 emailVerified: user.emailVerified,
                 mustChangePassword: (user as any).mustChangePassword ?? false,
+                tenantRole,
             },
         };
     }
@@ -463,5 +465,26 @@ export class AuthService {
             this.logger.warn(`reCAPTCHA rechazado action=${result?.action} score=${result?.score} errors=${JSON.stringify(result?.['error-codes'] ?? [])}`);
             throw new UnauthorizedException('No pudimos validar que seas una persona. Intenta de nuevo.');
         }
+    }
+
+    async resolveTenantRole(userId: string, tenantKey?: string | null): Promise<string | undefined> {
+        const key = tenantKey?.trim();
+        if (!key) return undefined;
+
+        const tenant = await this.prisma.corporateTenant.findFirst({
+            where: {
+                status: 'ACTIVE',
+                OR: [{ slug: key }, { customDomain: key }],
+            },
+            select: { id: true },
+        });
+        if (!tenant) return undefined;
+
+        const member = await this.prisma.tenantMember.findUnique({
+            where: { tenantId_userId: { tenantId: tenant.id, userId } },
+            select: { role: true, status: true },
+        });
+        if (!member || member.status !== 'ACTIVE') return undefined;
+        return member.role;
     }
 }

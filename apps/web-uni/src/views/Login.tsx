@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { useTenantStore } from '../stores/tenant.store';
 import { getRecaptchaToken } from '../recaptcha';
 import { ApiError } from '../api';
+import { getPostLoginRoute } from '../utils/tenantRole';
 
 export default function Login() {
     const navigate = useNavigate();
@@ -29,13 +30,7 @@ export default function Login() {
         try {
             const recaptchaToken = await getRecaptchaToken('login');
             const user = await login(identifier.trim(), password, recaptchaToken);
-            if (user.mustChangePassword) {
-                navigate('/change-password', { replace: true });
-            } else if (user.needsAvatarUpdate) {
-                navigate('/update-avatar', { replace: true });
-            } else {
-                navigate(params.get('next') ?? '/', { replace: true });
-            }
+            navigate(getPostLoginRoute(user, params.get('next')), { replace: true });
         } catch (err) {
             if (err instanceof ApiError && err.code === 'IDENTIFIER_NOT_FOUND') {
                 setNotRegistered(true);

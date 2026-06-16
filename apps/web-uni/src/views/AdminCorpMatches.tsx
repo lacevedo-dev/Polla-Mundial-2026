@@ -65,7 +65,7 @@ function teamLabel(team: CorpMatchRow['homeTeam']) {
 
 export default function AdminCorpMatches() {
     const tenantRole = useAuthStore((s) => s.user?.tenantRole ?? '');
-    const canManage = ['OWNER', 'ADMIN', 'STAFF'].includes(tenantRole);
+    const canManage = ['OWNER', 'ADMIN'].includes(tenantRole);
     const [rows, setRows] = useState<CorpMatchRow[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);

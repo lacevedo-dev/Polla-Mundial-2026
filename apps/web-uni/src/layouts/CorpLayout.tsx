@@ -10,6 +10,11 @@ import { useRankingStore } from '../stores/ranking.store';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import NotificationBell from '../components/NotificationBell';
 import { BASE_URL } from '../api';
+import { STAFF_HOME, isStaffUser, tenantRoleLabel } from '../utils/tenantRole';
+
+const STAFF_NAV_ITEMS = [
+    { path: STAFF_HOME, label: 'Gestión de usuarios', icon: Users },
+];
 
 const NAV_ITEMS = [
     { path: '/', label: 'Inicio', icon: Home },
@@ -45,13 +50,14 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'Portal Corporativo';
     const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
-    const isStaff = user?.tenantRole === 'STAFF';
+    const isStaff = isStaffUser(user);
+    const homePath = isStaff ? STAFF_HOME : '/';
     const primaryColor = 'var(--color-primary, #f59e0b)';
 
     useEffect(() => {
-        if (!user) return;
+        if (!user || isStaff) return;
         void prefetchRanking('GENERAL');
-    }, [user, prefetchRanking]);
+    }, [user, isStaff, prefetchRanking]);
 
     const avatarUrl = user?.avatar
         ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=random`;
@@ -93,7 +99,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
             <aside className="hidden md:flex flex-col w-64 bg-black text-white h-screen sticky top-0 shadow-xl z-20">
                 {/* Logo / Org name */}
                 <div className="p-6">
-                    <Link to="/" className="mb-8 flex h-20 w-full items-center justify-center rounded-xl">
+                    <Link to={homePath} className="mb-8 flex h-20 w-full items-center justify-center rounded-xl">
                         {tenant?.branding?.logoUrl ? (
                             <img
                                 src={tenant.branding.logoUrl}
@@ -110,22 +116,19 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
                     {/* Primary nav */}
                     <nav className="space-y-1">
-                        {NAV_ITEMS.map((item) => (
-                            <SidebarLink key={item.path} {...item} />
+                        {(isStaff ? STAFF_NAV_ITEMS : NAV_ITEMS).map((item) => (
+                            <SidebarLink key={item.path} {...item} highlight={isStaff} />
                         ))}
                     </nav>
 
                     {/* Admin nav */}
-                    {(isAdmin || isStaff) && (
+                    {isAdmin && (
                         <div className="mt-6">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4 mb-2">
                                 Administración
                             </p>
                             <nav className="space-y-1">
-                                {(isStaff
-                                    ? ADMIN_NAV_ITEMS.filter(i => ['/admin/members', '/admin/participation', '/admin/matches'].includes(i.path))
-                                    : ADMIN_NAV_ITEMS
-                                ).map((item) => (
+                                {ADMIN_NAV_ITEMS.map((item) => (
                                     <SidebarLink key={item.path} {...item} highlight />
                                 ))}
                             </nav>
@@ -134,7 +137,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                 </div>
 
                 {/* Notification toggle */}
-                {pushAvailable && (
+                {!isStaff && pushAvailable && (
                     <div className="px-4 pb-4">
                         {error && (
                             <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">{error}</p>
@@ -204,7 +207,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                     </p>
                                 )}
                                 <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                                    {isAdmin ? (user?.tenantRole === 'OWNER' ? 'Propietario' : 'Administrador') : 'Participante'}
+                                    {tenantRoleLabel(user?.tenantRole)}
                                 </p>
                             </div>
                         </div>
@@ -221,7 +224,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
             {/* ── Mobile Header ── */}
             <header className="md:hidden flex items-center justify-between px-4 py-3 bg-black text-white sticky top-0 z-30 shadow-md">
-                <Link to="/" className="flex items-center">
+                <Link to={homePath} className="flex items-center">
                     {tenant?.branding?.logoUrl ? (
                         <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 object-contain" />
                     ) : (
@@ -259,7 +262,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                 <div className="fixed inset-0 bg-slate-950 z-50 md:hidden flex flex-col">
                     {/* Top bar */}
                     <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
-                        <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center">
+                        <Link to={homePath} onClick={() => setMobileOpen(false)} className="flex items-center">
                             {tenant?.branding?.logoUrl ? (
                                 <img src={tenant.branding.logoUrl} alt={orgName} className="h-8 object-contain" />
                             ) : (
@@ -294,7 +297,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                                     </p>
                                 )}
                                 <p className="text-xs text-slate-400 mt-0.5">
-                                    {isAdmin ? (user?.tenantRole === 'OWNER' ? 'Propietario' : 'Administrador') : 'Participante'}
+                                    {tenantRoleLabel(user?.tenantRole)}
                                 </p>
                             </div>
                             <button
@@ -308,18 +311,15 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
 
                     {/* Nav */}
                     <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-                        {NAV_ITEMS.map((item) => (
-                            <SidebarLink key={item.path} {...item} />
+                        {(isStaff ? STAFF_NAV_ITEMS : NAV_ITEMS).map((item) => (
+                            <SidebarLink key={item.path} {...item} highlight={isStaff} />
                         ))}
-                        {(isAdmin || isStaff) && (
+                        {isAdmin && (
                             <>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4 pt-4 pb-1">
                                     Administración
                                 </p>
-                                {(isStaff
-                                    ? ADMIN_NAV_ITEMS.filter(i => ['/admin/members', '/admin/participation', '/admin/matches'].includes(i.path))
-                                    : ADMIN_NAV_ITEMS
-                                ).map((item) => (
+                                {ADMIN_NAV_ITEMS.map((item) => (
                                     <SidebarLink key={item.path} {...item} highlight />
                                 ))}
                             </>
@@ -327,7 +327,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                     </nav>
 
                     {/* Notification toggle mobile */}
-                    {pushAvailable && (
+                    {!isStaff && pushAvailable && (
                         <div className="px-4 pb-3">
                             {error && (
                                 <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">{error}</p>
@@ -386,11 +386,11 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
             </main>
 
             {/* ── Campana de notificaciones flotante ── */}
-            <NotificationBell />
+            {!isStaff && <NotificationBell />}
 
             {/* ── Mobile Bottom Nav ── */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-30 shadow-lg">
-                {NAV_ITEMS.slice(0, 4).map(({ path, label, icon: Icon }) => {
+                {(isStaff ? STAFF_NAV_ITEMS : NAV_ITEMS.slice(0, 4)).map(({ path, label, icon: Icon }) => {
                     const active = isActive(path);
                     return (
                         <Link
@@ -404,7 +404,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
                         </Link>
                     );
                 })}
-                {(isAdmin || isStaff) && (
+                {isAdmin && (
                     <Link
                         to="/admin"
                         className="flex flex-col items-center gap-1 transition-colors"

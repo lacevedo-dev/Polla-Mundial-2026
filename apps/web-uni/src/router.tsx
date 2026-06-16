@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useTenantStore } from './stores/tenant.store';
 import { useAuthStore } from './stores/auth.store';
+import { STAFF_HOME, getHomeRoute, isStaffUser, isTenantAdmin } from './utils/tenantRole';
 
 const LandingB2B = React.lazy(() => import('./views/LandingB2B'));
 const Login = React.lazy(() => import('./views/Login'));
@@ -46,6 +47,32 @@ function RequireSession({ children }: { children: React.ReactNode }) {
     const user = useAuthStore((s) => s.user);
     if (!user) return <Navigate to="/login" replace />;
     return <>{children}</>;
+}
+
+/** Bloquea rutas de participante y admin general para usuarios STAFF. */
+function BlockStaff({ children }: { children: React.ReactNode }) {
+    const user = useAuthStore((s) => s.user);
+    if (isStaffUser(user)) return <Navigate to={STAFF_HOME} replace />;
+    return <>{children}</>;
+}
+
+/** Solo OWNER/ADMIN; STAFF y jugadores son redirigidos. */
+function RequireTenantAdmin({ children }: { children: React.ReactNode }) {
+    const user = useAuthStore((s) => s.user);
+    if (isStaffUser(user)) return <Navigate to={STAFF_HOME} replace />;
+    if (isTenantAdmin(user)) return <>{children}</>;
+    return <Navigate to="/" replace />;
+}
+
+function HomeRoute() {
+    const user = useAuthStore((s) => s.user);
+    if (isStaffUser(user)) return <Navigate to={STAFF_HOME} replace />;
+    return <Dashboard />;
+}
+
+function FallbackRedirect() {
+    const user = useAuthStore((s) => s.user);
+    return <Navigate to={getHomeRoute(user)} replace />;
 }
 
 export function AppRouter() {
@@ -96,7 +123,7 @@ export function AppRouter() {
                         path="/"
                         element={
                             <RequireAuth>
-                                <Dashboard />
+                                <HomeRoute />
                             </RequireAuth>
                         }
                     />
@@ -104,7 +131,9 @@ export function AppRouter() {
                         path="/pollas"
                         element={
                             <RequireAuth>
-                                <Pollas />
+                                <BlockStaff>
+                                    <Pollas />
+                                </BlockStaff>
                             </RequireAuth>
                         }
                     />
@@ -112,7 +141,9 @@ export function AppRouter() {
                         path="/ranking"
                         element={
                             <RequireAuth>
-                                <Ranking />
+                                <BlockStaff>
+                                    <Ranking />
+                                </BlockStaff>
                             </RequireAuth>
                         }
                     />
@@ -120,7 +151,9 @@ export function AppRouter() {
                         path="/pollas/:id"
                         element={
                             <RequireAuth>
-                                <PollaDetail />
+                                <BlockStaff>
+                                    <PollaDetail />
+                                </BlockStaff>
                             </RequireAuth>
                         }
                     />
@@ -128,7 +161,9 @@ export function AppRouter() {
                         path="/help"
                         element={
                             <RequireAuth>
-                                <Help />
+                                <BlockStaff>
+                                    <Help />
+                                </BlockStaff>
                             </RequireAuth>
                         }
                     />
@@ -136,7 +171,9 @@ export function AppRouter() {
                         path="/admin"
                         element={
                             <RequireAuth>
-                                <AdminCorp />
+                                <RequireTenantAdmin>
+                                    <AdminCorp />
+                                </RequireTenantAdmin>
                             </RequireAuth>
                         }
                     />
@@ -152,7 +189,9 @@ export function AppRouter() {
                         path="/admin/pollas"
                         element={
                             <RequireAuth>
-                                <AdminCorpLeagues />
+                                <RequireTenantAdmin>
+                                    <AdminCorpLeagues />
+                                </RequireTenantAdmin>
                             </RequireAuth>
                         }
                     />
@@ -160,7 +199,9 @@ export function AppRouter() {
                         path="/admin/settings"
                         element={
                             <RequireAuth>
-                                <AdminCorpSettings />
+                                <RequireTenantAdmin>
+                                    <AdminCorpSettings />
+                                </RequireTenantAdmin>
                             </RequireAuth>
                         }
                     />
@@ -168,7 +209,9 @@ export function AppRouter() {
                         path="/admin/roles"
                         element={
                             <RequireAuth>
-                                <AdminCorpRoles />
+                                <RequireTenantAdmin>
+                                    <AdminCorpRoles />
+                                </RequireTenantAdmin>
                             </RequireAuth>
                         }
                     />
@@ -176,7 +219,9 @@ export function AppRouter() {
                         path="/admin/participation"
                         element={
                             <RequireAuth>
-                                <AdminCorpParticipation />
+                                <RequireTenantAdmin>
+                                    <AdminCorpParticipation />
+                                </RequireTenantAdmin>
                             </RequireAuth>
                         }
                     />
@@ -184,11 +229,13 @@ export function AppRouter() {
                         path="/admin/matches"
                         element={
                             <RequireAuth>
-                                <AdminCorpMatches />
+                                <RequireTenantAdmin>
+                                    <AdminCorpMatches />
+                                </RequireTenantAdmin>
                             </RequireAuth>
                         }
                     />
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                    <Route path="*" element={<FallbackRedirect />} />
                 </Routes>
             )}
         </Suspense>

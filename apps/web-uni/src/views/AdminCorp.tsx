@@ -83,7 +83,7 @@ export default function AdminCorp() {
             color: 'text-emerald-600',
             bg: 'bg-emerald-50',
         },
-    ].filter((item) => !isStaff || ['/admin/matches', '/admin/participation', '/admin/members'].includes(item.link));
+    ].filter((item) => !isStaff || item.link === '/admin/members');
 
     useEffect(() => {
         Promise.all([
