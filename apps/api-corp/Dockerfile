@@ -11,6 +11,7 @@
 FROM node:22-alpine AS builder
 
 ARG GIT_COMMIT=unknown
+ARG CACHE_BUST=unknown
 
 WORKDIR /app
 
@@ -50,7 +51,7 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 # Compilar api-corp (webpack bundling, resuelve alias @corp-api en build time)
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules
-RUN echo "api-corp build commit=${GIT_COMMIT}" && npm run build
+RUN echo "api-corp build cache=${CACHE_BUST} commit=${GIT_COMMIT}" && npm run build
 RUN printf '{"gitCommit":"%s","builtAt":"%s","rankingBreakdown":true}\n' "${GIT_COMMIT}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /app/apps/api-corp/.build-info.json
 
 # ---- Etapa 2: Producción ----

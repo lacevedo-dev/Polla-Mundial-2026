@@ -357,8 +357,13 @@ export class CorpPortalController {
     }
 
     @Get('ranking')
-    async getRanking(@Req() req: any) {
+    async getRanking(@Req() req: any, @Query('breakdownUserId') breakdownUserId?: string) {
         const tenantId: string = req.tenantId;
+        const breakdownTarget = breakdownUserId?.trim();
+        if (breakdownTarget) {
+            return this.predictionsService.getCorpTenantUserBreakdown(tenantId, breakdownTarget);
+        }
+
         const userId: string = req.user.userId;
 
         const members = await this.prisma.tenantMember.findMany({

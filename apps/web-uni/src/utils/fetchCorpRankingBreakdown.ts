@@ -10,9 +10,17 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
 };
 
 const BREAKDOWN_PATHS = [
+    (userId: string) =>
+        `/corp/ranking?breakdownUserId=${encodeURIComponent(userId)}`,
     (userId: string) => `/corp/ranking/user/${userId}/breakdown`,
     (userId: string) => `/corp/ranking-breakdown/${userId}`,
 ] as const;
+
+function isBreakdownPayload(data: unknown): data is CorpRankingBreakdownApiResponse {
+    if (!data || typeof data !== 'object') return false;
+    const record = data as Record<string, unknown>;
+    return Array.isArray(record.matches) && record.summary !== undefined && record.user !== undefined;
+}
 
 function isRouteNotFound(err: unknown): boolean {
     if (!(err instanceof ApiError)) return false;
@@ -60,11 +68,9 @@ function mergeBreakdowns(
     return { user, summary, matches, bonuses };
 }
 
-async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBreakdownApiResponse> {
+async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBreakdownApiResponse | null> {
     const leagues = await request<CorpLeagueSummary[]>('/corp/leagues');
-    if (!leagues.length) {
-        throw new ApiError('No hay pollas corporativas para calcular el detalle de puntos.', { status: 404 });
-    }
+    if (!leagues.length) return null;
 
     const parts: CorpRankingBreakdownApiResponse[] = [];
     let predictionsRouteMissing = false;
@@ -99,21 +105,15 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
         }
     }
 
-    if (predictionsRouteMissing) {
-        throw new ApiError(
-            'El servidor no expone el desglose de ranking. Redespliega api-corp (apps/api y apps/api-corp cambiaron).',
-            { status: 404 },
-        );
+    if (predictionsRouteMissing || !parts.length) {
+        return null;
     }
 
-    if (!parts.length) {
-        if (participantMissingInAllLeagues) {
-            throw new ApiError(
-                'Este participante no tiene pronósticos puntuados en las pollas del tenant.',
-                { status: 404 },
-            );
-        }
-        throw new ApiError('No se pudo cargar el detalle de puntos para este participante.', { status: 404 });
+    if (participantMissingInAllLeagues) {
+        throw new ApiError(
+            'Este participante no tiene pronósticos puntuados en las pollas del tenant.',
+            { status: 404 },
+        );
     }
 
     return mergeBreakdowns(parts);
@@ -122,7 +122,10 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
 async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBreakdownApiResponse | null> {
     for (const buildPath of BREAKDOWN_PATHS) {
         try {
-            return await request<CorpRankingBreakdownApiResponse>(buildPath(userId));
+            const data = await request<unknown>(buildPath(userId));
+            if (isBreakdownPayload(data)) {
+                return data;
+            }
         } catch (err) {
             if (!isRouteNotFound(err)) throw err;
         }
@@ -130,8 +133,16 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
     return null;
 }
 
+const STALE_BACKEND_MESSAGE =
+    'El backend api-corp en api-polla-coop no se ha actualizado. En Dokploy despliega la app Backend ' +
+    '(dominio api-polla-coop), con Clean Cache, y confirma que /health incluye buildGitCommit.';
+
 export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
     const direct = await fetchCorpBreakdownDirect(userId);
     if (direct) return direct;
-    return fetchBreakdownViaLeagues(userId);
+
+    const viaLeagues = await fetchBreakdownViaLeagues(userId);
+    if (viaLeagues) return viaLeagues;
+
+    throw new ApiError(STALE_BACKEND_MESSAGE, { status: 404 });
 }
