@@ -3,6 +3,7 @@ import { Trophy, Check, ChevronRight, Calendar, MapPin, Loader2, CheckSquare, Sq
 import { request } from '../../api';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { resolveTeamFlagUrl } from '../../lib/team-flag';
 
 interface Match {
     id: string;
@@ -178,8 +179,8 @@ export const MatchSelector: React.FC<MatchSelectorProps> = ({
                                         ) : (
                                             matches.map((match) => {
                                                 const isSelected = selectedMatchIds.includes(match.id);
-                                                const homeFlag = match.homeTeam.flagUrl || (match.homeTeam.code ? `https://flagcdn.com/w80/${match.homeTeam.code.toLowerCase()}.png` : '');
-                                                const awayFlag = match.awayTeam.flagUrl || (match.awayTeam.code ? `https://flagcdn.com/w80/${match.awayTeam.code.toLowerCase()}.png` : '');
+                                                const homeFlag = resolveTeamFlagUrl(match.homeTeam.flagUrl, match.homeTeam.code);
+                                                const awayFlag = resolveTeamFlagUrl(match.awayTeam.flagUrl, match.awayTeam.code);
                                                 const homeCode = match.homeTeam.code || match.homeTeam.name.substring(0, 3).toUpperCase();
                                                 const awayCode = match.awayTeam.code || match.awayTeam.name.substring(0, 3).toUpperCase();
                                                 
