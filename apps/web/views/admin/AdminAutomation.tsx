@@ -1412,6 +1412,14 @@ function resolveDefaultPreviewChannel(stepChannels: string[]): PreviewChannel {
   return resolvePreviewChannels(stepChannels)[0] ?? 'push';
 }
 
+const OUTDATED_AUTOMATION_API_HINT =
+  'El API en producción está desactualizado (anterior a automation v2). Redeploy de apps/api desde main y aplicar migraciones 20260616_automation_pre_match_steps y 20260617_automation_live_steps.';
+
+function isOutdatedAutomationApiRetryError(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 400) return false;
+  return err.message.includes('step debe ser uno de:') && !err.message.includes('HALFTIME');
+}
+
 function IncidentModal({
   incident,
   onClose,
@@ -1429,6 +1437,7 @@ function IncidentModal({
   const [preview, setPreview] = useState<MessagePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewApiMissing, setPreviewApiMissing] = useState(false);
   const stepChannels = getStepChannels(stepCatalog, step.key);
   const availablePreviewChannels = useMemo(
     () => resolvePreviewChannels(stepChannels),
@@ -1455,11 +1464,13 @@ function IncidentModal({
   useEffect(() => {
     setPreviewChannel(resolveDefaultPreviewChannel(stepChannels));
     setPreviewError(null);
+    setPreviewApiMissing(false);
   }, [incident.match.id, step.key, stepChannels.join('|')]);
 
   useEffect(() => {
     let cancelled = false;
     const loadPreview = async () => {
+      if (previewApiMissing) return;
       if (previewLeagueRequired && !selectedLeagueId) {
         setPreview(null);
         setPreviewError(null);
@@ -1483,9 +1494,12 @@ function IncidentModal({
         if (!cancelled) {
           setPreview(null);
           if (err instanceof ApiError && err.status === 404) {
+            setPreviewApiMissing(true);
             setPreviewError(
-              'Vista previa no disponible: el API desplegado no incluye /admin/automation/message-preview. Redeploy de apps/api. Puedes usar «Reintentar manualmente» igualmente.',
+              `Vista previa no disponible: el API no expone /admin/automation/message-preview. ${OUTDATED_AUTOMATION_API_HINT}`,
             );
+          } else if (err instanceof ApiError && isOutdatedAutomationApiRetryError(err)) {
+            setPreviewError(OUTDATED_AUTOMATION_API_HINT);
           } else if (err instanceof ApiError) {
             setPreviewError(err.message);
           } else {
@@ -1498,7 +1512,7 @@ function IncidentModal({
     };
     void loadPreview();
     return () => { cancelled = true; };
-  }, [incident.match.id, step.key, selectedLeagueId, previewChannel, previewLeagueRequired]);
+  }, [incident.match.id, step.key, selectedLeagueId, previewChannel, previewLeagueRequired, previewApiMissing]);
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -1525,7 +1539,12 @@ function IncidentModal({
       setRetryResult(result);
       if (result.ok) setTimeout(() => { onRefresh(); }, 1500);
     } catch (err: unknown) {
-      setRetryResult({ ok: false, runId: null, summary: err instanceof Error ? err.message : 'Error desconocido' });
+      const summary = isOutdatedAutomationApiRetryError(err)
+        ? OUTDATED_AUTOMATION_API_HINT
+        : err instanceof Error
+          ? err.message
+          : 'Error desconocido';
+      setRetryResult({ ok: false, runId: null, summary });
     } finally {
       setRetrying(false);
     }
