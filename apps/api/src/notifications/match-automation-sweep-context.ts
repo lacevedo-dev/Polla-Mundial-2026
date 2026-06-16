@@ -257,7 +257,10 @@ export function getRelevantLeaguesForScheduledMatch(
 /** Ligas por torneo + ligas con pronósticos en el partido (evita audiencia vacía). */
 export function getRelevantLeaguesForMatchReminder(
   context: MatchAutomationSweepContext,
-  match: Pick<MatchAutomationSweepMatch, 'tournamentId' | 'predictions'>,
+  match: {
+    tournamentId: string | null;
+    predictions: Array<{ leagueId: string }>;
+  },
 ): MatchAutomationSweepLeague[] {
   const byTournament = getRelevantLeaguesForScheduledMatch(
     context,

@@ -324,7 +324,7 @@ export class NotificationScheduler {
       now >= matchDate.getTime() - 60 * 60_000;
 
     const seen = new Set<string>();
-    const merged = [];
+    const merged: typeof primary = [];
     for (const match of [...primary, ...catchUp.filter((m) => reminderDueBefore(m.matchDate))]) {
       if (seen.has(match.id)) continue;
       seen.add(match.id);
