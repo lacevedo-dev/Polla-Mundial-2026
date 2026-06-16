@@ -490,7 +490,7 @@ export default function Dashboard() {
     return (
         <CorpLayout>
             {/* ── Header ── */}
-            <div className="mb-5 flex items-start justify-between gap-3">
+            <div className="mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 max-w-[1440px] mx-auto w-full">
                 <div>
                     <h1 className="text-2xl font-black text-slate-900 leading-tight uppercase tracking-tight">
                         {orgName || 'Mi Dashboard'}
@@ -514,7 +514,7 @@ export default function Dashboard() {
 
             {/* ── League selector ── */}
             {!loadingDash && displayLeagues.length > 1 && (
-                <div className="flex gap-1.5 flex-wrap mb-4">
+                <div className="flex gap-1.5 flex-wrap mb-4 max-w-[1440px] mx-auto w-full">
                     {displayLeagues.map((l) => (
                         <button key={l.id} onClick={() => setSelectedLeagueId(l.id)}
                             className="px-3 py-1.5 rounded-xl text-xs font-black transition-all border"
@@ -546,10 +546,10 @@ export default function Dashboard() {
                 ) : !leagueDetail ? (
                     <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-sm text-slate-400">Error cargando la polla.</div>
                 ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_300px] gap-4 items-start">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 xl:gap-5 max-w-[1440px] mx-auto w-full items-start">
 
-                        {/* ══ COLUMNA IZQUIERDA: Mi desempeño + Próximo reto + Stats ══ */}
-                        <div className="space-y-4">
+                        {/* ══ COLUMNA IZQUIERDA: perfil y rendimiento ══ */}
+                        <aside className="md:col-span-1 md:row-start-1 xl:col-span-3 flex flex-col gap-4 min-w-0">
 
                             {/* Mi desempeño — tarjeta oscura estilo spectator */}
                             <div className="rounded-2xl overflow-hidden shadow-sm" style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e293b 100%)' }}>
@@ -663,12 +663,10 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            {/* Reglas de puntos — colapsable con desempate */}
-                            <ScoringRulesCard defaultTab="resultado" />
-                        </div>
+                        </aside>
 
-                        {/* ══ COLUMNA CENTRAL: En vivo + Próximos partidos + Predicciones recientes ══ */}
-                        <div className="space-y-4">
+                        {/* ══ COLUMNA CENTRAL: acción principal (partidos) ══ */}
+                        <main className="md:col-span-2 md:row-start-2 xl:col-span-6 xl:row-start-auto flex flex-col gap-4 min-w-0">
 
                             {/* Partidos en vivo */}
                             {liveMatches.length > 0 && (
@@ -724,7 +722,7 @@ export default function Dashboard() {
                                         <p className="text-xs font-bold text-slate-500">¡Todos los pronósticos al día!</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2 gap-3">
                                         {nextMatches.map((m) => (
                                             <MatchCard key={m.id} match={m} leagueId={leagueDetail.id}
                                                 closeMin={leagueDetail.closePredictionMinutes}
@@ -790,10 +788,10 @@ export default function Dashboard() {
                                     </div>
                                 )}
                             </div>
-                        </div>
+                        </main>
 
-                        {/* ══ COLUMNA DERECHA: Ranking ══ */}
-                        <div className="space-y-4">
+                        {/* ══ COLUMNA DERECHA: ranking y reglas ══ */}
+                        <aside className="md:col-span-1 md:col-start-2 md:row-start-1 xl:col-span-3 xl:col-start-auto xl:row-start-auto flex flex-col gap-4 min-w-0 xl:sticky xl:top-4 xl:self-start">
 
                             {/* Top actual / Ranking */}
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -836,7 +834,9 @@ export default function Dashboard() {
                                     </Link>
                                 </div>
                             </div>
-                        </div>
+
+                            <ScoringRulesCard defaultTab="resultado" />
+                        </aside>
 
                     </div>
                 )
