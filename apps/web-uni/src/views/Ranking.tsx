@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Medal, Search, Trophy } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, resolveApiAssetUrl } from '../api';
 import { RankingSkeleton } from '../components/RankingSkeleton';
+import { ScoringRulesCard } from '../components/ScoringRulesCard';
 import { useRankingStore } from '../stores/ranking.store';
 import type {
     CorpRankingEntry,
@@ -206,21 +207,24 @@ export default function Ranking() {
                 </div>
             )}
 
-            <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 mb-4 shadow-sm">
-                <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Cómo leer los puntos</p>
-                <p className="text-xs text-slate-500 mt-1 mb-2">
-                    Toca un participante para ver el detalle partido a partido. Resumen de aciertos en cada fila.
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                    {POINTS_LEGEND.map((item) => (
-                        <span
-                            key={item.code}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-500"
-                        >
-                            {item.code}: {item.label}
-                        </span>
-                    ))}
+            <div className="grid gap-4 mb-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Cómo leer los puntos</p>
+                    <p className="text-xs text-slate-500 mt-1 mb-2">
+                        Toca un participante para ver el detalle partido a partido. Resumen de aciertos en cada fila.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {POINTS_LEGEND.map((item) => (
+                            <span
+                                key={item.code}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-500"
+                            >
+                                {item.code}: {item.label}
+                            </span>
+                        ))}
+                    </div>
                 </div>
+                <ScoringRulesCard />
             </div>
 
             {myEntry && tournamentStarted && (
@@ -312,6 +316,11 @@ export default function Ranking() {
                                                 <p className="text-[10px] text-slate-500 truncate mt-0.5">
                                                     {buildPointsResume(entry)}
                                                 </p>
+                                                {entry.tieBreakNote && (
+                                                    <p className="text-[9px] text-slate-400 mt-0.5 leading-snug">
+                                                        {entry.tieBreakNote}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="text-right shrink-0">

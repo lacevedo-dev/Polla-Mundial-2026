@@ -1,4 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+    assignCompetitionRanks,
+    formatTiebreakNote,
+    sortLeaderboardEntries,
+} from '@polla-2026/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const CORP_RANKING_LIMIT = 50;
@@ -182,17 +187,6 @@ export class CorpRankingService {
         return participationKeys.has(`${phaseBonus.userId}:${phaseBonus.phase}`);
     }
 
-    private sortLeaderboardRows(rows: CorpLeaderboardRow[]): CorpLeaderboardRow[] {
-        return [...rows].sort((a, b) => {
-            if (b.points !== a.points) return b.points - a.points;
-            if (b.hasChampion !== a.hasChampion) return b.hasChampion ? 1 : -1;
-            if (b.exactCount !== a.exactCount) return b.exactCount - a.exactCount;
-            if (b.winnerCount !== a.winnerCount) return b.winnerCount - a.winnerCount;
-            if (b.goalCount !== a.goalCount) return b.goalCount - a.goalCount;
-            return b.uniqueCount - a.uniqueCount;
-        });
-    }
-
     /** Leaderboard compatible con api-corp (sin modelos Prisma PhaseBonus / ParticipationObligation). */
     async buildLeaderboard(
         leagueId: string,
@@ -311,7 +305,29 @@ export class CorpRankingService {
                 };
             });
 
-        return this.sortLeaderboardRows(rows);
+        return sortLeaderboardEntries(rows);
+    }
+
+    private mapRankedEntries(
+        leaderboard: CorpLeaderboardRow[],
+        viewerUserId: string,
+        limit?: number,
+    ) {
+        const ranked = assignCompetitionRanks(leaderboard);
+        const slice = limit != null ? ranked.slice(0, limit) : ranked;
+
+        return slice.map((entry, index) => {
+            const previous = index > 0 ? slice[index - 1] : null;
+            const tieBreakNote =
+                previous && previous.points === entry.points
+                    ? formatTiebreakNote(previous, entry)
+                    : null;
+
+            return {
+                ...this.mapLeaderboardEntry(entry, entry.rank, viewerUserId),
+                tieBreakNote,
+            };
+        });
     }
 
     async resolveActiveLeague(tenantId: string): Promise<LeagueWithFees | null> {
@@ -411,9 +427,7 @@ export class CorpRankingService {
             availableCategories: CORP_RANKING_CATEGORY_META.filter((item) =>
                 available.includes(item.id),
             ),
-            entries: leaderboard
-                .slice(0, CORP_RANKING_LIMIT)
-                .map((entry, index) => this.mapLeaderboardEntry(entry, index + 1, viewerUserId)),
+            entries: this.mapRankedEntries(leaderboard, viewerUserId, CORP_RANKING_LIMIT),
             totalParticipants: leaderboard.length,
             limit: CORP_RANKING_LIMIT,
         };
@@ -426,15 +440,14 @@ export class CorpRankingService {
         category: CorpLeaderboardCategory = 'GENERAL',
     ) {
         const leaderboard = await this.buildLeaderboard(leagueId, category);
-        const myIndex = leaderboard.findIndex((entry) => entry.id === viewerUserId);
+        const ranked = assignCompetitionRanks(leaderboard);
+        const myEntry = ranked.find((entry) => entry.id === viewerUserId);
 
         return {
-            entries: leaderboard
-                .slice(0, limit)
-                .map((entry, index) => this.mapLeaderboardEntry(entry, index + 1, viewerUserId)),
+            entries: this.mapRankedEntries(leaderboard, viewerUserId, limit),
             totalParticipants: leaderboard.length,
-            myPoints: myIndex >= 0 ? leaderboard[myIndex].points : 0,
-            myRank: myIndex >= 0 ? myIndex + 1 : null,
+            myPoints: myEntry?.points ?? 0,
+            myRank: myEntry?.rank ?? null,
         };
     }
 

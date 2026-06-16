@@ -19,6 +19,7 @@ export interface CorpRankingEntry {
     goalCount: number;
     uniqueCount: number;
     isMe: boolean;
+    tieBreakNote?: string | null;
 }
 
 export interface CorpRankingResponse {
