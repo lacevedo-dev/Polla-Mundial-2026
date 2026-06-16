@@ -52,8 +52,8 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules
 RUN echo "api-corp build cache=${CACHE_BUST} commit=${GIT_COMMIT}" && npm run build
-RUN grep -q 'ranking-breakdown-v5' /app/apps/api-corp/dist/main.js \
-    || (echo "ERROR: el bundle no incluye ranking-breakdown-v5 — build incompleto" && exit 1)
+RUN grep -q 'ranking-breakdown-v6' /app/apps/api-corp/dist/main.js \
+    || (echo "ERROR: el bundle no incluye ranking-breakdown-v6 — build incompleto" && exit 1)
 RUN printf '{"gitCommit":"%s","builtAt":"%s","rankingBreakdown":true}\n' "${GIT_COMMIT}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /app/apps/api-corp/.build-info.json
 
 # ---- Etapa 2: Producción ----
@@ -67,7 +67,7 @@ RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV BUILD_GIT_COMMIT=${GIT_COMMIT}
-ENV CORP_DEPLOY_STAMP=ranking-breakdown-v5
+ENV CORP_DEPLOY_STAMP=ranking-breakdown-v6
 
 # Dependencias hoisted
 COPY --from=builder /app/node_modules ./node_modules

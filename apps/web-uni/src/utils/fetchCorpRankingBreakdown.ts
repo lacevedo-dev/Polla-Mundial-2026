@@ -25,7 +25,7 @@ type CorpPingResponse = {
     deployStamp?: string | null;
 };
 
-const EXPECTED_BUILD_MARKER = 'ranking-breakdown-v5';
+const EXPECTED_BUILD_MARKER = 'ranking-breakdown-v6';
 
 const BREAKDOWN_PATHS = [
     (userId: string) => `/corp/member-points/${userId}`,
@@ -225,9 +225,9 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
 
 function buildStaleBackendMessage(diagnostics: string): string {
     return (
-        'El dominio api-polla-coop sigue sirviendo un contenedor antiguo (sin ranking-breakdown-v5). ' +
+        'El dominio api-polla-coop sigue sirviendo un contenedor antiguo (sin ranking-breakdown-v6). ' +
         'En Dokploy: app Backend → Stop → elimina el contenedor → Clean Cache → Deploy. ' +
-        'Verifica https://api-polla-coop.atencionesvirtuales.com.co/corp-api-ping debe mostrar buildMarker v5. ' +
+        'Verifica https://api-polla-coop.atencionesvirtuales.com.co/corp-api-ping debe mostrar buildMarker v6. ' +
         `Diagnóstico: ${diagnostics}`
     );
 }
