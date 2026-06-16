@@ -9,6 +9,21 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
     >;
 };
 
+type CorpHealthResponse = {
+    buildGitCommit?: string;
+    features?: { rankingBreakdown?: boolean };
+};
+
+type CorpVersionResponse = {
+    buildGitCommit?: string;
+    rankingBreakdown?: boolean;
+};
+
+const STALE_DEPLOY_MESSAGE =
+    'El contenedor que responde en api-polla-coop está desactualizado ( /health sin buildGitCommit ). ' +
+    'En Dokploy abre la app que tiene el dominio api-polla-coop.atencionesvirtuales.com.co, haz deploy con limpiar caché y recrea el contenedor. ' +
+    'Luego verifica /api-corp-version y /health con features.rankingBreakdown=true.';
+
 const BREAKDOWN_PATHS = [
     (userId: string) => `/corp/ranking/user/${userId}/breakdown`,
     (userId: string) => `/corp/ranking-breakdown/${userId}`,
@@ -30,6 +45,28 @@ function isParticipantMissing(err: unknown): boolean {
     if (err.status !== 404) return false;
     const msg = err.message.toLowerCase();
     return msg.includes('participante') || msg.includes('not found') || msg.includes('no encontrado');
+}
+
+function isStaleCorpHealth(health: CorpHealthResponse): boolean {
+    return health.features?.rankingBreakdown !== true && !health.buildGitCommit;
+}
+
+async function assertCorpRankingDeployed(): Promise<void> {
+    const health = await request<CorpHealthResponse>('/health');
+    if (!isStaleCorpHealth(health) && health.features?.rankingBreakdown === true) {
+        return;
+    }
+
+    try {
+        const version = await request<CorpVersionResponse>('/api-corp-version');
+        if (version.rankingBreakdown === true) {
+            return;
+        }
+    } catch {
+        // /api-corp-version solo existe en builds recientes.
+    }
+
+    throw new ApiError(STALE_DEPLOY_MESSAGE, { status: 404 });
 }
 
 function mergeBreakdowns(
@@ -100,10 +137,7 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
     }
 
     if (predictionsRouteMissing) {
-        throw new ApiError(
-            'El backend corporativo aún no expone el desglose de ranking. Verifica /health (buildGitCommit) y reinicia el contenedor api-corp.',
-            { status: 404 },
-        );
+        throw new ApiError(STALE_DEPLOY_MESSAGE, { status: 404 });
     }
 
     if (!parts.length) {
@@ -131,23 +165,7 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
 }
 
 export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
-    try {
-        const health = await request<{
-            buildGitCommit?: string;
-            features?: { rankingBreakdown?: boolean };
-        }>('/health');
-        if (health.features?.rankingBreakdown !== true) {
-            throw new ApiError(
-                `El API corporativo (${health.buildGitCommit ?? 'sin buildGitCommit'}) aún no tiene desglose de ranking. En Dokploy: redeploy api-corp sin caché, recrear contenedor y verificar que /health muestre features.rankingBreakdown=true.`,
-                { status: 404 },
-            );
-        }
-    } catch (err) {
-        if (err instanceof ApiError && err.status === 404 && err.message.includes('desglose de ranking')) {
-            throw err;
-        }
-        // Si /health falla, intentar rutas directas igualmente.
-    }
+    await assertCorpRankingDeployed();
 
     const direct = await fetchCorpBreakdownDirect(userId);
     if (direct) return direct;

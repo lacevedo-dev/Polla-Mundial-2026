@@ -54,6 +54,10 @@ function BreakdownPanel({
         return (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
                 <p>{error}</p>
+                <p className="mt-2 text-xs text-amber-700">
+                    Total en ranking: <strong>{entry.totalPoints} pts</strong>
+                    {entry.totalPoints > 0 && ' (detalle partido a partido pendiente de actualizar el servidor).'}
+                </p>
                 <button type="button" onClick={onRetry} className="mt-2 text-xs font-bold underline">
                     Reintentar
                 </button>

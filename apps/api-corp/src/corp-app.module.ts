@@ -19,6 +19,7 @@ import { CorpHealthModule } from './health/corp-health.module';
 import { DataSyncModule } from './sync/data-sync.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CorpApiRankingModule } from './ranking/corp-api-ranking.module';
+import { CorpDeployModule } from './deploy/corp-deploy.module';
 
 @Module({
     imports: [
@@ -44,6 +45,9 @@ import { CorpApiRankingModule } from './ranking/corp-api-ranking.module';
 
         // Desglose de ranking (controlador nativo api-corp)
         CorpApiRankingModule,
+
+        // Probe público de versión desplegada (/api-corp-version)
+        CorpDeployModule,
 
         // Módulo nuevo: proxy de datos de fútbol desde el VPS principal
         FootballProxyModule,
