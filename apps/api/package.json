@@ -11,7 +11,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/src/main.js",
+    "start:prod": "node dist/main.js",
     "smtp:bootstrap": "tsx -r dotenv/config prisma/bootstrap_email_providers.ts",
     "smtp:bootstrap:apply": "tsx -r dotenv/config prisma/bootstrap_email_providers.ts --apply",
     "smtp:backlog:audit": "tsx -r dotenv/config prisma/sanitize_email_backlog.ts",

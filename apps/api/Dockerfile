@@ -44,7 +44,7 @@ RUN npx prisma generate
 
 # Compilar NestJS (esto generará /dist)
 RUN npm run build
-RUN test -f dist/src/main.js || (echo "FATAL: nest build no generó dist/src/main.js" && exit 1)
+RUN test -f dist/main.js || (echo "FATAL: nest build no generó dist/main.js" && exit 1)
 
 # Verificar que puppeteer-core esté disponible para el workspace API
 RUN node -e "require('puppeteer-core'); console.log('puppeteer-core OK')"
@@ -100,4 +100,4 @@ RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
 EXPOSE 3000
 
 # Aplicar migraciones pendientes y luego arrancar el servidor
-CMD ["/bin/sh", "-c", "test -f dist/src/main.js || { echo 'FATAL: dist/src/main.js no existe — rebuild de imagen requerido'; exit 1; }; npx prisma migrate deploy; exec node dist/src/main.js"]
+CMD ["/bin/sh", "-c", "test -f dist/main.js || { echo 'FATAL: dist/main.js no existe — rebuild de imagen requerido'; exit 1; }; npx prisma migrate deploy; exec node dist/main.js"]
