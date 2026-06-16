@@ -4,10 +4,10 @@ import { CorpLayout } from '../layouts/CorpLayout';
 import { request, resolveApiAssetUrl, ApiError } from '../api';
 import { buildPointsResume, PointsBreakdown } from '../components/PointsBreakdown';
 import { Tooltip } from '../components/Tooltip';
+import { fetchCorpRankingBreakdown } from '../utils/fetchCorpRankingBreakdown';
 import {
     toCorpRankingBreakdown,
     type CorpRankingBreakdown,
-    type CorpRankingBreakdownApiResponse,
 } from '../utils/rankingBreakdown';
 
 interface RankingEntry {
@@ -166,7 +166,7 @@ export default function Ranking() {
             return next;
         });
         try {
-            const data = await request<CorpRankingBreakdownApiResponse>(`/corp/ranking/user/${userId}/breakdown`);
+            const data = await fetchCorpRankingBreakdown(userId);
             setBreakdowns((prev) => ({ ...prev, [userId]: toCorpRankingBreakdown(data) }));
         } catch (err) {
             const message = err instanceof ApiError
