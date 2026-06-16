@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     Home, Trophy, BarChart2, LogOut, Menu, X,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
+import { useRankingStore } from '../stores/ranking.store';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import NotificationBell from '../components/NotificationBell';
 import { BASE_URL } from '../api';
@@ -32,6 +33,7 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
     const navigate = useNavigate();
     const tenant = useTenantStore((s) => s.tenant);
     const { user, logout } = useAuthStore();
+    const prefetchRanking = useRankingStore((s) => s.prefetchRanking);
     const [mobileOpen, setMobileOpen] = useState(false);
     const { supported, permission, subscribed, loading, error, subscribe, unsubscribe } = usePushNotifications();
     const pushAvailable = supported && permission !== 'denied';
@@ -45,6 +47,11 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
     const isAdmin = user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
     const isStaff = user?.tenantRole === 'STAFF';
     const primaryColor = 'var(--color-primary, #f59e0b)';
+
+    useEffect(() => {
+        if (!user) return;
+        void prefetchRanking('GENERAL');
+    }, [user, prefetchRanking]);
 
     const avatarUrl = user?.avatar
         ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name ?? 'U')}&background=random`;
@@ -65,7 +72,14 @@ export function CorpLayout({ children }: { children: React.ReactNode }) {
             cls += 'text-slate-400 hover:text-white hover:bg-slate-900';
         }
         return (
-            <Link to={path} onClick={() => setMobileOpen(false)} className={cls} style={style}>
+            <Link
+                to={path}
+                onClick={() => setMobileOpen(false)}
+                onMouseEnter={path === '/ranking' ? () => void prefetchRanking('GENERAL') : undefined}
+                onFocus={path === '/ranking' ? () => void prefetchRanking('GENERAL') : undefined}
+                className={cls}
+                style={style}
+            >
                 <Icon size={20} />
                 <span>{label}</span>
             </Link>

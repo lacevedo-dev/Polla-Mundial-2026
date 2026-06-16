@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Medal, Search, Trophy } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, resolveApiAssetUrl } from '../api';
+import { RankingSkeleton } from '../components/RankingSkeleton';
+import { useRankingStore } from '../stores/ranking.store';
 import type {
     CorpRankingEntry,
-    CorpRankingResponse,
     LeaderboardCategory,
     RankingBreakdownResponse,
 } from './ranking.types';
@@ -82,27 +83,30 @@ function BreakdownPanel({
 }
 
 export default function Ranking() {
-    const [data, setData] = useState<CorpRankingResponse | null>(null);
-    const [loading, setLoading] = useState(true);
+    const fetchRanking = useRankingStore((state) => state.fetchRanking);
+    const isLoadingCategory = useRankingStore((state) => state.isLoadingCategory);
+
     const [category, setCategory] = useState<LeaderboardCategory>('GENERAL');
     const [search, setSearch] = useState('');
     const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
     const [breakdowns, setBreakdowns] = useState<Record<string, RankingBreakdownResponse>>({});
     const [loadingBreakdownId, setLoadingBreakdownId] = useState<string | null>(null);
 
+    const data = useRankingStore((state) => state.cache[category]?.data ?? null);
+    const loading = isLoadingCategory(category) && !data;
+
     useEffect(() => {
-        setLoading(true);
-        const query = category !== 'GENERAL' ? `?category=${encodeURIComponent(category)}` : '';
-        request<CorpRankingResponse>(`/corp/ranking${query}`)
-            .then((payload) => {
-                setData(payload);
-                if (payload.category && payload.category !== category) {
-                    setCategory(payload.category);
-                }
-            })
-            .catch(() => setData(null))
-            .finally(() => setLoading(false));
-    }, [category]);
+        let cancelled = false;
+
+        void fetchRanking(category).then((payload) => {
+            if (cancelled || !payload?.category || payload.category === category) return;
+            setCategory(payload.category);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [category, fetchRanking]);
 
     const entries = data?.entries ?? [];
     const tournamentStarted = useMemo(
@@ -156,7 +160,9 @@ export default function Ranking() {
                 <p className="text-slate-500 text-sm mt-1">
                     {data?.league
                         ? <>Clasificación de <span className="font-bold text-slate-700">{data.league.name}</span></>
-                        : 'Clasificación de la polla activa'}
+                        : loading
+                            ? 'Cargando clasificación...'
+                            : 'Clasificación de la polla activa'}
                     {data && data.totalParticipants > data.limit
                         ? ` · Top ${data.limit} de ${data.totalParticipants} participantes`
                         : data && data.totalParticipants > 0
@@ -240,7 +246,7 @@ export default function Ranking() {
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                     type="search"
-                    placeholder="Buscar por nombre o usuario..."
+                    placeholder="Buscar participante..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-amber-400 transition-colors"
@@ -256,12 +262,7 @@ export default function Ranking() {
                 </div>
 
                 {loading ? (
-                    <div className="flex justify-center py-12">
-                        <div
-                            className="w-7 h-7 border-4 border-t-transparent rounded-full animate-spin"
-                            style={{ borderColor: 'var(--color-primary, #f59e0b)', borderTopColor: 'transparent' }}
-                        />
-                    </div>
+                    <RankingSkeleton />
                 ) : filtered.length === 0 ? (
                     <div className="text-center py-12 text-slate-400 text-sm">
                         <Medal size={32} className="mx-auto mb-2 opacity-30" />
@@ -308,9 +309,6 @@ export default function Ranking() {
                                                     )}
                                                     {entry.isMe && <span className="ml-1 text-[10px] font-black opacity-70">(tú)</span>}
                                                 </p>
-                                                {entry.username && (
-                                                    <p className="text-[10px] text-slate-400 truncate">@{entry.username}</p>
-                                                )}
                                                 <p className="text-[10px] text-slate-500 truncate mt-0.5">
                                                     {buildPointsResume(entry)}
                                                 </p>
