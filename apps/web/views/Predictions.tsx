@@ -112,6 +112,28 @@ function buildDrafts(matches: MatchViewModel[]): DraftMap {
     );
 }
 
+function shouldPreserveDraft(
+    current: { home: string; away: string; advanceTeamId?: string },
+    built: { home: string; away: string; advanceTeamId?: string },
+    match: MatchViewModel,
+): boolean {
+    const differsFromBuilt =
+        current.home !== built.home ||
+        current.away !== built.away ||
+        current.advanceTeamId !== built.advanceTeamId;
+
+    if (!differsFromBuilt) {
+        return false;
+    }
+
+    const isStaleEmptyDraft =
+        current.home === '' &&
+        current.away === '' &&
+        match.saved;
+
+    return !isStaleEmptyDraft;
+}
+
 function areDraftMapsEqual(left: DraftMap, right: DraftMap): boolean {
     const leftKeys = Object.keys(left);
     const rightKeys = Object.keys(right);
@@ -2019,19 +2041,13 @@ const Predictions: React.FC = () => {
     React.useEffect(() => {
         setDrafts((currentDrafts) => {
             const nextDrafts = buildDrafts(matches);
-            Object.keys(currentDrafts).forEach((matchId) => {
-                const current = currentDrafts[matchId];
-                const built = nextDrafts[matchId];
-                if (current && built) {
-                    const modified =
-                        current.home !== built.home ||
-                        current.away !== built.away ||
-                        current.advanceTeamId !== built.advanceTeamId;
-                    if (modified) {
-                        nextDrafts[matchId] = current;
-                    }
+            for (const match of matches) {
+                const current = currentDrafts[match.id];
+                const built = nextDrafts[match.id];
+                if (current && built && shouldPreserveDraft(current, built, match)) {
+                    nextDrafts[match.id] = current;
                 }
-            });
+            }
             return areDraftMapsEqual(currentDrafts, nextDrafts) ? currentDrafts : nextDrafts;
         });
     }, [matches]);

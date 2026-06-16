@@ -13,6 +13,37 @@ export function getMatchesInMinutesBeforeKickoffWindow(
   context: MatchAutomationSweepContext,
   minutesBeforeKickoff: number,
 ): MatchAutomationSweepMatch[] {
+  const primary = filterCheckpointWindow(context, minutesBeforeKickoff);
+  const catchUp = getCatchUpEscalationMatches(context, minutesBeforeKickoff);
+  const seen = new Set<string>();
+  const merged: MatchAutomationSweepMatch[] = [];
+  for (const match of [...primary, ...catchUp]) {
+    if (seen.has(match.id)) continue;
+    seen.add(match.id);
+    merged.push(match);
+  }
+  return merged;
+}
+
+/** Escalada debía enviarse pero el kickoff aún no pasó (catch-up). */
+export function getCatchUpEscalationMatches(
+  context: MatchAutomationSweepContext,
+  minutesBeforeKickoff: number,
+): MatchAutomationSweepMatch[] {
+  const now = context.now.getTime();
+
+  return context.scheduledMatches.filter((match) => {
+    const kickoffMs = match.matchDate.getTime();
+    if (kickoffMs <= now) return false;
+    const dueAt = kickoffMs - minutesBeforeKickoff * 60_000;
+    return now >= dueAt;
+  });
+}
+
+function filterCheckpointWindow(
+  context: MatchAutomationSweepContext,
+  minutesBeforeKickoff: number,
+): MatchAutomationSweepMatch[] {
   const windowStart = new Date(
     context.now.getTime() + minutesBeforeKickoff * 60_000,
   );

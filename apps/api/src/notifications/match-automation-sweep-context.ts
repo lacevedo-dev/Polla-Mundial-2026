@@ -7,6 +7,10 @@ export const REMINDER_WINDOW_START_MINUTES = 45;
 /** Más lejano del kickoff: primer intento de recordatorio (~75 min antes) */
 export const REMINDER_WINDOW_END_MINUTES = 75;
 const CLOSING_ALERT_WINDOW_GRACE_MINUTES = 5;
+/** Lookback del sweep: T-60 + catch-up de escaladas/cierre */
+export const SWEEP_LOOKBACK_MINUTES = 120;
+/** Partidos LIVE siguen en contexto hasta ~130 min post kickoff */
+export const SWEEP_LIVE_RETENTION_MINUTES = 130;
 /** Fechas cero de MariaDB (0000-00-00) rompen el mapeo Date de Prisma. */
 export const MIN_VALID_MYSQL_DATETIME = new Date('1970-01-01T00:00:00.000Z');
 const REPORTABLE_MEMBER_STATUSES = [
@@ -121,12 +125,14 @@ export async function buildMatchAutomationSweepContext(
     ...activeLeagues.map((league) => league.closePredictionMinutes),
   );
   const windowStart = new Date(
-    now.getTime() - maxClosePredictionMinutes * 60_000,
+    now.getTime() -
+      Math.max(SWEEP_LOOKBACK_MINUTES, maxClosePredictionMinutes) * 60_000,
   );
   const windowEnd = new Date(
     now.getTime() +
       Math.max(
         REMINDER_WINDOW_END_MINUTES,
+        SWEEP_LIVE_RETENTION_MINUTES,
         maxClosePredictionMinutes + CLOSING_ALERT_WINDOW_GRACE_MINUTES,
       ) *
         60_000,
@@ -243,16 +249,40 @@ export function getCatchUpReminderMatches(
   });
 }
 
+/** Partidos cuyo cierre ya debió dispararse pero el kickoff aún no pasó. */
+export function getCatchUpClosingAlertMatches(
+  context: MatchAutomationSweepContext,
+  closeMinutes: number,
+): MatchAutomationSweepMatch[] {
+  const now = context.now.getTime();
+
+  return context.scheduledMatches.filter((match) => {
+    const kickoffMs = match.matchDate.getTime();
+    if (kickoffMs <= now) return false;
+    const closingDueAt = kickoffMs - closeMinutes * 60_000;
+    return now >= closingDueAt;
+  });
+}
+
 export function getClosingAlertMatches(
   context: MatchAutomationSweepContext,
   closeMinutes: number,
 ): MatchAutomationSweepMatch[] {
-  return filterMatchesInFutureWindow(
+  const primary = filterMatchesInFutureWindow(
     context.scheduledMatches,
     context.now,
     closeMinutes,
     closeMinutes + CLOSING_ALERT_WINDOW_GRACE_MINUTES,
   );
+  const catchUp = getCatchUpClosingAlertMatches(context, closeMinutes);
+  const seen = new Set<string>();
+  const merged: MatchAutomationSweepMatch[] = [];
+  for (const match of [...primary, ...catchUp]) {
+    if (seen.has(match.id)) continue;
+    seen.add(match.id);
+    merged.push(match);
+  }
+  return merged;
 }
 
 export function getPendingReportMatches(
@@ -262,13 +292,21 @@ export function getPendingReportMatches(
 ): MatchAutomationSweepMatch[] {
   const lowerBound = new Date(context.now.getTime() - closeMinutes * 60_000);
   const upperBound = new Date(context.now.getTime() + closeMinutes * 60_000);
+  const now = context.now.getTime();
 
   return context.scheduledMatches.filter(
-    (match) =>
-      match.predictionReportSentAt === null &&
-      match.matchDate > lowerBound &&
-      match.matchDate <= upperBound &&
-      match.predictions.some((prediction) => prediction.leagueId === leagueId),
+    (match) => {
+      if (match.predictionReportSentAt !== null) return false;
+      if (!match.predictions.some((prediction) => prediction.leagueId === leagueId)) {
+        return false;
+      }
+      const kickoffMs = match.matchDate.getTime();
+      const closingDueAt = kickoffMs - closeMinutes * 60_000;
+      if (now >= closingDueAt && now < kickoffMs + closeMinutes * 60_000) {
+        return true;
+      }
+      return match.matchDate > lowerBound && match.matchDate <= upperBound;
+    },
   );
 }
 

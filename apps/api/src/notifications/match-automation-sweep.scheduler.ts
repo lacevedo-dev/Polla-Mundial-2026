@@ -14,7 +14,6 @@ import { PredictionReportScheduler } from '../prediction-report/prediction-repor
 import { SyncPlanService } from '../football-sync/services/sync-plan.service';
 import { buildMatchAutomationSweepContext } from './match-automation-sweep-context';
 import { NotificationScheduler } from './notification.scheduler';
-import { AutomationFeatureFlagsService } from '../automation/config/automation-feature-flags.service';
 import { PreMatchOrchestratorService } from '../automation/pre-match/pre-match-orchestrator.service';
 import { PostMatchOrchestratorService } from '../automation/post-match/post-match-orchestrator.service';
 
@@ -28,7 +27,6 @@ export class MatchAutomationSweepScheduler {
     private readonly notificationScheduler: NotificationScheduler,
     private readonly predictionReportScheduler: PredictionReportScheduler,
     private readonly syncPlan: SyncPlanService,
-    private readonly featureFlags: AutomationFeatureFlagsService,
     private readonly preMatchOrchestrator: PreMatchOrchestratorService,
     private readonly postMatchOrchestrator: PostMatchOrchestratorService,
   ) {}
@@ -70,76 +68,42 @@ export class MatchAutomationSweepScheduler {
 
   private async runSweepTasks(): Promise<SchedulerObservationSummary> {
     const context = await buildMatchAutomationSweepContext(this.prisma);
-    const preMatchV2 = await this.featureFlags.isPreMatchV2Enabled();
 
-    const taskNames = preMatchV2
-      ? [
-          'runPreMatchV2',
-          'sendMatchResultNotifications',
-          'checkAndSendReports',
-          'sendPendingResultReports',
-          'closeStaleUnlinkedMatches',
-        ]
-      : [
-          'sendMatchReminders',
-          'sendPredictionClosingAlerts',
-          'sendMatchResultNotifications',
-          'checkAndSendReports',
-          'sendPendingResultReports',
-          'closeStaleUnlinkedMatches',
-        ];
+    const taskNames = [
+      'runPreMatchAutomation',
+      'sendPredictionClosingAlerts',
+      'sendMatchResultNotifications',
+      'checkAndSendReports',
+      'sendPendingResultReports',
+      'closeStaleUnlinkedMatches',
+    ];
 
     const tasks: Array<[string, () => Promise<SchedulerObservationOutcome | void>]> =
-      preMatchV2
-        ? [
-            ['runPreMatchV2', () => this.preMatchOrchestrator.run(context)],
-            [
-              'sendMatchResultNotifications',
-              () => this.postMatchOrchestrator.runResultNotifications(),
-            ],
-            [
-              'checkAndSendReports',
-              () => this.predictionReportScheduler.checkAndSendReports(context),
-            ],
-            [
-              'sendPendingResultReports',
-              () => this.predictionReportScheduler.sendPendingResultReports(),
-            ],
-            [
-              'closeStaleUnlinkedMatches',
-              async () => {
-                await this.syncPlan.closeStaleUnlinkedMatches();
-              },
-            ],
-          ]
-        : [
-            [
-              'sendMatchReminders',
-              () => this.notificationScheduler.sendMatchReminders(context),
-            ],
-            [
-              'sendPredictionClosingAlerts',
-              () => this.notificationScheduler.sendPredictionClosingAlerts(context),
-            ],
-            [
-              'sendMatchResultNotifications',
-              () => this.postMatchOrchestrator.runResultNotifications(),
-            ],
-            [
-              'checkAndSendReports',
-              () => this.predictionReportScheduler.checkAndSendReports(context),
-            ],
-            [
-              'sendPendingResultReports',
-              () => this.predictionReportScheduler.sendPendingResultReports(),
-            ],
-            [
-              'closeStaleUnlinkedMatches',
-              async () => {
-                await this.syncPlan.closeStaleUnlinkedMatches();
-              },
-            ],
-          ];
+      [
+        ['runPreMatchAutomation', () => this.preMatchOrchestrator.run(context)],
+        [
+          'sendPredictionClosingAlerts',
+          () => this.notificationScheduler.sendPredictionClosingAlerts(context),
+        ],
+        [
+          'sendMatchResultNotifications',
+          () => this.postMatchOrchestrator.runResultNotifications(),
+        ],
+        [
+          'checkAndSendReports',
+          () => this.predictionReportScheduler.checkAndSendReports(context),
+        ],
+        [
+          'sendPendingResultReports',
+          () => this.predictionReportScheduler.sendPendingResultReports(),
+        ],
+        [
+          'closeStaleUnlinkedMatches',
+          async () => {
+            await this.syncPlan.closeStaleUnlinkedMatches();
+          },
+        ],
+      ];
 
     const taskResults: SweepTaskResult[] = [];
 

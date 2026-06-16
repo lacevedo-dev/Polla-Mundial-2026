@@ -513,7 +513,7 @@ export class AutomationObservabilityService {
           )
         : this.deriveExpectedStatus(
             params.step,
-            params.match.status,
+            params.match,
             scheduledAt,
             params.now,
           );
@@ -550,14 +550,32 @@ export class AutomationObservabilityService {
 
   private deriveExpectedStatus(
     step: AutomationStep,
-    matchStatus: MatchStatus,
+    match: {
+      status: MatchStatus;
+      predictionReportSentAt: Date | null;
+      resultNotificationSentAt: Date | null;
+    },
     scheduledAt: Date | null,
     now: Date,
   ): StepState {
     if (
+      step === AutomationStep.PREDICTION_REPORT &&
+      match.predictionReportSentAt
+    ) {
+      return 'SUCCESS';
+    }
+
+    if (
+      step === AutomationStep.RESULT_NOTIFICATION &&
+      match.resultNotificationSentAt
+    ) {
+      return 'SUCCESS';
+    }
+
+    if (
       (step === AutomationStep.RESULT_NOTIFICATION ||
         step === AutomationStep.RESULT_REPORT) &&
-      matchStatus !== MatchStatus.FINISHED
+      match.status !== MatchStatus.FINISHED
     ) {
       return scheduledAt && now < scheduledAt ? 'SCHEDULED' : 'NOT_APPLICABLE';
     }

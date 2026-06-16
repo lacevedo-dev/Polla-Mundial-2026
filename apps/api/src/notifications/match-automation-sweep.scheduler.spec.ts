@@ -3,7 +3,6 @@ import { resetExclusiveBackgroundJobStateForTests } from '../prisma/background-j
 import { SyncPlanService } from '../football-sync/services/sync-plan.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
-import { AutomationFeatureFlagsService } from '../automation/config/automation-feature-flags.service';
 import { PreMatchOrchestratorService } from '../automation/pre-match/pre-match-orchestrator.service';
 import { PostMatchOrchestratorService } from '../automation/post-match/post-match-orchestrator.service';
 import { MatchAutomationSweepScheduler } from './match-automation-sweep.scheduler';
@@ -28,9 +27,6 @@ describe('MatchAutomationSweepScheduler', () => {
   const syncPlan = {
     closeStaleUnlinkedMatches: jest.fn(),
   };
-  const featureFlags = {
-    isPreMatchV2Enabled: jest.fn().mockResolvedValue(false),
-  };
   const preMatchOrchestrator = {
     run: jest.fn().mockResolvedValue({ status: 'completed', summary: {} }),
   };
@@ -50,7 +46,6 @@ describe('MatchAutomationSweepScheduler', () => {
         { provide: NotificationScheduler, useValue: notificationScheduler },
         { provide: PredictionReportScheduler, useValue: predictionReportScheduler },
         { provide: SyncPlanService, useValue: syncPlan },
-        { provide: AutomationFeatureFlagsService, useValue: featureFlags },
         { provide: PreMatchOrchestratorService, useValue: preMatchOrchestrator },
         { provide: PostMatchOrchestratorService, useValue: postMatchOrchestrator },
       ],
@@ -77,13 +72,13 @@ describe('MatchAutomationSweepScheduler', () => {
   beforeEach(() => {
     prisma.league.findMany.mockResolvedValue([]);
     prisma.match.findMany.mockResolvedValue([]);
-    featureFlags.isPreMatchV2Enabled.mockResolvedValue(false);
   });
 
-  it('runs notification and report tasks sequentially from a single cron entrypoint', async () => {
+  it('runs pre-match orchestrator, closing alerts and report tasks sequentially', async () => {
     const order: string[] = [];
-    notificationScheduler.sendMatchReminders.mockImplementation(async () => {
-      order.push('sendMatchReminders');
+    preMatchOrchestrator.run.mockImplementation(async () => {
+      order.push('runPreMatchAutomation');
+      return { status: 'completed', summary: {} };
     });
     notificationScheduler.sendPredictionClosingAlerts.mockImplementation(async () => {
       order.push('sendPredictionClosingAlerts');
@@ -105,47 +100,16 @@ describe('MatchAutomationSweepScheduler', () => {
     await scheduler.runMatchAutomationSweep();
 
     expect(order).toEqual([
-      'sendMatchReminders',
+      'runPreMatchAutomation',
       'sendPredictionClosingAlerts',
       'sendMatchResultNotifications',
       'checkAndSendReports',
       'sendPendingResultReports',
       'closeStaleUnlinkedMatches',
     ]);
-  });
-
-  it('uses pre-match v2 orchestrator when feature flag is enabled', async () => {
-    featureFlags.isPreMatchV2Enabled.mockResolvedValue(true);
-    const order: string[] = [];
-    preMatchOrchestrator.run.mockImplementation(async () => {
-      order.push('runPreMatchV2');
-      return { status: 'completed', summary: {} };
-    });
-    postMatchOrchestrator.runResultNotifications.mockImplementation(async () => {
-      order.push('sendMatchResultNotifications');
-      return { status: 'completed', summary: {} };
-    });
-    predictionReportScheduler.checkAndSendReports.mockImplementation(async () => {
-      order.push('checkAndSendReports');
-    });
-    predictionReportScheduler.sendPendingResultReports.mockImplementation(async () => {
-      order.push('sendPendingResultReports');
-    });
-    syncPlan.closeStaleUnlinkedMatches.mockImplementation(async () => {
-      order.push('closeStaleUnlinkedMatches');
-    });
-
-    await scheduler.runMatchAutomationSweep();
-
-    expect(order).toEqual([
-      'runPreMatchV2',
-      'sendMatchResultNotifications',
-      'checkAndSendReports',
-      'sendPendingResultReports',
-      'closeStaleUnlinkedMatches',
-    ]);
     expect(notificationScheduler.sendMatchReminders).not.toHaveBeenCalled();
-    expect(notificationScheduler.sendPredictionClosingAlerts).not.toHaveBeenCalled();
+    expect(preMatchOrchestrator.run).toHaveBeenCalledTimes(1);
+    expect(notificationScheduler.sendPredictionClosingAlerts).toHaveBeenCalledTimes(1);
   });
 
   it('continues with later tasks if one task throws', async () => {
@@ -153,7 +117,7 @@ describe('MatchAutomationSweepScheduler', () => {
 
     await scheduler.runMatchAutomationSweep();
 
-    expect(notificationScheduler.sendMatchReminders).toHaveBeenCalledTimes(1);
+    expect(preMatchOrchestrator.run).toHaveBeenCalledTimes(1);
     expect(notificationScheduler.sendPredictionClosingAlerts).toHaveBeenCalledTimes(1);
     expect(postMatchOrchestrator.runResultNotifications).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.checkAndSendReports).toHaveBeenCalledTimes(1);
@@ -178,10 +142,10 @@ describe('MatchAutomationSweepScheduler', () => {
 
   it('skips overlapping sweep ticks while a previous sweep is still running', async () => {
     let resolveFirstTask: (() => void) | null = null;
-    notificationScheduler.sendMatchReminders.mockImplementation(
+    preMatchOrchestrator.run.mockImplementation(
       () =>
-        new Promise<void>((resolve) => {
-          resolveFirstTask = resolve;
+        new Promise<{ status: 'completed'; summary: Record<string, never> }>((resolve) => {
+          resolveFirstTask = () => resolve({ status: 'completed', summary: {} });
         }),
     );
 
@@ -190,7 +154,7 @@ describe('MatchAutomationSweepScheduler', () => {
 
     await scheduler.runMatchAutomationSweep();
 
-    expect(notificationScheduler.sendMatchReminders).toHaveBeenCalledTimes(1);
+    expect(preMatchOrchestrator.run).toHaveBeenCalledTimes(1);
     expect(notificationScheduler.sendPredictionClosingAlerts).not.toHaveBeenCalled();
     expect(postMatchOrchestrator.runResultNotifications).not.toHaveBeenCalled();
     expect(predictionReportScheduler.checkAndSendReports).not.toHaveBeenCalled();

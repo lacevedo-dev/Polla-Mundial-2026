@@ -9,7 +9,7 @@ import { AutomationObservabilityService } from '../../automation-observability/a
 import { NotificationScheduler } from '../../notifications/notification.scheduler';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
-import { AutomationFeatureFlagsService } from '../config/automation-feature-flags.service';
+import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { automationStepToLiveEvent } from '../config/automation-step-scheduler.util';
 import type {
   GoalImpactContext,
@@ -32,7 +32,7 @@ export class LiveOrchestratorService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly featureFlags: AutomationFeatureFlagsService,
+    private readonly stepConfig: AutomationStepConfigService,
     private readonly observability: AutomationObservabilityService,
     private readonly notificationScheduler: NotificationScheduler,
     private readonly goalImpactAnalyzer: GoalImpactAnalyzerService,
@@ -40,27 +40,25 @@ export class LiveOrchestratorService {
   ) {}
 
   async handleMatchStart(ctx: LiveMatchContext): Promise<void> {
-    if (!(await this.featureFlags.isLivePhaseV2Enabled())) return;
     await this.dispatchLiveEvent(ctx, 'MATCH_START');
   }
 
   async handleHalftime(ctx: LiveMatchContext): Promise<void> {
-    if (!(await this.featureFlags.isLivePhaseV2Enabled())) return;
     await this.dispatchLiveEvent(ctx, 'HALFTIME');
   }
 
   async handleSecondHalfStart(ctx: LiveMatchContext): Promise<void> {
-    if (!(await this.featureFlags.isLivePhaseV2Enabled())) return;
     await this.dispatchLiveEvent(ctx, 'SECOND_HALF_START');
   }
 
   async handleMatchLiveEnd(ctx: LiveMatchContext): Promise<void> {
-    if (!(await this.featureFlags.isLivePhaseV2Enabled())) return;
     await this.dispatchLiveEvent(ctx, 'MATCH_LIVE_END');
   }
 
   async handleGoalImpact(ctx: GoalImpactContext): Promise<void> {
-    if (!(await this.featureFlags.isLivePhaseV2Enabled())) return;
+    if (!(await this.stepConfig.isStepEnabled(AutomationStep.GOAL_IMPACT))) {
+      return;
+    }
 
     try {
       const summaries = await this.goalImpactAnalyzer.summarizeByLeague(
@@ -132,6 +130,11 @@ export class LiveOrchestratorService {
     options?: { forceResend?: boolean; leagueIds?: string[] },
   ): Promise<void> {
     if (event === 'GOAL_IMPACT') return;
+
+    const automationStep = liveEventToAutomationStep(event);
+    if (!(await this.stepConfig.isStepEnabled(automationStep))) {
+      return;
+    }
 
     try {
       const predictions = await this.prisma.prediction.findMany({
@@ -233,8 +236,6 @@ export class LiveOrchestratorService {
           if (ok) waEnqueued++;
         }
       }
-
-      const automationStep = liveEventToAutomationStep(event);
 
       for (const leagueId of leagueIds) {
         await this.recordRun({

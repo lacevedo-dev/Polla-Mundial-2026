@@ -281,6 +281,27 @@ export class PreMatchOrchestratorService {
     );
 
     if (audiences.length === 0) {
+      for (const league of leagues) {
+        const scheduledAt = this.observability.getScheduledAt(automationStep, {
+          matchDate: match.matchDate,
+          closeMinutes,
+          matchStatus: MatchStatus.SCHEDULED,
+        });
+        const runId = await this.observability.startRun({
+          step: automationStep,
+          matchId: match.id,
+          leagueId: league.id,
+          scheduledAt,
+          audienceCount: 0,
+          summary: `Escalada ${checkpoint} ${home} vs ${away}`,
+        });
+        await this.observability.finishRun(runId, {
+          status: 'SKIPPED',
+          summary: `Escalada ${checkpoint}: todos completos en ${league.name}`,
+          deliveredCount: 0,
+          details: { checkpoint, minutesBeforeKickoff, closeMinutes, reason: 'all_complete' },
+        });
+      }
       return;
     }
 

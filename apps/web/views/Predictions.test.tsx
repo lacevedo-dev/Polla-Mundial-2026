@@ -79,9 +79,12 @@ describe('Predictions view', () => {
                 },
             ],
             isLoading: false,
+            goalEvents: [],
             fetchLeagueMatches: fetchLeagueMatchesMock,
             savePrediction: savePredictionMock,
             resetLeagueData: resetLeagueDataMock,
+            clearGoalEvent: vi.fn(),
+            batchUpdateLiveScores: vi.fn(),
         };
         fetchMyLeaguesMock.mockResolvedValue(undefined);
         fetchLeagueMatchesMock.mockResolvedValue(predictionState.matches);
