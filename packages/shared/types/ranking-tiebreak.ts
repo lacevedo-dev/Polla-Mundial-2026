@@ -135,10 +135,52 @@ export function formatTiebreakAdvantage(higher: TiebreakStats, lower: TiebreakSt
 }
 
 export const TIEBREAK_ROW_METRICS = [
-    { id: 'points', icon: '🏅', label: 'Pts', getValue: (s: TiebreakStats) => String(s.points) },
-    { id: 'champion', icon: '🏆', label: 'Campeón', getValue: (s: TiebreakStats) => (s.hasChampion ? 'Sí' : 'No') },
-    { id: 'exact', icon: '🎯', label: 'Exactos', getValue: (s: TiebreakStats) => String(s.exactCount) },
-    { id: 'winner', icon: '✅', label: 'Ganadores', getValue: (s: TiebreakStats) => String(s.winnerCount) },
-    { id: 'goals', icon: '⚽', label: 'Goles', getValue: (s: TiebreakStats) => String(s.goalCount) },
-    { id: 'unique', icon: '⭐', label: 'Únicas', getValue: (s: TiebreakStats) => String(s.uniqueCount) },
+    {
+        id: 'points',
+        icon: '🏅',
+        label: 'Puntos totales',
+        shortLabel: 'Pts',
+        description: 'Suma de aciertos en partidos y bonos de fase. Es el criterio principal del ranking.',
+        getValue: (s: TiebreakStats) => String(s.points),
+    },
+    {
+        id: 'champion',
+        icon: '🏆',
+        label: 'Campeón acertado',
+        shortLabel: 'Campeón',
+        description: 'Indica si acertó el campeón del torneo (bono de la final). Gana quien lo tenga en empate de puntos.',
+        getValue: (s: TiebreakStats) => (s.hasChampion ? 'Sí' : 'No'),
+    },
+    {
+        id: 'exact',
+        icon: '🎯',
+        label: 'Marcadores exactos',
+        shortLabel: 'Exactos',
+        description: 'Cantidad de partidos con marcador exacto (ambos goles). A mayor número, mejor posición.',
+        getValue: (s: TiebreakStats) => String(s.exactCount),
+    },
+    {
+        id: 'winner',
+        icon: '✅',
+        label: 'Ganadores acertados',
+        shortLabel: 'Ganadores',
+        description: 'Partidos donde acertó el resultado (ganador o empate), sin contar el marcador exacto.',
+        getValue: (s: TiebreakStats) => String(s.winnerCount),
+    },
+    {
+        id: 'goals',
+        icon: '⚽',
+        label: 'Goles acertados',
+        shortLabel: 'Goles',
+        description: 'Goles de un equipo acertados aunque no haya acertado el marcador completo.',
+        getValue: (s: TiebreakStats) => String(s.goalCount),
+    },
+    {
+        id: 'unique',
+        icon: '⭐',
+        label: 'Predicciones únicas',
+        shortLabel: 'Únicas',
+        description: 'Marcadores exactos que nadie más predijo en la liga. Bonifica la originalidad en el desempate.',
+        getValue: (s: TiebreakStats) => String(s.uniqueCount),
+    },
 ] as const;

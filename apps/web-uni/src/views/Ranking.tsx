@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Medal, Search, Trophy } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, resolveApiAssetUrl } from '../api';
 import { RankingSkeleton } from '../components/RankingSkeleton';
+import { RankingGuidePanel } from '../components/RankingGuidePanel';
 import { RankingTiebreakSummary } from '../components/RankingTiebreakSummary';
 import { useRankingStore } from '../stores/ranking.store';
 import type {
@@ -11,7 +12,6 @@ import type {
     RankingBreakdownResponse,
 } from './ranking.types';
 import {
-    POINTS_LEGEND,
     buildPointsResume,
     formatPhaseLabel,
     toDisplayDate,
@@ -218,23 +218,7 @@ export default function Ranking() {
                 </div>
             )}
 
-            <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 mb-4 shadow-sm">
-                <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Cómo leer el ranking</p>
-                <p className="text-xs text-slate-500 mt-1 mb-2">
-                    Cada fila muestra los 6 criterios de desempate. Si hay empate en puntos, se explica por qué uno queda arriba del otro.
-                    Toca un participante para ver el detalle partido a partido.
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                    {POINTS_LEGEND.map((item) => (
-                        <span
-                            key={item.code}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-500"
-                        >
-                            {item.code}: {item.label}
-                        </span>
-                    ))}
-                </div>
-            </div>
+            <RankingGuidePanel />
 
             {myEntry && tournamentStarted && (
                 <div

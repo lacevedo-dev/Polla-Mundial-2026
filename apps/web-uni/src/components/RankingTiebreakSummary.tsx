@@ -70,6 +70,7 @@ export function RankingTiebreakSummary({
                         <span
                             key={metric.id}
                             title={`${metric.label}: ${value}`}
+                            aria-label={`${metric.label}: ${value}`}
                             className={`inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[9px] font-bold leading-none ${
                                 isActive
                                     ? 'border-slate-200 bg-white text-slate-700'
