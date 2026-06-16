@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { WhatsappGroupJobType, WhatsappJobStatus } from '@prisma/client';
+import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWebService } from './whatsapp-web.service';
 import { WhatsappImageService } from './whatsapp-image.service';
@@ -10,6 +10,8 @@ import {
   WA_PREDICTION_REPORT_EVENT,
 } from '../prediction-report/prediction-report.service';
 import type { WhatsappReportEvent } from '../prediction-report/prediction-report.service';
+import { automationStepToEscalationCheckpoint } from '../automation/config/automation-timing.util';
+import { escalationDedupeKey } from '../automation/pre-match/pre-match-message.builder';
 
 /** Mapeo de job type a schedulerId (mismo id que usa el frontend) */
 const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
@@ -19,6 +21,12 @@ const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.GOAL_SCORED]:         'live_goal',
   [WhatsappGroupJobType.PREDICTION_REPORT]:   'prediction_report',
   [WhatsappGroupJobType.RESULT_REPORT]:       'result_report',
+  [WhatsappGroupJobType.PRE_MATCH_ESCALATION]: 'pre_match_escalation',
+  [WhatsappGroupJobType.MATCH_START]: 'live_match_start',
+  [WhatsappGroupJobType.HALFTIME]: 'live_halftime',
+  [WhatsappGroupJobType.SECOND_HALF_START]: 'live_second_half',
+  [WhatsappGroupJobType.MATCH_LIVE_END]: 'live_match_end',
+  [WhatsappGroupJobType.GOAL_IMPACT]: 'live_goal_impact',
 };
 
 @Injectable()
@@ -267,6 +275,11 @@ export class WhatsappGroupService {
     matchId: string,
     leagueId: string,
     type: WhatsappGroupJobType,
+    options?: {
+      automationStep?: AutomationStep;
+      forceResend?: boolean;
+      caption?: string;
+    },
   ): Promise<{ ok: boolean; message: string; jobId?: string }> {
     const league = await this.prisma.league.findUnique({
       where: { id: leagueId },
@@ -287,26 +300,66 @@ export class WhatsappGroupService {
       };
     }
 
-    const dedupeKey = `${type}:${matchId}:${leagueId}`;
-    const existing = await this.prisma.whatsappGroupJob.findUnique({
+    const dedupeKey = await this.resolveRetryDedupeKey(
+      matchId,
+      leagueId,
+      type,
+      options?.automationStep,
+    );
+
+    if (!dedupeKey) {
+      return {
+        ok: false,
+        message:
+          'No se encontró un job previo para reintentar. Ejecuta el reintento del paso completo primero.',
+      };
+    }
+
+    let existing = await this.prisma.whatsappGroupJob.findUnique({
       where: { dedupeKey },
       select: { id: true, status: true },
     });
 
-    if (existing?.status === WhatsappJobStatus.SENT) {
+    if (existing?.status === WhatsappJobStatus.SENT && !options?.forceResend) {
       return { ok: true, message: 'El mensaje ya fue enviado al grupo.', jobId: existing.id };
     }
 
     if (existing) {
+      if (options?.caption) {
+        await this.prisma.whatsappGroupJob.update({
+          where: { id: existing.id },
+          data: { caption: options.caption, lastError: null },
+        });
+      }
       await this.resetFailedJob(existing.id);
+    } else if (options?.caption) {
+      await this.prisma.whatsappGroupJob.create({
+        data: {
+          type,
+          matchId,
+          leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey,
+          caption: options.caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      existing = await this.prisma.whatsappGroupJob.findUnique({
+        where: { dedupeKey },
+        select: { id: true, status: true },
+      });
     } else {
       await this.enqueueManual(type, matchId, leagueId);
+      existing = await this.prisma.whatsappGroupJob.findUnique({
+        where: { dedupeKey },
+        select: { id: true, status: true },
+      });
     }
 
-    const job = await this.prisma.whatsappGroupJob.findUnique({
+    const job = existing ?? (await this.prisma.whatsappGroupJob.findUnique({
       where: { dedupeKey },
       select: { id: true },
-    });
+    }));
 
     if (!job) {
       return { ok: false, message: 'No se pudo crear el job de reintento.' };
@@ -315,13 +368,39 @@ export class WhatsappGroupService {
     try {
       await this.processJob(job.id);
       return { ok: true, message: 'Mensaje reenviado al grupo de WhatsApp.', jobId: job.id };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         ok: false,
-        message: error?.message ?? 'Falló el reenvío al grupo de WhatsApp.',
+        message: message || 'Falló el reenvío al grupo de WhatsApp.',
         jobId: job.id,
       };
     }
+  }
+
+  private async resolveRetryDedupeKey(
+    matchId: string,
+    leagueId: string,
+    type: WhatsappGroupJobType,
+    automationStep?: AutomationStep,
+  ): Promise<string | null> {
+    if (type === WhatsappGroupJobType.PRE_MATCH_ESCALATION && automationStep) {
+      const checkpoint = automationStepToEscalationCheckpoint(automationStep);
+      if (checkpoint) {
+        return escalationDedupeKey(checkpoint, matchId, leagueId);
+      }
+    }
+
+    if (type === WhatsappGroupJobType.GOAL_IMPACT) {
+      const job = await this.prisma.whatsappGroupJob.findFirst({
+        where: { matchId, leagueId, type: WhatsappGroupJobType.GOAL_IMPACT },
+        orderBy: { createdAt: 'desc' },
+        select: { dedupeKey: true },
+      });
+      return job?.dedupeKey ?? null;
+    }
+
+    return `${type}:${matchId}:${leagueId}`;
   }
 
   async enqueueNotification(
@@ -372,6 +451,120 @@ export class WhatsappGroupService {
       },
     });
     return true;
+  }
+
+  /**
+   * Escalada pre-partido con dedupeKey por checkpoint (T45/T30/T_FINAL).
+   */
+  async enqueuePreMatchEscalation(
+    matchId: string,
+    leagueId: string,
+    caption: string,
+    dedupeKey: string,
+  ): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.PRE_MATCH_ESCALATION))) {
+      return false;
+    }
+
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true },
+    });
+    if (!league?.whatsappGroupId) return false;
+
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return true;
+    }
+
+    if (existing?.status === WhatsappJobStatus.FAILED) {
+      await this.resetFailedJob(existing.id);
+      return true;
+    }
+
+    if (existing) {
+      return true;
+    }
+
+    try {
+      await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: WhatsappGroupJobType.PRE_MATCH_ESCALATION,
+          matchId,
+          leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey,
+          caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      return true;
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Mensaje de impacto en la polla tras un gol. Dedupe por marcador (como GOAL_SCORED).
+   */
+  async enqueueGoalImpact(
+    matchId: string,
+    leagueId: string,
+    caption: string,
+    dedupeKey: string,
+  ): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.GOAL_IMPACT))) {
+      return false;
+    }
+
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true },
+    });
+    if (!league?.whatsappGroupId) return false;
+
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return true;
+    }
+
+    if (existing?.status === WhatsappJobStatus.FAILED) {
+      await this.resetFailedJob(existing.id);
+      return true;
+    }
+
+    if (existing) {
+      return true;
+    }
+
+    try {
+      await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: WhatsappGroupJobType.GOAL_IMPACT,
+          matchId,
+          leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey,
+          caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      return true;
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') return false;
+      throw error;
+    }
   }
 
   private async buildTextCaption(job: {
@@ -472,12 +665,18 @@ function buildResultCaption(
 
 function buildReminderCaption(home: string, away: string, matchDate: Date, leagueName: string): string {
   const dateStr = new Date(matchDate).toLocaleString('es-CO', {
-    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Bogota',
   });
   return [
     `⏰ *Recordatorio de Partido* | ${leagueName}`,
     `⚽ ${home} vs ${away}`,
-    `📅 ${dateStr}`,
+    `📅 ${dateStr} (hora Bogotá)`,
     '',
     '¡Revisa tu pronóstico antes de que cierren las predicciones!',
   ].join('\n');
@@ -564,18 +763,20 @@ function buildPredictionsCaption(
   leagueName: string,
   count: number,
 ): string {
-  const dateStr = new Date(match.matchDate).toLocaleDateString('es-CO', {
+  const dateStr = new Date(match.matchDate).toLocaleString('es-CO', {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Bogota',
   });
 
   return [
     `🔒 *Predicciones Cerradas* | ${leagueName}`,
     `⚽ ${match.homeTeam} vs ${match.awayTeam}`,
-    `📅 ${dateStr}`,
+    `📅 ${dateStr} (hora Bogotá)`,
     `👥 ${count} pronóstico${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''}`,
     '',
     '_Reporte completo en el PDF adjunto_',

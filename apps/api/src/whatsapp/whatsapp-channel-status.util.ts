@@ -16,6 +16,14 @@ export const AUTOMATION_STEP_TO_WA_JOB: Partial<Record<AutomationStep, WhatsappG
   [AutomationStep.RESULT_NOTIFICATION]: WhatsappGroupJobType.RESULT_NOTIFICATION,
   [AutomationStep.PREDICTION_REPORT]: WhatsappGroupJobType.PREDICTION_REPORT,
   [AutomationStep.RESULT_REPORT]: WhatsappGroupJobType.RESULT_REPORT,
+  [AutomationStep.ESCALATION_T45]: WhatsappGroupJobType.PRE_MATCH_ESCALATION,
+  [AutomationStep.ESCALATION_T30]: WhatsappGroupJobType.PRE_MATCH_ESCALATION,
+  [AutomationStep.ESCALATION_FINAL]: WhatsappGroupJobType.PRE_MATCH_ESCALATION,
+  [AutomationStep.MATCH_START]: WhatsappGroupJobType.MATCH_START,
+  [AutomationStep.HALFTIME]: WhatsappGroupJobType.HALFTIME,
+  [AutomationStep.SECOND_HALF_START]: WhatsappGroupJobType.SECOND_HALF_START,
+  [AutomationStep.MATCH_LIVE_END]: WhatsappGroupJobType.MATCH_LIVE_END,
+  [AutomationStep.GOAL_IMPACT]: WhatsappGroupJobType.GOAL_IMPACT,
 };
 
 type WaJobRow = {

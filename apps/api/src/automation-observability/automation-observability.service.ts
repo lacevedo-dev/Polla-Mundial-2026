@@ -138,12 +138,30 @@ export class AutomationObservabilityService {
       case AutomationStep.PREDICTION_CLOSING:
       case AutomationStep.PREDICTION_REPORT:
         return new Date(matchDate.getTime() - (closeMinutes ?? 15) * 60 * 1000);
+      case AutomationStep.ESCALATION_T45:
+        return new Date(matchDate.getTime() - 45 * 60 * 1000);
+      case AutomationStep.ESCALATION_T30:
+        return new Date(matchDate.getTime() - 30 * 60 * 1000);
+      case AutomationStep.ESCALATION_FINAL:
+        return new Date(
+          matchDate.getTime() - ((closeMinutes ?? 15) + 5) * 60 * 1000,
+        );
       case AutomationStep.RESULT_NOTIFICATION:
       case AutomationStep.RESULT_REPORT:
         if (matchStatus !== MatchStatus.FINISHED) {
           return new Date(matchDate.getTime() + 130 * 60 * 1000);
         }
         return new Date(matchDate.getTime() + 130 * 60 * 1000);
+      case AutomationStep.MATCH_START:
+        return matchDate;
+      case AutomationStep.HALFTIME:
+        return new Date(matchDate.getTime() + 45 * 60 * 1000);
+      case AutomationStep.SECOND_HALF_START:
+        return new Date(matchDate.getTime() + 47 * 60 * 1000);
+      case AutomationStep.MATCH_LIVE_END:
+        return new Date(matchDate.getTime() + 105 * 60 * 1000);
+      case AutomationStep.GOAL_IMPACT:
+        return null;
       default:
         return null;
     }
@@ -291,6 +309,14 @@ export class AutomationObservabilityService {
 
       const steps = [
         AutomationStep.MATCH_REMINDER,
+        AutomationStep.ESCALATION_T45,
+        AutomationStep.ESCALATION_T30,
+        AutomationStep.ESCALATION_FINAL,
+        AutomationStep.MATCH_START,
+        AutomationStep.HALFTIME,
+        AutomationStep.SECOND_HALF_START,
+        AutomationStep.MATCH_LIVE_END,
+        AutomationStep.GOAL_IMPACT,
         AutomationStep.PREDICTION_CLOSING,
         AutomationStep.RESULT_NOTIFICATION,
         AutomationStep.PREDICTION_REPORT,
@@ -584,12 +610,28 @@ export class AutomationObservabilityService {
         return 'Recordatorio 60 min';
       case AutomationStep.PREDICTION_CLOSING:
         return 'Cierre de predicciones';
+      case AutomationStep.ESCALATION_T45:
+        return 'Escalada T-45';
+      case AutomationStep.ESCALATION_T30:
+        return 'Escalada T-30';
+      case AutomationStep.ESCALATION_FINAL:
+        return 'Escalada final (cierre+5)';
       case AutomationStep.RESULT_NOTIFICATION:
         return 'Notificación de resultado';
       case AutomationStep.PREDICTION_REPORT:
         return 'Reporte de predicciones';
       case AutomationStep.RESULT_REPORT:
         return 'Reporte de resultados';
+      case AutomationStep.MATCH_START:
+        return 'Inicio partido';
+      case AutomationStep.HALFTIME:
+        return 'Medio tiempo';
+      case AutomationStep.SECOND_HALF_START:
+        return '2.ª parte';
+      case AutomationStep.MATCH_LIVE_END:
+        return 'Fin partido (live)';
+      case AutomationStep.GOAL_IMPACT:
+        return 'Impacto gol (WA)';
       default:
         return step;
     }

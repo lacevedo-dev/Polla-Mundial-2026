@@ -1599,6 +1599,19 @@ export class NotificationScheduler {
       await this.notifyUser(userId, NotificationType.RESULT_PUBLISHED, title, body, { matchId: match.id, leagueId, points }, `[MANUAL] Resultado: ${home} ${score} ${away} | ${points} pts`);
     }
   }
+
+  /** API pública para orquestadores de automatización (pre-partido v2, etc.). */
+  async deliverUserNotification(
+    userId: string,
+    type: NotificationType,
+    title: string,
+    body: string,
+    data: Record<string, unknown>,
+    trigger?: string,
+    userContact?: { phone: string | null; countryCode: string | null } | null,
+  ): Promise<NotificationDeliveryResult> {
+    return this.notifyUser(userId, type, title, body, data, trigger, userContact);
+  }
 }
 
 

@@ -30,6 +30,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
 import { CorporateTenantModule } from './corporate-tenant/corporate-tenant.module';
 import { InternalModule } from './internal/internal.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { AutomationModule } from './automation/automation.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     CorporateTenantModule,
     InternalModule,
     WhatsappModule,
+    AutomationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

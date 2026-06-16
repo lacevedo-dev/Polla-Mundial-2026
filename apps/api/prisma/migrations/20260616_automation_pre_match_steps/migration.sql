@@ -1,0 +1,25 @@
+-- Pre-partido v2: escaladas T-45 / T-30 / T-final + WA Grupo
+ALTER TABLE `AutomationRun`
+  MODIFY COLUMN `step`
+    ENUM(
+      'MATCH_REMINDER',
+      'PREDICTION_CLOSING',
+      'RESULT_NOTIFICATION',
+      'PREDICTION_REPORT',
+      'RESULT_REPORT',
+      'ESCALATION_T45',
+      'ESCALATION_T30',
+      'ESCALATION_FINAL'
+    ) NOT NULL;
+
+ALTER TABLE `WhatsappGroupJob`
+  MODIFY COLUMN `type`
+    ENUM(
+      'RESULT_REPORT',
+      'PREDICTION_REPORT',
+      'MATCH_REMINDER',
+      'PREDICTION_CLOSED',
+      'RESULT_NOTIFICATION',
+      'GOAL_SCORED',
+      'PRE_MATCH_ESCALATION'
+    ) NOT NULL;

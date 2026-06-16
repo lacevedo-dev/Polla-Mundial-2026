@@ -15,7 +15,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
 import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
-import { AUTOMATION_STEP_TO_WA_JOB } from '../whatsapp/whatsapp-channel-status.util';
+import { AdminAutomationMessagePreviewQueryDto } from './dto/admin-automation-message-preview-query.dto';
+import { AdminAutomationFeatureFlagsDto } from './dto/admin-automation-feature-flags.dto';
+import { AutomationRetryService } from '../automation/retry/automation-retry.service';
+import { AutomationMessagePreviewService } from '../automation/preview/automation-message-preview.service';
+import { AutomationFeatureFlagsService } from '../automation/config/automation-feature-flags.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
 const AUTO_TYPES = [
@@ -38,6 +42,9 @@ export class AdminAutomationController {
     private readonly predictionReportScheduler: PredictionReportScheduler,
     private readonly waWeb: WhatsappWebService,
     private readonly waGroup: WhatsappGroupService,
+    private readonly automationRetry: AutomationRetryService,
+    private readonly messagePreview: AutomationMessagePreviewService,
+    private readonly featureFlags: AutomationFeatureFlagsService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -110,17 +117,27 @@ export class AdminAutomationController {
         id: 'match_reminder',
         name: 'Recordatorio de partido',
         cron: '* * * * *',
-        description: 'Cada minuto — partidos que empiezan en ~60 min',
+        description: 'Cada minuto — T-60: recordatorio con hora Bogotá y plazo de modificación',
         notifType: 'MATCH_REMINDER',
         icon: '⏰',
         audience: 'Todos los miembros activos de ligas con ese partido',
-        channels: ['inApp', 'push', 'whatsapp', 'waGroup', 'email'],
+        channels: ['inApp', 'push'],
+      },
+      {
+        id: 'pre_match_escalation',
+        name: 'Escalada pre-partido (T-45 / T-30 / T-final)',
+        cron: '* * * * *',
+        description: 'Cada minuto — alertas a pendientes + WA Grupo con nombres. T-final = cierre + 5 min',
+        notifType: 'PREDICTION_CLOSED',
+        icon: '⚠️',
+        audience: 'Miembros sin pronóstico + grupos WA de la polla',
+        channels: ['inApp', 'push', 'waGroup'],
       },
       {
         id: 'prediction_closing',
-        name: 'Cierre de predicciones',
+        name: 'Cierre de predicciones (legacy)',
         cron: '* * * * *',
-        description: 'Cada minuto — predicciones que cierran en ≤5 min',
+        description: 'Solo si pre_match_v2 está desactivado — alerta única antes del cierre',
         notifType: 'PREDICTION_CLOSED',
         icon: '⚠️',
         audience: 'Miembros activos que aún no han pronosticado',
@@ -130,7 +147,7 @@ export class AdminAutomationController {
         id: 'match_result',
         name: 'Resultado de partido',
         cron: '* * * * *',
-        description: 'Cada minuto — partidos finalizados sin notificación enviada',
+        description: 'Cada minuto — partidos finalizados sin notificación enviada. Con post_match_v2: mensajes con hora Bogotá + WA con top del partido',
         notifType: 'RESULT_PUBLISHED',
         icon: '✅',
         audience: 'Usuarios con predicción en el partido',
@@ -145,6 +162,56 @@ export class AdminAutomationController {
         icon: '⚽',
         audience: 'Usuarios con predicción + grupos WA de ligas del partido',
         channels: ['inApp', 'push', 'waGroup'],
+      },
+      {
+        id: 'live_match_start',
+        name: 'Inicio partido (live v2)',
+        cron: 'Football Sync',
+        description: 'Al pasar SCHEDULED → LIVE. Requiere automation:live_phase_v2',
+        notifType: 'LEAGUE_UPDATE',
+        icon: '▶️',
+        audience: 'Usuarios con predicción + grupos WA',
+        channels: ['inApp', 'push', 'waGroup'],
+      },
+      {
+        id: 'live_halftime',
+        name: 'Medio tiempo (live v2)',
+        cron: 'Football Sync',
+        description: 'Detecta status HT. Requiere automation:live_phase_v2',
+        notifType: 'LEAGUE_UPDATE',
+        icon: '⏸️',
+        audience: 'Usuarios con predicción + grupos WA',
+        channels: ['inApp', 'push', 'waGroup'],
+      },
+      {
+        id: 'live_second_half',
+        name: '2.ª parte (live v2)',
+        cron: 'Football Sync',
+        description: 'Al salir de HT. Requiere automation:live_phase_v2',
+        notifType: 'LEAGUE_UPDATE',
+        icon: '▶️',
+        audience: 'Usuarios con predicción + grupos WA',
+        channels: ['inApp', 'push', 'waGroup'],
+      },
+      {
+        id: 'live_match_end',
+        name: 'Fin partido teaser (live v2)',
+        cron: 'Football Sync',
+        description: 'Antes de calcular puntos. Requiere automation:live_phase_v2',
+        notifType: 'LEAGUE_UPDATE',
+        icon: '🏁',
+        audience: 'Usuarios con predicción + grupos WA',
+        channels: ['inApp', 'push', 'waGroup'],
+      },
+      {
+        id: 'live_goal_impact',
+        name: 'Impacto gol en polla (live v2)',
+        cron: 'Football Sync',
+        description: 'Segundo mensaje WA tras cada gol con impacto provisional. Requiere automation:live_phase_v2',
+        notifType: 'GOAL_SCORED',
+        icon: '📈',
+        audience: 'Grupos WA de ligas del partido',
+        channels: ['waGroup'],
       },
       {
         id: 'prediction_report',
@@ -185,11 +252,14 @@ export class AdminAutomationController {
       ? JSON.parse(overridesRow.value)
       : {};
 
+    const featureFlags = await this.featureFlags.getAllFlagStates();
+
     return {
       channels,
       schedulers,
       channelOverrides,
       stats: { notifLast24h, pushSubscribers: pushCount, usersWithPhone: userWithPhone },
+      featureFlags,
       automation: {
         emailBacklogAudit: {
           cron: '*/15 * * * *',
@@ -477,11 +547,28 @@ export class AdminAutomationController {
     }
 
     if (
-      (dto.step === AutomationStep.RESULT_NOTIFICATION || dto.step === AutomationStep.RESULT_REPORT) &&
+      (dto.step === AutomationStep.RESULT_NOTIFICATION ||
+        dto.step === AutomationStep.RESULT_REPORT) &&
       match.status !== 'FINISHED'
     ) {
       throw new BadRequestException(
         `El step ${dto.step} solo aplica a partidos finalizados. Estado actual: ${match.status}.`,
+      );
+    }
+
+    const liveSteps: AutomationStep[] = [
+      AutomationStep.MATCH_START,
+      AutomationStep.HALFTIME,
+      AutomationStep.SECOND_HALF_START,
+      AutomationStep.MATCH_LIVE_END,
+      AutomationStep.GOAL_IMPACT,
+    ];
+    if (
+      liveSteps.includes(dto.step) &&
+      match.status === 'SCHEDULED'
+    ) {
+      throw new BadRequestException(
+        `El step ${dto.step} requiere que el partido haya comenzado o finalizado.`,
       );
     }
 
@@ -498,7 +585,7 @@ export class AdminAutomationController {
     try {
       switch (dto.step) {
         case AutomationStep.MATCH_REMINDER: {
-          const delivery = await this.notificationScheduler.retryReminderForMatch(
+          const delivery = await this.automationRetry.retryMatchReminder(
             dto.matchId,
             dto.leagueId,
           );
@@ -536,16 +623,21 @@ export class AdminAutomationController {
           };
         }
         case AutomationStep.PREDICTION_CLOSING:
-          await this.notificationScheduler.retryClosingForMatch(dto.matchId, dto.leagueId);
-          break;
+        case AutomationStep.ESCALATION_T45:
+        case AutomationStep.ESCALATION_T30:
+        case AutomationStep.ESCALATION_FINAL:
+        case AutomationStep.MATCH_START:
+        case AutomationStep.HALFTIME:
+        case AutomationStep.SECOND_HALF_START:
+        case AutomationStep.MATCH_LIVE_END:
         case AutomationStep.RESULT_NOTIFICATION:
-          await this.notificationScheduler.retryResultNotificationForMatch(dto.matchId);
-          break;
         case AutomationStep.PREDICTION_REPORT:
-          await this.predictionReportScheduler.retryPredictionReportForMatch(dto.matchId, dto.leagueId);
-          break;
         case AutomationStep.RESULT_REPORT:
-          await this.predictionReportScheduler.retryResultReportForMatch(dto.matchId, dto.leagueId);
+          await this.automationRetry.retryStep({
+            step: dto.step,
+            matchId: dto.matchId,
+            leagueId: dto.leagueId,
+          });
           break;
         default:
           throw new BadRequestException(`Step no soportado: ${dto.step as string}`);
@@ -564,6 +656,23 @@ export class AdminAutomationController {
     }
   }
 
+  @Put('feature-flags')
+  async setFeatureFlag(@Body() dto: AdminAutomationFeatureFlagsDto) {
+    await this.featureFlags.setFlag(dto.flag, dto.enabled);
+    const featureFlags = await this.featureFlags.getAllFlagStates();
+    return { ok: true, featureFlags };
+  }
+
+  @Get('message-preview')
+  async getMessagePreview(@Query() query: AdminAutomationMessagePreviewQueryDto) {
+    return this.messagePreview.getPreview({
+      matchId: query.matchId,
+      step: query.step,
+      leagueId: query.leagueId,
+      channel: query.channel,
+    });
+  }
+
   /** Reintenta un canal específico (p. ej. WA Grupo) para un paso y liga. */
   @Post('retry-channel')
   async retryChannel(@Body() dto: AdminAutomationRetryChannelDto) {
@@ -571,12 +680,11 @@ export class AdminAutomationController {
       throw new BadRequestException(`Canal no soportado: ${dto.channel}`);
     }
 
-    const jobType = AUTOMATION_STEP_TO_WA_JOB[dto.step];
-    if (!jobType) {
-      throw new BadRequestException(`El step ${dto.step} no tiene envío a WA Grupo.`);
-    }
-
-    const result = await this.waGroup.retryStepDelivery(dto.matchId, dto.leagueId, jobType);
+    const result = await this.automationRetry.retryWaGroupChannel({
+      step: dto.step,
+      matchId: dto.matchId,
+      leagueId: dto.leagueId,
+    });
     return {
       ok: result.ok,
       jobId: result.jobId ?? null,

@@ -15,6 +15,8 @@ import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { LiveOrchestratorService } from '../../automation/live/live-orchestrator.service';
+import type { LiveMatchContext, LivePhaseEventId } from '../../automation/types/automation.types';
 import {
   MatchStatus,
   Phase,
@@ -55,6 +57,7 @@ export class MatchSyncService {
     private readonly push: PushNotificationsService,
     private readonly notifications: NotificationsService,
     @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() private readonly liveOrchestrator?: LiveOrchestratorService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -759,11 +762,64 @@ export class MatchSyncService {
       const transitionedToLive = match.status !== MatchStatus.LIVE && status === MatchStatus.LIVE;
       if (transitionedToLive) {
         await this.autoActivateMatchInLeagues(match.id);
+        await this.maybeDispatchLiveEvent('MATCH_START', {
+          matchId: match.id,
+          homeTeam: fixture.teams.home.name,
+          awayTeam: fixture.teams.away.name,
+          homeScore: fixture.goals.home,
+          awayScore: fixture.goals.away,
+          matchDate: match.matchDate,
+          elapsed: fixture.fixture.status.elapsed ?? null,
+        });
+      }
+
+      const transitionedToSecondHalf =
+        previousStatusShort === 'HT' &&
+        currentStatusShort !== null &&
+        currentStatusShort !== 'HT' &&
+        !['FT', 'AET', 'PEN', 'NS', 'CANC', 'PST', 'SUSP', 'ABD'].includes(
+          currentStatusShort,
+        );
+
+      if (shouldSyncHalftimeEvents) {
+        await this.maybeDispatchLiveEvent('HALFTIME', {
+          matchId: match.id,
+          homeTeam: fixture.teams.home.name,
+          awayTeam: fixture.teams.away.name,
+          homeScore: fixture.goals.home,
+          awayScore: fixture.goals.away,
+          matchDate: match.matchDate,
+          elapsed: fixture.fixture.status.elapsed ?? null,
+        });
+      }
+
+      if (transitionedToSecondHalf) {
+        await this.maybeDispatchLiveEvent('SECOND_HALF_START', {
+          matchId: match.id,
+          homeTeam: fixture.teams.home.name,
+          awayTeam: fixture.teams.away.name,
+          homeScore: fixture.goals.home,
+          awayScore: fixture.goals.away,
+          matchDate: match.matchDate,
+          elapsed: fixture.fixture.status.elapsed ?? null,
+        });
       }
 
       // When the match reaches FINISHED we must calculate points and enqueue the
       // result email even if the score was already present before the final status.
       if (status === MatchStatus.FINISHED && (scoreChanged || transitionedToFinished)) {
+        if (transitionedToFinished) {
+          await this.maybeDispatchLiveEvent('MATCH_LIVE_END', {
+            matchId: match.id,
+            homeTeam: fixture.teams.home.name,
+            awayTeam: fixture.teams.away.name,
+            homeScore: fixture.goals.home,
+            awayScore: fixture.goals.away,
+            matchDate: match.matchDate,
+            elapsed: fixture.fixture.status.elapsed ?? null,
+          });
+        }
+
         this.logger.log(`Match ${match.id} finished, calculating points`);
         await this.predictionsService.calculateMatchPoints(match.id);
 
@@ -1007,8 +1063,59 @@ export class MatchSyncService {
           },
         });
       }
+
+      if (
+        this.liveOrchestrator &&
+        homeScore !== null &&
+        awayScore !== null
+      ) {
+        const matchRow = await this.prisma.match.findUnique({
+          where: { id: matchId },
+          select: { matchDate: true },
+        });
+        await this.liveOrchestrator.handleGoalImpact({
+          matchId,
+          homeTeam: homeTeamName,
+          awayTeam: awayTeamName,
+          homeScore,
+          awayScore,
+          matchDate: matchRow?.matchDate ?? new Date(),
+          elapsed,
+          scoringTeam,
+          scorerName: scorerInfo?.scorerName ?? null,
+        });
+      }
     } catch (error) {
       this.logger.error(`sendGoalPushNotification failed: ${error.message}`);
+    }
+  }
+
+  private async maybeDispatchLiveEvent(
+    event: LivePhaseEventId,
+    ctx: LiveMatchContext,
+  ): Promise<void> {
+    if (!this.liveOrchestrator) return;
+
+    try {
+      switch (event) {
+        case 'MATCH_START':
+          await this.liveOrchestrator.handleMatchStart(ctx);
+          break;
+        case 'HALFTIME':
+          await this.liveOrchestrator.handleHalftime(ctx);
+          break;
+        case 'SECOND_HALF_START':
+          await this.liveOrchestrator.handleSecondHalfStart(ctx);
+          break;
+        case 'MATCH_LIVE_END':
+          await this.liveOrchestrator.handleMatchLiveEnd(ctx);
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Live event ${event} failed for match ${ctx.matchId}: ${message}`);
     }
   }
 

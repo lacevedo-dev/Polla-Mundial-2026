@@ -11,6 +11,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
 import { EmailModule } from '../email/email.module';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { AutomationModule } from '../automation/automation.module';
 import { AvatarStorageService } from '../auth/avatar-storage.service';
 import { AdminWhatsappController } from './admin-whatsapp.controller';
 import { AdminService } from './admin.service';
@@ -44,6 +45,7 @@ import { AdminSystemController } from './admin-system.controller';
     AutomationObservabilityModule,
     PredictionReportModule,
     WhatsappModule,
+    AutomationModule,
   ],
   controllers: [
     AdminStatsController,

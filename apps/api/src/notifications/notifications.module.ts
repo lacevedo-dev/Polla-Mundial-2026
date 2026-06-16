@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AutomationModule } from '../automation/automation.module';
 import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
 import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -19,6 +20,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PushNotificationsModule,
     PredictionReportModule,
     AutomationObservabilityModule,
+    forwardRef(() => AutomationModule),
     forwardRef(() => FootballSyncModule),
     WhatsappModule,
   ],

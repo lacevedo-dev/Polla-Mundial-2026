@@ -38,11 +38,33 @@ interface SchedulerDef {
   channels: string[];
 }
 
+interface FeatureFlagState {
+  enabled: boolean;
+  source: 'env' | 'db' | 'default';
+  locked: boolean;
+}
+
 interface AutomationStatus {
   channels: Record<string, ChannelInfo>;
   schedulers: SchedulerDef[];
   channelOverrides: Record<string, Record<string, boolean>>;
   stats: { notifLast24h: number; pushSubscribers: number; usersWithPhone: number };
+  featureFlags?: {
+    preMatchV2: FeatureFlagState;
+    livePhaseV2: FeatureFlagState;
+    postMatchV2: FeatureFlagState;
+  };
+}
+
+interface MessagePreview {
+  step: string;
+  channel: string;
+  source: 'job' | 'generated' | 'unavailable';
+  dedupeKey: string | null;
+  jobStatus: string | null;
+  jobId: string | null;
+  title: string | null;
+  body: string;
 }
 
 type StepState =
@@ -153,7 +175,7 @@ interface HistoryResponse {
   limit: number;
 }
 
-type TabId = 'matrix' | 'history' | 'schedulers' | 'channels';
+type TabId = 'matrix' | 'history' | 'schedulers' | 'config' | 'channels';
 
 interface IncidentInfo {
   match: OperationsMatch;
@@ -194,12 +216,110 @@ const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {
 };
 
 const STEP_CHANNELS: Record<string, string[]> = {
-  MATCH_REMINDER:       ['push', 'whatsapp', 'waGroup', 'email'],
+  MATCH_REMINDER:       ['push', 'inApp', 'email'],
+  ESCALATION_T45:       ['push', 'inApp', 'waGroup'],
+  ESCALATION_T30:       ['push', 'inApp', 'waGroup'],
+  ESCALATION_FINAL:     ['push', 'inApp', 'waGroup'],
   PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
+  MATCH_START:          ['push', 'inApp', 'waGroup'],
+  HALFTIME:             ['push', 'inApp', 'waGroup'],
+  SECOND_HALF_START:    ['push', 'inApp', 'waGroup'],
+  MATCH_LIVE_END:       ['push', 'inApp', 'waGroup'],
+  GOAL_IMPACT:          ['waGroup'],
   RESULT_NOTIFICATION:  ['push', 'whatsapp', 'waGroup'],
   PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
   RESULT_REPORT:        ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
 };
+
+const MATRIX_STEP_KEYS = [
+  'MATCH_REMINDER',
+  'ESCALATION_T45',
+  'ESCALATION_T30',
+  'ESCALATION_FINAL',
+  'PREDICTION_CLOSING',
+  'MATCH_START',
+  'HALFTIME',
+  'SECOND_HALF_START',
+  'MATCH_LIVE_END',
+  'GOAL_IMPACT',
+  'RESULT_NOTIFICATION',
+  'PREDICTION_REPORT',
+  'RESULT_REPORT',
+] as const;
+
+const MATRIX_GRID_COLUMNS =
+  'minmax(0,1.2fr) auto auto auto repeat(13, minmax(3.5rem, 1fr)) 1.2rem';
+
+/** Paso → schedulerId (mismo mapeo que backend / overrides WA). */
+const STEP_TO_SCHEDULER: Record<string, string> = {
+  MATCH_REMINDER: 'match_reminder',
+  ESCALATION_T45: 'pre_match_escalation',
+  ESCALATION_T30: 'pre_match_escalation',
+  ESCALATION_FINAL: 'pre_match_escalation',
+  PREDICTION_CLOSING: 'prediction_closing',
+  MATCH_START: 'live_match_start',
+  HALFTIME: 'live_halftime',
+  SECOND_HALF_START: 'live_second_half',
+  MATCH_LIVE_END: 'live_match_end',
+  GOAL_IMPACT: 'live_goal_impact',
+  RESULT_NOTIFICATION: 'match_result',
+  PREDICTION_REPORT: 'prediction_report',
+  RESULT_REPORT: 'result_report',
+};
+
+const STEP_CONFIG_LABELS: Record<string, string> = {
+  MATCH_REMINDER: 'Recordatorio T-60',
+  ESCALATION_T45: 'Escalada T-45',
+  ESCALATION_T30: 'Escalada T-30',
+  ESCALATION_FINAL: 'Escalada final',
+  PREDICTION_CLOSING: 'Cierre predicciones',
+  MATCH_START: 'Inicio partido',
+  HALFTIME: 'Medio tiempo',
+  SECOND_HALF_START: '2.ª parte',
+  MATCH_LIVE_END: 'Fin partido (live)',
+  GOAL_IMPACT: 'Impacto gol (WA)',
+  RESULT_NOTIFICATION: 'Resultado personal',
+  PREDICTION_REPORT: 'Reporte predicciones',
+  RESULT_REPORT: 'Reporte resultados',
+};
+
+const CONFIG_CHANNEL_KEYS = ['push', 'inApp', 'waGroup', 'email', 'whatsapp'] as const;
+
+const MATRIX_PHASES = [
+  {
+    id: 'pre',
+    label: 'Pre-partido',
+    className: 'bg-sky-50 text-sky-800 border-sky-200',
+    fromCol: 5,
+    toCol: 10,
+  },
+  {
+    id: 'live',
+    label: 'En vivo',
+    className: 'bg-rose-50 text-rose-800 border-rose-200',
+    fromCol: 10,
+    toCol: 15,
+  },
+  {
+    id: 'post',
+    label: 'Post-partido',
+    className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    fromCol: 15,
+    toCol: 18,
+  },
+] as const;
+
+const MATRIX_COLUMN_LABELS = [
+  'T-60', 'T-45', 'T-30', 'T-f', 'Cierre',
+  'Inicio', 'HT', '2H', 'Fin', 'Imp.G',
+  'Result.', 'P.Rep', 'Rep.F',
+] as const;
+
+const EXPANDED_PHASE_GROUPS = [
+  { id: 'pre', label: 'Pre-partido', keys: ['MATCH_REMINDER', 'ESCALATION_T45', 'ESCALATION_T30', 'ESCALATION_FINAL', 'PREDICTION_CLOSING'] },
+  { id: 'live', label: 'En vivo', keys: ['MATCH_START', 'HALFTIME', 'SECOND_HALF_START', 'MATCH_LIVE_END', 'GOAL_IMPACT'] },
+  { id: 'post', label: 'Post-partido', keys: ['RESULT_NOTIFICATION', 'PREDICTION_REPORT', 'RESULT_REPORT'] },
+] as const;
 
 // Cuántos se enviaron/fallaron por canal, extraído de latestDetails.channelBreakdown
 function getChannelCounters(
@@ -611,7 +731,15 @@ function StepCell({
   return (
     <div
       className={`flex flex-col items-center gap-1 ${canRetry && onIncident ? 'cursor-pointer' : ''}`}
-      onClick={canRetry && onIncident ? (e) => { e.stopPropagation(); onIncident({ match, step, label: step.label }); } : undefined}
+      onClick={canRetry && onIncident ? (e) => {
+        e.stopPropagation();
+        onIncident({
+          match,
+          step,
+          label: step.label,
+          leagueId: step.leagues[0]?.leagueId ?? null,
+        });
+      } : undefined}
       title={canRetry && onIncident ? 'Click para ver detalle y reintentar' : undefined}
     >
       <StatusDot state={step.status} />
@@ -677,14 +805,14 @@ function MatrixRow({
   onExpand: (id: string) => void;
   onIncident?: (info: IncidentInfo) => void;
 }) {
-  const STEP_KEYS = ['MATCH_REMINDER', 'PREDICTION_CLOSING', 'RESULT_NOTIFICATION', 'PREDICTION_REPORT', 'RESULT_REPORT'];
+  const STEP_KEYS = [...MATRIX_STEP_KEYS];
   const orderedSteps = STEP_KEYS.map((k) => match.steps.find((s) => s.key === k)).filter(Boolean) as OperationsStep[];
 
   return (
     <>
       <div
         className="grid cursor-pointer items-center px-4 py-3 transition-colors hover:bg-slate-50"
-        style={{ gridTemplateColumns: 'minmax(0,1.2fr) auto auto auto 1fr 1fr 1fr 1fr 1fr 1.2rem' }}
+        style={{ gridTemplateColumns: MATRIX_GRID_COLUMNS }}
         onClick={() => onExpand(match.id)}
       >
         <div className="min-w-0">
@@ -759,45 +887,74 @@ function MatrixRow({
               )}
             </div>
 
-            {/* Pasos */}
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {match.steps.map((step) => (
-                <div key={step.key} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <StatusDot state={step.status} />
-                    <p className="text-xs font-black text-slate-800">{step.label}</p>
-                  </div>
-                  <div className="space-y-1 text-xs text-slate-600">
-                    {step.scheduledAt && <p><span className="text-slate-400">Programado: </span>{fmtFull(step.scheduledAt)}</p>}
-                    {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
-                    {step.lastFinishedAt && <p><span className="text-slate-400">Fin: </span>{fmtFull(step.lastFinishedAt)}</p>}
-                    {step.errorMessage && step.leagues.length === 0 && (
-                      <p className="text-red-600 font-semibold">{step.errorMessage}</p>
-                    )}
-                  </div>
-                  {step.leagues.length > 0 && (
-                    <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
-                      {step.leagues.map((league) => (
-                        <div key={league.leagueId} className="rounded-lg bg-slate-50 px-2 py-1.5">
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <StatusDot state={league.status} size={8} />
-                            <span className="text-[10px] font-semibold text-slate-700 truncate">{league.leagueName}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
-                            {league.deliveredCount !== null && <span>✓ {league.deliveredCount}</span>}
-                            {league.failedCount !== null && league.failedCount > 0 && <span className="text-red-600">✗ {league.failedCount}</span>}
-                            {league.audienceCount !== null && <span>👥 {league.audienceCount}</span>}
-                          </div>
-                          {league.errorMessage && (
-                            <p className="text-[10px] text-red-600 mt-0.5">{league.errorMessage}</p>
+            {/* Pasos por fase */}
+            {EXPANDED_PHASE_GROUPS.map((phase) => {
+              const phaseSteps = match.steps.filter((s) =>
+                (phase.keys as readonly string[]).includes(s.key),
+              );
+              if (phaseSteps.length === 0) return null;
+              return (
+                <div key={phase.id}>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{phase.label}</p>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {phaseSteps.map((step) => (
+                      <div key={step.key} className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <StatusDot state={step.status} />
+                          <p className="text-xs font-black text-slate-800">{step.label}</p>
+                        </div>
+                        <div className="space-y-1 text-xs text-slate-600">
+                          {step.scheduledAt && <p><span className="text-slate-400">Programado: </span>{fmtFull(step.scheduledAt)}</p>}
+                          {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
+                          {step.lastFinishedAt && <p><span className="text-slate-400">Fin: </span>{fmtFull(step.lastFinishedAt)}</p>}
+                          {step.errorMessage && step.leagues.length === 0 && (
+                            <p className="text-red-600 font-semibold">{step.errorMessage}</p>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        {step.leagues.length > 0 && (
+                          <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                            {step.leagues.map((league) => (
+                              <div key={league.leagueId} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <StatusDot state={league.status} size={8} />
+                                  <span className="text-[10px] font-semibold text-slate-700 truncate">{league.leagueName}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                                  {league.deliveredCount !== null && <span>✓ {league.deliveredCount}</span>}
+                                  {league.failedCount !== null && league.failedCount > 0 && <span className="text-red-600">✗ {league.failedCount}</span>}
+                                  {league.audienceCount !== null && <span>👥 {league.audienceCount}</span>}
+                                </div>
+                                {league.errorMessage && (
+                                  <p className="text-[10px] text-red-600 mt-0.5">{league.errorMessage}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {onIncident && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onIncident({
+                                match,
+                                step,
+                                label: step.label,
+                                leagueId: step.leagues[0]?.leagueId ?? null,
+                              });
+                            }}
+                            className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white hover:text-slate-900"
+                          >
+                            <MessageSquare size={10} />
+                            Ver mensaje
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -934,6 +1091,96 @@ function ChannelCard({ id, info }: { id: string; info: ChannelInfo }) {
   );
 }
 
+function StepConfigMatrix({
+  channelStatus,
+  channelOverrides,
+  onToggleChannel,
+}: {
+  channelStatus: AutomationStatus['channels'];
+  channelOverrides: Record<string, Record<string, boolean>>;
+  onToggleChannel: (schedulerId: string, channel: string, enabled: boolean) => void;
+}) {
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  const handleToggle = async (stepKey: string, channel: string, currentlyActive: boolean) => {
+    const schedulerId = STEP_TO_SCHEDULER[stepKey];
+    if (!schedulerId) return;
+    const key = `${stepKey}:${channel}`;
+    setToggling(key);
+    try {
+      await onToggleChannel(schedulerId, channel, !currentlyActive);
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-sm font-semibold text-slate-900">Canales por paso de automatización</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Los toggles actualizan el mismo override que la pestaña Schedulers. Pasos que comparten scheduler (p. ej. escaladas) se configuran juntos.
+        </p>
+      </div>
+      <table className="min-w-full text-xs">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <th className="px-4 py-3 text-left">Paso</th>
+            {CONFIG_CHANNEL_KEYS.map((ch) => (
+              <th key={ch} className="px-3 py-3 text-center">{CHANNEL_META[ch]?.label ?? ch}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {MATRIX_STEP_KEYS.map((stepKey) => {
+            const schedulerId = STEP_TO_SCHEDULER[stepKey];
+            const stepChannels = STEP_CHANNELS[stepKey] ?? [];
+            return (
+              <tr key={stepKey} className="hover:bg-slate-50/80">
+                <td className="px-4 py-3 font-semibold text-slate-800">
+                  {STEP_CONFIG_LABELS[stepKey] ?? stepKey}
+                  {schedulerId && (
+                    <span className="mt-0.5 block font-mono text-[10px] font-normal text-slate-400">{schedulerId}</span>
+                  )}
+                </td>
+                {CONFIG_CHANNEL_KEYS.map((ch) => {
+                  const applies = stepChannels.includes(ch);
+                  if (!applies) {
+                    return <td key={ch} className="px-3 py-3 text-center text-slate-300">—</td>;
+                  }
+                  const sysEnabled = channelStatus[ch]?.enabled ?? false;
+                  const overrideVal = schedulerId ? channelOverrides[schedulerId]?.[ch] : undefined;
+                  const manuallyDisabled = overrideVal === false;
+                  const effectivelyActive = sysEnabled && !manuallyDisabled;
+                  const isTogglable = ch !== 'inApp' && !!schedulerId && sysEnabled;
+                  const toggleKey = `${stepKey}:${ch}`;
+                  return (
+                    <td key={ch} className="px-3 py-3 text-center">
+                      <button
+                        type="button"
+                        disabled={!isTogglable || toggling === toggleKey}
+                        onClick={() => isTogglable && handleToggle(stepKey, ch, effectivelyActive)}
+                        className={`inline-flex h-7 min-w-[3rem] items-center justify-center rounded-full border px-2 text-[10px] font-black uppercase transition ${
+                          effectivelyActive
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 bg-slate-100 text-slate-500'
+                        } ${isTogglable ? 'cursor-pointer hover:opacity-80' : 'cursor-default opacity-70'}`}
+                        title={!sysEnabled ? (channelStatus[ch]?.description ?? 'Canal no configurado') : undefined}
+                      >
+                        {toggling === toggleKey ? '…' : effectivelyActive ? 'ON' : 'OFF'}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function SchedulerCard({
   scheduler,
   channelStatus,
@@ -1039,10 +1286,52 @@ function SchedulerCard({
 function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInfo; onClose: () => void; onRefresh: () => void }) {
   const [retrying, setRetrying] = useState(false);
   const [retryResult, setRetryResult] = useState<RetryResult | null>(null);
+  const [preview, setPreview] = useState<MessagePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewChannel, setPreviewChannel] = useState<'waGroup' | 'push' | 'inApp'>('waGroup');
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(
+    incident.leagueId ?? incident.step.leagues[0]?.leagueId ?? null,
+  );
 
   const step = incident.step;
   const breakdown = step.latestDetails?.channelBreakdown;
-  const isChannelRetry = incident.channel === 'waGroup' && !!incident.leagueId;
+  const stepChannels = STEP_CHANNELS[step.key] ?? [];
+  const isProblemStep =
+    step.status === 'FAILED' ||
+    step.status === 'OVERDUE' ||
+    step.status === 'WARNING' ||
+    step.status === 'MANUAL' ||
+    (step.status === 'SUCCESS' &&
+      stepChannels.some((ch) => channelHasFailure(ch, breakdown, step)));
+  const isChannelRetry = incident.channel === 'waGroup' && !!selectedLeagueId;
+  const previewLeagueRequired = ['ESCALATION_T45', 'ESCALATION_T30', 'ESCALATION_FINAL', 'GOAL_IMPACT'].includes(step.key);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPreview = async () => {
+      if (previewLeagueRequired && !selectedLeagueId) {
+        setPreview(null);
+        return;
+      }
+      setPreviewLoading(true);
+      try {
+        const params = new URLSearchParams({
+          matchId: incident.match.id,
+          step: step.key,
+          channel: previewChannel,
+        });
+        if (selectedLeagueId) params.set('leagueId', selectedLeagueId);
+        const data = await request<MessagePreview>(`/admin/automation/message-preview?${params.toString()}`);
+        if (!cancelled) setPreview(data);
+      } catch {
+        if (!cancelled) setPreview(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    };
+    void loadPreview();
+    return () => { cancelled = true; };
+  }, [incident.match.id, step.key, selectedLeagueId, previewChannel, previewLeagueRequired]);
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -1054,13 +1343,17 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
             body: JSON.stringify({
               matchId: incident.match.id,
               step: step.key,
-              leagueId: incident.leagueId,
+              leagueId: incident.leagueId ?? selectedLeagueId,
               channel: 'waGroup',
             }),
           })
         : await request<RetryResult>('/admin/automation/retry', {
             method: 'POST',
-            body: JSON.stringify({ matchId: incident.match.id, step: step.key }),
+            body: JSON.stringify({
+              matchId: incident.match.id,
+              step: step.key,
+              leagueId: selectedLeagueId ?? incident.leagueId ?? undefined,
+            }),
           });
       setRetryResult(result);
       if (result.ok) setTimeout(() => { onRefresh(); }, 1500);
@@ -1079,7 +1372,11 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
             <div className="flex flex-wrap items-center gap-2">
               <AlertTriangle size={16} className="shrink-0 text-amber-500" />
               <p className="text-sm font-black text-slate-900">
-                {incident.channel ? 'Canal con problema' : 'Paso con problema'}
+                {incident.channel
+                  ? 'Canal con problema'
+                  : isProblemStep
+                    ? 'Paso con problema'
+                    : 'Vista previa del mensaje'}
               </p>
               <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-700">{incident.label}</span>
             </div>
@@ -1110,9 +1407,22 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
           {step.leagues.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Ligas</p>
+              {step.leagues.length > 1 && (
+                <select
+                  value={selectedLeagueId ?? ''}
+                  onChange={(e) => setSelectedLeagueId(e.target.value || null)}
+                  className="mb-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700"
+                >
+                  {step.leagues.map((league) => (
+                    <option key={league.leagueId} value={league.leagueId}>
+                      {league.leagueName} ({league.leagueCode})
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="space-y-2">
                 {step.leagues.map((league) => (
-                  <div key={league.leagueId} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                  <div key={league.leagueId} className={`rounded-lg border p-2 ${selectedLeagueId === league.leagueId ? 'border-slate-300 bg-slate-50' : 'border-slate-100 bg-white'}`}>
                     <div className="flex items-center gap-2 mb-1">
                       <StatusDot state={league.status} size={8} />
                       <span className="text-xs font-semibold text-slate-800">{league.leagueName}</span>
@@ -1132,6 +1442,82 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
             </div>
           )}
 
+          {(stepChannels.includes('waGroup') || stepChannels.includes('push')) && (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vista previa del mensaje</p>
+                <div className="flex gap-1">
+                  {(['waGroup', 'push', 'inApp'] as const)
+                    .filter((ch) => stepChannels.includes(ch))
+                    .map((ch) => (
+                      <button
+                        key={ch}
+                        type="button"
+                        onClick={() => setPreviewChannel(ch)}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${previewChannel === ch ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'}`}
+                      >
+                        {CHANNEL_META[ch]?.label ?? ch}
+                      </button>
+                    ))}
+                </div>
+              </div>
+              {previewLoading ? (
+                <p className="text-xs text-slate-400">Generando vista previa…</p>
+              ) : preview ? (
+                <>
+                  <div className="mb-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">
+                      {preview.source === 'job' ? 'Job WA' : preview.source === 'generated' ? 'Generado' : 'N/D'}
+                    </span>
+                    {preview.jobStatus && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">job: {preview.jobStatus}</span>
+                    )}
+                    {preview.dedupeKey && (
+                      <span className="truncate rounded-full bg-slate-100 px-2 py-0.5 font-mono max-w-full" title={preview.dedupeKey}>
+                        {preview.dedupeKey}
+                      </span>
+                    )}
+                  </div>
+                  {preview.title && (
+                    <p className="mb-1 text-xs font-semibold text-slate-800">{preview.title}</p>
+                  )}
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-50 p-2.5 font-mono text-[11px] leading-relaxed text-slate-700">
+                    {preview.body}
+                  </pre>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400">No hay vista previa disponible.</p>
+              )}
+            </div>
+          )}
+
+          {breakdown && (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Canales</p>
+              <div className="flex flex-wrap gap-2">
+                {stepChannels.map((ch) => {
+                  const counters = getChannelCounters(ch, breakdown);
+                  const failed = channelHasFailure(ch, breakdown, step);
+                  return (
+                    <div
+                      key={ch}
+                      className={`rounded-lg border px-2 py-1 text-[10px] ${failed ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}
+                    >
+                      {CHANNEL_META[ch]?.label ?? ch}
+                      {counters && (
+                        <span className="ml-1 font-semibold">
+                          {counters.sent > 0 && `✓${counters.sent}`}
+                          {counters.failed > 0 && ` ✗${counters.failed}`}
+                          {counters.pending > 0 && ` ⏳${counters.pending}`}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {retryResult && (
             <div className={`rounded-xl border px-3 py-2 text-xs font-medium ${retryResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
               {retryResult.ok ? '✓' : '✗'} {retryResult.summary}
@@ -1144,7 +1530,7 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
           {!retryResult?.ok && (
             <button
               onClick={handleRetry}
-              disabled={retrying || (isChannelRetry && !incident.leagueId)}
+              disabled={retrying || (isChannelRetry && !selectedLeagueId) || (previewLeagueRequired && !selectedLeagueId && !isChannelRetry)}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
             >
               <RotateCcw size={12} className={retrying ? 'animate-spin' : ''} />
@@ -1174,6 +1560,94 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
   );
 }
 
+function FeatureFlagsPanel({
+  featureFlags,
+  onToggle,
+}: {
+  featureFlags: NonNullable<AutomationStatus['featureFlags']>;
+  onToggle: (flag: keyof NonNullable<AutomationStatus['featureFlags']>, enabled: boolean) => Promise<void>;
+}) {
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const items: Array<{
+    key: keyof NonNullable<AutomationStatus['featureFlags']>;
+    label: string;
+    hint: string;
+  }> = [
+    { key: 'preMatchV2', label: 'Pre-partido v2', hint: 'T-60, escaladas T-45/T-30/T-final, WA con nombres' },
+    { key: 'livePhaseV2', label: 'En vivo v2', hint: 'Inicio, HT, 2.ª parte, fin live, impacto gol WA' },
+    { key: 'postMatchV2', label: 'Post-partido v2', hint: 'Resultado personal + WA con top del partido' },
+  ];
+
+  const handleToggle = async (key: keyof NonNullable<AutomationStatus['featureFlags']>, enabled: boolean) => {
+    setToggling(key);
+    setError(null);
+    try {
+      await onToggle(key, enabled);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el flag.');
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  return (
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-black tracking-tight text-slate-900">Feature flags v2</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Activa por fases. Orden recomendado: pre → en vivo → post. Si hay variable de entorno, el toggle queda bloqueado.
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {items.map((item) => {
+          const state = featureFlags[item.key];
+          const isOn = state.enabled;
+          return (
+            <div
+              key={item.key}
+              className={`rounded-xl border p-3 ${isOn ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900">{item.label}</p>
+                  <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{item.hint}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={state.locked || toggling === item.key}
+                  onClick={() => handleToggle(item.key, !isOn)}
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isOn
+                      ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                      : 'border-slate-300 bg-white text-slate-600'
+                  }`}
+                  title={
+                    state.locked
+                      ? `Fijado por entorno (${state.source})`
+                      : `Fuente: ${state.source}`
+                  }
+                >
+                  {toggling === item.key ? '…' : isOn ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-slate-400">
+                {state.locked ? '🔒 Env' : state.source === 'db' ? 'BD' : 'Default OFF'}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAutomation() {
   const [status, setStatus] = useState<AutomationStatus | null>(null);
   const [matrix, setMatrix] = useState<DailyOperations | null>(null);
@@ -1187,6 +1661,19 @@ export default function AdminAutomation() {
   const [historySearch, setHistorySearch] = useState('');
   const [matrixSearch, setMatrixSearch] = useState('');
   const [incident, setIncident] = useState<IncidentInfo | null>(null);
+
+  const handleToggleFeatureFlag = async (
+    flag: keyof NonNullable<AutomationStatus['featureFlags']>,
+    enabled: boolean,
+  ) => {
+    const result = await request<{ ok: boolean; featureFlags: NonNullable<AutomationStatus['featureFlags']> }>(
+      '/admin/automation/feature-flags',
+      { method: 'PUT', body: JSON.stringify({ flag, enabled }) },
+    );
+    if (result.ok) {
+      setStatus((prev) => prev ? { ...prev, featureFlags: result.featureFlags } : prev);
+    }
+  };
 
   const handleToggleChannel = async (schedulerId: string, channel: string, enabled: boolean) => {
     try {
@@ -1240,6 +1727,7 @@ export default function AdminAutomation() {
     { id: 'matrix', label: 'Matriz del día' },
     { id: 'history', label: 'Historial 24h' },
     { id: 'schedulers', label: 'Tipos / schedulers' },
+    { id: 'config', label: 'Config pasos' },
     { id: 'channels', label: 'Canales' },
   ];
 
@@ -1328,6 +1816,10 @@ export default function AdminAutomation() {
         </div>
       </div>
 
+      {status?.featureFlags && (
+        <FeatureFlagsPanel featureFlags={status.featureFlags} onToggle={handleToggleFeatureFlag} />
+      )}
+
       {status && (
         <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
           {[
@@ -1389,16 +1881,30 @@ export default function AdminAutomation() {
 
           {filteredMatches.length > 0 ? (
             <div className="overflow-x-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500" style={{ gridTemplateColumns: 'minmax(0,1.2fr) auto auto auto 1fr 1fr 1fr 1fr 1fr 1.2rem' }}>
+              <div
+                className="grid border-b border-slate-100 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={{ gridTemplateColumns: MATRIX_GRID_COLUMNS }}
+              >
+                <span style={{ gridColumn: '1 / 5' }} />
+                {MATRIX_PHASES.map((phase) => (
+                  <span
+                    key={phase.id}
+                    style={{ gridColumn: `${phase.fromCol} / ${phase.toCol}` }}
+                    className={`rounded-md border px-2 py-1 text-center ${phase.className}`}
+                  >
+                    {phase.label}
+                  </span>
+                ))}
+                <span />
+              </div>
+              <div className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500" style={{ gridTemplateColumns: MATRIX_GRID_COLUMNS }}>
                 <span>Partido</span>
                 <span className="px-3">Hora</span>
                 <span className="text-center px-2">Estado</span>
                 <span className="text-center px-2">Sync</span>
-                <span className="text-center">Recordatorio</span>
-                <span className="text-center">Cierre</span>
-                <span className="text-center">Resultado</span>
-                <span className="text-center">P.Report</span>
-                <span className="text-center">Reportes</span>
+                {MATRIX_COLUMN_LABELS.map((label) => (
+                  <span key={label} className="text-center">{label}</span>
+                ))}
                 <span />
               </div>
               <div className="divide-y divide-slate-200">
@@ -1491,6 +1997,27 @@ export default function AdminAutomation() {
               onToggleChannel={handleToggleChannel}
             />
           ))}
+        </div>
+      )}
+
+      {tab === 'config' && status && (
+        <div className="space-y-4">
+          <StepConfigMatrix
+            channelStatus={status.channels}
+            channelOverrides={status.channelOverrides ?? {}}
+            onToggleChannel={handleToggleChannel}
+          />
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-900">Regla de timing (solo lectura)</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Última escalada = <strong>cierre + 5 min</strong> antes del kickoff.
+              Ejemplo: cierre 15 min → alerta T-20, cierre duro T-15.
+              Si cierre = 10 min → última alerta T-15.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Todas las horas mostradas al participante usan <strong>America/Bogota</strong> (formato 24h).
+            </p>
+          </div>
         </div>
       )}
 

@@ -1,13 +1,6 @@
 import { AutomationStep } from '@prisma/client';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
-
-const RETRYABLE_STEPS = [
-  AutomationStep.MATCH_REMINDER,
-  AutomationStep.PREDICTION_CLOSING,
-  AutomationStep.RESULT_NOTIFICATION,
-  AutomationStep.PREDICTION_REPORT,
-  AutomationStep.RESULT_REPORT,
-] as const;
+import { IsEnum, IsString } from 'class-validator';
+import { WA_GROUP_RETRY_STEPS } from '../../automation/config/automation-step-scheduler.util';
 
 const RETRYABLE_CHANNELS = ['waGroup'] as const;
 
@@ -15,10 +8,10 @@ export class AdminAutomationRetryChannelDto {
   @IsString()
   matchId!: string;
 
-  @IsEnum(RETRYABLE_STEPS, {
-    message: `step debe ser uno de: ${RETRYABLE_STEPS.join(', ')}`,
+  @IsEnum(WA_GROUP_RETRY_STEPS, {
+    message: `step debe ser uno de: ${WA_GROUP_RETRY_STEPS.join(', ')}`,
   })
-  step!: (typeof RETRYABLE_STEPS)[number];
+  step!: AutomationStep;
 
   @IsString()
   leagueId!: string;

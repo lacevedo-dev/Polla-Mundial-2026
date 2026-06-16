@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminAutomation from './AdminAutomation';
 
@@ -23,7 +24,13 @@ describe('AdminAutomation', () => {
             email: { enabled: true, description: 'SMTP activo' },
           },
           schedulers: [],
+          channelOverrides: {},
           stats: { notifLast24h: 10, pushSubscribers: 12, usersWithPhone: 4 },
+          featureFlags: {
+            preMatchV2: { enabled: false, source: 'default', locked: false },
+            livePhaseV2: { enabled: false, source: 'default', locked: false },
+            postMatchV2: { enabled: false, source: 'default', locked: false },
+          },
         });
       }
 
@@ -192,14 +199,19 @@ describe('AdminAutomation', () => {
 
   it('renders the new observability columns and expands failed league details', async () => {
     const user = userEvent.setup();
-    render(<AdminAutomation />);
+    render(
+      <MemoryRouter>
+        <AdminAutomation />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith('/admin/automation/operations');
     });
 
     expect(screen.getByText(/Sync/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reportes/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Post-partido/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Feature flags v2/i)).toBeInTheDocument();
     expect(screen.getByText(/Colombia vs Argentina/i)).toBeInTheDocument();
 
     await user.click(screen.getByText(/Colombia vs Argentina/i));

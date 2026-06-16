@@ -38,6 +38,21 @@ export interface PredictionPointDetail {
 }
 
 type CalculatePointsResult = { total: number; detail: PredictionPointDetail };
+
+export type ProvisionalMatchImpactEntry = {
+    userId: string;
+    displayName: string;
+    predictedHome: number;
+    predictedAway: number;
+    points: number;
+    detailType: PointType;
+};
+
+export type ProvisionalLeagueImpact = {
+    leagueId: string;
+    leagueName: string;
+    entries: ProvisionalMatchImpactEntry[];
+};
 type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
 
 type LeaderboardSummaryStats = {
@@ -236,6 +251,76 @@ export class PredictionsService {
                 },
             });
         }
+    }
+
+    /**
+     * Puntos provisionales por liga para un marcador en curso (sin bono único ni persistencia).
+     */
+    async computeProvisionalImpactByLeague(
+        matchId: string,
+        homeScore: number,
+        awayScore: number,
+    ): Promise<ProvisionalLeagueImpact[]> {
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            select: { phase: true },
+        });
+        if (!match) return [];
+
+        const predictions = await this.prisma.prediction.findMany({
+            where: { matchId },
+            include: {
+                user: { select: { id: true, name: true, username: true } },
+                league: {
+                    select: {
+                        id: true,
+                        name: true,
+                        scoringRules: { where: { active: true } },
+                    },
+                },
+            },
+        });
+
+        const byLeague = new Map<string, ProvisionalLeagueImpact>();
+        const matchForScoring: MatchScoreLike = {
+            homeScore,
+            awayScore,
+            phase: match.phase,
+        };
+
+        for (const pred of predictions) {
+            const result = this.calculatePointsForOne(
+                matchForScoring,
+                { homeScore: pred.homeScore, awayScore: pred.awayScore },
+                pred.league.scoringRules,
+            );
+
+            const displayName =
+                pred.user.name?.trim() ||
+                pred.user.username?.trim() ||
+                'Participante';
+
+            let leagueImpact = byLeague.get(pred.leagueId);
+            if (!leagueImpact) {
+                leagueImpact = {
+                    leagueId: pred.leagueId,
+                    leagueName: pred.league.name,
+                    entries: [],
+                };
+                byLeague.set(pred.leagueId, leagueImpact);
+            }
+
+            leagueImpact.entries.push({
+                userId: pred.userId,
+                displayName,
+                predictedHome: pred.homeScore,
+                predictedAway: pred.awayScore,
+                points: result.total,
+                detailType: result.detail.type,
+            });
+        }
+
+        return [...byLeague.values()];
     }
 
     async calculatePhaseBonuses(matchId: string): Promise<void> {
