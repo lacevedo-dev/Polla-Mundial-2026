@@ -98,6 +98,5 @@ RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
 EXPOSE 3000
 
-# Aplicar migraciones pendientes y luego arrancar el servidor
-# Usando ";" para que el servidor siempre inicie aunque migrate falle
-CMD ["/bin/sh", "-c", "npx prisma migrate deploy; node dist/src/main.js"]
+# Arrancar el servidor (migraciones se aplican manualmente en prod, no en cada deploy)
+CMD ["node", "dist/src/main.js"]
