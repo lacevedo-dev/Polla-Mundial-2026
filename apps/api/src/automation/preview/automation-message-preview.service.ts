@@ -38,7 +38,7 @@ import {
   getMissingMembersForLeague,
 } from '../audience/match-audience.resolver';
 
-export type MessagePreviewChannel = 'waGroup' | 'push' | 'inApp';
+export type MessagePreviewChannel = 'waGroup' | 'push' | 'inApp' | 'email';
 
 export type MessagePreviewResult = {
   step: AutomationStep;

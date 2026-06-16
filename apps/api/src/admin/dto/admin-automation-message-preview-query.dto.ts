@@ -1,14 +1,14 @@
 import { AutomationStep } from '@prisma/client';
-import { IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 import { MANUAL_RETRY_STEPS } from '../../automation/config/automation-step-scheduler.util';
 
-const PREVIEW_CHANNELS = ['waGroup', 'push', 'inApp'] as const;
+const PREVIEW_CHANNELS = ['push', 'inApp', 'email', 'waGroup'] as const;
 
 export class AdminAutomationMessagePreviewQueryDto {
   @IsString()
   matchId!: string;
 
-  @IsEnum(MANUAL_RETRY_STEPS, {
+  @IsIn(MANUAL_RETRY_STEPS, {
     message: `step debe ser uno de: ${MANUAL_RETRY_STEPS.join(', ')}`,
   })
   step!: AutomationStep;

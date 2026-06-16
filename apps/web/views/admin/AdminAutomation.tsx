@@ -18,7 +18,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { request } from '../../api';
+import { ApiError, request } from '../../api';
 
 interface ChannelInfo {
   enabled: boolean;
@@ -253,7 +253,7 @@ const EXPANDED_PHASE_GROUPS = PHASE_META.map(({ id, phase, label }) => ({ id, ph
 
 /** Catálogo local por si el API aún no expone stepCatalog (deploy pendiente). */
 const FALLBACK_STEP_CATALOG: StepCatalogEntry[] = [
-  { key: 'MATCH_REMINDER', phase: 'PRE_MATCH', label: 'Recordatorio T-60', shortLabel: 'T-60', description: '', schedulerId: 'match_reminder', channels: ['push', 'inApp', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'MATCH_REMINDER', phase: 'PRE_MATCH', label: 'Recordatorio T-60', shortLabel: 'T-60', description: '', schedulerId: 'match_reminder', channels: ['push', 'inApp', 'email', 'waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
   { key: 'ESCALATION_T45', phase: 'PRE_MATCH', label: 'Escalada T-45', shortLabel: 'T-45', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
   { key: 'ESCALATION_T30', phase: 'PRE_MATCH', label: 'Escalada T-30', shortLabel: 'T-30', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
   { key: 'ESCALATION_FINAL', phase: 'PRE_MATCH', label: 'Escalada final', shortLabel: 'T-f', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
@@ -1390,6 +1390,17 @@ function SchedulerCard({
   );
 }
 
+const PREVIEW_CHANNEL_ORDER = ['push', 'inApp', 'email', 'waGroup'] as const;
+type PreviewChannel = (typeof PREVIEW_CHANNEL_ORDER)[number];
+
+function resolvePreviewChannels(stepChannels: string[]): PreviewChannel[] {
+  return PREVIEW_CHANNEL_ORDER.filter((ch) => stepChannels.includes(ch));
+}
+
+function resolveDefaultPreviewChannel(stepChannels: string[]): PreviewChannel {
+  return resolvePreviewChannels(stepChannels)[0] ?? 'push';
+}
+
 function IncidentModal({
   incident,
   onClose,
@@ -1403,16 +1414,23 @@ function IncidentModal({
 }) {
   const [retrying, setRetrying] = useState(false);
   const [retryResult, setRetryResult] = useState<RetryResult | null>(null);
+  const step = incident.step;
   const [preview, setPreview] = useState<MessagePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewChannel, setPreviewChannel] = useState<'waGroup' | 'push' | 'inApp'>('waGroup');
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const stepChannels = getStepChannels(stepCatalog, step.key);
+  const availablePreviewChannels = useMemo(
+    () => resolvePreviewChannels(stepChannels),
+    [stepChannels],
+  );
+  const [previewChannel, setPreviewChannel] = useState<PreviewChannel>(() =>
+    resolveDefaultPreviewChannel(stepChannels),
+  );
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(
     incident.leagueId ?? incident.step.leagues[0]?.leagueId ?? null,
   );
 
-  const step = incident.step;
   const breakdown = step.latestDetails?.channelBreakdown;
-  const stepChannels = getStepChannels(stepCatalog, step.key);
   const isProblemStep =
     step.status === 'FAILED' ||
     step.status === 'OVERDUE' ||
@@ -1424,13 +1442,20 @@ function IncidentModal({
   const previewLeagueRequired = ['ESCALATION_T45', 'ESCALATION_T30', 'ESCALATION_FINAL', 'GOAL_IMPACT'].includes(step.key);
 
   useEffect(() => {
+    setPreviewChannel(resolveDefaultPreviewChannel(stepChannels));
+    setPreviewError(null);
+  }, [incident.match.id, step.key, stepChannels.join('|')]);
+
+  useEffect(() => {
     let cancelled = false;
     const loadPreview = async () => {
       if (previewLeagueRequired && !selectedLeagueId) {
         setPreview(null);
+        setPreviewError(null);
         return;
       }
       setPreviewLoading(true);
+      setPreviewError(null);
       try {
         const params = new URLSearchParams({
           matchId: incident.match.id,
@@ -1439,9 +1464,23 @@ function IncidentModal({
         });
         if (selectedLeagueId) params.set('leagueId', selectedLeagueId);
         const data = await request<MessagePreview>(`/admin/automation/message-preview?${params.toString()}`);
-        if (!cancelled) setPreview(data);
-      } catch {
-        if (!cancelled) setPreview(null);
+        if (!cancelled) {
+          setPreview(data);
+          setPreviewError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPreview(null);
+          if (err instanceof ApiError && err.status === 404) {
+            setPreviewError(
+              'Vista previa no disponible: el API desplegado no incluye /admin/automation/message-preview. Redeploy de apps/api. Puedes usar «Reintentar manualmente» igualmente.',
+            );
+          } else if (err instanceof ApiError) {
+            setPreviewError(err.message);
+          } else {
+            setPreviewError('No se pudo cargar la vista previa.');
+          }
+        }
       } finally {
         if (!cancelled) setPreviewLoading(false);
       }
@@ -1564,9 +1603,7 @@ function IncidentModal({
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Prueba del servicio (vista previa)</p>
                 <div className="flex gap-1">
-                  {(['waGroup', 'push', 'inApp'] as const)
-                    .filter((ch) => stepChannels.includes(ch))
-                    .map((ch) => (
+                  {availablePreviewChannels.map((ch) => (
                       <button
                         key={ch}
                         type="button"
@@ -1580,6 +1617,8 @@ function IncidentModal({
               </div>
               {previewLoading ? (
                 <p className="text-xs text-slate-400">Generando vista previa…</p>
+              ) : previewError ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">{previewError}</p>
               ) : preview ? (
                 <>
                   <div className="mb-2 flex flex-wrap gap-2 text-[10px] text-slate-500">

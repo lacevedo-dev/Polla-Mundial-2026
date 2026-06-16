@@ -1,5 +1,5 @@
 import { AutomationStep } from '@prisma/client';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 import { MANUAL_RETRY_STEPS } from '../../automation/config/automation-step-scheduler.util';
 
 export type RetryableStep = (typeof MANUAL_RETRY_STEPS)[number];
@@ -8,7 +8,7 @@ export class AdminAutomationRetryDto {
   @IsString()
   matchId!: string;
 
-  @IsEnum(MANUAL_RETRY_STEPS, {
+  @IsIn(MANUAL_RETRY_STEPS, {
     message: `step debe ser uno de: ${MANUAL_RETRY_STEPS.join(', ')}`,
   })
   step!: RetryableStep;

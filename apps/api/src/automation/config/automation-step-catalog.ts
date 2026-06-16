@@ -32,7 +32,7 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
     shortLabel: 'T-60',
     description: 'Alerta general 60 min antes — incluye plazo de modificación',
     schedulerId: 'match_reminder',
-    channels: ['push', 'inApp', 'email'],
+    channels: ['push', 'inApp', 'email', 'waGroup'],
     defaultEnabled: true,
   },
   {
