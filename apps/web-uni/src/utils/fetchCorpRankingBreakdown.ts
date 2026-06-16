@@ -131,6 +131,24 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
 }
 
 export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
+    try {
+        const health = await request<{
+            buildGitCommit?: string;
+            features?: { rankingBreakdown?: boolean };
+        }>('/health');
+        if (health.features?.rankingBreakdown !== true) {
+            throw new ApiError(
+                `El API corporativo (${health.buildGitCommit ?? 'sin buildGitCommit'}) aún no tiene desglose de ranking. En Dokploy: redeploy api-corp sin caché, recrear contenedor y verificar que /health muestre features.rankingBreakdown=true.`,
+                { status: 404 },
+            );
+        }
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404 && err.message.includes('desglose de ranking')) {
+            throw err;
+        }
+        // Si /health falla, intentar rutas directas igualmente.
+    }
+
     const direct = await fetchCorpBreakdownDirect(userId);
     if (direct) return direct;
     return fetchBreakdownViaLeagues(userId);

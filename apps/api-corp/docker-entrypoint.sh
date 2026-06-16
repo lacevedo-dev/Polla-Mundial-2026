@@ -22,5 +22,11 @@ else
     echo "[entrypoint] Volumen de branding ya tiene contenido — se conserva."
 fi
 
+if [ -f /app/apps/api-corp/.build-info.json ]; then
+    echo "[entrypoint] Build info: $(cat /app/apps/api-corp/.build-info.json)"
+else
+    echo "[entrypoint] AVISO: .build-info.json no encontrado — imagen antigua o build incompleto."
+fi
+
 # Iniciar la aplicación
 exec node dist/main.js

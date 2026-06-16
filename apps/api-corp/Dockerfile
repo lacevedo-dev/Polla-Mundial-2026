@@ -48,6 +48,7 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules
 RUN echo "api-corp build commit=${GIT_COMMIT}" && npm run build
+RUN printf '{"gitCommit":"%s","builtAt":"%s","rankingBreakdown":true}\n' "${GIT_COMMIT}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /app/apps/api-corp/.build-info.json
 
 # ---- Etapa 2: Producción ----
 FROM node:22-alpine AS runner
@@ -69,6 +70,7 @@ COPY --from=builder /app/packages ./packages
 
 # Artefactos de api-corp
 COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
+COPY --from=builder /app/apps/api-corp/.build-info.json ./apps/api-corp/.build-info.json
 COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
 
 WORKDIR /app/apps/api-corp

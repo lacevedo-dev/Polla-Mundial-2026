@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import { CorpAppModule } from './corp-app.module';
+import { resolveCorpBuildCommit, readCorpBuildInfo } from './build-info';
 
 const DEFAULT_PRODUCTION_CORS_ORIGINS = [
     'https://coopcanapro.zonapronosticos.com',
@@ -48,6 +49,10 @@ async function bootstrap(): Promise<void> {
     }
 
     console.info(`[corp-api] Iniciando (env=${nodeEnv}, port=${port}, corpDatabaseUrlConfigured=${databaseUrlConfigured ? 'yes' : 'no'})`);
+    const buildInfo = readCorpBuildInfo();
+    console.info(
+        `[corp-api] Build commit=${resolveCorpBuildCommit()}, builtAt=${buildInfo?.builtAt ?? 'n/a'}, rankingBreakdown=${buildInfo?.rankingBreakdown ? 'yes' : 'no'}`,
+    );
 
     const app = await NestFactory.create(CorpAppModule, { rawBody: true, bodyParser: false });
 
