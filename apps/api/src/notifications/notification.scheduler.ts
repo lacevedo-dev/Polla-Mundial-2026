@@ -14,9 +14,12 @@ import { USER_STATUS } from '../users/user-status.constants';
 import {
   getClosingAlertMatches,
   getNotificationLeagueMembers,
+  getRelevantLeaguesForMatchReminder,
   getRelevantLeaguesForScheduledMatch,
   getReminderMatches,
   MatchAutomationSweepContext,
+  REMINDER_WINDOW_END_MINUTES,
+  REMINDER_WINDOW_START_MINUTES,
 } from './match-automation-sweep-context';
 import { NotificationsService } from './notifications.service';
 import { TwilioService } from './twilio.service';
@@ -240,6 +243,96 @@ export class NotificationScheduler {
     return result;
   }
 
+  /** Ligas destinatarias: por torneo del partido + cualquier liga con pronósticos en él. */
+  private async resolveLeaguesForMatchReminder(
+    match: {
+      tournamentId: string | null;
+      predictions: Array<{ userId: string; leagueId: string }>;
+    },
+    context?: MatchAutomationSweepContext,
+  ): Promise<Array<{ id: string; members: Array<{ userId: string }> }>> {
+    if (context) {
+      return getRelevantLeaguesForMatchReminder(context, match).map((league) => ({
+        id: league.id,
+        members: getNotificationLeagueMembers(league),
+      }));
+    }
+
+    const predictionLeagueIds = [
+      ...new Set(match.predictions.map((prediction) => prediction.leagueId)),
+    ];
+    const [tournamentLeagues, predictionLeagues] = await Promise.all([
+      this.getLeaguesForMatch(match.tournamentId ?? null),
+      predictionLeagueIds.length > 0
+        ? this.prisma.league.findMany({
+            where: { id: { in: predictionLeagueIds }, status: 'ACTIVE' },
+            select: {
+              id: true,
+              members: { where: { status: 'ACTIVE' }, select: { userId: true } },
+            },
+          })
+        : [],
+    ]);
+
+    const seen = new Set<string>();
+    const merged: Array<{ id: string; members: Array<{ userId: string }> }> = [];
+    for (const league of [...tournamentLeagues, ...predictionLeagues]) {
+      if (!seen.has(league.id)) {
+        seen.add(league.id);
+        merged.push(league);
+      }
+    }
+    return merged;
+  }
+
+  private async findStandaloneReminderMatches() {
+    const now = Date.now();
+    const matchSelect = {
+      id: true,
+      matchDate: true,
+      tournamentId: true,
+      venue: true,
+      homeTeam: { select: { name: true } },
+      awayTeam: { select: { name: true } },
+      predictions: { select: { userId: true, leagueId: true } },
+    } as const;
+
+    const [primary, catchUp] = await Promise.all([
+      this.prisma.match.findMany({
+        where: {
+          status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
+          matchDate: {
+            gte: new Date(now + REMINDER_WINDOW_START_MINUTES * 60_000),
+            lte: new Date(now + REMINDER_WINDOW_END_MINUTES * 60_000),
+          },
+        },
+        select: matchSelect,
+      }),
+      this.prisma.match.findMany({
+        where: {
+          status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
+          matchDate: {
+            gt: new Date(now),
+            lte: new Date(now + REMINDER_WINDOW_START_MINUTES * 60_000),
+          },
+        },
+        select: matchSelect,
+      }),
+    ]);
+
+    const reminderDueBefore = (matchDate: Date) =>
+      now >= matchDate.getTime() - 60 * 60_000;
+
+    const seen = new Set<string>();
+    const merged = [];
+    for (const match of [...primary, ...catchUp.filter((m) => reminderDueBefore(m.matchDate))]) {
+      if (seen.has(match.id)) continue;
+      seen.add(match.id);
+      merged.push(match);
+    }
+    return merged;
+  }
+
   async sendMatchReminders(
     context?: MatchAutomationSweepContext,
   ): Promise<SchedulerObservationOutcome> {
@@ -262,32 +355,18 @@ export class NotificationScheduler {
     try {
       const matches = context
         ? getReminderMatches(context)
-        : await this.prisma.match.findMany({
-            where: {
-              status: MatchStatus.SCHEDULED,
-              matchDate: {
-                gte: new Date(Date.now() + 55 * 60 * 1000),
-                lte: new Date(Date.now() + 65 * 60 * 1000),
-              },
-            },
-            select: {
-              id: true,
-              matchDate: true,
-              tournamentId: true,
-              venue: true,
-              homeTeam: { select: { name: true } },
-              awayTeam: { select: { name: true } },
-              predictions: { select: { userId: true, leagueId: true } },
-            },
-          });
+        : await this.findStandaloneReminderMatches();
 
       const notified = new Set<string>();
 
       for (const match of matches) {
-        const leagues = await this.getLeaguesForMatch(
-          match.tournamentId ?? null,
-          context,
-        );
+        const leagues = await this.resolveLeaguesForMatchReminder(match, context);
+        if (leagues.length === 0) {
+          this.logger.warn(
+            `Recordatorio ${match.id}: sin ligas destinatarias (torneo=${match.tournamentId ?? 'null'}, predictions=${match.predictions.length})`,
+          );
+          continue;
+        }
         const home = match.homeTeam.name;
         const away = match.awayTeam.name;
         
@@ -1187,7 +1266,13 @@ export class NotificationScheduler {
           where: { id: leagueId, status: 'ACTIVE' },
           select: { id: true, members: { where: { status: 'ACTIVE' }, select: { userId: true } } },
         })
-      : await this.getLeaguesForMatch(match.tournamentId ?? null);
+      : await this.resolveLeaguesForMatchReminder(match);
+
+    if (leagues.length === 0) {
+      this.logger.warn(
+        `[MANUAL] Recordatorio ${matchId}: sin ligas destinatarias (torneo=${match.tournamentId ?? 'null'}, predictions=${match.predictions.length})`,
+      );
+    }
 
     const home = match.homeTeam.name;
     const away = match.awayTeam.name;

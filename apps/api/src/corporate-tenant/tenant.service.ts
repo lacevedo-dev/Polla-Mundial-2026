@@ -38,7 +38,7 @@ export class TenantService {
                         name: string;
                         email: string;
                         username: string;
-                        documentNumber: string;
+                        documentNumber: string | null;
                         avatar: string | null;
                         mustChangePassword: boolean;
                         emailVerified: boolean;

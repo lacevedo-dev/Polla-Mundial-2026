@@ -65,18 +65,14 @@ export class MatchAutomationSweepScheduler {
   private async runSweepTasks(): Promise<SchedulerObservationSummary> {
     const context = await buildMatchAutomationSweepContext(this.prisma);
     const taskNames = [
-      'closeStaleUnlinkedMatches',
       'sendMatchReminders',
       'sendPredictionClosingAlerts',
       'sendMatchResultNotifications',
       'checkAndSendReports',
       'sendPendingResultReports',
+      'closeStaleUnlinkedMatches',
     ];
     const tasks: Array<[string, () => Promise<SchedulerObservationOutcome | void>]> = [
-      [
-        'closeStaleUnlinkedMatches',
-        async () => { await this.syncPlan.closeStaleUnlinkedMatches(); },
-      ],
       [
         'sendMatchReminders',
         () => this.notificationScheduler.sendMatchReminders(context),
@@ -96,6 +92,10 @@ export class MatchAutomationSweepScheduler {
       [
         'sendPendingResultReports',
         () => this.predictionReportScheduler.sendPendingResultReports(),
+      ],
+      [
+        'closeStaleUnlinkedMatches',
+        async () => { await this.syncPlan.closeStaleUnlinkedMatches(); },
       ],
     ];
 

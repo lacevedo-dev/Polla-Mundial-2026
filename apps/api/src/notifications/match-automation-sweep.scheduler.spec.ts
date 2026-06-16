@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { resetExclusiveBackgroundJobStateForTests } from '../prisma/background-job-lock.util';
+import { SyncPlanService } from '../football-sync/services/sync-plan.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportScheduler } from '../prediction-report/prediction-report.scheduler';
 import { MatchAutomationSweepScheduler } from './match-automation-sweep.scheduler';
@@ -21,6 +22,9 @@ describe('MatchAutomationSweepScheduler', () => {
     checkAndSendReports: jest.fn(),
     sendPendingResultReports: jest.fn(),
   };
+  const syncPlan = {
+    closeStaleUnlinkedMatches: jest.fn(),
+  };
   const prisma = {
     league: { findMany: jest.fn() },
     match: { findMany: jest.fn() },
@@ -33,6 +37,7 @@ describe('MatchAutomationSweepScheduler', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: NotificationScheduler, useValue: notificationScheduler },
         { provide: PredictionReportScheduler, useValue: predictionReportScheduler },
+        { provide: SyncPlanService, useValue: syncPlan },
       ],
     }).compile();
 
@@ -76,6 +81,9 @@ describe('MatchAutomationSweepScheduler', () => {
     predictionReportScheduler.sendPendingResultReports.mockImplementation(async () => {
       order.push('sendPendingResultReports');
     });
+    syncPlan.closeStaleUnlinkedMatches.mockImplementation(async () => {
+      order.push('closeStaleUnlinkedMatches');
+    });
 
     await scheduler.runMatchAutomationSweep();
 
@@ -85,6 +93,7 @@ describe('MatchAutomationSweepScheduler', () => {
       'sendMatchResultNotifications',
       'checkAndSendReports',
       'sendPendingResultReports',
+      'closeStaleUnlinkedMatches',
     ]);
   });
 
@@ -98,12 +107,13 @@ describe('MatchAutomationSweepScheduler', () => {
     expect(notificationScheduler.sendMatchResultNotifications).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.checkAndSendReports).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.sendPendingResultReports).toHaveBeenCalledTimes(1);
+    expect(syncPlan.closeStaleUnlinkedMatches).toHaveBeenCalledTimes(1);
 
     const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
     expect(payload.summary).toEqual(
       expect.objectContaining({
-        attemptedTasks: 5,
-        completedTasks: 4,
+        attemptedTasks: 6,
+        completedTasks: 5,
         skippedTasks: 0,
         failedTasks: 1,
       }),
@@ -142,6 +152,7 @@ describe('MatchAutomationSweepScheduler', () => {
     expect(notificationScheduler.sendMatchResultNotifications).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.checkAndSendReports).toHaveBeenCalledTimes(1);
     expect(predictionReportScheduler.sendPendingResultReports).toHaveBeenCalledTimes(1);
+    expect(syncPlan.closeStaleUnlinkedMatches).toHaveBeenCalledTimes(1);
     const schedulerJobDebugCall = debugSpy.mock.calls.find((call) =>
       typeof call[0] === 'string' && (call[0] as string).includes('"event":"scheduler_job"'),
     );

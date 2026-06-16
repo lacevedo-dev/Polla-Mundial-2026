@@ -2,8 +2,10 @@ import { MatchStatus, MemberStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DEFAULT_CLOSE_PREDICTION_MINUTES = 15;
-const REMINDER_WINDOW_START_MINUTES = 55;
-const REMINDER_WINDOW_END_MINUTES = 65;
+/** Más cercano al kickoff: aún se envía recordatorio si no se hizo antes */
+export const REMINDER_WINDOW_START_MINUTES = 45;
+/** Más lejano del kickoff: primer intento de recordatorio (~75 min antes) */
+export const REMINDER_WINDOW_END_MINUTES = 75;
 const CLOSING_ALERT_WINDOW_GRACE_MINUTES = 5;
 const REPORTABLE_MEMBER_STATUSES = [
   MemberStatus.ACTIVE,
@@ -130,7 +132,7 @@ export async function buildMatchAutomationSweepContext(
 
   const scheduledMatches = await prisma.match.findMany({
     where: {
-      status: MatchStatus.SCHEDULED,
+      status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
       matchDate: {
         gt: windowStart,
         lte: windowEnd,
@@ -177,12 +179,37 @@ export async function buildMatchAutomationSweepContext(
 export function getReminderMatches(
   context: MatchAutomationSweepContext,
 ): MatchAutomationSweepMatch[] {
-  return filterMatchesInFutureWindow(
+  const primary = filterMatchesInFutureWindow(
     context.scheduledMatches,
     context.now,
     REMINDER_WINDOW_START_MINUTES,
     REMINDER_WINDOW_END_MINUTES,
   );
+  const catchUp = getCatchUpReminderMatches(context);
+  const seen = new Set<string>();
+  const merged: MatchAutomationSweepMatch[] = [];
+  for (const match of [...primary, ...catchUp]) {
+    if (seen.has(match.id)) continue;
+    seen.add(match.id);
+    merged.push(match);
+  }
+  return merged;
+}
+
+/** Partidos cuyo recordatorio (T-60) ya debió dispararse pero el partido aún no empieza. */
+export function getCatchUpReminderMatches(
+  context: MatchAutomationSweepContext,
+): MatchAutomationSweepMatch[] {
+  const now = context.now.getTime();
+  const latestKickoffMs = now + REMINDER_WINDOW_START_MINUTES * 60_000;
+
+  return context.scheduledMatches.filter((match) => {
+    const kickoffMs = match.matchDate.getTime();
+    if (kickoffMs <= now) return false;
+    if (kickoffMs > latestKickoffMs) return false;
+    const reminderDueAt = kickoffMs - 60 * 60_000;
+    return now >= reminderDueAt;
+  });
 }
 
 export function getClosingAlertMatches(
@@ -225,6 +252,32 @@ export function getRelevantLeaguesForScheduledMatch(
         (entry) => entry.tournamentId === tournamentId,
       ),
   );
+}
+
+/** Ligas por torneo + ligas con pronósticos en el partido (evita audiencia vacía). */
+export function getRelevantLeaguesForMatchReminder(
+  context: MatchAutomationSweepContext,
+  match: Pick<MatchAutomationSweepMatch, 'tournamentId' | 'predictions'>,
+): MatchAutomationSweepLeague[] {
+  const byTournament = getRelevantLeaguesForScheduledMatch(
+    context,
+    match.tournamentId,
+  );
+  const predictionLeagueIds = new Set(
+    match.predictions.map((prediction) => prediction.leagueId),
+  );
+  const byPrediction = context.activeLeagues.filter((league) =>
+    predictionLeagueIds.has(league.id),
+  );
+
+  const seen = new Set<string>();
+  const merged: MatchAutomationSweepLeague[] = [];
+  for (const league of [...byTournament, ...byPrediction]) {
+    if (seen.has(league.id)) continue;
+    seen.add(league.id);
+    merged.push(league);
+  }
+  return merged;
 }
 
 export function getNotificationLeagueMembers(
