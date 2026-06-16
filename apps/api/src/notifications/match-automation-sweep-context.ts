@@ -7,6 +7,8 @@ export const REMINDER_WINDOW_START_MINUTES = 45;
 /** Más lejano del kickoff: primer intento de recordatorio (~75 min antes) */
 export const REMINDER_WINDOW_END_MINUTES = 75;
 const CLOSING_ALERT_WINDOW_GRACE_MINUTES = 5;
+/** Fechas cero de MariaDB (0000-00-00) rompen el mapeo Date de Prisma. */
+export const MIN_VALID_MYSQL_DATETIME = new Date('1970-01-01T00:00:00.000Z');
 const REPORTABLE_MEMBER_STATUSES = [
   MemberStatus.ACTIVE,
   MemberStatus.PENDING_PAYMENT,
@@ -130,13 +132,18 @@ export async function buildMatchAutomationSweepContext(
         60_000,
   );
 
-  const scheduledMatches = await prisma.match.findMany({
+  const scheduledMatchRows = await prisma.match.findMany({
     where: {
       status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
       matchDate: {
         gt: windowStart,
         lte: windowEnd,
+        gte: MIN_VALID_MYSQL_DATETIME,
       },
+      OR: [
+        { predictionReportSentAt: null },
+        { predictionReportSentAt: { gte: MIN_VALID_MYSQL_DATETIME } },
+      ],
     },
     select: {
       id: true,
@@ -145,28 +152,52 @@ export async function buildMatchAutomationSweepContext(
       tournamentId: true,
       venue: true,
       round: true,
-
       predictionReportSentAt: true,
       homeTeam: { select: { name: true } },
       awayTeam: { select: { name: true } },
-      predictions: {
-        select: {
-          userId: true,
-          leagueId: true,
-          homeScore: true,
-          awayScore: true,
-          submittedAt: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
     },
   });
+
+  const matchIds = scheduledMatchRows.map((match) => match.id);
+  const predictionRows =
+    matchIds.length === 0
+      ? []
+      : await prisma.prediction.findMany({
+          where: {
+            matchId: { in: matchIds },
+            submittedAt: { gte: MIN_VALID_MYSQL_DATETIME },
+          },
+          select: {
+            matchId: true,
+            userId: true,
+            leagueId: true,
+            homeScore: true,
+            awayScore: true,
+            submittedAt: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        });
+
+  const predictionsByMatchId = new Map<string, MatchAutomationSweepPrediction[]>();
+  for (const row of predictionRows) {
+    const { matchId, ...prediction } = row;
+    const bucket = predictionsByMatchId.get(matchId) ?? [];
+    bucket.push(prediction);
+    predictionsByMatchId.set(matchId, bucket);
+  }
+
+  const scheduledMatches: MatchAutomationSweepMatch[] = scheduledMatchRows.map(
+    (match) => ({
+      ...match,
+      predictions: predictionsByMatchId.get(match.id) ?? [],
+    }),
+  );
 
   return {
     now,
