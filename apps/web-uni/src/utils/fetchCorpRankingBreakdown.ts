@@ -1,4 +1,4 @@
-import { request, ApiError } from '../api';
+import { request, ApiError, getLastCorpDeployStamp } from '../api';
 import type { CorpRankingBreakdownApiResponse } from './rankingBreakdown';
 
 type CorpLeagueSummary = { id: string; name: string };
@@ -12,6 +12,20 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
 type LeagueDetailWithBreakdown = {
     memberPointsBreakdown?: CorpRankingBreakdownApiResponse;
 };
+
+type CorpHealthResponse = {
+    deployStamp?: string | null;
+    buildMarker?: string;
+    buildGitCommit?: string;
+};
+
+type CorpPingResponse = {
+    ok?: boolean;
+    buildMarker?: string;
+    deployStamp?: string | null;
+};
+
+const EXPECTED_BUILD_MARKER = 'ranking-breakdown-v5';
 
 const BREAKDOWN_PATHS = [
     (userId: string) => `/corp/member-points/${userId}`,
@@ -75,6 +89,38 @@ function mergeBreakdowns(
     }
 
     return { user, summary, matches, bonuses };
+}
+
+async function readBackendDeployStatus(): Promise<string> {
+    const headerStamp = getLastCorpDeployStamp();
+    let health: CorpHealthResponse | null = null;
+    let ping: CorpPingResponse | null = null;
+
+    try {
+        health = await request<CorpHealthResponse>('/health');
+    } catch {
+        /* ignore */
+    }
+
+    try {
+        ping = await request<CorpPingResponse>('/corp-api-ping');
+    } catch {
+        /* ignore */
+    }
+
+    const marker = ping?.buildMarker ?? health?.buildMarker;
+    const stamp = ping?.deployStamp ?? health?.deployStamp ?? headerStamp;
+
+    if (marker === EXPECTED_BUILD_MARKER || stamp === EXPECTED_BUILD_MARKER) {
+        return 'updated';
+    }
+
+    return JSON.stringify({
+        headerStamp,
+        health,
+        ping,
+        expected: EXPECTED_BUILD_MARKER,
+    });
 }
 
 async function fetchBreakdownViaLeagueDetails(userId: string): Promise<CorpRankingBreakdownApiResponse | null> {
@@ -177,11 +223,18 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
     return null;
 }
 
-const STALE_BACKEND_MESSAGE =
-    'El backend api-corp sigue desactualizado: /health no muestra deployStamp. ' +
-    'En Dokploy redeploy de la app Backend (api-polla-coop) con Clean Cache.';
+function buildStaleBackendMessage(diagnostics: string): string {
+    return (
+        'El dominio api-polla-coop sigue sirviendo un contenedor antiguo (sin ranking-breakdown-v5). ' +
+        'En Dokploy: app Backend → Stop → elimina el contenedor → Clean Cache → Deploy. ' +
+        'Verifica https://api-polla-coop.atencionesvirtuales.com.co/corp-api-ping debe mostrar buildMarker v5. ' +
+        `Diagnóstico: ${diagnostics}`
+    );
+}
 
 export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
+    const deployStatus = await readBackendDeployStatus();
+
     const direct = await fetchCorpBreakdownDirect(userId);
     if (direct) return direct;
 
@@ -191,5 +244,5 @@ export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRan
     const viaLeagues = await fetchBreakdownViaLeagues(userId);
     if (viaLeagues) return viaLeagues;
 
-    throw new ApiError(STALE_BACKEND_MESSAGE, { status: 404 });
+    throw new ApiError(buildStaleBackendMessage(deployStatus), { status: 404 });
 }

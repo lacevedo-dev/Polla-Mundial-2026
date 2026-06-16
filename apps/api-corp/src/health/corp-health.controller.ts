@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from '@corp-api/prisma/prisma.service';
 import { readCorpBuildInfo, resolveCorpBuildCommit } from '../build-info';
+import { CORP_BUILD_MARKER } from '../build-marker';
 
 @Controller('health')
 export class CorpHealthController {
@@ -18,6 +19,7 @@ export class CorpHealthController {
             buildGitCommit: resolveCorpBuildCommit(),
             builtAt: buildInfo?.builtAt ?? null,
             deployStamp: process.env.CORP_DEPLOY_STAMP ?? null,
+            buildMarker: CORP_BUILD_MARKER,
             features: rankingBreakdown
                 ? {
                     rankingBreakdown: true,

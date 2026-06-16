@@ -52,6 +52,8 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules
 RUN echo "api-corp build cache=${CACHE_BUST} commit=${GIT_COMMIT}" && npm run build
+RUN grep -q 'ranking-breakdown-v5' /app/apps/api-corp/dist/main.js \
+    || (echo "ERROR: el bundle no incluye ranking-breakdown-v5 — build incompleto" && exit 1)
 RUN printf '{"gitCommit":"%s","builtAt":"%s","rankingBreakdown":true}\n' "${GIT_COMMIT}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /app/apps/api-corp/.build-info.json
 
 # ---- Etapa 2: Producción ----
@@ -65,7 +67,7 @@ RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV BUILD_GIT_COMMIT=${GIT_COMMIT}
-ENV CORP_DEPLOY_STAMP=ranking-breakdown-v4
+ENV CORP_DEPLOY_STAMP=ranking-breakdown-v5
 
 # Dependencias hoisted
 COPY --from=builder /app/node_modules ./node_modules
@@ -86,7 +88,7 @@ EXPOSE 3001
 # El entrypoint restaura estos archivos al volumen persistente solo si está vacío.
 COPY --from=builder /app/apps/api-corp/uploads/branding ./.seed/branding
 
-COPY apps/api-corp/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=builder /app/apps/api-corp/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

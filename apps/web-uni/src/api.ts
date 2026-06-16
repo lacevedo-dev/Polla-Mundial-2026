@@ -22,6 +22,17 @@ function getBaseUrl(): string {
 
 export const BASE_URL = getBaseUrl();
 
+let lastCorpDeployStamp: string | null = null;
+
+export function getLastCorpDeployStamp(): string | null {
+    return lastCorpDeployStamp;
+}
+
+function captureCorpDeployHeaders(res: Response): void {
+    const stamp = res.headers.get('x-corp-deploy-stamp');
+    if (stamp) lastCorpDeployStamp = stamp;
+}
+
 function isAbsoluteAssetUrl(path: string): boolean {
     return (
         path.startsWith('http://') ||
@@ -109,6 +120,7 @@ export async function uploadFile<T = unknown>(path: string, formData: FormData, 
     try {
         const res = await fetch(url, { method, body: formData, headers, signal: controller.signal });
         clearTimeout(timeout);
+        captureCorpDeployHeaders(res);
         if (!res.ok) {
             let msg = `HTTP ${res.status}`;
             try {
@@ -135,6 +147,7 @@ export async function request<T = unknown>(
 ): Promise<T> {
     const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
     const res = await fetch(url, { ...init, headers: getHeaders(init.headers as HeadersInit) });
+    captureCorpDeployHeaders(res);
 
     if (!res.ok) {
         let msg = `HTTP ${res.status}`;
