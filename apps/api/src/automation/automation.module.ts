@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PredictionReportModule } from '../prediction-report/prediction-report.module';
 import { PredictionsModule } from '../predictions/predictions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
@@ -18,6 +19,7 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
     PrismaModule,
     AutomationObservabilityModule,
     PredictionsModule,
+    PredictionReportModule,
     forwardRef(() => NotificationsModule),
     WhatsappModule,
   ],
