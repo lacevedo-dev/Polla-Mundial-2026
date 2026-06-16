@@ -29,6 +29,7 @@ export class AutomationStepConfigService {
   async getStepOverrides(): Promise<Partial<Record<AutomationStep, boolean>>> {
     const row = await this.prisma.systemConfig.findUnique({
       where: { key: STEP_OVERRIDES_KEY },
+      select: { value: true },
     });
     if (!row) return {};
     try {

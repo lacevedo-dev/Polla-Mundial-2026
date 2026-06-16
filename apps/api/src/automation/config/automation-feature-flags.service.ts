@@ -87,6 +87,7 @@ export class AutomationFeatureFlagsService {
 
     const row = await this.prisma.systemConfig.findUnique({
       where: { key: def.configKey },
+      select: { value: true },
     });
     if (row) {
       return {
