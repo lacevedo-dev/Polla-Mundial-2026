@@ -2,6 +2,9 @@
 # Dockerfile — Backend Corporativo (api-corp)
 # Contexto de build: Raíz del monorepo
 # Comando: docker build -f apps/api-corp/Dockerfile -t polla-api-corp .
+#
+# Dokploy watch paths (webhook): apps/api-corp/** Y apps/api/**
+# (corp-portal y predictions viven en apps/api; sin esto el deploy no se dispara).
 # ================================================================
 
 # ---- Etapa 1: Build ----

@@ -9,21 +9,6 @@ type LeaderboardBreakdownResponse = Omit<CorpRankingBreakdownApiResponse, 'match
     >;
 };
 
-type CorpHealthResponse = {
-    buildGitCommit?: string;
-    features?: { rankingBreakdown?: boolean };
-};
-
-type CorpVersionResponse = {
-    buildGitCommit?: string;
-    rankingBreakdown?: boolean;
-};
-
-const STALE_DEPLOY_MESSAGE =
-    'El contenedor que responde en api-polla-coop está desactualizado ( /health sin buildGitCommit ). ' +
-    'En Dokploy abre la app que tiene el dominio api-polla-coop.atencionesvirtuales.com.co, haz deploy con limpiar caché y recrea el contenedor. ' +
-    'Luego verifica /api-corp-version y /health con features.rankingBreakdown=true.';
-
 const BREAKDOWN_PATHS = [
     (userId: string) => `/corp/ranking/user/${userId}/breakdown`,
     (userId: string) => `/corp/ranking-breakdown/${userId}`,
@@ -45,28 +30,6 @@ function isParticipantMissing(err: unknown): boolean {
     if (err.status !== 404) return false;
     const msg = err.message.toLowerCase();
     return msg.includes('participante') || msg.includes('not found') || msg.includes('no encontrado');
-}
-
-function isStaleCorpHealth(health: CorpHealthResponse): boolean {
-    return health.features?.rankingBreakdown !== true && !health.buildGitCommit;
-}
-
-async function assertCorpRankingDeployed(): Promise<void> {
-    const health = await request<CorpHealthResponse>('/health');
-    if (!isStaleCorpHealth(health) && health.features?.rankingBreakdown === true) {
-        return;
-    }
-
-    try {
-        const version = await request<CorpVersionResponse>('/api-corp-version');
-        if (version.rankingBreakdown === true) {
-            return;
-        }
-    } catch {
-        // /api-corp-version solo existe en builds recientes.
-    }
-
-    throw new ApiError(STALE_DEPLOY_MESSAGE, { status: 404 });
 }
 
 function mergeBreakdowns(
@@ -137,7 +100,10 @@ async function fetchBreakdownViaLeagues(userId: string): Promise<CorpRankingBrea
     }
 
     if (predictionsRouteMissing) {
-        throw new ApiError(STALE_DEPLOY_MESSAGE, { status: 404 });
+        throw new ApiError(
+            'El servidor no expone el desglose de ranking. Redespliega api-corp (apps/api y apps/api-corp cambiaron).',
+            { status: 404 },
+        );
     }
 
     if (!parts.length) {
@@ -165,8 +131,6 @@ async function fetchCorpBreakdownDirect(userId: string): Promise<CorpRankingBrea
 }
 
 export async function fetchCorpRankingBreakdown(userId: string): Promise<CorpRankingBreakdownApiResponse> {
-    await assertCorpRankingDeployed();
-
     const direct = await fetchCorpBreakdownDirect(userId);
     if (direct) return direct;
     return fetchBreakdownViaLeagues(userId);

@@ -18,7 +18,6 @@ import { FootballProxyModule } from './football-proxy/football-proxy.module';
 import { CorpHealthModule } from './health/corp-health.module';
 import { DataSyncModule } from './sync/data-sync.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { CorpApiRankingModule } from './ranking/corp-api-ranking.module';
 import { CorpDeployModule } from './deploy/corp-deploy.module';
 
 @Module({
@@ -40,11 +39,8 @@ import { CorpDeployModule } from './deploy/corp-deploy.module';
         // Expone /predictions/* (leaderboard breakdown fallback en web-uni)
         PredictionsModule,
 
-        // Módulo corporativo principal
+        // Módulo corporativo principal (/corp/ranking, /corp/ranking/user/:id/breakdown, …)
         CorporateTenantModule,
-
-        // Desglose de ranking (controlador nativo api-corp)
-        CorpApiRankingModule,
 
         // Probe público de versión desplegada (/api-corp-version)
         CorpDeployModule,

@@ -13,6 +13,7 @@ import { UpdateMemberDto } from './dto/update-member.dto';
 import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
 import { ParticipationService, ParticipationMemberFilter } from './participation.service';
 import { MatchOperationsService } from './match-operations.service';
+import { PredictionsService } from '../predictions/predictions.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
@@ -80,6 +81,7 @@ export class CorpPortalController {
         private readonly brandingStorage: BrandingStorageService,
         private readonly participationService: ParticipationService,
         private readonly matchOperations: MatchOperationsService,
+        private readonly predictionsService: PredictionsService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -400,6 +402,18 @@ export class CorpPortalController {
             .map((u, i) => ({ ...u, rank: i + 1 }));
 
         return ranking;
+    }
+
+    @Get('ranking/user/:userId/breakdown')
+    async getRankingUserBreakdown(@Req() req: any, @Param('userId') userId: string) {
+        const tenantId: string = req.tenantId;
+        return this.predictionsService.getCorpTenantUserBreakdown(tenantId, userId);
+    }
+
+    @Get('ranking-breakdown/:userId')
+    async getRankingBreakdown(@Req() req: any, @Param('userId') userId: string) {
+        const tenantId: string = req.tenantId;
+        return this.predictionsService.getCorpTenantUserBreakdown(tenantId, userId);
     }
 
     @Get('tournaments')
