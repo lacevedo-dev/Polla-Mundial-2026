@@ -21,6 +21,13 @@ Cada fase tiene un flag independiente. **Todos OFF por defecto.**
 
 **Prioridad:** si la variable de entorno está definida (`true`/`false`), **bloquea** el toggle en admin.
 
+### Activación por paso (admin)
+
+En **Config pasos**, cada fila tiene toggle **Activo** independiente de los canales.
+Los pasos desactivados no aparecen en la matriz del día y el orquestador pre-partido los omite.
+
+Persistencia: `SystemConfig` key `automation:step_overrides` (JSON por `AutomationStep`).
+
 ### Activación desde admin (recomendado en staging)
 
 1. Ir a **Admin → Procesos automáticos**

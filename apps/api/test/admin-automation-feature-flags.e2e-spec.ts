@@ -64,6 +64,7 @@ describe('Admin automation feature flags (e2e)', () => {
       controllers: [AdminAutomationController],
       providers: [
         AutomationFeatureFlagsService,
+        AutomationStepConfigService,
         { provide: PrismaService, useValue: prismaServiceMock },
         { provide: ConfigService, useValue: configServiceMock },
         { provide: PushNotificationsService, useValue: pushServiceMock },

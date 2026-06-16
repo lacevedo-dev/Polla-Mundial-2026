@@ -17,6 +17,9 @@ import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
 import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
 import { AdminAutomationMessagePreviewQueryDto } from './dto/admin-automation-message-preview-query.dto';
 import { AdminAutomationFeatureFlagsDto } from './dto/admin-automation-feature-flags.dto';
+import { AdminAutomationStepOverrideDto } from './dto/admin-automation-step-override.dto';
+import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
+import { getFinalEscalationMinutesBeforeKickoff } from '../automation/config/automation-timing.util';
 import { AutomationRetryService } from '../automation/retry/automation-retry.service';
 import { AutomationMessagePreviewService } from '../automation/preview/automation-message-preview.service';
 import { AutomationFeatureFlagsService } from '../automation/config/automation-feature-flags.service';
@@ -45,6 +48,7 @@ export class AdminAutomationController {
     private readonly automationRetry: AutomationRetryService,
     private readonly messagePreview: AutomationMessagePreviewService,
     private readonly featureFlags: AutomationFeatureFlagsService,
+    private readonly stepConfig: AutomationStepConfigService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -253,6 +257,8 @@ export class AdminAutomationController {
       : {};
 
     const featureFlags = await this.featureFlags.getAllFlagStates();
+    const stepCatalog = await this.stepConfig.getResolvedCatalog();
+    const defaultCloseMinutes = 15;
 
     return {
       channels,
@@ -260,6 +266,13 @@ export class AdminAutomationController {
       channelOverrides,
       stats: { notifLast24h, pushSubscribers: pushCount, usersWithPhone: userWithPhone },
       featureFlags,
+      stepCatalog,
+      timingHints: {
+        defaultCloseMinutes,
+        finalEscalationMinutesBeforeKickoff:
+          getFinalEscalationMinutesBeforeKickoff(defaultCloseMinutes),
+        timezone: 'America/Bogota',
+      },
       automation: {
         emailBacklogAudit: {
           cron: '*/15 * * * *',
@@ -654,6 +667,13 @@ export class AdminAutomationController {
       await this.observability.failRun(runId, error, null, `Reintento manual falló: ${message}`);
       return { ok: false, runId, summary: message };
     }
+  }
+
+  @Put('step-overrides')
+  async setStepOverride(@Body() dto: AdminAutomationStepOverrideDto) {
+    await this.stepConfig.setStepEnabled(dto.step, dto.enabled);
+    const stepCatalog = await this.stepConfig.getResolvedCatalog();
+    return { ok: true, stepCatalog };
   }
 
   @Put('feature-flags')

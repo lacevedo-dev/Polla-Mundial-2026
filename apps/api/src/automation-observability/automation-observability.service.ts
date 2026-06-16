@@ -10,6 +10,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildWaGroupChannelBreakdown } from '../whatsapp/whatsapp-channel-status.util';
+import { AUTOMATION_STEP_ORDER, getCatalogEntry } from '../automation/config/automation-step-catalog';
+import { BOGOTA_LOCALE, BOGOTA_TIMEZONE } from '../automation/config/automation-datetime.util';
 
 type StepState =
   | 'NOT_APPLICABLE'
@@ -307,21 +309,7 @@ export class AutomationObservabilityService {
       const matchSyncLogs = syncLogsByMatch.get(match.id) ?? [];
       const sync = this.buildSyncSummary(matchSyncLogs, now);
 
-      const steps = [
-        AutomationStep.MATCH_REMINDER,
-        AutomationStep.ESCALATION_T45,
-        AutomationStep.ESCALATION_T30,
-        AutomationStep.ESCALATION_FINAL,
-        AutomationStep.MATCH_START,
-        AutomationStep.HALFTIME,
-        AutomationStep.SECOND_HALF_START,
-        AutomationStep.MATCH_LIVE_END,
-        AutomationStep.GOAL_IMPACT,
-        AutomationStep.PREDICTION_CLOSING,
-        AutomationStep.RESULT_NOTIFICATION,
-        AutomationStep.PREDICTION_REPORT,
-        AutomationStep.RESULT_REPORT,
-      ].map((step) => {
+      const steps = AUTOMATION_STEP_ORDER.map((step) => {
         const summary = this.buildStepSummary({
           step,
           match,
@@ -376,13 +364,22 @@ export class AutomationObservabilityService {
         };
       });
 
+      const isCarryOver = match.matchDate < dayStart;
+      const displayName = this.buildMatchDisplayName(match.homeTeam, match.awayTeam);
+      const matchDateLabel = this.formatMatchDateLabel(match.matchDate);
+
       return {
         id: match.id,
-        trackingScope: match.matchDate < dayStart ? 'CARRY_OVER' : 'TODAY',
+        trackingScope: isCarryOver ? 'CARRY_OVER' : 'TODAY',
         homeTeam: match.homeTeam.name,
         awayTeam: match.awayTeam.name,
         homeTeamCode: match.homeTeam.code,
         awayTeamCode: match.awayTeam.code,
+        displayName,
+        matchDateLabel,
+        carryOverReason: isCarryOver
+          ? this.getCarryOverReason(match)
+          : null,
         matchDate: match.matchDate.toISOString(),
         status: match.status,
         tournament: match.tournament?.name ?? null,
@@ -605,36 +602,62 @@ export class AutomationObservabilityService {
   }
 
   private getStepLabel(step: AutomationStep): string {
-    switch (step) {
-      case AutomationStep.MATCH_REMINDER:
-        return 'Recordatorio 60 min';
-      case AutomationStep.PREDICTION_CLOSING:
-        return 'Cierre de predicciones';
-      case AutomationStep.ESCALATION_T45:
-        return 'Escalada T-45';
-      case AutomationStep.ESCALATION_T30:
-        return 'Escalada T-30';
-      case AutomationStep.ESCALATION_FINAL:
-        return 'Escalada final (cierre+5)';
-      case AutomationStep.RESULT_NOTIFICATION:
-        return 'Notificación de resultado';
-      case AutomationStep.PREDICTION_REPORT:
-        return 'Reporte de predicciones';
-      case AutomationStep.RESULT_REPORT:
-        return 'Reporte de resultados';
-      case AutomationStep.MATCH_START:
-        return 'Inicio partido';
-      case AutomationStep.HALFTIME:
-        return 'Medio tiempo';
-      case AutomationStep.SECOND_HALF_START:
-        return '2.ª parte';
-      case AutomationStep.MATCH_LIVE_END:
-        return 'Fin partido (live)';
-      case AutomationStep.GOAL_IMPACT:
-        return 'Impacto gol (WA)';
-      default:
-        return step;
+    return getCatalogEntry(step)?.label ?? step;
+  }
+
+  private buildMatchDisplayName(
+    homeTeam: { name: string; code: string | null },
+    awayTeam: { name: string; code: string | null },
+  ): string {
+    const home = this.resolveTeamLabel(homeTeam);
+    const away = this.resolveTeamLabel(awayTeam);
+    return `${home} vs ${away}`;
+  }
+
+  private resolveTeamLabel(team: { name: string; code: string | null }): string {
+    const name = team.name?.trim();
+    if (name && !/^tbd$|^por definir$|^unknown$/i.test(name)) {
+      return name;
     }
+    if (team.code?.trim()) {
+      return team.code.trim();
+    }
+    return 'Por definir';
+  }
+
+  private formatMatchDateLabel(matchDate: Date): string {
+    return matchDate.toLocaleDateString(BOGOTA_LOCALE, {
+      timeZone: BOGOTA_TIMEZONE,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+  }
+
+  private getCarryOverReason(match: {
+    status: MatchStatus;
+    predictionReportSentAt: Date | null;
+    resultNotificationSentAt: Date | null;
+  }): string {
+    if (match.status === MatchStatus.LIVE) {
+      return 'Partido en vivo desde día anterior';
+    }
+    if (match.status === MatchStatus.SCHEDULED) {
+      return 'Partido reprogramado o pendiente de inicio';
+    }
+    if (
+      match.status === MatchStatus.FINISHED &&
+      !match.resultNotificationSentAt
+    ) {
+      return 'Pendiente notificación de resultado';
+    }
+    if (
+      match.status === MatchStatus.FINISHED &&
+      !match.predictionReportSentAt
+    ) {
+      return 'Pendiente reporte de predicciones';
+    }
+    return 'Seguimiento operativo arrastrado';
   }
 
   private mapRunToStepState(

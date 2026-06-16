@@ -24,6 +24,7 @@ import {
   escalationCheckpointToMinutes,
   getEscalationCheckpointsMinutes,
 } from '../config/automation-timing.util';
+import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { normalizeClosePredictionMinutes } from '../../notifications/match-automation-sweep-context';
 import {
   getReminderMatches,
@@ -50,6 +51,7 @@ export class PreMatchOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly observability: AutomationObservabilityService,
     private readonly notificationScheduler: NotificationScheduler,
+    private readonly stepConfig: AutomationStepConfigService,
     @Optional() private readonly waGroup?: WhatsappGroupService,
   ) {}
 
@@ -71,6 +73,10 @@ export class PreMatchOrchestratorService {
   private async processT60Reminders(
     context: MatchAutomationSweepContext,
   ): Promise<void> {
+    if (!(await this.stepConfig.isStepEnabled(AutomationStep.MATCH_REMINDER))) {
+      return;
+    }
+
     const matches = getReminderMatches(context);
 
     for (const match of matches) {
@@ -193,6 +199,11 @@ export class PreMatchOrchestratorService {
           closeMinutes,
         );
         if (!checkpoint) continue;
+
+        const escalationStep = escalationCheckpointToAutomationStep(checkpoint);
+        if (!(await this.stepConfig.isStepEnabled(escalationStep))) {
+          continue;
+        }
 
         const matches = getMatchesInMinutesBeforeKickoffWindow(
           context,

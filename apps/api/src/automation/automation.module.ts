@@ -5,6 +5,7 @@ import { PredictionsModule } from '../predictions/predictions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { AutomationFeatureFlagsService } from './config/automation-feature-flags.service';
+import { AutomationStepConfigService } from './config/automation-step-config.service';
 import { GoalImpactAnalyzerService } from './live/goal-impact-analyzer.service';
 import { LiveOrchestratorService } from './live/live-orchestrator.service';
 import { PostMatchOrchestratorService } from './post-match/post-match-orchestrator.service';
@@ -22,6 +23,7 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
   ],
   providers: [
     AutomationFeatureFlagsService,
+    AutomationStepConfigService,
     GoalImpactAnalyzerService,
     LiveOrchestratorService,
     PostMatchOrchestratorService,
@@ -31,6 +33,7 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
   ],
   exports: [
     AutomationFeatureFlagsService,
+    AutomationStepConfigService,
     GoalImpactAnalyzerService,
     LiveOrchestratorService,
     PostMatchOrchestratorService,

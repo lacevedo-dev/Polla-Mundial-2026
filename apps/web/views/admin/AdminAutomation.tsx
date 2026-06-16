@@ -44,6 +44,21 @@ interface FeatureFlagState {
   locked: boolean;
 }
 
+interface StepCatalogEntry {
+  key: string;
+  phase: 'PRE_MATCH' | 'LIVE' | 'POST_MATCH';
+  label: string;
+  shortLabel: string;
+  description: string;
+  schedulerId: string | null;
+  channels: string[];
+  requiresFlag?: 'preMatchV2' | 'livePhaseV2' | 'postMatchV2';
+  defaultEnabled: boolean;
+  enabled: boolean;
+  flagActive: boolean;
+  operational: boolean;
+}
+
 interface AutomationStatus {
   channels: Record<string, ChannelInfo>;
   schedulers: SchedulerDef[];
@@ -53,6 +68,12 @@ interface AutomationStatus {
     preMatchV2: FeatureFlagState;
     livePhaseV2: FeatureFlagState;
     postMatchV2: FeatureFlagState;
+  };
+  stepCatalog?: StepCatalogEntry[];
+  timingHints?: {
+    defaultCloseMinutes: number;
+    finalEscalationMinutesBeforeKickoff: number;
+    timezone: string;
   };
 }
 
@@ -135,6 +156,11 @@ interface OperationsMatch {
   trackingScope?: 'TODAY' | 'CARRY_OVER';
   homeTeam: string;
   awayTeam: string;
+  homeTeamCode?: string | null;
+  awayTeamCode?: string | null;
+  displayName?: string;
+  matchDateLabel?: string;
+  carryOverReason?: string | null;
   matchDate: string;
   status: string;
   tournament: string | null;
@@ -215,111 +241,64 @@ const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {
   email: { label: 'Email', icon: <Send size={14} /> },
 };
 
-const STEP_CHANNELS: Record<string, string[]> = {
-  MATCH_REMINDER:       ['push', 'inApp', 'email'],
-  ESCALATION_T45:       ['push', 'inApp', 'waGroup'],
-  ESCALATION_T30:       ['push', 'inApp', 'waGroup'],
-  ESCALATION_FINAL:     ['push', 'inApp', 'waGroup'],
-  PREDICTION_CLOSING:   ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
-  MATCH_START:          ['push', 'inApp', 'waGroup'],
-  HALFTIME:             ['push', 'inApp', 'waGroup'],
-  SECOND_HALF_START:    ['push', 'inApp', 'waGroup'],
-  MATCH_LIVE_END:       ['push', 'inApp', 'waGroup'],
-  GOAL_IMPACT:          ['waGroup'],
-  RESULT_NOTIFICATION:  ['push', 'whatsapp', 'waGroup'],
-  PREDICTION_REPORT:    ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
-  RESULT_REPORT:        ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
-};
-
-const MATRIX_STEP_KEYS = [
-  'MATCH_REMINDER',
-  'ESCALATION_T45',
-  'ESCALATION_T30',
-  'ESCALATION_FINAL',
-  'PREDICTION_CLOSING',
-  'MATCH_START',
-  'HALFTIME',
-  'SECOND_HALF_START',
-  'MATCH_LIVE_END',
-  'GOAL_IMPACT',
-  'RESULT_NOTIFICATION',
-  'PREDICTION_REPORT',
-  'RESULT_REPORT',
-] as const;
-
-const MATRIX_GRID_COLUMNS =
-  'minmax(0,1.2fr) auto auto auto repeat(13, minmax(3.5rem, 1fr)) 1.2rem';
-
-/** Paso → schedulerId (mismo mapeo que backend / overrides WA). */
-const STEP_TO_SCHEDULER: Record<string, string> = {
-  MATCH_REMINDER: 'match_reminder',
-  ESCALATION_T45: 'pre_match_escalation',
-  ESCALATION_T30: 'pre_match_escalation',
-  ESCALATION_FINAL: 'pre_match_escalation',
-  PREDICTION_CLOSING: 'prediction_closing',
-  MATCH_START: 'live_match_start',
-  HALFTIME: 'live_halftime',
-  SECOND_HALF_START: 'live_second_half',
-  MATCH_LIVE_END: 'live_match_end',
-  GOAL_IMPACT: 'live_goal_impact',
-  RESULT_NOTIFICATION: 'match_result',
-  PREDICTION_REPORT: 'prediction_report',
-  RESULT_REPORT: 'result_report',
-};
-
-const STEP_CONFIG_LABELS: Record<string, string> = {
-  MATCH_REMINDER: 'Recordatorio T-60',
-  ESCALATION_T45: 'Escalada T-45',
-  ESCALATION_T30: 'Escalada T-30',
-  ESCALATION_FINAL: 'Escalada final',
-  PREDICTION_CLOSING: 'Cierre predicciones',
-  MATCH_START: 'Inicio partido',
-  HALFTIME: 'Medio tiempo',
-  SECOND_HALF_START: '2.ª parte',
-  MATCH_LIVE_END: 'Fin partido (live)',
-  GOAL_IMPACT: 'Impacto gol (WA)',
-  RESULT_NOTIFICATION: 'Resultado personal',
-  PREDICTION_REPORT: 'Reporte predicciones',
-  RESULT_REPORT: 'Reporte resultados',
-};
-
 const CONFIG_CHANNEL_KEYS = ['push', 'inApp', 'waGroup', 'email', 'whatsapp'] as const;
 
-const MATRIX_PHASES = [
-  {
-    id: 'pre',
-    label: 'Pre-partido',
-    className: 'bg-sky-50 text-sky-800 border-sky-200',
-    fromCol: 5,
-    toCol: 10,
-  },
-  {
-    id: 'live',
-    label: 'En vivo',
-    className: 'bg-rose-50 text-rose-800 border-rose-200',
-    fromCol: 10,
-    toCol: 15,
-  },
-  {
-    id: 'post',
-    label: 'Post-partido',
-    className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-    fromCol: 15,
-    toCol: 18,
-  },
+const PHASE_META = [
+  { id: 'pre', phase: 'PRE_MATCH' as const, label: 'Pre-partido', className: 'bg-sky-50 text-sky-800 border-sky-200' },
+  { id: 'live', phase: 'LIVE' as const, label: 'En vivo', className: 'bg-rose-50 text-rose-800 border-rose-200' },
+  { id: 'post', phase: 'POST_MATCH' as const, label: 'Post-partido', className: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
 ] as const;
 
-const MATRIX_COLUMN_LABELS = [
-  'T-60', 'T-45', 'T-30', 'T-f', 'Cierre',
-  'Inicio', 'HT', '2H', 'Fin', 'Imp.G',
-  'Result.', 'P.Rep', 'Rep.F',
-] as const;
+const EXPANDED_PHASE_GROUPS = PHASE_META.map(({ id, phase, label }) => ({ id, phase, label }));
 
-const EXPANDED_PHASE_GROUPS = [
-  { id: 'pre', label: 'Pre-partido', keys: ['MATCH_REMINDER', 'ESCALATION_T45', 'ESCALATION_T30', 'ESCALATION_FINAL', 'PREDICTION_CLOSING'] },
-  { id: 'live', label: 'En vivo', keys: ['MATCH_START', 'HALFTIME', 'SECOND_HALF_START', 'MATCH_LIVE_END', 'GOAL_IMPACT'] },
-  { id: 'post', label: 'Post-partido', keys: ['RESULT_NOTIFICATION', 'PREDICTION_REPORT', 'RESULT_REPORT'] },
-] as const;
+function buildMatrixGridColumns(stepCount: number): string {
+  return `minmax(0,1.55fr) auto auto auto repeat(${Math.max(stepCount, 1)}, minmax(3.25rem, 1fr)) 1.2rem`;
+}
+
+function getVisibleSteps(catalog: StepCatalogEntry[] | undefined): StepCatalogEntry[] {
+  return (catalog ?? []).filter((step) => step.enabled);
+}
+
+function getStepChannels(catalog: StepCatalogEntry[] | undefined, stepKey: string): string[] {
+  return catalog?.find((step) => step.key === stepKey)?.channels ?? [];
+}
+
+function buildPhaseColumnSpans(steps: StepCatalogEntry[]): Array<{ id: string; label: string; className: string; fromCol: number; toCol: number }> {
+  let col = 5;
+  return PHASE_META.map((phase) => {
+    const count = steps.filter((step) => step.phase === phase.phase).length;
+    const fromCol = col;
+    col += count;
+    return { id: phase.id, label: phase.label, className: phase.className, fromCol, toCol: fromCol + count };
+  }).filter((phase) => phase.toCol > phase.fromCol);
+}
+
+function resolveEscalationFinalShortLabel(timing?: AutomationStatus['timingHints']): string {
+  if (!timing) return 'T-f';
+  return `T-${timing.finalEscalationMinutesBeforeKickoff}`;
+}
+
+function resolveStepShortLabel(step: StepCatalogEntry, timing?: AutomationStatus['timingHints']): string {
+  if (step.key === 'ESCALATION_FINAL') return resolveEscalationFinalShortLabel(timing);
+  return step.shortLabel;
+}
+
+function formatMatchTitle(match: OperationsMatch): string {
+  if (match.displayName?.trim()) return match.displayName.trim();
+  const home = match.homeTeam?.trim() || match.homeTeamCode?.trim() || 'Local';
+  const away = match.awayTeam?.trim() || match.awayTeamCode?.trim() || 'Visitante';
+  return `${home} vs ${away}`;
+}
+
+function formatMatchSubtitle(match: OperationsMatch): string {
+  const parts: string[] = [];
+  if (match.tournament) parts.push(match.tournament);
+  if (match.trackingScope === 'CARRY_OVER') {
+    if (match.matchDateLabel) parts.push(`Fecha partido: ${match.matchDateLabel}`);
+    if (match.carryOverReason) parts.push(match.carryOverReason);
+  }
+  return parts.join(' · ');
+}
 
 // Cuántos se enviaron/fallaron por canal, extraído de latestDetails.channelBreakdown
 function getChannelCounters(
@@ -666,14 +645,16 @@ function StepCell({
   step,
   onIncident,
   match,
+  stepChannels,
 }: {
   step: OperationsStep;
   onIncident?: (info: IncidentInfo) => void;
   match: OperationsMatch;
+  stepChannels: string[];
 }) {
   const navigate = useNavigate();
   const breakdown = step.latestDetails?.channelBreakdown;
-  const channels = STEP_CHANNELS[step.key] ?? [];
+  const channels = stepChannels;
   const canRetry =
     step.status === 'FAILED' ||
     step.status === 'OVERDUE' ||
@@ -799,38 +780,49 @@ function MatrixRow({
   expanded,
   onExpand,
   onIncident,
+  visibleSteps,
+  gridColumns,
+  stepCatalog,
 }: {
   match: OperationsMatch;
   expanded: boolean;
   onExpand: (id: string) => void;
   onIncident?: (info: IncidentInfo) => void;
+  visibleSteps: StepCatalogEntry[];
+  gridColumns: string;
+  stepCatalog: StepCatalogEntry[];
 }) {
-  const STEP_KEYS = [...MATRIX_STEP_KEYS];
-  const orderedSteps = STEP_KEYS.map((k) => match.steps.find((s) => s.key === k)).filter(Boolean) as OperationsStep[];
+  const orderedSteps = visibleSteps
+    .map((catalogStep) => match.steps.find((s) => s.key === catalogStep.key))
+    .filter(Boolean) as OperationsStep[];
+  const matchTitle = formatMatchTitle(match);
+  const matchSubtitle = formatMatchSubtitle(match);
 
   return (
     <>
       <div
         className="grid cursor-pointer items-center px-4 py-3 transition-colors hover:bg-slate-50"
-        style={{ gridTemplateColumns: MATRIX_GRID_COLUMNS }}
+        style={{ gridTemplateColumns: gridColumns }}
         onClick={() => onExpand(match.id)}
       >
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-semibold text-slate-900">
-              {match.homeTeam} vs {match.awayTeam}
+        <div className="min-w-0 pr-2">
+          <p className="truncate text-sm font-semibold text-slate-900" title={matchTitle}>
+            {matchTitle}
+          </p>
+          {matchSubtitle && (
+            <p className="truncate text-[10px] text-slate-500" title={matchSubtitle}>
+              {matchSubtitle}
             </p>
-            {match.trackingScope === 'CARRY_OVER' && (
-              <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-black uppercase text-violet-700">
-                Arrastre
-              </span>
-            )}
-          </div>
-          {match.tournament && <p className="truncate text-[10px] text-slate-500">{match.tournament}</p>}
+          )}
         </div>
 
         <div className="flex flex-col items-center gap-1 px-3">
-          <span className="text-sm font-bold text-slate-700">{fmtTime(match.matchDate)}</span>
+          <span className="text-sm font-bold text-slate-700" title={match.matchDateLabel ?? undefined}>
+            {fmtTime(match.matchDate)}
+          </span>
+          {match.trackingScope === 'CARRY_OVER' && match.matchDateLabel && (
+            <span className="text-[9px] font-semibold text-violet-600">{match.matchDateLabel}</span>
+          )}
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_BADGES[match.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>
             {STATUS_LABELS[match.status] ?? match.status}
           </span>
@@ -854,7 +846,12 @@ function MatrixRow({
         {/* Steps */}
         {orderedSteps.map((step) => (
           <div key={step.key} className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-            <StepCell step={step} onIncident={onIncident} match={match} />
+            <StepCell
+              step={step}
+              onIncident={onIncident}
+              match={match}
+              stepChannels={getStepChannels(stepCatalog, step.key)}
+            />
           </div>
         ))}
 
@@ -889,9 +886,10 @@ function MatrixRow({
 
             {/* Pasos por fase */}
             {EXPANDED_PHASE_GROUPS.map((phase) => {
-              const phaseSteps = match.steps.filter((s) =>
-                (phase.keys as readonly string[]).includes(s.key),
-              );
+              const phaseStepKeys = stepCatalog
+                .filter((entry) => entry.phase === phase.phase)
+                .map((entry) => entry.key);
+              const phaseSteps = match.steps.filter((s) => phaseStepKeys.includes(s.key));
               if (phaseSteps.length === 0) return null;
               return (
                 <div key={phase.id}>
@@ -1092,23 +1090,37 @@ function ChannelCard({ id, info }: { id: string; info: ChannelInfo }) {
 }
 
 function StepConfigMatrix({
+  stepCatalog,
   channelStatus,
   channelOverrides,
+  timingHints,
   onToggleChannel,
+  onToggleStep,
 }: {
+  stepCatalog: StepCatalogEntry[];
   channelStatus: AutomationStatus['channels'];
   channelOverrides: Record<string, Record<string, boolean>>;
+  timingHints?: AutomationStatus['timingHints'];
   onToggleChannel: (schedulerId: string, channel: string, enabled: boolean) => void;
+  onToggleStep: (stepKey: string, enabled: boolean) => Promise<void>;
 }) {
   const [toggling, setToggling] = useState<string | null>(null);
 
-  const handleToggle = async (stepKey: string, channel: string, currentlyActive: boolean) => {
-    const schedulerId = STEP_TO_SCHEDULER[stepKey];
-    if (!schedulerId) return;
-    const key = `${stepKey}:${channel}`;
+  const handleToggleChannel = async (step: StepCatalogEntry, channel: string, currentlyActive: boolean) => {
+    if (!step.schedulerId) return;
+    const key = `${step.key}:${channel}`;
     setToggling(key);
     try {
-      await onToggleChannel(schedulerId, channel, !currentlyActive);
+      await onToggleChannel(step.schedulerId, channel, !currentlyActive);
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const handleToggleStep = async (step: StepCatalogEntry) => {
+    setToggling(`step:${step.key}`);
+    try {
+      await onToggleStep(step.key, !step.enabled);
     } finally {
       setToggling(null);
     }
@@ -1117,55 +1129,79 @@ function StepConfigMatrix({
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <p className="text-sm font-semibold text-slate-900">Canales por paso de automatización</p>
+        <p className="text-sm font-semibold text-slate-900">Pasos y canales de automatización</p>
         <p className="mt-1 text-xs text-slate-500">
-          Los toggles actualizan el mismo override que la pestaña Schedulers. Pasos que comparten scheduler (p. ej. escaladas) se configuran juntos.
+          Activa o desactiva cada paso de forma independiente. Los canales comparten override con la pestaña Schedulers cuando el paso usa el mismo scheduler.
         </p>
       </div>
       <table className="min-w-full text-xs">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
             <th className="px-4 py-3 text-left">Paso</th>
+            <th className="px-3 py-3 text-center">Activo</th>
             {CONFIG_CHANNEL_KEYS.map((ch) => (
               <th key={ch} className="px-3 py-3 text-center">{CHANNEL_META[ch]?.label ?? ch}</th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {MATRIX_STEP_KEYS.map((stepKey) => {
-            const schedulerId = STEP_TO_SCHEDULER[stepKey];
-            const stepChannels = STEP_CHANNELS[stepKey] ?? [];
+          {stepCatalog.map((step) => {
+            const rowMuted = !step.enabled;
             return (
-              <tr key={stepKey} className="hover:bg-slate-50/80">
+              <tr key={step.key} className={rowMuted ? 'bg-slate-50/80 opacity-80' : 'hover:bg-slate-50/80'}>
                 <td className="px-4 py-3 font-semibold text-slate-800">
-                  {STEP_CONFIG_LABELS[stepKey] ?? stepKey}
-                  {schedulerId && (
-                    <span className="mt-0.5 block font-mono text-[10px] font-normal text-slate-400">{schedulerId}</span>
+                  <span>
+                    {step.key === 'ESCALATION_FINAL'
+                      ? `Escalada ${resolveEscalationFinalShortLabel(timingHints)}`
+                      : step.label}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] font-normal text-slate-500">{step.description}</span>
+                  {step.schedulerId && (
+                    <span className="mt-0.5 block font-mono text-[10px] font-normal text-slate-400">{step.schedulerId}</span>
+                  )}
+                  {step.requiresFlag && !step.flagActive && (
+                    <span className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700">
+                      Requiere flag v2
+                    </span>
                   )}
                 </td>
+                <td className="px-3 py-3 text-center">
+                  <button
+                    type="button"
+                    disabled={toggling === `step:${step.key}`}
+                    onClick={() => handleToggleStep(step)}
+                    className={`inline-flex h-7 min-w-12 items-center justify-center rounded-full border px-2 text-[10px] font-black uppercase transition ${
+                      step.enabled
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {toggling === `step:${step.key}` ? '…' : step.enabled ? 'ON' : 'OFF'}
+                  </button>
+                </td>
                 {CONFIG_CHANNEL_KEYS.map((ch) => {
-                  const applies = stepChannels.includes(ch);
+                  const applies = step.channels.includes(ch);
                   if (!applies) {
                     return <td key={ch} className="px-3 py-3 text-center text-slate-300">—</td>;
                   }
                   const sysEnabled = channelStatus[ch]?.enabled ?? false;
-                  const overrideVal = schedulerId ? channelOverrides[schedulerId]?.[ch] : undefined;
+                  const overrideVal = step.schedulerId ? channelOverrides[step.schedulerId]?.[ch] : undefined;
                   const manuallyDisabled = overrideVal === false;
-                  const effectivelyActive = sysEnabled && !manuallyDisabled;
-                  const isTogglable = ch !== 'inApp' && !!schedulerId && sysEnabled;
-                  const toggleKey = `${stepKey}:${ch}`;
+                  const effectivelyActive = step.enabled && sysEnabled && !manuallyDisabled;
+                  const isTogglable = ch !== 'inApp' && !!step.schedulerId && sysEnabled && step.enabled;
+                  const toggleKey = `${step.key}:${ch}`;
                   return (
                     <td key={ch} className="px-3 py-3 text-center">
                       <button
                         type="button"
                         disabled={!isTogglable || toggling === toggleKey}
-                        onClick={() => isTogglable && handleToggle(stepKey, ch, effectivelyActive)}
-                        className={`inline-flex h-7 min-w-[3rem] items-center justify-center rounded-full border px-2 text-[10px] font-black uppercase transition ${
+                        onClick={() => isTogglable && handleToggleChannel(step, ch, effectivelyActive)}
+                        className={`inline-flex h-7 min-w-12 items-center justify-center rounded-full border px-2 text-[10px] font-black uppercase transition ${
                           effectivelyActive
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-slate-200 bg-slate-100 text-slate-500'
                         } ${isTogglable ? 'cursor-pointer hover:opacity-80' : 'cursor-default opacity-70'}`}
-                        title={!sysEnabled ? (channelStatus[ch]?.description ?? 'Canal no configurado') : undefined}
+                        title={!step.enabled ? 'Activa el paso primero' : !sysEnabled ? (channelStatus[ch]?.description ?? 'Canal no configurado') : undefined}
                       >
                         {toggling === toggleKey ? '…' : effectivelyActive ? 'ON' : 'OFF'}
                       </button>
@@ -1283,7 +1319,17 @@ function SchedulerCard({
   );
 }
 
-function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInfo; onClose: () => void; onRefresh: () => void }) {
+function IncidentModal({
+  incident,
+  onClose,
+  onRefresh,
+  stepCatalog,
+}: {
+  incident: IncidentInfo;
+  onClose: () => void;
+  onRefresh: () => void;
+  stepCatalog?: StepCatalogEntry[];
+}) {
   const [retrying, setRetrying] = useState(false);
   const [retryResult, setRetryResult] = useState<RetryResult | null>(null);
   const [preview, setPreview] = useState<MessagePreview | null>(null);
@@ -1295,7 +1341,7 @@ function IncidentModal({ incident, onClose, onRefresh }: { incident: IncidentInf
 
   const step = incident.step;
   const breakdown = step.latestDetails?.channelBreakdown;
-  const stepChannels = STEP_CHANNELS[step.key] ?? [];
+  const stepChannels = getStepChannels(stepCatalog, step.key);
   const isProblemStep =
     step.status === 'FAILED' ||
     step.status === 'OVERDUE' ||
@@ -1675,6 +1721,16 @@ export default function AdminAutomation() {
     }
   };
 
+  const handleToggleStep = async (stepKey: string, enabled: boolean) => {
+    const result = await request<{ ok: boolean; stepCatalog: StepCatalogEntry[] }>(
+      '/admin/automation/step-overrides',
+      { method: 'PUT', body: JSON.stringify({ step: stepKey, enabled }) },
+    );
+    if (result.ok) {
+      setStatus((prev) => prev ? { ...prev, stepCatalog: result.stepCatalog } : prev);
+    }
+  };
+
   const handleToggleChannel = async (schedulerId: string, channel: string, enabled: boolean) => {
     try {
       const result = await request<{ ok: boolean; overrides: Record<string, Record<string, boolean>> }>(
@@ -1750,15 +1806,30 @@ export default function AdminAutomation() {
     },
   ];
 
+  const visibleSteps = useMemo(() => getVisibleSteps(status?.stepCatalog), [status?.stepCatalog]);
+  const matrixGridColumns = useMemo(
+    () => buildMatrixGridColumns(visibleSteps.length),
+    [visibleSteps.length],
+  );
+  const matrixPhaseSpans = useMemo(
+    () => buildPhaseColumnSpans(visibleSteps),
+    [visibleSteps],
+  );
+
   const filteredMatches = useMemo(() => {
     if (!matrix) return [];
     const q = matrixSearch.trim().toLowerCase();
     if (!q) return matrix.matches;
-    return matrix.matches.filter((match) =>
-      match.homeTeam.toLowerCase().includes(q) ||
-      match.awayTeam.toLowerCase().includes(q) ||
-      (match.tournament ?? '').toLowerCase().includes(q),
-    );
+    return matrix.matches.filter((match) => {
+      const title = formatMatchTitle(match).toLowerCase();
+      return (
+        title.includes(q) ||
+        match.homeTeam.toLowerCase().includes(q) ||
+        match.awayTeam.toLowerCase().includes(q) ||
+        (match.tournament ?? '').toLowerCase().includes(q) ||
+        (match.carryOverReason ?? '').toLowerCase().includes(q)
+      );
+    });
   }, [matrix, matrixSearch]);
 
   const filteredHistory = useMemo(() => {
@@ -1777,7 +1848,14 @@ export default function AdminAutomation() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8">
-      {incident && <IncidentModal incident={incident} onClose={() => setIncident(null)} onRefresh={loadBase} />}
+      {incident && (
+        <IncidentModal
+          incident={incident}
+          onClose={() => setIncident(null)}
+          onRefresh={loadBase}
+          stepCatalog={status?.stepCatalog}
+        />
+      )}
       <div className="mx-auto max-w-7xl">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -1883,10 +1961,10 @@ export default function AdminAutomation() {
             <div className="overflow-x-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div
                 className="grid border-b border-slate-100 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest"
-                style={{ gridTemplateColumns: MATRIX_GRID_COLUMNS }}
+                style={{ gridTemplateColumns: matrixGridColumns }}
               >
                 <span style={{ gridColumn: '1 / 5' }} />
-                {MATRIX_PHASES.map((phase) => (
+                {matrixPhaseSpans.map((phase) => (
                   <span
                     key={phase.id}
                     style={{ gridColumn: `${phase.fromCol} / ${phase.toCol}` }}
@@ -1897,19 +1975,30 @@ export default function AdminAutomation() {
                 ))}
                 <span />
               </div>
-              <div className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500" style={{ gridTemplateColumns: MATRIX_GRID_COLUMNS }}>
+              <div className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500" style={{ gridTemplateColumns: matrixGridColumns }}>
                 <span>Partido</span>
                 <span className="px-3">Hora</span>
                 <span className="text-center px-2">Estado</span>
                 <span className="text-center px-2">Sync</span>
-                {MATRIX_COLUMN_LABELS.map((label) => (
-                  <span key={label} className="text-center">{label}</span>
+                {visibleSteps.map((step) => (
+                  <span key={step.key} className="text-center" title={step.label}>
+                    {resolveStepShortLabel(step, status?.timingHints)}
+                  </span>
                 ))}
                 <span />
               </div>
               <div className="divide-y divide-slate-200">
                 {filteredMatches.map((match) => (
-                  <MatrixRow key={match.id} match={match} expanded={expandedMatch === match.id} onExpand={(id) => setExpandedMatch((current) => current === id ? null : id)} onIncident={setIncident} />
+                  <MatrixRow
+                    key={match.id}
+                    match={match}
+                    expanded={expandedMatch === match.id}
+                    onExpand={(id) => setExpandedMatch((current) => current === id ? null : id)}
+                    onIncident={setIncident}
+                    visibleSteps={visibleSteps}
+                    gridColumns={matrixGridColumns}
+                    stepCatalog={status?.stepCatalog ?? []}
+                  />
                 ))}
               </div>
             </div>
@@ -2003,16 +2092,23 @@ export default function AdminAutomation() {
       {tab === 'config' && status && (
         <div className="space-y-4">
           <StepConfigMatrix
+            stepCatalog={status.stepCatalog ?? []}
             channelStatus={status.channels}
             channelOverrides={status.channelOverrides ?? {}}
+            timingHints={status.timingHints}
             onToggleChannel={handleToggleChannel}
+            onToggleStep={handleToggleStep}
           />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-semibold text-slate-900">Regla de timing (solo lectura)</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               Última escalada = <strong>cierre + 5 min</strong> antes del kickoff.
-              Ejemplo: cierre 15 min → alerta T-20, cierre duro T-15.
-              Si cierre = 10 min → última alerta T-15.
+              {status.timingHints && (
+                <>
+                  {' '}Con cierre default {status.timingHints.defaultCloseMinutes} min → columna{' '}
+                  <strong>{resolveEscalationFinalShortLabel(status.timingHints)}</strong>.
+                </>
+              )}
             </p>
             <p className="mt-2 text-xs text-slate-500">
               Todas las horas mostradas al participante usan <strong>America/Bogota</strong> (formato 24h).

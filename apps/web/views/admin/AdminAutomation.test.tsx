@@ -10,6 +10,14 @@ vi.mock('../../api', () => ({
   request: (...args: any[]) => requestMock(...args),
 }));
 
+const mockStepCatalog = [
+  { key: 'MATCH_REMINDER', phase: 'PRE_MATCH', label: 'Recordatorio T-60', shortLabel: 'T-60', description: '', schedulerId: 'match_reminder', channels: ['push', 'inApp'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'PREDICTION_CLOSING', phase: 'PRE_MATCH', label: 'Cierre predicciones', shortLabel: 'Cierre', description: '', schedulerId: 'prediction_closing', channels: ['push'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'RESULT_NOTIFICATION', phase: 'POST_MATCH', label: 'Resultado personal', shortLabel: 'Result.', description: '', schedulerId: 'match_result', channels: ['push'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'PREDICTION_REPORT', phase: 'POST_MATCH', label: 'Reporte predicciones', shortLabel: 'P.Rep', description: '', schedulerId: 'prediction_report', channels: ['email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'RESULT_REPORT', phase: 'POST_MATCH', label: 'Reporte resultados', shortLabel: 'Rep.F', description: '', schedulerId: 'result_report', channels: ['email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+];
+
 describe('AdminAutomation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,6 +39,12 @@ describe('AdminAutomation', () => {
             livePhaseV2: { enabled: false, source: 'default', locked: false },
             postMatchV2: { enabled: false, source: 'default', locked: false },
           },
+          stepCatalog: mockStepCatalog,
+          timingHints: {
+            defaultCloseMinutes: 15,
+            finalEscalationMinutesBeforeKickoff: 20,
+            timezone: 'America/Bogota',
+          },
         });
       }
 
@@ -42,6 +56,7 @@ describe('AdminAutomation', () => {
             {
               id: 'match-1',
               trackingScope: 'TODAY',
+              displayName: 'Colombia vs Argentina',
               homeTeam: 'Colombia',
               awayTeam: 'Argentina',
               matchDate: '2026-03-29T20:00:00.000Z',
