@@ -17,6 +17,7 @@ type LeagueWithFees = {
     id: string;
     name: string;
     includeBaseFee: boolean;
+    includeStageFees: boolean;
     stageFees: Array<{ type: string; amount: number; active: boolean }>;
 };
 
@@ -27,20 +28,48 @@ export class CorpRankingService {
         private readonly predictionsService: PredictionsService,
     ) {}
 
+    /**
+     * StageFee no está en el schema de api-corp; si la tabla existe en BD
+     * (p. ej. datos sincronizados), la leemos con SQL directo.
+     */
+    private async loadStageFees(
+        leagueId: string,
+    ): Promise<Array<{ type: string; amount: number; active: boolean }>> {
+        try {
+            const rows = await this.prisma.$queryRaw<
+                Array<{ type: string; amount: number; active: number | boolean }>
+            >`SELECT type, amount, active FROM StageFee WHERE leagueId = ${leagueId}`;
+
+            return rows.map((row) => ({
+                type: String(row.type),
+                amount: Number(row.amount ?? 0),
+                active: Boolean(row.active),
+            }));
+        } catch {
+            return [];
+        }
+    }
+
     /** Polla activa del tenant: la liga ACTIVE más reciente (opción A). */
     async resolveActiveLeague(tenantId: string): Promise<LeagueWithFees | null> {
-        return this.prisma.league.findFirst({
+        const league = await this.prisma.league.findFirst({
             where: { tenantId, status: 'ACTIVE' },
             orderBy: { createdAt: 'desc' },
             select: {
                 id: true,
                 name: true,
                 includeBaseFee: true,
-                stageFees: {
-                    select: { type: true, amount: true, active: true },
-                },
+                includeStageFees: true,
             },
         });
+
+        if (!league) return null;
+
+        const stageFees = league.includeStageFees
+            ? await this.loadStageFees(league.id)
+            : [];
+
+        return { ...league, stageFees };
     }
 
     buildAvailableCategories(league: LeagueWithFees): CorpLeaderboardCategory[] {
