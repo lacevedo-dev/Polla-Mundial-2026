@@ -1,0 +1,46 @@
+---
+description: Verificar cambios con TypeScript; evitar build completo salvo que sea necesario
+alwaysApply: true
+---
+
+# Verificación: TypeScript, no build
+
+Al validar que un cambio compila o “funciona”, **no ejecutes `npm run build`** por defecto. Los builds de Nest/webpack en este monorepo son lentos (minutos) y no son necesarios para revisar la mayoría de cambios de código.
+
+## Por defecto: solo typecheck
+
+Usa `tsc --noEmit` en el app que tocaste:
+
+| App | Comando |
+|-----|---------|
+| `apps/api` | `npx tsc -p tsconfig.build.json --noEmit` |
+| `apps/api-corp` | `npx tsc -p tsconfig.build.json --noEmit` |
+| `apps/web` | `npx tsc --noEmit` |
+| `apps/web-uni` | `npx tsc --noEmit` |
+| `apps/web-corp` | `npx tsc --noEmit` |
+
+Ejecuta desde el directorio del app (`apps/api`, `apps/api-corp`, etc.).
+
+Si solo cambiaste archivos de un paquete, typecheck **solo ese app**, no el monorepo entero.
+
+## Cuándo sí hacer build
+
+Solo ejecuta `npm run build` (o Docker build) si:
+
+- El usuario pide explícitamente build o deploy.
+- Cambiaste `webpack.config.js`, `nest-cli.json`, Dockerfile o alias de paths que webpack resuelve en build time.
+- El cambio depende de generación en build (`prisma generate` en CI) y typecheck no alcanza.
+- Typecheck pasó pero hay sospecha de error solo visible en bundling (imports reemplazados por webpack en `api-corp`).
+
+## Prioridad de herramientas
+
+1. Linter / diagnósticos del IDE (`read_lints` en archivos editados).
+2. `tsc --noEmit` del app afectado.
+3. Tests existentes del app, si aplican y el usuario no pidió solo typecheck.
+4. `npm run build` — último recurso.
+
+## No hacer
+
+- No lanzar `npm run build` en `api-corp` “para ver si compila” tras un cambio TypeScript rutinario.
+- No esperar builds de varios minutos si typecheck ya confirma los tipos.
+- No asumir que el build local es obligatorio antes de commit; el CI/Dokploy hará el build cuando despliegue.

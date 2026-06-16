@@ -21,7 +21,7 @@ import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-stor
 import { ParticipationService } from '@corp-api/corporate-tenant/participation.service';
 import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operations.service';
 import { PredictionsModule } from '@corp-api/predictions/predictions.module';
-import { CorpMembersResendController } from './corp-members-resend.controller';
+import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-members-resend.controller';
 
 @Module({
     imports: [PrismaModule, EmailModule, PredictionsModule],
