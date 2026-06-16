@@ -610,9 +610,9 @@ export class AdminAutomationController {
                 : 'SUCCESS'
               : 'FAILED',
             summary: this.buildMatchReminderRetrySummary(label, delivery),
-            deliveredCount: delivery.usersNotified,
+            deliveredCount: delivery.pushSent + delivery.waGroupSent + delivery.whatsappSent,
             failedCount: delivery.pushFailed + delivery.waGroupFailed,
-            warningCount: delivery.pushFailed + delivery.waGroupFailed,
+            warningCount: delivery.pushFailed + delivery.waGroupFailed + (delivery.inAppSent > 0 && !ok ? 1 : 0),
             details: {
               channelBreakdown: {
                 pushSent: delivery.pushSent,
@@ -620,7 +620,7 @@ export class AdminAutomationController {
                 pushDevices: delivery.pushDevices,
                 whatsappSentCount: delivery.whatsappSent,
                 emailQueued: delivery.emailQueued,
-                inAppSent: delivery.usersNotified,
+                inAppSent: delivery.inAppSent,
                 waGroupSent: delivery.waGroupSent,
                 waGroupFailed: delivery.waGroupFailed,
               },
@@ -769,9 +769,9 @@ export class AdminAutomationController {
   private isMatchReminderRetrySuccessful(delivery: MatchReminderRetrySummary): boolean {
     if (delivery.audienceCount === 0) return false;
     return (
-      delivery.usersNotified > 0 ||
+      delivery.pushSent > 0 ||
       delivery.waGroupSent > 0 ||
-      delivery.pushSent > 0
+      delivery.whatsappSent > 0
     );
   }
 
@@ -784,17 +784,30 @@ export class AdminAutomationController {
     }
 
     const parts = [
-      `${delivery.usersNotified} in-app`,
+      delivery.inAppSent > 0 ? `${delivery.inAppSent} in-app` : null,
       `${delivery.pushSent}/${delivery.pushDevices} push`,
-      `${delivery.waGroupSent} WA grupo`,
-    ];
+      delivery.waGroupSent > 0 ? `${delivery.waGroupSent} WA grupo` : null,
+      delivery.whatsappSent > 0 ? `${delivery.whatsappSent} WA personal` : null,
+      delivery.emailQueued > 0 ? `${delivery.emailQueued} email encolado` : null,
+    ].filter(Boolean);
+
+    if (delivery.waGroupFailed > 0 && delivery.waGroupSent === 0) {
+      return `Reintento fallido para ${label}: WA grupo no envió (${delivery.waGroupFailed} fallo(s)). ¿WhatsApp Web conectado? ${parts.join(', ')}.`;
+    }
 
     if (delivery.pushFailed > 0 || delivery.waGroupFailed > 0) {
       return `Reintento parcial para ${label}: ${parts.join(', ')}. Fallos: push ${delivery.pushFailed}, WA grupo ${delivery.waGroupFailed}.`;
     }
 
-    if (delivery.usersNotified === 0 && delivery.waGroupSent === 0) {
-      return `Reintento sin entregas para ${label}. Revisa canales y suscripciones push.`;
+    if (
+      delivery.pushSent === 0 &&
+      delivery.waGroupSent === 0 &&
+      delivery.whatsappSent === 0
+    ) {
+      if (delivery.inAppSent > 0) {
+        return `Solo in-app (${delivery.inAppSent}) — no hubo push ni WA. Revisa suscripciones push y Admin → WhatsApp.`;
+      }
+      return `Reintento sin entregas externas para ${label}. Revisa canales y suscripciones push.`;
     }
 
     return `Reintento completado para ${label}: ${parts.join(', ')}.`;

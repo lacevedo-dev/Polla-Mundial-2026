@@ -216,6 +216,17 @@ interface RetryResult {
   ok: boolean;
   runId: string | null;
   summary: string;
+  delivery?: {
+    pushSent?: number;
+    pushFailed?: number;
+    pushDevices?: number;
+    waGroupSent?: number;
+    waGroupFailed?: number;
+    inAppSent?: number;
+    whatsappSent?: number;
+    emailQueued?: number;
+    audienceCount?: number;
+  };
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -1677,6 +1688,14 @@ function IncidentModal({
           {retryResult && (
             <div className={`rounded-xl border px-3 py-2 text-xs font-medium ${retryResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
               {retryResult.ok ? '✓' : '✗'} {retryResult.summary}
+              {retryResult.delivery && (
+                <p className="mt-1.5 text-[10px] opacity-90">
+                  Push {retryResult.delivery.pushSent ?? 0}/{retryResult.delivery.pushDevices ?? 0}
+                  {' · '}WA grupo {retryResult.delivery.waGroupSent ?? 0}
+                  {(retryResult.delivery.waGroupFailed ?? 0) > 0 && ` (fallos ${retryResult.delivery.waGroupFailed})`}
+                  {' · '}In-app {retryResult.delivery.inAppSent ?? 0}
+                </p>
+              )}
             </div>
           )}
         </div>

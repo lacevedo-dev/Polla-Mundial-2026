@@ -408,6 +408,7 @@ export class NotificationScheduler {
 
         // Enviar una notificación por usuario (agrupada)
         let totalDelivered = 0;
+        let totalInAppSent = 0;
         let totalPushSent = 0;
         let totalPushFailed = 0;
         let totalPushDevices = 0;
@@ -460,7 +461,10 @@ export class NotificationScheduler {
             `Partido en ~60 min: ${home} vs ${away}`,
             userContacts.get(userId) ?? null,
           );
-          totalDelivered++;
+          totalInAppSent++;
+          if (delivery.pushSent > 0 || delivery.whatsappSent) {
+            totalDelivered++;
+          }
           totalPushSent += delivery.pushSent;
           totalPushFailed += delivery.pushFailed;
           totalPushDevices += delivery.pushDevices;
@@ -544,21 +548,31 @@ export class NotificationScheduler {
               '',
             );
 
+            const hasExternalDelivery = totalDelivered > 0 || waGroupEnqueued > 0;
+            const runStatus =
+              totalDelivered === 0 && totalAlreadySent > 0
+                ? 'SKIPPED'
+                : totalPushFailed > 0
+                  ? 'WARNING'
+                  : hasExternalDelivery
+                    ? 'SUCCESS'
+                    : totalInAppSent > 0
+                      ? 'WARNING'
+                      : 'SKIPPED';
+
             await this.observability.finishRun(runId, {
-              status:
-                totalDelivered === 0 && totalAlreadySent > 0
-                  ? 'SKIPPED'
-                  : totalPushFailed > 0
-                    ? 'WARNING'
-                    : totalDelivered > 0
-                      ? 'SUCCESS'
-                      : 'SKIPPED',
-              summary: totalDelivered > 0
-                ? `Recordatorio agrupado procesado para ${league.members.length} miembros`
-                : 'No hubo envíos nuevos para este recordatorio.',
+              status: runStatus,
+              summary: hasExternalDelivery
+                ? `Recordatorio: push ${totalPushSent}/${totalPushDevices}, WA ${waGroupEnqueued ? 'encolado' : 'no'}`
+                : totalInAppSent > 0
+                  ? `Recordatorio: solo in-app (${totalInAppSent}) — revisa push/WA`
+                  : 'No hubo envíos nuevos para este recordatorio.',
               deliveredCount: totalDelivered,
               failedCount: totalPushFailed,
-              warningCount: totalPushFailed > 0 ? totalPushFailed : 0,
+              warningCount:
+                totalPushFailed > 0 || (totalInAppSent > 0 && !hasExternalDelivery)
+                  ? Math.max(totalPushFailed, 1)
+                  : 0,
               details: {
                 matchId: match.id,
                 leagueId: league.id,
@@ -568,7 +582,7 @@ export class NotificationScheduler {
                   pushDevices: totalPushDevices,
                   whatsappSentCount: totalWhatsappSent,
                   emailQueued: totalEmailQueued,
-                  inAppSent: totalDelivered,
+                  inAppSent: totalInAppSent,
                   waGroupEnqueued: waGroupEnqueued,
                 },
                 alreadySentCount: totalAlreadySent,
@@ -1237,6 +1251,7 @@ export class NotificationScheduler {
   ): Promise<MatchReminderRetrySummary> {
     const summary: MatchReminderRetrySummary = {
       usersNotified: 0,
+      inAppSent: 0,
       pushSent: 0,
       pushFailed: 0,
       pushDevices: 0,
@@ -1341,7 +1356,10 @@ export class NotificationScheduler {
         `[MANUAL] Partido en ~60 min: ${home} vs ${away}`,
         userContacts.get(userId) ?? null,
       );
-      summary.usersNotified++;
+      summary.inAppSent++;
+      if (delivery.pushSent > 0 || delivery.whatsappSent) {
+        summary.usersNotified++;
+      }
       summary.pushSent += delivery.pushSent;
       summary.pushFailed += delivery.pushFailed;
       summary.pushDevices += delivery.pushDevices;
@@ -1408,11 +1426,18 @@ export class NotificationScheduler {
           match.id,
           league.id,
           WhatsappGroupJobType.MATCH_REMINDER,
+          {
+            automationStep: AutomationStep.MATCH_REMINDER,
+            forceResend: true,
+          },
         );
         if (result.ok) {
           summary.waGroupSent++;
         } else {
           summary.waGroupFailed++;
+          this.logger.warn(
+            `[MANUAL] WA grupo T-60 ${match.id}/${league.id}: ${result.message}`,
+          );
         }
       } catch {
         summary.waGroupFailed++;
@@ -1624,7 +1649,10 @@ type NotificationDeliveryResult = {
 };
 
 export type MatchReminderRetrySummary = {
+  /** Usuarios con entrega externa (push o WA personal). */
   usersNotified: number;
+  /** Notificaciones in-app creadas (no implica push/WA). */
+  inAppSent: number;
   pushSent: number;
   pushFailed: number;
   pushDevices: number;

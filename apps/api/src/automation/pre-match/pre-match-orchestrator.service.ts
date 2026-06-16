@@ -106,6 +106,8 @@ export class PreMatchOrchestratorService {
       let delivered = 0;
       let pushSent = 0;
       let pushFailed = 0;
+      let pushDevices = 0;
+      let inAppSent = 0;
 
       for (const audience of audiences) {
         if (alreadySentIds.has(audience.userId)) continue;
@@ -139,12 +141,29 @@ export class PreMatchOrchestratorService {
           `Recordatorio T-60: ${home} vs ${away}`,
         );
 
-        delivered++;
+        inAppSent++;
+        if (delivery.pushSent > 0) delivered++;
         pushSent += delivery.pushSent;
         pushFailed += delivery.pushFailed;
+        pushDevices += delivery.pushDevices;
       }
 
       for (const league of leagues) {
+        let waGroupEnqueued = 0;
+        if (this.waGroup) {
+          try {
+            const ok = await this.waGroup.enqueueNotification(
+              WhatsappGroupJobType.MATCH_REMINDER,
+              match.id,
+              league.id,
+              '',
+            );
+            if (ok) waGroupEnqueued = 1;
+          } catch {
+            // best-effort
+          }
+        }
+
         const scheduledAt = this.observability.getScheduledAt(
           AutomationStep.MATCH_REMINDER,
           {
@@ -162,23 +181,36 @@ export class PreMatchOrchestratorService {
           summary: `Recordatorio T-60 (v2) ${home} vs ${away}`,
         });
 
+        const hasExternalDelivery = delivered > 0 || waGroupEnqueued > 0;
+        const runStatus =
+          pushFailed > 0
+            ? 'WARNING'
+            : hasExternalDelivery
+              ? 'SUCCESS'
+              : inAppSent > 0
+                ? 'WARNING'
+                : 'SKIPPED';
+
         await this.observability.finishRun(runId, {
-          status:
-            pushFailed > 0
-              ? 'WARNING'
-              : delivered > 0
-                ? 'SUCCESS'
-                : 'SKIPPED',
+          status: runStatus,
           summary:
-            delivered > 0
-              ? `T-60 enviado a ${delivered} usuario(s)`
-              : 'Sin recordatorios T-60 nuevos',
+            hasExternalDelivery
+              ? `T-60: push ${pushSent}/${pushDevices}, WA grupo ${waGroupEnqueued ? 'encolado' : 'omitido'}`
+              : inAppSent > 0
+                ? `T-60: solo in-app (${inAppSent}) — sin push ni WA grupo`
+                : 'Sin recordatorios T-60 nuevos',
           deliveredCount: delivered,
           failedCount: pushFailed,
-          warningCount: pushFailed > 0 ? pushFailed : 0,
+          warningCount: pushFailed > 0 || (inAppSent > 0 && !hasExternalDelivery) ? 1 : 0,
           details: {
             preMatchV2: true,
-            channelBreakdown: { pushSent, pushFailed },
+            channelBreakdown: {
+              pushSent,
+              pushFailed,
+              pushDevices,
+              inAppSent,
+              waGroupEnqueued: waGroupEnqueued,
+            },
           },
         });
       }

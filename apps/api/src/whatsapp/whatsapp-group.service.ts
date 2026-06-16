@@ -367,7 +367,20 @@ export class WhatsappGroupService {
 
     try {
       await this.processJob(job.id);
-      return { ok: true, message: 'Mensaje reenviado al grupo de WhatsApp.', jobId: job.id };
+      const final = await this.prisma.whatsappGroupJob.findUnique({
+        where: { id: job.id },
+        select: { status: true, lastError: true },
+      });
+      if (final?.status === WhatsappJobStatus.SENT) {
+        return { ok: true, message: 'Mensaje reenviado al grupo de WhatsApp.', jobId: job.id };
+      }
+      return {
+        ok: false,
+        message:
+          final?.lastError ??
+          'El job no quedó en estado SENT. Revisa Admin → WhatsApp (sesión conectada).',
+        jobId: job.id,
+      };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       return {
