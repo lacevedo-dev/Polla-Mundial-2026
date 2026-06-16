@@ -12,7 +12,6 @@ import { TenantMemberGuard } from './guards/tenant-member.guard';
 import { TenantAdminGuard } from './guards/tenant-admin.guard';
 import { TenantStaffGuard } from './guards/tenant-staff.guard';
 import { CorpPortalController } from './corp-portal.controller';
-import { CorpRankingBreakdownController } from './corp-ranking-breakdown.controller';
 import { BrandingStorageService } from './branding-storage.service';
 import { ParticipationService } from './participation.service';
 import { MatchOperationsService } from './match-operations.service';
@@ -26,7 +25,6 @@ import { PredictionsModule } from '../predictions/predictions.module';
         TenantInvitationController,
         TenantInvitationAdminController,
         CorpPortalController,
-        CorpRankingBreakdownController,
     ],
     providers: [
         TenantService,

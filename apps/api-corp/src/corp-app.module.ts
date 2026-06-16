@@ -10,7 +10,6 @@ import { AuthModule } from '@corp-api/auth/auth.module';
 import { EmailModule } from '@corp-api/email/email.module';
 import { UsersModule } from '@corp-api/users/users.module';
 import { PushNotificationsModule } from '@corp-api/push-notifications/push-notifications.module';
-import { PredictionsModule } from '@corp-api/predictions/predictions.module';
 import { CorporateTenantModule } from '@corp-api/corporate-tenant/corporate-tenant.module';
 
 // Módulos propios del backend corporativo
@@ -18,8 +17,6 @@ import { FootballProxyModule } from './football-proxy/football-proxy.module';
 import { CorpHealthModule } from './health/corp-health.module';
 import { DataSyncModule } from './sync/data-sync.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { CorpDeployModule } from './deploy/corp-deploy.module';
-import { CorpRankingDetailModule } from './corp-ranking-detail/corp-ranking-detail.module';
 
 @Module({
     imports: [
@@ -37,17 +34,8 @@ import { CorpRankingDetailModule } from './corp-ranking-detail/corp-ranking-deta
         AuthModule,
         PushNotificationsModule,
 
-        // Expone /predictions/* (leaderboard breakdown fallback en web-uni)
-        PredictionsModule,
-
-        // Módulo corporativo principal (/corp/ranking, /corp/ranking/user/:id/breakdown, …)
+        // Módulo corporativo principal
         CorporateTenantModule,
-
-        // Desglose de ranking (GET /corp/member-points/:userId)
-        CorpRankingDetailModule,
-
-        // Probe público de versión desplegada (/api-corp-version)
-        CorpDeployModule,
 
         // Módulo nuevo: proxy de datos de fútbol desde el VPS principal
         FootballProxyModule,

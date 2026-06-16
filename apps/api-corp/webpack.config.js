@@ -95,15 +95,7 @@ module.exports = (options) => {
         ),
         new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]corporate-tenant\.module/,
-            (result) => {
-                const overridePath = path.resolve(__dirname, 'src/overrides/corporate-tenant.module.ts');
-                result.createData.resource = overridePath;
-                result.createData.context = path.dirname(overridePath);
-            },
-        ),
-        new webpack.NormalModuleReplacementPlugin(
-            /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]corp-members-resend\.controller/,
-            path.resolve(__dirname, 'src/overrides/corp-members-resend.controller.ts'),
+            path.resolve(__dirname, 'src/overrides/corporate-tenant.module.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]dto[\\/]update-member\.dto/,

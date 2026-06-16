@@ -13,7 +13,6 @@ import { UpdateMemberDto } from './dto/update-member.dto';
 import { BrandingStorageService, BrandingUploadFile } from './branding-storage.service';
 import { ParticipationService, ParticipationMemberFilter } from './participation.service';
 import { MatchOperationsService } from './match-operations.service';
-import { PredictionsService } from '../predictions/predictions.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
@@ -81,7 +80,6 @@ export class CorpPortalController {
         private readonly brandingStorage: BrandingStorageService,
         private readonly participationService: ParticipationService,
         private readonly matchOperations: MatchOperationsService,
-        private readonly predictionsService: PredictionsService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -199,14 +197,9 @@ export class CorpPortalController {
     }
 
     @Get('leagues/:id')
-    async getLeagueDetail(
-        @Req() req: any,
-        @Param('id') leagueId: string,
-        @Query('scoredForUserId') scoredForUserId?: string,
-    ) {
+    async getLeagueDetail(@Req() req: any, @Param('id') leagueId: string) {
         const tenantId: string = req.tenantId;
-        const sessionUserId: string = req.user.userId;
-        const viewingUserId = scoredForUserId?.trim() || sessionUserId;
+        const userId: string = req.user.userId;
 
         const league = await this.prisma.league.findFirst({
             where: { id: leagueId, tenantId },
@@ -229,7 +222,7 @@ export class CorpPortalController {
                             homeTeam: { select: teamSelect },
                             awayTeam: { select: teamSelect },
                             predictions: {
-                                where: { userId: viewingUserId, leagueId },
+                                where: { userId, leagueId },
                                 select: { homeScore: true, awayScore: true, points: true },
                                 take: 1,
                             },
@@ -239,7 +232,7 @@ export class CorpPortalController {
                 orderBy: { match: { matchDate: 'asc' } },
             }),
             this.prisma.prediction.findMany({
-                where: { userId: viewingUserId, leagueId },
+                where: { userId, leagueId },
                 orderBy: { submittedAt: 'desc' },
                 take: 5,
                 include: {
@@ -266,30 +259,8 @@ export class CorpPortalController {
         });
         const userMap = new Map(users.map((u) => [u.id, u]));
 
-        const myPoints = memberPoints.find((p) => p.userId === sessionUserId)?._sum.points ?? 0;
+        const myPoints = memberPoints.find((p) => p.userId === userId)?._sum.points ?? 0;
         const myRank = memberPoints.filter((p) => (p._sum.points ?? 0) > myPoints).length + 1;
-
-        let memberPointsBreakdown: Awaited<ReturnType<PredictionsService['getCorpTenantUserBreakdown']>> | null = null;
-        if (scoredForUserId?.trim()) {
-            const breakdown = await this.predictionsService.getCorpTenantUserBreakdown(
-                tenantId,
-                scoredForUserId.trim(),
-            );
-            const matches = breakdown.matches.filter((match) => match.leagueId === leagueId);
-            memberPointsBreakdown = {
-                user: breakdown.user,
-                summary: {
-                    points: matches.reduce((sum, match) => sum + match.points, 0),
-                    exactCount: 0,
-                    winnerCount: 0,
-                    goalCount: 0,
-                    uniqueCount: 0,
-                    phaseBonusPoints: 0,
-                },
-                matches,
-                bonuses: [],
-            };
-        }
 
         return {
             id: league.id,
@@ -335,11 +306,11 @@ export class CorpPortalController {
                 rank: i + 1,
                 userId: p.userId,
                 name: userMap.get(p.userId)?.name ?? 'â€”',
+                username: (userMap.get(p.userId) as any)?.documentNumber ?? userMap.get(p.userId)?.username ?? '',
                 avatar: userMap.get(p.userId)?.avatar ?? null,
                 totalPoints: p._sum.points ?? 0,
-                isMe: p.userId === sessionUserId,
+                isMe: p.userId === userId,
             })),
-            ...(memberPointsBreakdown ? { memberPointsBreakdown } : {}),
         };
     }
 
@@ -385,13 +356,8 @@ export class CorpPortalController {
     }
 
     @Get('ranking')
-    async getRanking(@Req() req: any, @Query('breakdownUserId') breakdownUserId?: string) {
+    async getRanking(@Req() req: any) {
         const tenantId: string = req.tenantId;
-        const breakdownTarget = breakdownUserId?.trim();
-        if (breakdownTarget) {
-            return this.predictionsService.getCorpTenantUserBreakdown(tenantId, breakdownTarget);
-        }
-
         const userId: string = req.user.userId;
 
         const members = await this.prisma.tenantMember.findMany({
@@ -403,20 +369,11 @@ export class CorpPortalController {
 
         const userIds = members.map((m) => m.userId);
 
-        const leagueIds = (
-            await this.prisma.league.findMany({
-                where: { tenantId },
-                select: { id: true },
-            })
-        ).map((league) => league.id);
-
         const scores = await this.prisma.prediction.groupBy({
             by: ['userId'],
             where: {
                 userId: { in: userIds },
-                ...(leagueIds.length
-                    ? { leagueId: { in: leagueIds } }
-                    : { league: { tenantId } }),
+                league: { tenantId },
             },
             _sum: { points: true },
         });
@@ -427,6 +384,7 @@ export class CorpPortalController {
             .map((m) => ({
                 userId: m.userId,
                 name: m.user.name,
+                username: (m.user as any).documentNumber ?? m.user.username,
                 avatar: m.user.avatar,
                 totalPoints: scoreMap.get(m.userId) ?? 0,
                 isMe: m.userId === userId,
@@ -435,18 +393,6 @@ export class CorpPortalController {
             .map((u, i) => ({ ...u, rank: i + 1 }));
 
         return ranking;
-    }
-
-    @Get('ranking/user/:userId/breakdown')
-    async getRankingUserBreakdown(@Req() req: any, @Param('userId') userId: string) {
-        const tenantId: string = req.tenantId;
-        return this.predictionsService.getCorpTenantUserBreakdown(tenantId, userId);
-    }
-
-    @Get('ranking-breakdown/:userId')
-    async getRankingBreakdown(@Req() req: any, @Param('userId') userId: string) {
-        const tenantId: string = req.tenantId;
-        return this.predictionsService.getCorpTenantUserBreakdown(tenantId, userId);
     }
 
     @Get('tournaments')

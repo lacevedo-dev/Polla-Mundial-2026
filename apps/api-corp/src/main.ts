@@ -5,8 +5,6 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import { CorpAppModule } from './corp-app.module';
-import { resolveCorpBuildCommit, readCorpBuildInfo } from './build-info';
-import { CORP_BUILD_MARKER } from './build-marker';
 
 const DEFAULT_PRODUCTION_CORS_ORIGINS = [
     'https://coopcanapro.zonapronosticos.com',
@@ -50,19 +48,8 @@ async function bootstrap(): Promise<void> {
     }
 
     console.info(`[corp-api] Iniciando (env=${nodeEnv}, port=${port}, corpDatabaseUrlConfigured=${databaseUrlConfigured ? 'yes' : 'no'})`);
-    const buildInfo = readCorpBuildInfo();
-    console.info(
-        `[corp-api] Build commit=${resolveCorpBuildCommit()}, builtAt=${buildInfo?.builtAt ?? 'n/a'}, rankingBreakdown=${buildInfo?.rankingBreakdown ? 'yes' : 'no'}, marker=${CORP_BUILD_MARKER}`,
-    );
 
     const app = await NestFactory.create(CorpAppModule, { rawBody: true, bodyParser: false });
-
-    const deployStamp = process.env.CORP_DEPLOY_STAMP ?? CORP_BUILD_MARKER;
-    app.use((_req, res, next) => {
-        res.setHeader('X-Corp-Deploy-Stamp', deployStamp);
-        res.setHeader('X-Corp-Build-Marker', CORP_BUILD_MARKER);
-        next();
-    });
 
     app.use(json({ limit: '20mb' }));
     app.use(urlencoded({ extended: true, limit: '20mb' }));
@@ -92,7 +79,6 @@ async function bootstrap(): Promise<void> {
         credentials: true,
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With, Origin, X-Tenant-Slug',
-        exposedHeaders: 'X-Corp-Deploy-Stamp, X-Corp-Build-Marker',
         preflightContinue: false,
         optionsSuccessStatus: 204,
     });

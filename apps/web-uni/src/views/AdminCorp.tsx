@@ -5,7 +5,6 @@ import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
-import { ADMIN_QUICK_ACTIONS, STAFF_ADMIN_PATHS } from '../config/adminNav';
 
 interface AdminStats {
     totalMembers: number;
@@ -36,7 +35,38 @@ export default function AdminCorp() {
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
 
     const quickActions = [
-        ...ADMIN_QUICK_ACTIONS,
+        {
+            label: 'Partidos y puntajes',
+            desc: 'Revisar sync y recalcular puntos manualmente',
+            icon: Calculator,
+            link: '/admin/matches',
+            color: 'text-lime-700',
+            bg: 'bg-lime-50',
+        },
+        {
+            label: 'Seguimiento de participación',
+            desc: 'Quién pronostica vs. usuarios inscritos',
+            icon: Activity,
+            link: '/admin/participation',
+            color: 'text-violet-600',
+            bg: 'bg-violet-50',
+        },
+        {
+            label: 'Gestionar miembros',
+            desc: 'Ver, invitar y administrar usuarios',
+            icon: Users,
+            link: '/admin/members',
+            color: 'text-sky-600',
+            bg: 'bg-sky-50',
+        },
+        {
+            label: 'Gestionar pollas',
+            desc: 'Crear, editar y asignar torneos',
+            icon: Trophy,
+            link: '/admin/pollas',
+            color: 'text-amber-600',
+            bg: '',
+        },
         {
             label: 'Ver todas las pollas',
             desc: 'Explorar todas las pollas del tenant',
@@ -53,7 +83,7 @@ export default function AdminCorp() {
             color: 'text-emerald-600',
             bg: 'bg-emerald-50',
         },
-    ].filter((item) => !isStaff || (STAFF_ADMIN_PATHS as readonly string[]).includes(item.link));
+    ].filter((item) => !isStaff || ['/admin/matches', '/admin/participation', '/admin/members'].includes(item.link));
 
     useEffect(() => {
         Promise.all([

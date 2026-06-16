@@ -56,7 +56,7 @@ export function RankingTab({ topRanking }: { topRanking: TopRankEntry[] }) {
                     to="/ranking"
                     className="text-xs font-bold hover:opacity-80 transition-opacity"
                     style={{ color: 'var(--color-primary, #f59e0b)' }}>
-                    Ver ranking global (detalle de puntos) →
+                    Ver ranking global →
                 </Link>
             </div>
         </div>

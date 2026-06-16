@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Activity, AlertCircle, BarChart2, CheckCircle2, ChevronLeft, ChevronRight,
-    Clock, Filter, Loader2, RefreshCw, Search, Target, TrendingUp, Users, XCircle,
+    Clock, Filter, Loader2, RefreshCw, Search, Target, TrendingUp, Users, XCircle, Calculator,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
-import { AdminSubNav } from '../components/AdminSubNav';
 import { request, resolveApiAssetUrl, ApiError } from '../api';
 
 interface ParticipationSummary {
@@ -233,7 +232,21 @@ export default function AdminCorpParticipation() {
                 </div>
             )}
 
-            <AdminSubNav />
+            <Link
+                to="/admin/matches"
+                className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-lime-200 bg-lime-50 px-4 py-3 text-sm text-lime-900 hover:bg-lime-100 transition-colors"
+            >
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-white border border-lime-200 flex items-center justify-center shrink-0">
+                        <Calculator size={18} className="text-lime-700" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="font-black text-slate-900">Partidos y puntajes</p>
+                        <p className="text-xs text-lime-800">Recalcular puntos manualmente cuando un partido ya finalizó</p>
+                    </div>
+                </div>
+                <span className="text-xs font-black uppercase tracking-wide text-lime-700 shrink-0">Abrir</span>
+            </Link>
 
             {/* Filtro por polla */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-4 flex flex-wrap items-center gap-3">
