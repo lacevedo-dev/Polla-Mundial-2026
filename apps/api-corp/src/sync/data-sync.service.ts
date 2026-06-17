@@ -476,73 +476,26 @@ export class DataSyncService implements OnModuleInit {
                     continue;
                 }
 
-                const existing = await this.prisma.match.findUnique({
-                    where: { id: match.id },
-                    select: { status: true, homeScore: true, awayScore: true },
-                });
+                try {
+                    const { syncedMatchId, existingBeforeSync } = await this.upsertSyncedMatch(match, matchDate);
+                    synced += 1;
 
-                await this.prisma.match.upsert({
-                    where: { id: match.id },
-                    create: {
-                        id: match.id,
-                        homeTeamId: match.homeTeamId,
-                        awayTeamId: match.awayTeamId,
-                        homeScore: match.homeScore,
-                        awayScore: match.awayScore,
-                        phase: match.phase ?? 'GROUP',
-                        group: match.group ?? null,
-                        matchNumber: match.matchNumber ?? null,
-                        venue: match.venue,
-                        matchDate: new Date(matchDate),
-                        status: match.status,
-                        externalId: match.externalId,
-                        lastSyncAt: match.lastSyncAt ? new Date(match.lastSyncAt) : new Date(),
-                        syncCount: normalizeInt(match.syncCount, 0),
-                        round: match.round,
-                        tournamentId: match.tournamentId,
-                        predictionReportSentAt: match.predictionReportSentAt ? new Date(match.predictionReportSentAt) : null,
-                        advancingTeamId: match.advancingTeamId ?? null,
-                        resultNotificationSentAt: match.resultNotificationSentAt ? new Date(match.resultNotificationSentAt) : null,
-                        elapsed: match.elapsed ?? null,
-                        statusShort: match.statusShort ?? null,
-                        eventsNoDataAt: match.eventsNoDataAt ? new Date(match.eventsNoDataAt) : null,
-                    } as any,
-                    update: {
-                        homeTeamId: match.homeTeamId,
-                        awayTeamId: match.awayTeamId,
-                        homeScore: match.homeScore,
-                        awayScore: match.awayScore,
-                        phase: match.phase ?? 'GROUP',
-                        group: match.group ?? null,
-                        matchNumber: match.matchNumber ?? null,
-                        venue: match.venue,
-                        matchDate: new Date(matchDate),
-                        status: match.status,
-                        externalId: match.externalId ?? null,
-                        round: match.round,
-                        tournamentId: match.tournamentId,
-                        lastSyncAt: match.lastSyncAt ? new Date(match.lastSyncAt) : new Date(),
-                        syncCount: normalizeInt(match.syncCount, 0),
-                        predictionReportSentAt: match.predictionReportSentAt ? new Date(match.predictionReportSentAt) : null,
-                        advancingTeamId: match.advancingTeamId ?? null,
-                        resultNotificationSentAt: match.resultNotificationSentAt ? new Date(match.resultNotificationSentAt) : null,
-                        elapsed: match.elapsed ?? null,
-                        statusShort: match.statusShort ?? null,
-                        eventsNoDataAt: match.eventsNoDataAt ? new Date(match.eventsNoDataAt) : null,
-                    } as any,
-                });
-                synced += 1;
-
-                const isFinished = match.status === 'FINISHED'
-                    && match.homeScore != null
-                    && match.awayScore != null;
-                if (isFinished) {
-                    const transitionedToFinished = existing?.status !== 'FINISHED';
-                    const scoreChanged = existing?.homeScore !== match.homeScore
-                        || existing?.awayScore !== match.awayScore;
-                    if (!existing || transitionedToFinished || scoreChanged) {
-                        scoreCandidates.add(match.id);
+                    const isFinished = match.status === 'FINISHED'
+                        && match.homeScore != null
+                        && match.awayScore != null;
+                    if (isFinished) {
+                        const transitionedToFinished = existingBeforeSync?.status !== 'FINISHED';
+                        const scoreChanged = existingBeforeSync?.homeScore !== match.homeScore
+                            || existingBeforeSync?.awayScore !== match.awayScore;
+                        if (!existingBeforeSync || transitionedToFinished || scoreChanged) {
+                            scoreCandidates.add(syncedMatchId);
+                        }
                     }
+                } catch (error) {
+                    this.logger.error(
+                        `Error sincronizando partido ${match.id}${match.externalId ? ` (externalId=${match.externalId})` : ''}:`,
+                        this.formatError(error),
+                    );
                 }
             }
 
@@ -563,7 +516,7 @@ export class DataSyncService implements OnModuleInit {
         }
     }
 
-    /** Puntúa pronósticos corporativos de un partido finalizado (idempotente). */
+    /** Punt?a pron?sticos corporativos de un partido finalizado (idempotente). */
     private async scoreFinishedMatch(matchId: string): Promise<boolean> {
         try {
             const match = await this.prisma.match.findUnique({
@@ -602,7 +555,7 @@ export class DataSyncService implements OnModuleInit {
 
             await this.predictionsService.calculateMatchPoints(matchId);
             await this.predictionsService.calculatePhaseBonuses(matchId);
-            this.logger.log(`Puntos calculados para partido ${matchId} (${unscored} pronóstico(s) pendiente(s))`);
+            this.logger.log(`Puntos calculados para partido ${matchId} (${unscored} pron?stico(s) pendiente(s))`);
             return true;
         } catch (error) {
             this.logger.error(`Error calculando puntos del partido ${matchId}:`, this.formatError(error));
@@ -610,7 +563,7 @@ export class DataSyncService implements OnModuleInit {
         }
     }
 
-    /** Recupera partidos ya finalizados en BD corp con pronósticos sin puntuar. */
+    /** Recupera partidos ya finalizados en BD corp con pron?sticos sin puntuar. */
     private async scoreBacklogFinishedMatches(limit: number): Promise<number> {
         const pending = await this.prisma.match.findMany({
             where: {
@@ -726,6 +679,123 @@ export class DataSyncService implements OnModuleInit {
         });
     }
 
+    /** Sincroniza un partido resolviendo colisiones de externalId antes del upsert por id. */
+    private async upsertSyncedMatch(
+        match: any,
+        matchDate: string | Date,
+    ): Promise<{
+        syncedMatchId: string;
+        existingBeforeSync: { status: string; homeScore: number | null; awayScore: number | null } | null;
+    }> {
+        const externalId = normalizeExternalId(match.externalId);
+        const payload = this.buildMatchSyncPayload(match, matchDate, externalId);
+
+        await this.resolveExternalIdConflict(match.id, externalId);
+
+        const existingById = await this.prisma.match.findUnique({
+            where: { id: match.id },
+            select: { id: true, status: true, homeScore: true, awayScore: true },
+        });
+
+        if (existingById) {
+            await this.prisma.match.update({
+                where: { id: match.id },
+                data: payload,
+            });
+            return { syncedMatchId: match.id, existingBeforeSync: existingById };
+        }
+
+        if (externalId) {
+            const existingByExternal = await this.prisma.match.findUnique({
+                where: { externalId },
+                select: { id: true, status: true, homeScore: true, awayScore: true },
+            });
+            if (existingByExternal) {
+                await this.prisma.match.update({
+                    where: { id: existingByExternal.id },
+                    data: payload,
+                });
+                if (existingByExternal.id !== match.id) {
+                    this.logger.warn(
+                        `Partido sincronizado por externalId=${externalId} (${existingByExternal.id}); id principal ${match.id} no coincide`,
+                    );
+                }
+                return { syncedMatchId: existingByExternal.id, existingBeforeSync: existingByExternal };
+            }
+        }
+
+        await this.prisma.match.create({
+            data: { id: match.id, ...payload } as any,
+        });
+        return { syncedMatchId: match.id, existingBeforeSync: null };
+    }
+
+    private buildMatchSyncPayload(match: any, matchDate: string | Date, externalId: string | null) {
+        return {
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            homeScore: match.homeScore,
+            awayScore: match.awayScore,
+            phase: match.phase ?? 'GROUP',
+            group: match.group ?? null,
+            matchNumber: match.matchNumber ?? null,
+            venue: match.venue,
+            matchDate: new Date(matchDate),
+            status: match.status,
+            externalId,
+            lastSyncAt: match.lastSyncAt ? new Date(match.lastSyncAt) : new Date(),
+            syncCount: normalizeInt(match.syncCount, 0),
+            round: match.round,
+            tournamentId: match.tournamentId,
+            predictionReportSentAt: match.predictionReportSentAt ? new Date(match.predictionReportSentAt) : null,
+            advancingTeamId: match.advancingTeamId ?? null,
+            resultNotificationSentAt: match.resultNotificationSentAt ? new Date(match.resultNotificationSentAt) : null,
+            elapsed: match.elapsed ?? null,
+            statusShort: match.statusShort ?? null,
+            eventsNoDataAt: match.eventsNoDataAt ? new Date(match.eventsNoDataAt) : null,
+        };
+    }
+
+    /** Elimina o desvincula duplicados locales que bloquean el externalId del partido can?nico. */
+    private async resolveExternalIdConflict(canonicalMatchId: string, externalId: string | null): Promise<void> {
+        if (!externalId) return;
+
+        const conflicting = await this.prisma.match.findFirst({
+            where: {
+                externalId,
+                NOT: { id: canonicalMatchId },
+            },
+            select: {
+                id: true,
+                _count: {
+                    select: {
+                        predictions: true,
+                        leagueMatches: true,
+                    },
+                },
+            },
+        });
+
+        if (!conflicting) return;
+
+        const isOrphan = conflicting._count.predictions === 0 && conflicting._count.leagueMatches === 0;
+        if (isOrphan) {
+            await this.prisma.match.delete({ where: { id: conflicting.id } });
+            this.logger.warn(
+                `Partido duplicado ${conflicting.id} eliminado (externalId=${externalId} reservado para ${canonicalMatchId})`,
+            );
+            return;
+        }
+
+        await this.prisma.match.update({
+            where: { id: conflicting.id },
+            data: { externalId: null },
+        });
+        this.logger.warn(
+            `externalId=${externalId} desvinculado del partido ${conflicting.id} para sincronizar ${canonicalMatchId}`,
+        );
+    }
+
     private async existsById(modelName: 'tournament' | 'match', id: string): Promise<boolean> {
         const model = (this.prisma as any)[modelName];
         const record = await model.findUnique({ where: { id }, select: { id: true } });
@@ -754,4 +824,10 @@ function normalizeNullableInt(value: unknown): number | null {
 
 function normalizeInt(value: unknown, fallback: number): number {
     return normalizeNullableInt(value) ?? fallback;
+}
+
+function normalizeExternalId(value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    const normalized = String(value).trim();
+    return normalized.length > 0 ? normalized : null;
 }
