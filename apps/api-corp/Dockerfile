@@ -32,6 +32,10 @@ COPY apps/api ./apps/api
 COPY apps/api-corp ./apps/api-corp
 COPY packages/shared ./packages/shared
 
+# Compilar paquete shared (corp-ranking y otros módulos de api importan @polla-2026/shared en runtime)
+WORKDIR /app/packages/shared
+RUN npm run build
+
 # Generar cliente Prisma del API principal (para módulos compartidos)
 WORKDIR /app/apps/api
 RUN mkdir -p /app/apps/api/node_modules
