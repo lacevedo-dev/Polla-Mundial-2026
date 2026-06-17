@@ -17,6 +17,7 @@ import type {
   LivePhaseEventId,
 } from '../types/automation.types';
 import { GoalImpactAnalyzerService } from './goal-impact-analyzer.service';
+import type { LeagueGoalImpactSummary } from './goal-impact-analyzer.service';
 import {
   buildGoalImpactWaCaption,
   buildLiveUserMessage,
@@ -56,18 +57,34 @@ export class LiveOrchestratorService {
   }
 
   async handleGoalImpact(ctx: GoalImpactContext): Promise<void> {
+    const summaries = await this.loadGoalImpactSummaries(ctx);
+    if (!summaries) return;
+
+    for (const summary of summaries) {
+      await this.enqueueGoalImpactForLeague(ctx, summary);
+    }
+
+    this.logger.log(
+      `Goal impact WA for match ${ctx.matchId}: ${summaries.length} polla(s) procesadas`,
+    );
+  }
+
+  /** Resumen por polla si el paso está activo; null si se omite. */
+  async loadGoalImpactSummaries(
+    ctx: Pick<GoalImpactContext, 'matchId' | 'homeScore' | 'awayScore'>,
+  ): Promise<LeagueGoalImpactSummary[] | null> {
     if (!(await this.stepConfig.isStepEnabled(AutomationStep.GOAL_IMPACT))) {
       this.logger.warn(
         `GOAL_IMPACT desactivado en configuración — omitido para ${ctx.matchId} (${ctx.homeScore}-${ctx.awayScore})`,
       );
-      return;
+      return null;
     }
 
     if (!this.waGroup) {
       this.logger.warn(
         `WhatsappGroupService no disponible — GOAL_IMPACT omitido para ${ctx.matchId}`,
       );
-      return;
+      return null;
     }
 
     try {
@@ -80,71 +97,83 @@ export class LiveOrchestratorService {
         this.logger.debug(
           `Goal impact skipped for match ${ctx.matchId}: sin ligas con predicciones`,
         );
-        return;
+        return null;
       }
-
-      let waEnqueued = 0;
-
-      for (const summary of summaries) {
-        const caption = buildGoalImpactWaCaption({
-          leagueName: summary.leagueName,
-          homeTeam: ctx.homeTeam,
-          awayTeam: ctx.awayTeam,
-          homeScore: ctx.homeScore,
-          awayScore: ctx.awayScore,
-          elapsed: ctx.elapsed,
-          scoringTeam: ctx.scoringTeam,
-          scorerName: ctx.scorerName,
-          summary,
-        });
-
-        const enqueued = await this.enqueueGoalImpactWa(
-          ctx.matchId,
-          summary.leagueId,
-          caption,
-          goalImpactDedupeKey(
-            ctx.matchId,
-            summary.leagueId,
-            ctx.homeScore,
-            ctx.awayScore,
-          ),
-        );
-        if (enqueued) waEnqueued++;
-
-        await this.recordRun({
-          step: AutomationStep.GOAL_IMPACT,
-          matchId: ctx.matchId,
-          leagueId: summary.leagueId,
-          matchDate: ctx.matchDate,
-          audienceCount: summary.scoringCount,
-          summary: enqueued
-            ? `Impacto gol ${ctx.homeTeam} vs ${ctx.awayTeam} ${ctx.homeScore}-${ctx.awayScore} (${summary.leagueName})`
-            : `Impacto gol no encolado (${summary.leagueName}) — revisar WA Grupo`,
-          delivered: enqueued ? 1 : 0,
-          pushSent: 0,
-          pushFailed: 0,
-          waEnqueued: enqueued ? 1 : 0,
-          extraDetails: {
-            homeScore: ctx.homeScore,
-            awayScore: ctx.awayScore,
-            exactScoreCount: summary.exactScoreCount,
-            provisionalRanking: summary.provisionalRanking,
-          },
-        });
-
-        if (!enqueued) {
-          this.logger.warn(
-            `GOAL_IMPACT no encolado para liga ${summary.leagueId} (${summary.leagueName}) en partido ${ctx.matchId}`,
-          );
-        }
-      }
-
-      this.logger.log(
-        `Goal impact WA for match ${ctx.matchId}: ${waEnqueued} grupo(s) encolados`,
-      );
+      return summaries;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`handleGoalImpact failed: ${message}`);
+      this.logger.error(`loadGoalImpactSummaries failed: ${message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Encola GOAL_IMPACT en WhatsappGroupJob (PENDING) para envío masivo del dispatcher.
+   * Se invoca junto al gol del participante y al job GOAL_SCORED de la misma polla.
+   */
+  async enqueueGoalImpactForLeague(
+    ctx: GoalImpactContext,
+    summary: LeagueGoalImpactSummary,
+  ): Promise<boolean> {
+    try {
+      const caption = buildGoalImpactWaCaption({
+        leagueName: summary.leagueName,
+        homeTeam: ctx.homeTeam,
+        awayTeam: ctx.awayTeam,
+        homeScore: ctx.homeScore,
+        awayScore: ctx.awayScore,
+        elapsed: ctx.elapsed,
+        scoringTeam: ctx.scoringTeam,
+        scorerName: ctx.scorerName,
+        summary,
+      });
+
+      const enqueued = await this.enqueueGoalImpactWa(
+        ctx.matchId,
+        summary.leagueId,
+        caption,
+        goalImpactDedupeKey(
+          ctx.matchId,
+          summary.leagueId,
+          ctx.homeScore,
+          ctx.awayScore,
+        ),
+      );
+
+      await this.recordRun({
+        step: AutomationStep.GOAL_IMPACT,
+        matchId: ctx.matchId,
+        leagueId: summary.leagueId,
+        matchDate: ctx.matchDate,
+        audienceCount: summary.scoringCount,
+        summary: enqueued
+          ? `Impacto gol ${ctx.homeTeam} vs ${ctx.awayTeam} ${ctx.homeScore}-${ctx.awayScore} (${summary.leagueName})`
+          : `Impacto gol no encolado (${summary.leagueName}) — revisar WA Grupo`,
+        delivered: enqueued ? 1 : 0,
+        pushSent: 0,
+        pushFailed: 0,
+        waEnqueued: enqueued ? 1 : 0,
+        extraDetails: {
+          homeScore: ctx.homeScore,
+          awayScore: ctx.awayScore,
+          exactScoreCount: summary.exactScoreCount,
+          provisionalRanking: summary.provisionalRanking,
+        },
+      });
+
+      if (!enqueued) {
+        this.logger.warn(
+          `GOAL_IMPACT no encolado para liga ${summary.leagueId} (${summary.leagueName}) en partido ${ctx.matchId}`,
+        );
+      }
+
+      return enqueued;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `enqueueGoalImpactForLeague failed (${summary.leagueId}): ${message}`,
+      );
+      return false;
     }
   }
 

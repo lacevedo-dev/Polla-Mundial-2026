@@ -4,6 +4,8 @@ import { PushNotificationsService } from '../../push-notifications/push-notifica
 import { NotificationsService } from '../../notifications/notifications.service';
 import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { LiveOrchestratorService } from './live-orchestrator.service';
+import type { LeagueGoalImpactSummary } from './goal-impact-analyzer.service';
+import type { GoalImpactContext } from '../types/automation.types';
 
 export type GoalScoredDispatchParams = {
   matchId: string;
@@ -76,6 +78,11 @@ export class GoalLiveNotificationService {
     }
   }
 
+  /**
+   * Al detectar un gol: notifica participantes (push/in-app) y encola jobs WA Grupo
+   * (GOAL_SCORED + GOAL_IMPACT por polla) en el mismo instante. El dispatcher envía
+   * los jobs PENDING de forma masiva.
+   */
   async dispatchGoalScored(params: GoalScoredDispatchParams): Promise<void> {
     try {
       const predictions = await this.prisma.prediction.findMany({
@@ -109,107 +116,129 @@ export class GoalLiveNotificationService {
         goalDetail: params.scorerInfo?.goalDetail ?? null,
       });
 
-      if (this.waGroup) {
-        for (const leagueId of leagueIds) {
-          try {
-            await this.waGroup.enqueueGoalNotification(params.matchId, leagueId, {
-              homeTeam: params.homeTeamName,
-              awayTeam: params.awayTeamName,
-              homeScore: params.homeScore,
-              awayScore: params.awayScore,
-              scoringTeam,
-              elapsed: params.elapsed,
-              leagueName: leagueNameById.get(leagueId) ?? 'Polla',
-              scorerName: params.scorerInfo?.scorerName ?? null,
-              assistName: params.scorerInfo?.assistName ?? null,
-              goalDetail: params.scorerInfo?.goalDetail ?? null,
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.warn(
-              `WA group goal enqueue failed for league ${leagueId}: ${message}`,
-            );
-          }
-        }
-      }
+      const matchDate =
+        params.matchDate ??
+        (
+          await this.prisma.match.findUnique({
+            where: { id: params.matchId },
+            select: { matchDate: true },
+          })
+        )?.matchDate ??
+        new Date();
 
-      const notifiedUsers = new Set<string>();
-      for (const prediction of predictions) {
-        if (notifiedUsers.has(prediction.userId)) continue;
-        notifiedUsers.add(prediction.userId);
+      const impactCtx: GoalImpactContext = {
+        matchId: params.matchId,
+        homeTeam: params.homeTeamName,
+        awayTeam: params.awayTeamName,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        matchDate,
+        elapsed: params.elapsed,
+        scoringTeam,
+        scorerName: params.scorerInfo?.scorerName ?? null,
+      };
 
-        await this.push.sendToUser(prediction.userId, {
-          title,
-          body,
-          tag: `goal-${params.matchId}-${Date.now()}`,
-          requireInteraction: false,
-          data: {
-            matchId: params.matchId,
-            type: 'goal',
-            homeScore: params.homeScore,
-            awayScore: params.awayScore,
-            scorerName: params.scorerInfo?.scorerName ?? null,
-            elapsed: params.elapsed,
-          },
-        });
+      const impactSummaries = this.liveOrchestrator
+        ? await this.liveOrchestrator.loadGoalImpactSummaries(impactCtx)
+        : null;
+      const impactByLeague = new Map<string, LeagueGoalImpactSummary>(
+        (impactSummaries ?? []).map((summary) => [summary.leagueId, summary]),
+      );
 
-        await this.notifications.createInAppNotification({
-          userId: prediction.userId,
-          type: 'GOAL_SCORED',
-          title,
-          body,
-          data: {
-            matchId: params.matchId,
-            homeScore: params.homeScore,
-            awayScore: params.awayScore,
-            elapsed: params.elapsed,
-            scorerName: params.scorerInfo?.scorerName ?? null,
-            assistName: params.scorerInfo?.assistName ?? null,
-            goalDetail: params.scorerInfo?.goalDetail ?? null,
-            scoringTeam,
-            minute: minuteLabel,
-          },
-        });
-      }
-
-      if (this.liveOrchestrator) {
-        try {
-          const matchDate =
-            params.matchDate ??
-            (
-              await this.prisma.match.findUnique({
-                where: { id: params.matchId },
-                select: { matchDate: true },
-              })
-            )?.matchDate ??
-            new Date();
-
-          await this.liveOrchestrator.handleGoalImpact({
-            matchId: params.matchId,
-            homeTeam: params.homeTeamName,
-            awayTeam: params.awayTeamName,
-            homeScore: params.homeScore,
-            awayScore: params.awayScore,
-            matchDate,
-            elapsed: params.elapsed,
-            scoringTeam,
-            scorerName: params.scorerInfo?.scorerName ?? null,
-          });
-        } catch (impactError) {
-          const message =
-            impactError instanceof Error ? impactError.message : String(impactError);
-          this.logger.warn(
-            `Goal impact orchestrator failed for match ${params.matchId}: ${message}`,
-          );
-        }
-      } else {
-        this.logger.warn(
-          `LiveOrchestrator no disponible: GOAL_IMPACT omitido para ${params.matchId}`,
-        );
-      }
+      await Promise.all([
+        this.enqueueWaGoalJobs(params, leagueIds, leagueNameById, scoringTeam, impactCtx, impactByLeague),
+        this.notifyParticipants(predictions, params, title, body, minuteLabel, scoringTeam),
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`dispatchGoalScored failed for ${params.matchId}: ${message}`);
+    }
+  }
+
+  /** Encola GOAL_SCORED y GOAL_IMPACT por polla (WhatsappGroupJob → PENDING). */
+  private async enqueueWaGoalJobs(
+    params: GoalScoredDispatchParams,
+    leagueIds: string[],
+    leagueNameById: Map<string, string>,
+    scoringTeam: string | null,
+    impactCtx: GoalImpactContext,
+    impactByLeague: Map<string, LeagueGoalImpactSummary>,
+  ): Promise<void> {
+    if (!this.waGroup) return;
+
+    for (const leagueId of leagueIds) {
+      try {
+        await this.waGroup.enqueueGoalNotification(params.matchId, leagueId, {
+          homeTeam: params.homeTeamName,
+          awayTeam: params.awayTeamName,
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          scoringTeam,
+          elapsed: params.elapsed,
+          leagueName: leagueNameById.get(leagueId) ?? 'Polla',
+          scorerName: params.scorerInfo?.scorerName ?? null,
+          assistName: params.scorerInfo?.assistName ?? null,
+          goalDetail: params.scorerInfo?.goalDetail ?? null,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `WA group goal enqueue failed for league ${leagueId}: ${message}`,
+        );
+      }
+
+      const impactSummary = impactByLeague.get(leagueId);
+      if (impactSummary && this.liveOrchestrator) {
+        await this.liveOrchestrator.enqueueGoalImpactForLeague(impactCtx, impactSummary);
+      }
+    }
+  }
+
+  private async notifyParticipants(
+    predictions: Array<{ userId: string; leagueId: string }>,
+    params: GoalScoredDispatchParams,
+    title: string,
+    body: string,
+    minuteLabel: string | null,
+    scoringTeam: string | null,
+  ): Promise<void> {
+    const notifiedUsers = new Set<string>();
+    for (const prediction of predictions) {
+      if (notifiedUsers.has(prediction.userId)) continue;
+      notifiedUsers.add(prediction.userId);
+
+      await this.push.sendToUser(prediction.userId, {
+        title,
+        body,
+        tag: `goal-${params.matchId}-${Date.now()}`,
+        requireInteraction: false,
+        data: {
+          matchId: params.matchId,
+          type: 'goal',
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          scorerName: params.scorerInfo?.scorerName ?? null,
+          elapsed: params.elapsed,
+        },
+      });
+
+      await this.notifications.createInAppNotification({
+        userId: prediction.userId,
+        type: 'GOAL_SCORED',
+        title,
+        body,
+        data: {
+          matchId: params.matchId,
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          elapsed: params.elapsed,
+          scorerName: params.scorerInfo?.scorerName ?? null,
+          assistName: params.scorerInfo?.assistName ?? null,
+          goalDetail: params.scorerInfo?.goalDetail ?? null,
+          scoringTeam,
+          minute: minuteLabel,
+        },
+      });
     }
   }
 }
