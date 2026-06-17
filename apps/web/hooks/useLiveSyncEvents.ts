@@ -10,6 +10,8 @@ export interface MatchEventItem {
     minute: number;
     extraMin: number | null;
     teamId: string | null;
+    annulled?: boolean;
+    annulledReason?: string | null;
 }
 
 export interface LiveSyncState {

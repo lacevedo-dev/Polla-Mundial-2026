@@ -168,7 +168,7 @@ export class GoalLiveNotificationService {
 
     for (const leagueId of leagueIds) {
       try {
-        await this.waGroup.enqueueGoalNotification(params.matchId, leagueId, {
+        const enqueued = await this.waGroup.enqueueGoalNotification(params.matchId, leagueId, {
           homeTeam: params.homeTeamName,
           awayTeam: params.awayTeamName,
           homeScore: params.homeScore,
@@ -180,6 +180,11 @@ export class GoalLiveNotificationService {
           assistName: params.scorerInfo?.assistName ?? null,
           goalDetail: params.scorerInfo?.goalDetail ?? null,
         });
+        if (!enqueued) {
+          this.logger.warn(
+            `GOAL_SCORED no encolado para liga ${leagueId} (${leagueNameById.get(leagueId) ?? 'Polla'}) en partido ${params.matchId} — ${params.homeScore}-${params.awayScore}`,
+          );
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(

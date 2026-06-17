@@ -26,6 +26,28 @@ export const AUTOMATION_STEP_TO_WA_JOB: Partial<Record<AutomationStep, WhatsappG
   [AutomationStep.GOAL_IMPACT]: WhatsappGroupJobType.GOAL_IMPACT,
 };
 
+function findLatestWaJobForLeague(params: {
+  jobType: WhatsappGroupJobType;
+  matchId: string;
+  leagueId: string;
+  jobsByDedupeKey: Map<string, WaJobRow>;
+}): WaJobRow | undefined {
+  const prefix = `${params.jobType}:${params.matchId}:${params.leagueId}:`;
+  const exactKey = `${params.jobType}:${params.matchId}:${params.leagueId}`;
+  const exact = params.jobsByDedupeKey.get(exactKey);
+  if (exact) return exact;
+
+  let latest: WaJobRow | undefined;
+  for (const job of params.jobsByDedupeKey.values()) {
+    if (job.leagueId !== params.leagueId) continue;
+    if (!job.dedupeKey.startsWith(prefix)) continue;
+    if (!latest || job.updatedAt > latest.updatedAt) {
+      latest = job;
+    }
+  }
+  return latest;
+}
+
 type WaJobRow = {
   id: string;
   status: WhatsappJobStatus;
@@ -34,6 +56,7 @@ type WaJobRow = {
   sentAt: Date | null;
   updatedAt: Date;
   attemptCount: number;
+  dedupeKey: string;
 };
 
 export function buildWaGroupChannelBreakdown(params: {
@@ -85,8 +108,12 @@ export function buildWaGroupChannelBreakdown(params: {
     finishedMs !== null && Date.now() - finishedMs > 10 * 60 * 1000;
 
   for (const league of leaguesWithGroup) {
-    const dedupeKey = `${jobType}:${params.matchId}:${league.id}`;
-    const job = params.jobsByDedupeKey.get(dedupeKey);
+    const job = findLatestWaJobForLeague({
+      jobType,
+      matchId: params.matchId,
+      leagueId: league.id,
+      jobsByDedupeKey: params.jobsByDedupeKey,
+    });
 
     if (!job) {
       failed++;

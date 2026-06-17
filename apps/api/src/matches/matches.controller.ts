@@ -9,6 +9,7 @@ import type { Response } from 'express';
 import { SyncEventsService } from '../football-sync/services/sync-events.service';
 import { SyncPlanService } from '../football-sync/services/sync-plan.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { dedupeMatchEvents } from './match-events.util';
 
 @Controller('matches')
 export class MatchesController {
@@ -49,14 +50,15 @@ export class MatchesController {
     async getEvents(@Param('id') id: string) {
         const events = await (this.prisma as any).matchEvent.findMany({
             where: { matchId: id },
-            orderBy: [{ minute: 'asc' }, { extraMin: 'asc' }],
+            orderBy: [{ minute: 'asc' }, { extraMin: 'asc' }, { updatedAt: 'asc' }],
             select: {
                 id: true, type: true, detail: true,
                 playerName: true, assistName: true,
                 minute: true, extraMin: true, teamId: true,
+                annulled: true, annulledReason: true,
             },
         });
-        return events;
+        return dedupeMatchEvents(events);
     }
 
     @UseGuards(JwtAuthGuard)

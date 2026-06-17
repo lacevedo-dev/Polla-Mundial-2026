@@ -11,6 +11,13 @@ import { RateLimiterService } from './rate-limiter.service';
 import { SyncPlanService } from './sync-plan.service';
 import { MonitoringService } from './monitoring.service';
 import { SyncEventsService } from './sync-events.service';
+import {
+  buildMatchEventDedupeKey,
+  filterActiveGoalEventsFromTimeline,
+  formatAnnulledReason,
+  isVarGoalCancelledDetail,
+  resolveGoalAnnulments,
+} from '../../matches/match-events.util';
 import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -551,6 +558,7 @@ export class MatchSyncService {
               goalEvents = this.parseGoalEventsFromResponse(
                 cachedFixtureEvents,
                 fixture.teams.home.id,
+                fixture.teams.away.id,
                 totalGoalsDelta,
               );
 
@@ -576,14 +584,16 @@ export class MatchSyncService {
           for (const goal of goalEvents) {
             if (goal.isHomeGoal) runHome++;
             else runAway++;
+            const isOwnGoal = goal.detail === 'Own Goal';
+            const scorerOnHome = isOwnGoal ? !goal.isHomeGoal : goal.isHomeGoal;
             await this.goalLiveNotifications?.dispatchGoalScored({
               matchId: match.id,
               homeTeamName: fixture.teams.home.name,
               awayTeamName: fixture.teams.away.name,
               homeScore: runHome,
               awayScore: runAway,
-              goalScorerTeam: goal.isHomeGoal ? fixture.teams.home.name : null,
-              awayGoalScorerTeam: goal.isHomeGoal ? null : fixture.teams.away.name,
+              goalScorerTeam: scorerOnHome ? fixture.teams.home.name : null,
+              awayGoalScorerTeam: scorerOnHome ? null : fixture.teams.away.name,
               elapsed: goal.minute,
               scorerInfo: {
                 scorerName: goal.playerName,
@@ -676,6 +686,7 @@ export class MatchSyncService {
       // runtime is constrained to a single MariaDB connection.
       const currentStatusShort = fixture.fixture.status.short ?? null;
       const previousStatusShort = match.statusShort ?? null;
+      const scoreDecreased = newHome < prevHome || newAway < prevAway;
       const shouldSyncHalftimeEvents =
         currentStatusShort === 'HT' && previousStatusShort !== 'HT';
       const isFinalStatus = ['FT', 'AET', 'PEN'].includes(currentStatusShort ?? '');
@@ -685,15 +696,26 @@ export class MatchSyncService {
         !match.eventsNoDataAt &&
         (shouldSyncHalftimeEvents ||
           (isFinalStatus && !wasFinalStatus) ||
+          scoreDecreased ||
           cachedFixtureEvents !== undefined);
 
       if (shouldSyncEvents && fixture.fixture.id) {
+        const eventSyncContext = {
+          homeScore: fixture.goals.home ?? 0,
+          awayScore: fixture.goals.away ?? 0,
+          homeTeamId,
+          awayTeamId,
+          homeTeamApiId: fixture.teams.home.id,
+          awayTeamApiId: fixture.teams.away.id,
+        };
+
         if (cachedFixtureEvents !== undefined) {
           try {
             const eventSyncResult = await this.syncMatchEvents(
               fixture.fixture.id,
               match.id,
               cachedFixtureEvents,
+              eventSyncContext,
             );
             if (eventSyncResult.relevantEvents === 0) {
               await this.prisma.match.update({
@@ -713,7 +735,12 @@ export class MatchSyncService {
             );
           } else {
             try {
-              const eventSyncResult = await this.syncMatchEvents(fixture.fixture.id, match.id);
+              const eventSyncResult = await this.syncMatchEvents(
+                fixture.fixture.id,
+                match.id,
+                undefined,
+                eventSyncContext,
+              );
               if (eventSyncResult.relevantEvents === 0) {
                 await this.prisma.match.update({
                   where: { id: match.id },
@@ -865,20 +892,23 @@ export class MatchSyncService {
   private parseGoalEventsFromResponse(
     rawEvents: any[],
     homeTeamApiId: number,
+    awayTeamApiId: number,
     count: number,
   ): ParsedGoalEvent[] {
-    return rawEvents
-      .filter((ev) => ev.type === 'Goal' && ev.detail !== 'Missed Penalty')
-      .sort((a, b) => (a.time?.elapsed ?? 0) - (b.time?.elapsed ?? 0))
-      .slice(-count)
-      .map((ev) => ({
-        isHomeGoal: ev.team?.id === homeTeamApiId,
-        minute: ev.time?.elapsed ?? 0,
-        extraMin: ev.time?.extra ?? null,
-        playerName: ev.player?.name ?? null,
-        assistName: ev.assist?.name ?? null,
-        detail: ev.detail ?? null,
-      }));
+    const resolveTeamId = (apiTeamId: number | undefined | null): string | null => {
+      if (apiTeamId == null) return null;
+      if (apiTeamId === homeTeamApiId) return 'home';
+      if (apiTeamId === awayTeamApiId) return 'away';
+      return null;
+    };
+
+    return filterActiveGoalEventsFromTimeline(
+      rawEvents,
+      resolveTeamId,
+      count,
+      homeTeamApiId,
+      awayTeamApiId,
+    );
   }
 
   /**
@@ -889,6 +919,14 @@ export class MatchSyncService {
     fixtureId: number,
     matchId: string,
     preloadedEvents?: any[],
+    context?: {
+      homeScore: number;
+      awayScore: number;
+      homeTeamId: string;
+      awayTeamId: string;
+      homeTeamApiId: number;
+      awayTeamApiId: number;
+    },
   ): Promise<{
     relevantEvents: number;
     rawEvents: number;
@@ -928,32 +966,205 @@ export class MatchSyncService {
       const assistName: string | null = ev.assist?.name ?? null;
       const teamId = resolveTeamId(ev.team?.id);
 
+      if (type === 'Var') {
+        if (!isVarGoalCancelledDetail(detail)) continue;
+        relevantEvents++;
+
+        const normalizedPlayerName = (playerName ?? '').trim();
+        const varDetail = formatAnnulledReason(detail);
+        try {
+          const existing = await this.findExistingMatchEvent({
+            matchId,
+            eventType: 'VAR',
+            minute,
+            extraMin,
+            teamId,
+            playerName: normalizedPlayerName || varDetail,
+          });
+
+          if (existing) {
+            await (this.prisma as any).matchEvent.update({
+              where: { id: existing.id },
+              data: {
+                detail: varDetail,
+                teamId,
+                playerName: normalizedPlayerName || null,
+                updatedAt: new Date(),
+              },
+            });
+          } else {
+            await (this.prisma as any).matchEvent.create({
+              data: {
+                matchId,
+                type: 'VAR',
+                detail: varDetail,
+                minute,
+                extraMin,
+                playerName: normalizedPlayerName || null,
+                teamId,
+              },
+            });
+          }
+        } catch {
+          // Ignore duplicate VAR rows
+        }
+        continue;
+      }
+
       // Only store goals and cards (skip substitutions to keep list clean)
       if (!['Goal', 'Card'].includes(type)) continue;
       relevantEvents++;
 
+      const eventType = type.toUpperCase();
+      const normalizedPlayerName = (playerName ?? '').trim();
+
       try {
+        const existing = await this.findExistingMatchEvent({
+          matchId,
+          eventType,
+          minute,
+          extraMin,
+          teamId,
+          playerName: normalizedPlayerName,
+        });
+
+        if (existing) {
+          await (this.prisma as any).matchEvent.update({
+            where: { id: existing.id },
+            data: {
+              detail,
+              assistName,
+              extraMin,
+              teamId,
+              playerName: normalizedPlayerName || null,
+              updatedAt: new Date(),
+            },
+          });
+          continue;
+        }
+
         await (this.prisma as any).matchEvent.upsert({
           where: {
             matchId_type_playerName_minute: {
               matchId,
-              type:       type.toUpperCase(),
-              playerName: playerName ?? '',
+              type: eventType,
+              playerName: normalizedPlayerName,
               minute,
             },
           },
           update: { detail, assistName, extraMin, teamId, updatedAt: new Date() },
-          create: { matchId, type: type.toUpperCase(), detail, minute, extraMin, playerName, assistName, teamId },
+          create: {
+            matchId,
+            type: eventType,
+            detail,
+            minute,
+            extraMin,
+            playerName: normalizedPlayerName || null,
+            assistName,
+            teamId,
+          },
         });
       } catch {
         // Ignore constraint errors (duplicate event at same minute)
       }
     }
 
+    if (context) {
+      await this.reconcileGoalAnnulments(matchId, events, resolveTeamId, context);
+    }
+
     return {
       relevantEvents,
       rawEvents: events.length,
     };
+  }
+
+  private async reconcileGoalAnnulments(
+    matchId: string,
+    rawEvents: any[],
+    resolveTeamId: (apiTeamId: number | undefined | null) => string | null,
+    context: {
+      homeScore: number;
+      awayScore: number;
+      homeTeamId: string;
+      awayTeamId: string;
+    },
+  ): Promise<void> {
+    const dbGoals = await (this.prisma as any).matchEvent.findMany({
+      where: { matchId, type: 'GOAL' },
+      select: {
+        id: true,
+        type: true,
+        minute: true,
+        extraMin: true,
+        teamId: true,
+        playerName: true,
+        annulled: true,
+        annulledReason: true,
+      },
+    });
+
+    const annulments = resolveGoalAnnulments(
+      rawEvents,
+      dbGoals,
+      resolveTeamId,
+      context.homeTeamId,
+      context.awayTeamId,
+      context.homeScore,
+      context.awayScore,
+    );
+
+    for (const goal of dbGoals) {
+      const key = buildMatchEventDedupeKey(goal);
+      const reason = annulments.get(key) ?? null;
+      const shouldAnnul = reason != null;
+
+      if (!!goal.annulled === shouldAnnul && (goal.annulledReason ?? null) === reason) {
+        continue;
+      }
+
+      await (this.prisma as any).matchEvent.update({
+        where: { id: goal.id },
+        data: {
+          annulled: shouldAnnul,
+          annulledReason: shouldAnnul ? reason : null,
+          updatedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  private async findExistingMatchEvent(params: {
+    matchId: string;
+    eventType: string;
+    minute: number;
+    extraMin: number | null;
+    teamId: string | null;
+    playerName: string;
+  }) {
+    const candidates = await (this.prisma as any).matchEvent.findMany({
+      where: {
+        matchId: params.matchId,
+        type: params.eventType,
+        minute: params.minute,
+      },
+    });
+
+    const incomingKey = buildMatchEventDedupeKey({
+      type: params.eventType,
+      minute: params.minute,
+      extraMin: params.extraMin,
+      teamId: params.teamId,
+      playerName: params.playerName,
+    });
+
+    return candidates.find((candidate: {
+      type: string;
+      minute: number;
+      extraMin: number | null;
+      teamId: string | null;
+      playerName: string | null;
+    }) => buildMatchEventDedupeKey(candidate) === incomingKey) ?? null;
   }
 
   private async maybeDispatchLiveEvent(

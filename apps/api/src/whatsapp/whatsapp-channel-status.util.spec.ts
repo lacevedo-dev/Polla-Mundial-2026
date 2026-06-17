@@ -38,6 +38,7 @@ describe('buildWaGroupChannelBreakdown', () => {
             sentAt: new Date(),
             updatedAt: new Date(),
             attemptCount: 0,
+            dedupeKey: 'MATCH_REMINDER:m1:l1',
           },
         ],
       ]),
@@ -66,6 +67,7 @@ describe('buildWaGroupChannelBreakdown', () => {
             sentAt: null,
             updatedAt: new Date(),
             attemptCount: 0,
+            dedupeKey: 'RESULT_NOTIFICATION:m1:l1',
           },
         ],
       ]),
@@ -75,5 +77,34 @@ describe('buildWaGroupChannelBreakdown', () => {
 
     expect(result?.waGroupFailed).toBe(1);
     expect(result?.waGroupReason).toMatch(/desconectado/i);
+  });
+
+  it('encuentra jobs de gol con dedupe por marcador', () => {
+    const result = buildWaGroupChannelBreakdown({
+      step: AutomationStep.GOAL_IMPACT,
+      stepStatus: 'SUCCESS',
+      matchId: 'm1',
+      relevantLeagues: leagues,
+      jobsByDedupeKey: new Map([
+        [
+          'GOAL_IMPACT:m1:l1:2-1',
+          {
+            id: 'job3',
+            status: WhatsappJobStatus.SENT,
+            lastError: null,
+            leagueId: 'l1',
+            sentAt: new Date(),
+            updatedAt: new Date(),
+            attemptCount: 0,
+            dedupeKey: 'GOAL_IMPACT:m1:l1:2-1',
+          },
+        ],
+      ]),
+      waConnected: true,
+      stepFinishedAt: new Date().toISOString(),
+    });
+
+    expect(result?.waGroupSent).toBe(1);
+    expect(result?.waGroupFailed).toBe(0);
   });
 });

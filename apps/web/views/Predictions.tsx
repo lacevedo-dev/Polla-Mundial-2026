@@ -2065,7 +2065,8 @@ const Predictions: React.FC = () => {
                 return;
             }
 
-            const delay = hasLiveMatches ? 180_000 : 300_000;
+            const liveRefreshMs = Math.max(60_000, liveSync.syncIntervalMinutes * 60_000);
+            const delay = hasLiveMatches ? liveRefreshMs : 300_000;
             timeoutId = window.setTimeout(async () => {
                 if (
                     cancelled ||
@@ -2096,7 +2097,7 @@ const Predictions: React.FC = () => {
                 window.clearTimeout(timeoutId);
             }
         };
-    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches, hasLiveMatches]);
+    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches, hasLiveMatches, liveSync.syncIntervalMinutes]);
 
     const loadParticipationOptions = React.useCallback(
         async (matchId: string) => {

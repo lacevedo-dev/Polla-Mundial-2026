@@ -270,6 +270,47 @@ const Dashboard: React.FC = () => {
         });
     }, [liveSync.matchesUpdatedCount, liveMatches]);
 
+    // Refresco periódico alineado con el intervalo de sync del backend (~1 min en vivo)
+    useEffect(() => {
+        if (!activeLeague?.id || liveMatches.length === 0) return;
+
+        const intervalMs = Math.max(60_000, liveSync.syncIntervalMinutes * 60_000);
+        let cancelled = false;
+
+        const refreshLiveData = async () => {
+            if (cancelled || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
+                return;
+            }
+
+            try {
+                await fetchLeagueMatches(activeLeague.id, { background: true });
+                const results = await Promise.all(
+                    liveMatches.map((m) =>
+                        request<MatchEventItem[]>(`/matches/${m.id}/events`)
+                            .then((events) => ({ id: m.id, events }))
+                            .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
+                    ),
+                );
+                setMatchEvents((prev) => {
+                    const next = new Map(prev);
+                    results.forEach((r) => next.set(r.id, r.events));
+                    return next;
+                });
+            } catch {
+                // silent background refresh
+            }
+        };
+
+        const intervalId = window.setInterval(() => {
+            void refreshLiveData();
+        }, intervalMs);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [activeLeague?.id, liveMatches, liveSync.syncIntervalMinutes, fetchLeagueMatches]);
+
     useEffect(() => {
         if (liveMatches.length === 0 || !activeLeague?.id) { setLiveStandings(null); return; }
         void request<LiveStandingsData>(`/predictions/live-standings/${activeLeague.id}`)

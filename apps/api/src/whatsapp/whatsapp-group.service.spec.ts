@@ -123,7 +123,8 @@ describe('WhatsappGroupService', () => {
     });
 
     it('creates job with score-based dedupeKey', async () => {
-      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us' });
+      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us', name: 'Liga' });
+      mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue(null);
       mockPrisma.whatsappGroupJob.create.mockResolvedValue({});
 
       const ok = await service.enqueueGoalNotification('m1', 'l1', {
@@ -178,8 +179,10 @@ describe('WhatsappGroupService', () => {
       );
     });
 
-    it('marks job FAILED when sendToGroup throws', async () => {
-      mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue(baseJob);
+    it('reencola en PENDING cuando sendToGroup falla (reintento automático)', async () => {
+      mockPrisma.whatsappGroupJob.findUnique
+        .mockResolvedValueOnce(baseJob)
+        .mockResolvedValueOnce({ ...baseJob, attemptCount: 1 });
       mockPrisma.whatsappGroupJob.update.mockResolvedValue({});
       mockReportService.getResultsDataForLeague.mockResolvedValue({
         match: { homeTeam: 'A', awayTeam: 'B', matchDate: new Date(), homeScore: 1, awayScore: 0 },
@@ -192,8 +195,8 @@ describe('WhatsappGroupService', () => {
       expect(mockPrisma.whatsappGroupJob.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            status: WhatsappJobStatus.FAILED,
-            lastError: 'Network error',
+            status: WhatsappJobStatus.PENDING,
+            lastError: '[intento 1/3] Network error',
           }),
         }),
       );
@@ -218,7 +221,7 @@ describe('WhatsappGroupService', () => {
 
       expect(mockPrisma.whatsappGroupJob.update).toHaveBeenCalledWith({
         where: { id: 'job1' },
-        data: { status: WhatsappJobStatus.PENDING, lastError: null },
+        data: { status: WhatsappJobStatus.PENDING, lastError: null, attemptCount: 0 },
       });
     });
   });

@@ -140,7 +140,7 @@ export class SyncPlanService {
       date: today,
       totalMatches: matches.total,
       requestBudget: available,
-      intervalMinutes,
+      intervalMinutes: effectiveIntervalMinutes,
       estimatedRequestsUsed: estimatedTotal,
       strategy,
       hasLiveMatches: matches.live > 0,

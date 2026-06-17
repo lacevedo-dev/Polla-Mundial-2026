@@ -305,14 +305,52 @@ export class WhatsappGroupService {
       goalDetail?: string | null;
     },
   ): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.GOAL_SCORED))) {
+      this.logger.warn(
+        `GOAL_SCORED: canal WA Grupo deshabilitado (scheduler live_goal) para liga ${leagueId}`,
+      );
+      return false;
+    }
+
     const league = await this.prisma.league.findUnique({
       where: { id: leagueId },
-      select: { whatsappGroupId: true },
+      select: { whatsappGroupId: true, name: true },
     });
-    if (!league?.whatsappGroupId) return false;
+    if (!league?.whatsappGroupId) {
+      this.logger.warn(
+        `GOAL_SCORED: liga ${league?.name ?? leagueId} sin whatsappGroupId configurado`,
+      );
+      return false;
+    }
 
     const caption = buildGoalCaption(params);
     const dedupeKey = `GOAL_SCORED:${matchId}:${leagueId}:${params.homeScore}-${params.awayScore}`;
+
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return true;
+    }
+
+    if (existing?.status === WhatsappJobStatus.FAILED) {
+      await this.prisma.whatsappGroupJob.update({
+        where: { id: existing.id },
+        data: {
+          status: WhatsappJobStatus.PENDING,
+          caption,
+          lastError: null,
+          attemptCount: 0,
+        },
+      });
+      return true;
+    }
+
+    if (existing) {
+      return true;
+    }
 
     try {
       await this.prisma.whatsappGroupJob.create({
@@ -327,8 +365,12 @@ export class WhatsappGroupService {
         },
       });
       return true;
-    } catch (error: any) {
-      if (error?.code === 'P2002') return false;
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') {
+        this.logger.warn(`GOAL_SCORED: job duplicado ${dedupeKey}`);
+        return false;
+      }
       throw error;
     }
   }
@@ -469,6 +511,15 @@ export class WhatsappGroupService {
     if (type === WhatsappGroupJobType.GOAL_IMPACT) {
       const job = await this.prisma.whatsappGroupJob.findFirst({
         where: { matchId, leagueId, type: WhatsappGroupJobType.GOAL_IMPACT },
+        orderBy: { createdAt: 'desc' },
+        select: { dedupeKey: true },
+      });
+      return job?.dedupeKey ?? null;
+    }
+
+    if (type === WhatsappGroupJobType.GOAL_SCORED) {
+      const job = await this.prisma.whatsappGroupJob.findFirst({
+        where: { matchId, leagueId, type: WhatsappGroupJobType.GOAL_SCORED },
         orderBy: { createdAt: 'desc' },
         select: { dedupeKey: true },
       });

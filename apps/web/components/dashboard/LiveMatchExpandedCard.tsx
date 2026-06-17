@@ -4,6 +4,8 @@ import { LiveMatchTimer, MatchProgressBar } from '../live/LiveMatchTimer';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { calcLivePoints } from '../../utils/dashboard';
+import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
+import { formatAnnulledGoalLabel, splitGoalEvents } from '../../utils/matchEvents';
 
 function partitionGoalsByTeam(
     goals: MatchEventItem[],
@@ -49,6 +51,45 @@ function partitionGoalsByTeam(
     return { homeGoals, awayGoals };
 }
 
+function renderGoalLine(
+    event: MatchEventItem,
+    align: 'left' | 'right',
+    annulled = false,
+) {
+    const isOG = event.detail?.toLowerCase().includes('own goal');
+    const min = `${event.minute}'${event.extraMin ? `+${event.extraMin}` : ''}`;
+    const player = isOG ? 'OG' : (event.playerName?.split(' ').pop() ?? '—');
+    const tone = annulled ? 'text-white/35 line-through decoration-white/25' : 'text-white/70';
+
+    if (align === 'left') {
+        return (
+            <span key={`${event.minute}-${event.playerName}-${annulled ? 'x' : 'o'}`} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
+                <span className={`text-[10px] ${annulled ? 'opacity-40' : ''}`}>{annulled ? '🚫' : '⚽'}</span>
+                <span className="truncate">{player}</span>
+                <span className="text-white/30 shrink-0">{min}</span>
+                {annulled && (
+                    <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide text-rose-300/90 bg-rose-500/10">
+                        {formatAnnulledGoalLabel(event.annulledReason)}
+                    </span>
+                )}
+            </span>
+        );
+    }
+
+    return (
+        <span key={`${event.minute}-${event.playerName}-${annulled ? 'x' : 'o'}`} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
+            {annulled && (
+                <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide text-rose-300/90 bg-rose-500/10">
+                    {formatAnnulledGoalLabel(event.annulledReason)}
+                </span>
+            )}
+            <span className="text-white/30 shrink-0">{min}</span>
+            <span className="truncate">{player}</span>
+            <span className={`text-[10px] ${annulled ? 'opacity-40' : ''}`}>{annulled ? '🚫' : '⚽'}</span>
+        </span>
+    );
+}
+
 interface LiveStandingsData {
     myProvisionalPosition?: number | null;
     myPositionChange: number;
@@ -91,15 +132,25 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
         ? 'text-lime-300'
         : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
 
-    const expandedEvents = (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD'].includes(e.type));
-    const goals = expandedEvents.filter((e) => e.type === 'GOAL');
+    const expandedEvents = (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD', 'VAR'].includes(e.type));
+    const { active: activeGoals, annulled: annulledGoals } = splitGoalEvents(
+        expandedEvents.filter((e) => e.type === 'GOAL'),
+    );
     const { homeGoals, awayGoals } = partitionGoalsByTeam(
-        goals,
+        activeGoals,
         expandedMatch.homeTeamId,
         expandedMatch.awayTeamId,
         expandedRealHome,
         expandedRealAway,
     );
+    const { homeGoals: homeAnnulled, awayGoals: awayAnnulled } = partitionGoalsByTeam(
+        annulledGoals,
+        expandedMatch.homeTeamId,
+        expandedMatch.awayTeamId,
+        expandedRealHome,
+        expandedRealAway,
+    );
+    const hasGoalSummary = activeGoals.length + annulledGoals.length > 0;
 
     return (
         <AnimatePresence>
@@ -177,35 +228,17 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                     </div>
 
                     {/* Resumen de goles */}
-                    {goals.length > 0 && (
+                    {hasGoalSummary && (
                         <div className="mt-2 pt-2 border-t border-white/5">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
-                                    {homeGoals.map((e, i) => {
-                                        const isOG = e.detail?.toLowerCase().includes('own goal');
-                                        const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
-                                        return (
-                                            <span key={i} className="flex items-center gap-1 text-[9px] font-bold text-white/70">
-                                                <span className="text-[10px]">⚽</span>
-                                                <span className="truncate">{isOG ? 'OG' : (e.playerName?.split(' ').pop() ?? '—')}</span>
-                                                <span className="text-white/30 shrink-0">{min}</span>
-                                            </span>
-                                        );
-                                    })}
+                                    {homeGoals.map((e) => renderGoalLine(e, 'left'))}
+                                    {homeAnnulled.map((e) => renderGoalLine(e, 'left', true))}
                                 </div>
                                 <div className="w-px bg-white/10 self-stretch mx-1" />
                                 <div className="flex flex-col items-end gap-0.5 min-w-0 flex-1">
-                                    {awayGoals.map((e, i) => {
-                                        const isOG = e.detail?.toLowerCase().includes('own goal');
-                                        const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
-                                        return (
-                                            <span key={i} className="flex items-center gap-1 text-[9px] font-bold text-white/70">
-                                                <span className="text-white/30 shrink-0">{min}</span>
-                                                <span className="truncate">{isOG ? 'OG' : (e.playerName?.split(' ').pop() ?? '—')}</span>
-                                                <span className="text-[10px]">⚽</span>
-                                            </span>
-                                        );
-                                    })}
+                                    {awayGoals.map((e) => renderGoalLine(e, 'right'))}
+                                    {awayAnnulled.map((e) => renderGoalLine(e, 'right', true))}
                                 </div>
                             </div>
                         </div>
@@ -221,20 +254,35 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                         const isOG = e.detail?.toLowerCase().includes('own goal');
                                         const isPen = e.detail?.toLowerCase().includes('penalty');
                                         const isGoal = e.type === 'GOAL';
+                                        const isVar = e.type === 'VAR';
                                         const isYellow = e.type === 'CARD' && e.detail?.toLowerCase().includes('yellow');
                                         const isRed = e.type === 'CARD' && (e.detail?.toLowerCase().includes('red') || e.detail?.toLowerCase().includes('second yellow'));
                                         const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
-                                        const icon = isGoal ? (isOG ? '⚽ OG' : isPen ? '⚽ P' : '⚽') : isYellow ? '🟨' : '🟥';
-                                        const iconBg = isGoal
-                                            ? 'bg-white/10 text-white'
-                                            : isYellow ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-600/20 text-rose-300';
+                                        const isAnnulledGoal = isGoal && !!e.annulled;
+                                        const icon = isVar
+                                            ? '📺 VAR'
+                                            : isAnnulledGoal
+                                                ? '🚫'
+                                            : isGoal
+                                                ? (isOG ? '⚽ OG' : isPen ? '⚽ P' : '⚽')
+                                                : isYellow ? '🟨' : '🟥';
+                                        const iconBg = isVar || isAnnulledGoal
+                                            ? 'bg-rose-500/15 text-rose-200'
+                                            : isGoal
+                                                ? 'bg-white/10 text-white'
+                                                : isYellow ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-600/20 text-rose-300';
+                                        const label = isVar
+                                            ? `Gol anulado${e.detail ? ` · ${e.detail}` : ''}`
+                                            : isAnnulledGoal
+                                                ? `${e.playerName ?? '—'} · ${formatAnnulledGoalLabel(e.annulledReason)}`
+                                                : (e.playerName ?? '—');
                                         return (
                                             <div key={i} className="flex items-center gap-2">
                                                 <span className="w-8 shrink-0 text-right text-[9px] font-black text-white/30 tabular-nums">{min}</span>
                                                 <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black ${iconBg}`}>{icon}</span>
-                                                <span className="min-w-0 flex-1 truncate text-[9px] font-bold text-white/60">
-                                                    {e.playerName ?? '—'}
-                                                    {e.assistName && <span className="ml-1 text-white/30">(asist. {e.assistName.split(' ').pop()})</span>}
+                                                <span className={`min-w-0 flex-1 truncate text-[9px] font-bold ${isVar || isAnnulledGoal ? 'text-rose-200/80 line-through decoration-rose-200/30' : 'text-white/60'}`}>
+                                                    {label}
+                                                    {!isVar && e.assistName && <span className="ml-1 text-white/30">(asist. {e.assistName.split(' ').pop()})</span>}
                                                 </span>
                                             </div>
                                         );
