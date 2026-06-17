@@ -38,6 +38,7 @@ import {
   buildEscalationUserMessage,
   buildPreMatchEscalationWaCaption,
   buildT60ReminderMessage,
+  buildT60WaGroupCaption,
   escalationDedupeKey,
   escalationNotificationDataKey,
 } from './pre-match-message.builder';
@@ -152,11 +153,26 @@ export class PreMatchOrchestratorService {
         let waGroupEnqueued = 0;
         if (this.waGroup) {
           try {
+            const missing = getMissingMembersForLeague(match, league);
+            const activeMembers = league.members.filter(
+              (m) => m.status === MemberStatus.ACTIVE,
+            ).length;
+            const predictedCount = countPredictionsForLeague(match, league.id);
+            const waCaption = buildT60WaGroupCaption({
+              leagueName: league.name,
+              homeTeam: home,
+              awayTeam: away,
+              matchDate: match.matchDate,
+              closeMinutes,
+              missingMembers: missing,
+              predictedCount,
+              totalMembers: activeMembers,
+            });
             const ok = await this.waGroup.enqueueNotification(
               WhatsappGroupJobType.MATCH_REMINDER,
               match.id,
               league.id,
-              '',
+              waCaption,
             );
             if (ok) waGroupEnqueued = 1;
           } catch {

@@ -13,7 +13,7 @@ export class WhatsappDispatcherScheduler {
     private readonly waGroup: WhatsappGroupService,
   ) {}
 
-  @Cron('*/2 * * * *')
+  @Cron('* * * * *')
   async dispatchPendingJobs(): Promise<void> {
     if (this.running) return;
     if (!this.waWeb.isConnected()) return;

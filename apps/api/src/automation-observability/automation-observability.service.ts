@@ -255,6 +255,7 @@ export class AutomationObservabilityService {
           leagueId: true,
           sentAt: true,
           updatedAt: true,
+          attemptCount: true,
           dedupeKey: true,
         },
       }),

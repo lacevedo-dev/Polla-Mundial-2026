@@ -1,6 +1,7 @@
 import type { EscalationCheckpointId } from '../types/automation.types';
 import type { MissingMemberForLeague } from '../audience/match-audience.resolver';
 import {
+  BOGOTA_TIME_LABEL,
   formatCloseLineBogota,
   formatKickoffLineBogota,
   formatMatchDateTimeBogota,
@@ -48,6 +49,69 @@ export function buildT60ReminderMessage(params: {
     title: 'Recordatorio — pronóstico pendiente',
     body: `${homeTeam} vs ${awayTeam}. ${kickoffLine} Te falta pronosticar en: ${pendingList}. ${modifyLine}`,
   };
+}
+
+/** Mensaje WA Grupo para recordatorio T-60 (tono colectivo, no individual). */
+export function buildT60WaGroupCaption(params: {
+  leagueName: string;
+  homeTeam: string;
+  awayTeam: string;
+  matchDate: Date;
+  closeMinutes: number;
+  missingMembers: MissingMemberForLeague[];
+  predictedCount: number;
+  totalMembers: number;
+  sentAt?: Date;
+}): string {
+  const scheduledReminderAt = new Date(
+    params.matchDate.getTime() - 60 * 60_000,
+  );
+  const closeAt = formatPredictionCloseDateTimeBogota(
+    params.matchDate,
+    params.closeMinutes,
+  );
+
+  const lines = [
+    `⏰ *Recordatorio T-60* | ${params.leagueName}`,
+    `⚽ ${params.homeTeam} vs ${params.awayTeam}`,
+    `📅 Inicio del partido: ${formatMatchDateTimeBogota(params.matchDate)} (${BOGOTA_TIME_LABEL})`,
+    `🕐 Aviso programado: ${formatMatchDateTimeBogota(scheduledReminderAt)} (${BOGOTA_TIME_LABEL})`,
+    '',
+  ];
+
+  if (params.missingMembers.length === 0) {
+    lines.push('✅ Todos los miembros activos del grupo ya tienen pronóstico.');
+    lines.push(
+      `📝 Aún pueden ingresar o actualizar hasta ${closeAt} (${BOGOTA_TIME_LABEL}) — ${params.closeMinutes} min antes del inicio.`,
+    );
+  } else {
+    lines.push('⚠️ *En este grupo falta pronosticar:*');
+    const shown = params.missingMembers.slice(0, WA_MISSING_NAMES_DISPLAY_LIMIT);
+    for (const member of shown) {
+      lines.push(`• ${member.displayName}`);
+    }
+    const hidden = params.missingMembers.length - shown.length;
+    if (hidden > 0) {
+      lines.push(`• … y ${hidden} más`);
+    }
+    lines.push('');
+    lines.push(
+      `📝 Plazo para enviar o cambiar: hasta ${closeAt} (${BOGOTA_TIME_LABEL}).`,
+    );
+  }
+
+  lines.push('');
+  lines.push(
+    `📊 Con pronóstico: ${params.predictedCount}/${params.totalMembers}`,
+  );
+
+  if (params.sentAt) {
+    lines.push(
+      `📤 Enviado al grupo: ${formatMatchDateTimeBogota(params.sentAt)} (${BOGOTA_TIME_LABEL})`,
+    );
+  }
+
+  return lines.join('\n');
 }
 
 export function buildEscalationUserMessage(params: {

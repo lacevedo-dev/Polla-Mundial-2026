@@ -33,6 +33,7 @@ type WaJobRow = {
   leagueId: string;
   sentAt: Date | null;
   updatedAt: Date;
+  attemptCount: number;
 };
 
 export function buildWaGroupChannelBreakdown(params: {
@@ -108,14 +109,28 @@ export function buildWaGroupChannelBreakdown(params: {
       case WhatsappJobStatus.SENDING:
         if (!params.waConnected) {
           failed++;
-          reasons.push('WhatsApp Web desconectado — el mensaje quedó pendiente');
+          const retryHint =
+            job.attemptCount > 0 && job.lastError
+              ? ` (reintento ${job.attemptCount}/3)`
+              : '';
+          reasons.push(
+            `WhatsApp Web desconectado${retryHint} — ${job.lastError?.trim() || 'mensaje pendiente'}`,
+          );
           firstFailedJobId ??= job.id;
           firstFailedLeagueId ??= league.id;
         } else if (stalePending) {
           failed++;
-          reasons.push('Pendiente demasiado tiempo sin enviarse al grupo');
+          reasons.push(
+            job.lastError?.trim() ||
+              'Pendiente demasiado tiempo sin enviarse al grupo',
+          );
           firstFailedJobId ??= job.id;
           firstFailedLeagueId ??= league.id;
+        } else if (job.attemptCount > 0 && job.lastError) {
+          enqueued++;
+          reasons.push(
+            `Reintento ${job.attemptCount}/3 programado: ${job.lastError}`,
+          );
         } else {
           enqueued++;
         }

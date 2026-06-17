@@ -16,6 +16,7 @@ import {
   buildEscalationUserMessage,
   buildPreMatchEscalationWaCaption,
   buildT60ReminderMessage,
+  buildT60WaGroupCaption,
 } from '../pre-match/pre-match-message.builder';
 import {
   buildGoalImpactWaCaption,
@@ -206,12 +207,28 @@ export class AutomationMessagePreviewService {
     });
 
     if (channel === 'waGroup') {
+      const missing = league
+        ? getMissingMembersForLeague(match, league)
+        : [{ userId: 'preview', displayName: 'Participante pendiente' }];
+      const totalMembers = league?.members.filter((m) => m.status === 'ACTIVE').length ?? 1;
+      const predictedCount = league
+        ? countPredictionsForLeague(match, league.id)
+        : 0;
       return {
         step: AutomationStep.MATCH_REMINDER,
         channel,
         source: 'generated',
         title: null,
-        body: `${title}\n${body}`,
+        body: buildT60WaGroupCaption({
+          leagueName: league?.name ?? 'Polla',
+          homeTeam: match.homeTeam.name,
+          awayTeam: match.awayTeam.name,
+          matchDate: match.matchDate,
+          closeMinutes,
+          missingMembers: missing,
+          predictedCount,
+          totalMembers,
+        }),
       };
     }
     return {
