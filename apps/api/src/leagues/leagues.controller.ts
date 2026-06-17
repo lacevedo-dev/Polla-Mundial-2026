@@ -112,18 +112,6 @@ export class LeaguesController {
 
     @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK)
-    @Post(':id/payments/:obligationId/confirm')
-    async confirmPayment(
-        @Request() req,
-        @Param('id') leagueId: string,
-        @Param('obligationId') obligationId: string,
-        @Body() body: { method: string; reference?: string; note?: string },
-    ) {
-        return this.leaguesService.confirmObligation(req.user.userId, leagueId, obligationId, body);
-    }
-
-    @UseGuards(JwtAuthGuard)
-    @HttpCode(HttpStatus.OK)
     @Post(':id/payments/reminders')
     async sendPaymentReminders(
         @Request() req,
@@ -134,6 +122,18 @@ export class LeaguesController {
         },
     ) {
         return this.leaguesService.sendPaymentReminders(req.user.userId, leagueId, body);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(HttpStatus.OK)
+    @Post(':id/payments/:obligationId/confirm')
+    async confirmPayment(
+        @Request() req,
+        @Param('id') leagueId: string,
+        @Param('obligationId') obligationId: string,
+        @Body() body: { method: string; reference?: string; note?: string },
+    ) {
+        return this.leaguesService.confirmObligation(req.user.userId, leagueId, obligationId, body);
     }
 
     @UseGuards(JwtAuthGuard)

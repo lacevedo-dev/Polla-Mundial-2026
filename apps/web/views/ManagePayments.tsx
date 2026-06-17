@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Button, Input, Badge, Card, Checkbox } from '../components/UI';
 import { useLeagueStore } from '../stores/league.store';
-import { request } from '../api';
+import { ApiError, request } from '../api';
 
 /* ─── types ─────────────────────────────────────────────────────── */
 
@@ -559,8 +559,14 @@ const ReminderModal: React.FC<{
             }
             setSent(true);
             setTimeout(() => { setSent(false); onClose(); }, 1500);
-        } catch {
-            setSendError('No se pudo enviar el recordatorio. Verifica tu conexión e intenta de nuevo.');
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                setSendError('El servidor no tiene activo el envío de recordatorios (404). Falta desplegar la última versión del API.');
+            } else if (err instanceof ApiError && err.message) {
+                setSendError(err.message);
+            } else {
+                setSendError('No se pudo enviar el recordatorio. Verifica tu conexión e intenta de nuevo.');
+            }
         } finally {
             setSending(false);
         }
