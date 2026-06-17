@@ -57,6 +57,16 @@ export class LiveOrchestratorService {
 
   async handleGoalImpact(ctx: GoalImpactContext): Promise<void> {
     if (!(await this.stepConfig.isStepEnabled(AutomationStep.GOAL_IMPACT))) {
+      this.logger.warn(
+        `GOAL_IMPACT desactivado en configuración — omitido para ${ctx.matchId} (${ctx.homeScore}-${ctx.awayScore})`,
+      );
+      return;
+    }
+
+    if (!this.waGroup) {
+      this.logger.warn(
+        `WhatsappGroupService no disponible — GOAL_IMPACT omitido para ${ctx.matchId}`,
+      );
       return;
     }
 
@@ -107,7 +117,9 @@ export class LiveOrchestratorService {
           leagueId: summary.leagueId,
           matchDate: ctx.matchDate,
           audienceCount: summary.scoringCount,
-          summary: `Impacto gol ${ctx.homeTeam} vs ${ctx.awayTeam} ${ctx.homeScore}-${ctx.awayScore}`,
+          summary: enqueued
+            ? `Impacto gol ${ctx.homeTeam} vs ${ctx.awayTeam} ${ctx.homeScore}-${ctx.awayScore} (${summary.leagueName})`
+            : `Impacto gol no encolado (${summary.leagueName}) — revisar WA Grupo`,
           delivered: enqueued ? 1 : 0,
           pushSent: 0,
           pushFailed: 0,
@@ -116,8 +128,15 @@ export class LiveOrchestratorService {
             homeScore: ctx.homeScore,
             awayScore: ctx.awayScore,
             exactScoreCount: summary.exactScoreCount,
+            provisionalRanking: summary.provisionalRanking,
           },
         });
+
+        if (!enqueued) {
+          this.logger.warn(
+            `GOAL_IMPACT no encolado para liga ${summary.leagueId} (${summary.leagueName}) en partido ${ctx.matchId}`,
+          );
+        }
       }
 
       this.logger.log(
@@ -323,12 +342,7 @@ export class LiveOrchestratorService {
     });
 
     await this.observability.finishRun(runId, {
-      status:
-        params.pushFailed > 0
-          ? 'WARNING'
-          : params.delivered > 0 || params.waEnqueued > 0
-            ? 'SUCCESS'
-            : 'SKIPPED',
+      status: this.resolveRunStatus(params),
       summary: params.summary,
       deliveredCount: params.delivered,
       failedCount: params.pushFailed,
@@ -343,6 +357,22 @@ export class LiveOrchestratorService {
         ...params.extraDetails,
       },
     });
+  }
+
+  private resolveRunStatus(params: {
+    step: AutomationStep;
+    delivered: number;
+    pushFailed: number;
+    waEnqueued: number;
+  }): 'SUCCESS' | 'WARNING' | 'SKIPPED' | 'FAILED' {
+    if (params.step === AutomationStep.GOAL_IMPACT) {
+      if (params.waEnqueued > 0) return 'SUCCESS';
+      return 'FAILED';
+    }
+
+    if (params.pushFailed > 0) return 'WARNING';
+    if (params.delivered > 0 || params.waEnqueued > 0) return 'SUCCESS';
+    return 'SKIPPED';
   }
 
   /** Reintento manual desde admin — ignora dedupe de in-app y fuerza WA si aplica. */

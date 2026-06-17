@@ -12,6 +12,12 @@ export type LeagueGoalImpactSummary = {
   scoringCount: number;
   topScorers: Array<{ displayName: string; points: number }>;
   popularPredictions: Array<{ score: string; count: number }>;
+  provisionalRanking: Array<{
+    displayName: string;
+    provisionalPosition: number;
+    positionChange: number;
+    provisionalPoints: number;
+  }>;
 };
 
 @Injectable()
@@ -28,10 +34,25 @@ export class GoalImpactAnalyzerService {
       homeScore,
       awayScore,
     );
-    return impacts.map((impact) => this.summarizeOneLeague(impact));
+
+    const summaries: LeagueGoalImpactSummary[] = [];
+    for (const impact of impacts) {
+      const provisionalRanking =
+        await this.predictions.computeProvisionalRankingAfterMatchScore(
+          impact.leagueId,
+          matchId,
+          homeScore,
+          awayScore,
+        );
+      summaries.push(this.summarizeOneLeague(impact, provisionalRanking));
+    }
+    return summaries;
   }
 
-  summarizeOneLeague(impact: ProvisionalLeagueImpact): LeagueGoalImpactSummary {
+  summarizeOneLeague(
+    impact: ProvisionalLeagueImpact,
+    provisionalRanking: LeagueGoalImpactSummary['provisionalRanking'] = [],
+  ): LeagueGoalImpactSummary {
     const exactEntries = impact.entries.filter(
       (e) => e.detailType === 'EXACT_SCORE',
     );
@@ -61,6 +82,7 @@ export class GoalImpactAnalyzerService {
       scoringCount: scoringEntries.length,
       topScorers,
       popularPredictions,
+      provisionalRanking,
     };
   }
 }

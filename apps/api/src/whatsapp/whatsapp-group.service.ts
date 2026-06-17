@@ -595,14 +595,22 @@ export class WhatsappGroupService {
     dedupeKey: string,
   ): Promise<boolean> {
     if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.GOAL_IMPACT))) {
+      this.logger.warn(
+        `GOAL_IMPACT: canal WA Grupo deshabilitado (scheduler live_goal_impact) para liga ${leagueId}`,
+      );
       return false;
     }
 
     const league = await this.prisma.league.findUnique({
       where: { id: leagueId },
-      select: { whatsappGroupId: true },
+      select: { whatsappGroupId: true, name: true },
     });
-    if (!league?.whatsappGroupId) return false;
+    if (!league?.whatsappGroupId) {
+      this.logger.warn(
+        `GOAL_IMPACT: liga ${league?.name ?? leagueId} sin whatsappGroupId configurado`,
+      );
+      return false;
+    }
 
     const existing = await this.prisma.whatsappGroupJob.findUnique({
       where: { dedupeKey },

@@ -20,10 +20,16 @@ describe('MatchesService', () => {
     sendMatchResultsReport: jest.fn().mockResolvedValue(undefined),
   };
 
+  const goalLiveNotificationsMock = {
+    dispatchScoreIncrease: jest.fn().mockResolvedValue(undefined),
+    dispatchGoalScored: jest.fn().mockResolvedValue(undefined),
+  };
+
   const service = new MatchesService(
     prismaMock as any,
     predictionsServiceMock as any,
     predictionReportServiceMock as any,
+    goalLiveNotificationsMock as any,
   );
 
   beforeEach(() => {
@@ -89,7 +95,7 @@ describe('MatchesService', () => {
   });
 
   it('recalculates points, bonuses and triggers results email when admin updates a score', async () => {
-    prismaMock.match.findUnique.mockResolvedValue({
+    const matchBeforeUpdate = {
       id: 'match-1',
       matchDate: '2026-06-11T14:00:00.000Z',
       status: MatchStatus.SCHEDULED,
@@ -98,22 +104,26 @@ describe('MatchesService', () => {
       venue: 'Estadio Azteca',
       homeScore: null,
       awayScore: null,
+      elapsed: null,
       externalId: 'fixture-1',
-      homeTeam: {
-        id: 'team-home',
-        name: 'México',
-        code: 'MEX',
-        shortCode: 'MEX',
-        flagUrl: 'https://example.com/mex.png',
-      },
-      awayTeam: {
-        id: 'team-away',
-        name: 'Sudáfrica',
-        code: 'RSA',
-        shortCode: 'RSA',
-        flagUrl: 'https://example.com/rsa.png',
-      },
-    });
+      homeTeamId: 'team-home',
+      awayTeamId: 'team-away',
+      advancingTeamId: null,
+      homeTeam: { id: 'team-home', name: 'México' },
+      awayTeam: { id: 'team-away', name: 'Sudáfrica' },
+    };
+
+    prismaMock.match.findUnique
+      .mockResolvedValueOnce(matchBeforeUpdate)
+      .mockResolvedValueOnce({
+        id: 'match-1',
+        phase: Phase.KNOCKOUT,
+        homeScore: 2,
+        awayScore: 1,
+        homeTeamId: 'team-home',
+        awayTeamId: 'team-away',
+        advancingTeamId: null,
+      });
     prismaMock.match.update.mockResolvedValue({
       id: 'match-1',
       matchDate: '2026-06-11T14:00:00.000Z',
@@ -142,6 +152,15 @@ describe('MatchesService', () => {
 
     await service.updateScore('match-1', { homeScore: 2, awayScore: 1 });
 
+    expect(goalLiveNotificationsMock.dispatchScoreIncrease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matchId: 'match-1',
+        prevHome: 0,
+        prevAway: 0,
+        newHome: 2,
+        newAway: 1,
+      }),
+    );
     expect(predictionsServiceMock.calculateMatchPoints).toHaveBeenCalledWith('match-1');
     expect(predictionsServiceMock.calculatePhaseBonuses).toHaveBeenCalledWith('match-1');
     expect(predictionReportServiceMock.sendMatchResultsReport).toHaveBeenCalledWith('match-1');

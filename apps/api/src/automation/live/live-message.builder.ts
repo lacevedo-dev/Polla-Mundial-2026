@@ -160,7 +160,22 @@ export function buildGoalImpactWaCaption(params: {
           .join(', ')}`
       : '';
 
-  return `*${params.leagueName}*\n📈 *Impacto en la polla*\n${line}${scorerLine}${exactLine}${scoringLine}${topLine}${popularLine}`;
+  const rankingLine =
+    params.summary.provisionalRanking.length > 0
+      ? `\n🏆 Ranking provisional:\n${params.summary.provisionalRanking
+          .map((row) => {
+            const move =
+              row.positionChange > 0
+                ? ` ↑${row.positionChange}`
+                : row.positionChange < 0
+                  ? ` ↓${Math.abs(row.positionChange)}`
+                  : '';
+            return `${row.provisionalPosition}. ${row.displayName} — ${row.provisionalPoints} pts${move}`;
+          })
+          .join('\n')}`
+      : '';
+
+  return `*${params.leagueName}*\n📈 *Impacto en la polla*\n${line}${scorerLine}${exactLine}${scoringLine}${topLine}${popularLine}${rankingLine}`;
 }
 
 export function goalImpactDedupeKey(

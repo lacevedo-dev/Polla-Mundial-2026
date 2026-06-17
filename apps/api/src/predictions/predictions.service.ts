@@ -53,6 +53,14 @@ export type ProvisionalLeagueImpact = {
     leagueName: string;
     entries: ProvisionalMatchImpactEntry[];
 };
+
+export type ProvisionalRankingRow = {
+    displayName: string;
+    provisionalPosition: number;
+    currentPosition: number;
+    positionChange: number;
+    provisionalPoints: number;
+};
 type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
 
 type LeaderboardSummaryStats = {
@@ -321,6 +329,85 @@ export class PredictionsService {
         }
 
         return [...byLeague.values()];
+    }
+
+    /**
+     * Clasificación provisional de la polla tras un marcador en curso (incluye partidos LIVE).
+     */
+    async computeProvisionalRankingAfterMatchScore(
+        leagueId: string,
+        matchId: string,
+        homeScore: number,
+        awayScore: number,
+    ): Promise<ProvisionalRankingRow[]> {
+        const leaderboard = await this.getLeaderboard(leagueId);
+        if (leaderboard.length === 0) return [];
+
+        const liveMatches = await this.prisma.match.findMany({
+            where: {
+                OR: [
+                    { status: 'LIVE', predictions: { some: { leagueId } } },
+                    { id: matchId, predictions: { some: { leagueId } } },
+                ],
+            },
+            select: { id: true, homeScore: true, awayScore: true, phase: true },
+        });
+
+        if (liveMatches.length === 0) return [];
+
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            include: { scoringRules: { where: { active: true } } },
+        });
+        const rules = league?.scoringRules ?? [];
+
+        const liveMatchIds = liveMatches.map((m) => m.id);
+        const livePredictions = await this.prisma.prediction.findMany({
+            where: { leagueId, matchId: { in: liveMatchIds } },
+            select: { userId: true, matchId: true, homeScore: true, awayScore: true },
+        });
+
+        const liveGain = new Map<string, number>();
+        for (const pred of livePredictions) {
+            const liveMatch = liveMatches.find((m) => m.id === pred.matchId);
+            if (!liveMatch) continue;
+
+            const hs = liveMatch.id === matchId ? homeScore : liveMatch.homeScore;
+            const as = liveMatch.id === matchId ? awayScore : liveMatch.awayScore;
+            if (hs === null || as === null) continue;
+
+            const { total } = this.calculatePointsForOne(
+                { homeScore: hs, awayScore: as, phase: liveMatch.phase },
+                { homeScore: pred.homeScore, awayScore: pred.awayScore },
+                rules,
+            );
+            liveGain.set(pred.userId, (liveGain.get(pred.userId) ?? 0) + total);
+        }
+
+        const withLive = leaderboard.map((entry, idx) => ({
+            displayName:
+                entry.name?.trim() ||
+                entry.username?.trim() ||
+                'Participante',
+            userId: entry.id,
+            currentPosition: idx + 1,
+            provisionalPoints: entry.points + (liveGain.get(entry.id) ?? 0),
+            exactCount: entry.exactCount ?? 0,
+        }));
+
+        withLive.sort((a, b) =>
+            b.provisionalPoints !== a.provisionalPoints
+                ? b.provisionalPoints - a.provisionalPoints
+                : b.exactCount - a.exactCount,
+        );
+
+        return withLive.slice(0, 5).map((entry, idx) => ({
+            displayName: entry.displayName,
+            provisionalPosition: idx + 1,
+            currentPosition: entry.currentPosition,
+            positionChange: entry.currentPosition - (idx + 1),
+            provisionalPoints: entry.provisionalPoints,
+        }));
     }
 
     async calculatePhaseBonuses(matchId: string): Promise<void> {

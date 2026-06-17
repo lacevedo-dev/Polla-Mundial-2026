@@ -15,6 +15,7 @@ import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { GoalLiveNotificationService } from '../../automation/live/goal-live-notification.service';
 import { LiveOrchestratorService } from '../../automation/live/live-orchestrator.service';
 import type { LiveMatchContext, LivePhaseEventId } from '../../automation/types/automation.types';
 import {
@@ -58,6 +59,7 @@ export class MatchSyncService {
     private readonly notifications: NotificationsService,
     @Optional() private readonly waGroup?: WhatsappGroupService,
     @Optional() private readonly liveOrchestrator?: LiveOrchestratorService,
+    @Optional() private readonly goalLiveNotifications?: GoalLiveNotificationService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -574,21 +576,21 @@ export class MatchSyncService {
           for (const goal of goalEvents) {
             if (goal.isHomeGoal) runHome++;
             else runAway++;
-            await this.sendGoalPushNotification(
-              match.id,
-              fixture.teams.home.name,
-              fixture.teams.away.name,
-              runHome,
-              runAway,
-              goal.isHomeGoal ? fixture.teams.home.name : null,
-              goal.isHomeGoal ? null : fixture.teams.away.name,
-              goal.minute,
-              {
+            await this.goalLiveNotifications?.dispatchGoalScored({
+              matchId: match.id,
+              homeTeamName: fixture.teams.home.name,
+              awayTeamName: fixture.teams.away.name,
+              homeScore: runHome,
+              awayScore: runAway,
+              goalScorerTeam: goal.isHomeGoal ? fixture.teams.home.name : null,
+              awayGoalScorerTeam: goal.isHomeGoal ? null : fixture.teams.away.name,
+              elapsed: goal.minute,
+              scorerInfo: {
                 scorerName: goal.playerName,
                 assistName: goal.assistName,
                 goalDetail: goal.detail,
               },
-            );
+            });
           }
         } else {
           // Fallback: home goals first (arbitrary order), no event data
@@ -596,16 +598,16 @@ export class MatchSyncService {
             const isHomeGoal = g < homeGoalsDelta;
             if (isHomeGoal) runHome++;
             else runAway++;
-            await this.sendGoalPushNotification(
-              match.id,
-              fixture.teams.home.name,
-              fixture.teams.away.name,
-              runHome,
-              runAway,
-              isHomeGoal ? fixture.teams.home.name : null,
-              isHomeGoal ? null : fixture.teams.away.name,
+            await this.goalLiveNotifications?.dispatchGoalScored({
+              matchId: match.id,
+              homeTeamName: fixture.teams.home.name,
+              awayTeamName: fixture.teams.away.name,
+              homeScore: runHome,
+              awayScore: runAway,
+              goalScorerTeam: isHomeGoal ? fixture.teams.home.name : null,
+              awayGoalScorerTeam: isHomeGoal ? null : fixture.teams.away.name,
               elapsed,
-            );
+            });
           }
         }
       }
@@ -952,148 +954,6 @@ export class MatchSyncService {
       relevantEvents,
       rawEvents: events.length,
     };
-  }
-
-  /**
-   * Send push notifications to league members when a goal is scored during a live match
-   */
-  private async sendGoalPushNotification(
-    matchId: string,
-    homeTeamName: string,
-    awayTeamName: string,
-    homeScore: number | null,
-    awayScore: number | null,
-    goalScorerTeam: string | null,
-    awayGoalScorerTeam: string | null,
-    elapsed: number | null,
-    scorerInfo?: {
-      scorerName: string | null;
-      assistName: string | null;
-      goalDetail: string | null;
-    },
-  ): Promise<void> {
-    try {
-      const predictions = await this.prisma.prediction.findMany({
-        where: { matchId },
-        select: { userId: true, leagueId: true },
-      });
-
-      if (predictions.length === 0) return;
-
-      const leagueIds = [...new Set(predictions.map((p) => p.leagueId))];
-      const leagues = leagueIds.length > 0
-        ? await this.prisma.league.findMany({
-            where: { id: { in: leagueIds } },
-            select: { id: true, name: true },
-          })
-        : [];
-      const leagueNameById = new Map(leagues.map((l) => [l.id, l.name]));
-
-      const scoringTeam = goalScorerTeam ?? awayGoalScorerTeam;
-      const { title, body, minuteLabel } = buildGoalNotificationText({
-        homeTeamName,
-        awayTeamName,
-        homeScore,
-        awayScore,
-        goalScorerTeam,
-        awayGoalScorerTeam,
-        elapsed,
-        scorerName: scorerInfo?.scorerName ?? null,
-        assistName: scorerInfo?.assistName ?? null,
-        goalDetail: scorerInfo?.goalDetail ?? null,
-      });
-
-      if (this.waGroup && homeScore !== null && awayScore !== null) {
-        for (const leagueId of leagueIds) {
-          try {
-            await this.waGroup.enqueueGoalNotification(matchId, leagueId, {
-              homeTeam: homeTeamName,
-              awayTeam: awayTeamName,
-              homeScore,
-              awayScore,
-              scoringTeam,
-              elapsed,
-              leagueName: leagueNameById.get(leagueId) ?? 'Polla',
-              scorerName: scorerInfo?.scorerName ?? null,
-              assistName: scorerInfo?.assistName ?? null,
-              goalDetail: scorerInfo?.goalDetail ?? null,
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.warn(`WA group goal enqueue failed for league ${leagueId}: ${message}`);
-          }
-        }
-      }
-
-      const notifiedUsers = new Set<string>();
-      for (const prediction of predictions) {
-        if (notifiedUsers.has(prediction.userId)) continue;
-        notifiedUsers.add(prediction.userId);
-
-        await this.push.sendToUser(prediction.userId, {
-          title,
-          body,
-          tag: `goal-${matchId}-${Date.now()}`,
-          requireInteraction: false,
-          data: {
-            matchId,
-            type: 'goal',
-            homeScore,
-            awayScore,
-            scorerName: scorerInfo?.scorerName ?? null,
-            elapsed,
-          },
-        });
-
-        await this.notifications.createInAppNotification({
-          userId: prediction.userId,
-          type: 'GOAL_SCORED',
-          title,
-          body,
-          data: {
-            matchId,
-            homeScore,
-            awayScore,
-            elapsed,
-            scorerName: scorerInfo?.scorerName ?? null,
-            assistName: scorerInfo?.assistName ?? null,
-            goalDetail: scorerInfo?.goalDetail ?? null,
-            scoringTeam,
-            minute: minuteLabel,
-          },
-        });
-      }
-
-      if (
-        this.liveOrchestrator &&
-        homeScore !== null &&
-        awayScore !== null
-      ) {
-        try {
-          const matchRow = await this.prisma.match.findUnique({
-            where: { id: matchId },
-            select: { matchDate: true },
-          });
-          await this.liveOrchestrator.handleGoalImpact({
-            matchId,
-            homeTeam: homeTeamName,
-            awayTeam: awayTeamName,
-            homeScore,
-            awayScore,
-            matchDate: matchRow?.matchDate ?? new Date(),
-            elapsed,
-            scoringTeam,
-            scorerName: scorerInfo?.scorerName ?? null,
-          });
-        } catch (impactError) {
-          const message =
-            impactError instanceof Error ? impactError.message : String(impactError);
-          this.logger.warn(`Goal impact orchestrator failed for match ${matchId}: ${message}`);
-        }
-      }
-    } catch (error) {
-      this.logger.error(`sendGoalPushNotification failed: ${error.message}`);
-    }
   }
 
   private async maybeDispatchLiveEvent(
@@ -1864,55 +1724,3 @@ type ParsedGoalEvent = {
   assistName: string | null;
   detail: string | null;
 };
-
-function buildGoalNotificationText(params: {
-  homeTeamName: string;
-  awayTeamName: string;
-  homeScore: number | null;
-  awayScore: number | null;
-  goalScorerTeam: string | null;
-  awayGoalScorerTeam: string | null;
-  elapsed: number | null;
-  scorerName: string | null;
-  assistName: string | null;
-  goalDetail: string | null;
-}): { title: string; body: string; minuteLabel: string | null } {
-  const score = `${params.homeScore ?? '-'}-${params.awayScore ?? '-'}`;
-  const minuteLabel = params.elapsed != null ? `${params.elapsed}'` : null;
-  const minuteSuffix = minuteLabel ? ` ${minuteLabel}` : '';
-
-  const scorerLine = formatGoalScorerLine({
-    scoringTeam: params.goalScorerTeam ?? params.awayGoalScorerTeam,
-    scorerName: params.scorerName,
-    assistName: params.assistName,
-    goalDetail: params.goalDetail,
-  });
-
-  const title = params.scorerName ? `⚽ ¡GOL de ${params.scorerName}!` : '⚽ ¡GOL!';
-  const body = `${scorerLine} — ${params.homeTeamName} ${score} ${params.awayTeamName}${minuteSuffix}`;
-
-  return { title, body, minuteLabel };
-}
-
-function formatGoalScorerLine(params: {
-  scoringTeam: string | null;
-  scorerName: string | null;
-  assistName: string | null;
-  goalDetail: string | null;
-}): string {
-  if (params.goalDetail === 'Own Goal' && params.scorerName) {
-    return `Autogol de ${params.scorerName}`;
-  }
-
-  if (params.scorerName) {
-    const assist = params.assistName ? ` (asist. ${params.assistName})` : '';
-    const penalty = params.goalDetail === 'Penalty' ? ' (penalti)' : '';
-    return `${params.scorerName}${assist}${penalty}`;
-  }
-
-  if (params.scoringTeam) {
-    return params.scoringTeam;
-  }
-
-  return 'Gol';
-}

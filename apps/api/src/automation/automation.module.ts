@@ -7,7 +7,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { AutomationFeatureFlagsService } from './config/automation-feature-flags.service';
 import { AutomationStepConfigService } from './config/automation-step-config.service';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { GoalImpactAnalyzerService } from './live/goal-impact-analyzer.service';
+import { GoalLiveNotificationService } from './live/goal-live-notification.service';
 import { LiveOrchestratorService } from './live/live-orchestrator.service';
 import { PostMatchOrchestratorService } from './post-match/post-match-orchestrator.service';
 import { PreMatchOrchestratorService } from './pre-match/pre-match-orchestrator.service';
@@ -21,12 +23,14 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
     PredictionsModule,
     PredictionReportModule,
     forwardRef(() => NotificationsModule),
+    PushNotificationsModule,
     WhatsappModule,
   ],
   providers: [
     AutomationFeatureFlagsService,
     AutomationStepConfigService,
     GoalImpactAnalyzerService,
+    GoalLiveNotificationService,
     LiveOrchestratorService,
     PostMatchOrchestratorService,
     PreMatchOrchestratorService,
@@ -37,6 +41,7 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
     AutomationFeatureFlagsService,
     AutomationStepConfigService,
     GoalImpactAnalyzerService,
+    GoalLiveNotificationService,
     LiveOrchestratorService,
     PostMatchOrchestratorService,
     PreMatchOrchestratorService,

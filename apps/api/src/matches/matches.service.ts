@@ -5,6 +5,7 @@ import { MatchStatus, Phase } from '@prisma/client';
 import { PredictionsService } from '../predictions/predictions.service';
 import { matchWithTeamsSelect, toMatchResponse } from './match-response.util';
 import { PredictionReportService } from '../prediction-report/prediction-report.service';
+import { GoalLiveNotificationService } from '../automation/live/goal-live-notification.service';
 
 @Injectable()
 export class MatchesService {
@@ -14,6 +15,7 @@ export class MatchesService {
         private readonly prisma: PrismaService,
         private readonly predictionsService: PredictionsService,
         private readonly predictionReportService: PredictionReportService,
+        private readonly goalLiveNotifications: GoalLiveNotificationService,
     ) { }
 
     async create(createMatchDto: CreateMatchDto) {
@@ -53,7 +55,36 @@ export class MatchesService {
     }
 
     async updateScore(id: string, updateScoreDto: UpdateMatchScoreDto) {
-        await this.findOne(id);
+        const match = await this.prisma.match.findUnique({
+            where: { id },
+            include: {
+                homeTeam: { select: { name: true } },
+                awayTeam: { select: { name: true } },
+            },
+        });
+
+        if (!match) {
+            throw new NotFoundException(`Match with ID ${id} not found`);
+        }
+
+        const prevHome = match.homeScore ?? 0;
+        const prevAway = match.awayScore ?? 0;
+        const newHome = updateScoreDto.homeScore;
+        const newAway = updateScoreDto.awayScore;
+
+        if (newHome > prevHome || newAway > prevAway) {
+            await this.goalLiveNotifications.dispatchScoreIncrease({
+                matchId: id,
+                homeTeamName: match.homeTeam.name,
+                awayTeamName: match.awayTeam.name,
+                prevHome,
+                prevAway,
+                newHome,
+                newAway,
+                elapsed: match.elapsed,
+                matchDate: match.matchDate,
+            });
+        }
 
         const updatedMatch = await this.prisma.match.update({
             where: { id },
