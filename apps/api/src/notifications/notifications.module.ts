@@ -11,6 +11,8 @@ import { MatchAutomationSweepScheduler } from './match-automation-sweep.schedule
 import { NotificationScheduler } from './notification.scheduler';
 import { NotificationsController } from './notifications.controller';
 import { TwilioService } from './twilio.service';
+import { WhatsappPersonalService } from './whatsapp-personal.service';
+import { PaymentReminderNotifier } from './payment-reminder-notifier.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 
 @Module({
@@ -30,7 +32,15 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     NotificationScheduler,
     MatchAutomationSweepScheduler,
     TwilioService,
+    WhatsappPersonalService,
+    PaymentReminderNotifier,
   ],
-  exports: [NotificationsService, TwilioService, NotificationScheduler],
+  exports: [
+    NotificationsService,
+    TwilioService,
+    NotificationScheduler,
+    WhatsappPersonalService,
+    PaymentReminderNotifier,
+  ],
 })
 export class NotificationsModule {}

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
 import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep, MemberStatus } from '@prisma/client';
 import { logGoalAutomation } from '../automation/live/goal-automation-observability.util';
@@ -20,10 +21,15 @@ import {
   BOGOTA_TIME_LABEL,
   formatMatchDateTimeBogota,
 } from '../automation/config/automation-datetime.util';
+import {
+  isTextOnlyWhatsappGroupJob,
+  WhatsappDispatcherService,
+} from './whatsapp-dispatcher.service';
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
-export const WA_GROUP_RETRY_DELAY_MS = 60_000;
+/** Reintento tras fallo: antes 60s (parecía ~2 min con el cron de 1 min). */
+export const WA_GROUP_RETRY_DELAY_MS = 15_000;
 
 /** Mapeo de job type a schedulerId (mismo id que usa el frontend) */
 const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
@@ -39,6 +45,7 @@ const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.SECOND_HALF_START]: 'live_second_half',
   [WhatsappGroupJobType.MATCH_LIVE_END]: 'live_match_end',
   [WhatsappGroupJobType.GOAL_IMPACT]: 'live_goal_impact',
+  [WhatsappGroupJobType.PAYMENT_REMINDER]: 'payment_reminder',
 };
 
 @Injectable()
@@ -50,7 +57,18 @@ export class WhatsappGroupService {
     private readonly waWeb: WhatsappWebService,
     private readonly waImage: WhatsappImageService,
     private readonly reportService: PredictionReportService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  private scheduleTextJobDispatch(jobId: string, type: WhatsappGroupJobType): void {
+    if (!isTextOnlyWhatsappGroupJob(type)) return;
+    try {
+      const dispatcher = this.moduleRef.get(WhatsappDispatcherService, { strict: false });
+      dispatcher?.schedule(jobId);
+    } catch {
+      // Dispatcher aún no registrado (arranque).
+    }
+  }
 
   @OnEvent(WA_RESULT_REPORT_EVENT)
   async onResultReport(event: WhatsappReportEvent): Promise<void> {
@@ -123,12 +141,28 @@ export class WhatsappGroupService {
    * Procesa un job pendiente: genera imagen + PDF, publica en el grupo.
    */
   async processJob(jobId: string): Promise<void> {
+    const claimed = await this.prisma.whatsappGroupJob.updateMany({
+      where: { id: jobId, status: WhatsappJobStatus.PENDING },
+      data: { status: WhatsappJobStatus.SENDING, attemptCount: { increment: 1 } },
+    });
+
+    if (claimed.count === 0) {
+      const existing = await this.prisma.whatsappGroupJob.findUnique({
+        where: { id: jobId },
+        select: { status: true },
+      });
+      if (existing?.status === WhatsappJobStatus.SENT || existing?.status === WhatsappJobStatus.SENDING) {
+        return;
+      }
+      return;
+    }
+
     const job = await this.prisma.whatsappGroupJob.findUnique({
       where: { id: jobId },
       include: { league: { select: { name: true, code: true, whatsappGroupId: true } } },
     });
 
-    if (!job || job.status === WhatsappJobStatus.SENT) return;
+    if (!job) return;
 
     const isGoalJob =
       job.type === WhatsappGroupJobType.GOAL_SCORED ||
@@ -144,11 +178,6 @@ export class WhatsappGroupService {
         attempt: job.attemptCount + 1,
       });
     }
-
-    await this.prisma.whatsappGroupJob.update({
-      where: { id: jobId },
-      data: { status: WhatsappJobStatus.SENDING, attemptCount: { increment: 1 } },
-    });
 
     try {
       let caption: string;
@@ -384,6 +413,7 @@ export class WhatsappGroupService {
           attemptCount: 0,
         },
       });
+      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.GOAL_SCORED);
       return true;
     }
 
@@ -392,7 +422,7 @@ export class WhatsappGroupService {
     }
 
     try {
-      await this.prisma.whatsappGroupJob.create({
+      const job = await this.prisma.whatsappGroupJob.create({
         data: {
           type: WhatsappGroupJobType.GOAL_SCORED,
           matchId,
@@ -403,6 +433,7 @@ export class WhatsappGroupService {
           status: WhatsappJobStatus.PENDING,
         },
       });
+      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.GOAL_SCORED);
       return true;
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
@@ -597,6 +628,7 @@ export class WhatsappGroupService {
 
     if (existing?.status === WhatsappJobStatus.FAILED) {
       await this.resetFailedJob(existing.id);
+      this.scheduleTextJobDispatch(existing.id, type);
       return true;
     }
 
@@ -604,7 +636,7 @@ export class WhatsappGroupService {
       return true;
     }
 
-    await this.prisma.whatsappGroupJob.create({
+    const job = await this.prisma.whatsappGroupJob.create({
       data: {
         type,
         matchId,
@@ -615,6 +647,7 @@ export class WhatsappGroupService {
         status: WhatsappJobStatus.PENDING,
       },
     });
+    this.scheduleTextJobDispatch(job.id, type);
     return true;
   }
 
@@ -648,6 +681,7 @@ export class WhatsappGroupService {
 
     if (existing?.status === WhatsappJobStatus.FAILED) {
       await this.resetFailedJob(existing.id);
+      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.PRE_MATCH_ESCALATION);
       return true;
     }
 
@@ -656,7 +690,7 @@ export class WhatsappGroupService {
     }
 
     try {
-      await this.prisma.whatsappGroupJob.create({
+      const job = await this.prisma.whatsappGroupJob.create({
         data: {
           type: WhatsappGroupJobType.PRE_MATCH_ESCALATION,
           matchId,
@@ -667,6 +701,7 @@ export class WhatsappGroupService {
           status: WhatsappJobStatus.PENDING,
         },
       });
+      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.PRE_MATCH_ESCALATION);
       return true;
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
@@ -713,6 +748,7 @@ export class WhatsappGroupService {
 
     if (existing?.status === WhatsappJobStatus.FAILED) {
       await this.resetFailedJob(existing.id);
+      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.GOAL_IMPACT);
       return true;
     }
 
@@ -721,7 +757,7 @@ export class WhatsappGroupService {
     }
 
     try {
-      await this.prisma.whatsappGroupJob.create({
+      const job = await this.prisma.whatsappGroupJob.create({
         data: {
           type: WhatsappGroupJobType.GOAL_IMPACT,
           matchId,
@@ -732,6 +768,7 @@ export class WhatsappGroupService {
           status: WhatsappJobStatus.PENDING,
         },
       });
+      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.GOAL_IMPACT);
       return true;
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
@@ -823,6 +860,43 @@ export class WhatsappGroupService {
         });
       default:
         return `Notificación | ${job.league.name}: ${home} vs ${away}`;
+    }
+  }
+
+  async enqueuePaymentReminder(
+    leagueId: string,
+    caption: string,
+    dedupeKey: string,
+  ): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.PAYMENT_REMINDER))) {
+      this.logger.debug('WA Grupo deshabilitado para PAYMENT_REMINDER por override de configuración');
+      return false;
+    }
+
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true },
+    });
+    if (!league?.whatsappGroupId) return false;
+
+    try {
+      const job = await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: WhatsappGroupJobType.PAYMENT_REMINDER,
+          matchId: leagueId,
+          leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey,
+          caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.PAYMENT_REMINDER);
+      return true;
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') return false;
+      throw error;
     }
   }
 

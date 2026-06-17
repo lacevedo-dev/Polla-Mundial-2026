@@ -124,6 +124,20 @@ export class LeaguesController {
 
     @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK)
+    @Post(':id/payments/reminders')
+    async sendPaymentReminders(
+        @Request() req,
+        @Param('id') leagueId: string,
+        @Body() body: {
+            recipients: Array<{ userId: string; channels: string[] }>;
+            messages: Record<string, string>;
+        },
+    ) {
+        return this.leaguesService.sendPaymentReminders(req.user.userId, leagueId, body);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(HttpStatus.OK)
     @Post(':id/payments/:obligationId/reset')
     async resetPayment(
         @Request() req,

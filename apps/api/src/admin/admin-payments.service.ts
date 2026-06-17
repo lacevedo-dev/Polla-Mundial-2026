@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ParticipationStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentReminderNotifier } from '../notifications/payment-reminder-notifier.service';
 
 @Injectable()
 export class AdminPaymentsService {
@@ -9,7 +9,7 @@ export class AdminPaymentsService {
 
     constructor(
         private readonly prisma: PrismaService,
-        private readonly notifications: NotificationsService,
+        private readonly paymentReminderNotifier: PaymentReminderNotifier,
     ) {}
 
     async getObligations(params: {
@@ -76,7 +76,7 @@ export class AdminPaymentsService {
         const obligation = await this.prisma.participationObligation.findUnique({
             where: { id: obligationId },
             include: {
-                user: { select: { id: true, name: true } },
+                user: { select: { id: true, name: true, phone: true, countryCode: true } },
                 league: { select: { name: true } },
             },
         });
@@ -93,11 +93,16 @@ export class AdminPaymentsService {
             ? new Date(obligation.deadlineAt).toLocaleString('es-CO')
             : 'pronto';
 
-        await this.notifications.createInAppNotification({
+        const title = '💳 Pago pendiente en tu polla';
+        const body = `Tienes un pago pendiente de ${this._formatCurrency(obligation.totalAmount, obligation.currency)} en ${obligation.league.name}. Cierra antes del ${deadlineStr}.`;
+
+        const delivery = await this.paymentReminderNotifier.deliver({
             userId: obligation.userId,
-            type: 'PAYMENT_CONFIRMED',
-            title: '💳 Pago pendiente en tu polla',
-            body: `Tienes un pago pendiente de ${this._formatCurrency(obligation.totalAmount, obligation.currency)} en ${obligation.league.name}. Cierra antes del ${deadlineStr}.`,
+            userName: obligation.user.name,
+            phone: obligation.user.phone,
+            countryCode: obligation.user.countryCode,
+            title,
+            body,
             data: {
                 obligationId: obligation.id,
                 leagueId: obligation.leagueId,
@@ -106,6 +111,9 @@ export class AdminPaymentsService {
                 currency: obligation.currency,
                 deadlineAt: obligation.deadlineAt?.toISOString(),
             },
+            leagueId: obligation.leagueId,
+            dedupeSuffix: `admin:${obligation.id}`,
+            trigger: '[Admin] manual payment reminder',
         });
 
         await this.prisma.participationObligation.update({
@@ -114,7 +122,11 @@ export class AdminPaymentsService {
         });
 
         this.logger.log(`Payment reminder sent for obligation ${obligationId} to user ${obligation.userId}`);
-        return { sent: true, userId: obligation.userId };
+        return {
+            sent: true,
+            userId: obligation.userId,
+            delivery,
+        };
     }
 
     async sendBulkReminders(leagueId?: string) {

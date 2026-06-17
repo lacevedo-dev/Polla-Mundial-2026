@@ -22,7 +22,7 @@ import {
   REMINDER_WINDOW_START_MINUTES,
 } from './match-automation-sweep-context';
 import { NotificationsService } from './notifications.service';
-import { TwilioService } from './twilio.service';
+import { WhatsappPersonalService } from './whatsapp-personal.service';
 import type { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
 
 @Injectable()
@@ -38,7 +38,7 @@ export class NotificationScheduler {
     private readonly matchEmailTemplates: MatchEmailTemplateService,
     private readonly push: PushNotificationsService,
     private readonly notificationsService: NotificationsService,
-    private readonly twilio: TwilioService,
+    private readonly waPersonal: WhatsappPersonalService,
     @Optional() private readonly waGroup?: WhatsappGroupService,
   ) {}
 
@@ -88,16 +88,10 @@ export class NotificationScheduler {
     const pushResult = await this.push.sendToUser(userId, { title, body, data });
 
     let whatsappSent = false;
-    if (this.twilio.isEnabled()) {
-      if (contact?.phone) {
-        const fullPhone = `${contact.countryCode ?? '+57'}${contact.phone}`;
-        try {
-          await this.twilio.sendWhatsApp(fullPhone, `${title}\n${body}`);
-          whatsappSent = true;
-        } catch {
-          // Ignore WhatsApp failures so push/in-app still succeed.
-        }
-      }
+    if (contact?.phone) {
+      const waMessage = `${title}\n${body}`;
+      const wa = await this.waPersonal.send(contact.countryCode, contact.phone, waMessage);
+      whatsappSent = wa.sent;
     }
 
     const enrichedData: Record<string, unknown> = {

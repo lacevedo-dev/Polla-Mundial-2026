@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentReminderNotifier } from '../notifications/payment-reminder-notifier.service';
 
 @Injectable()
 export class ParticipationScheduler {
@@ -9,7 +9,7 @@ export class ParticipationScheduler {
 
     constructor(
         private readonly prisma: PrismaService,
-        private readonly notifications: NotificationsService,
+        private readonly paymentReminderNotifier: PaymentReminderNotifier,
     ) {}
 
     /**
@@ -52,7 +52,7 @@ export class ParticipationScheduler {
                 reminder30SentAt: null,
             },
             include: {
-                user: { select: { id: true } },
+                user: { select: { id: true, name: true, phone: true, countryCode: true } },
                 league: { select: { name: true } },
             },
         });
@@ -60,11 +60,16 @@ export class ParticipationScheduler {
         for (const obligation of obligations) {
             try {
                 const deadlineStr = new Date(obligation.deadlineAt).toLocaleString('es-CO');
-                await this.notifications.createInAppNotification({
+                const title = '⏰ Tienes un pago pendiente';
+                const body = `Recuerda pagar tu participación en ${obligation.league.name}. Cierra el ${deadlineStr} y podrías quedar fuera si no pagas.`;
+
+                await this.paymentReminderNotifier.deliver({
                     userId: obligation.userId,
-                    type: 'PAYMENT_CONFIRMED',
-                    title: '⏰ Tienes un pago pendiente',
-                    body: `Recuerda pagar tu participación en ${obligation.league.name}. Cierra el ${deadlineStr} y podrías quedar fuera si no pagas.`,
+                    userName: obligation.user.name,
+                    phone: obligation.user.phone,
+                    countryCode: obligation.user.countryCode,
+                    title,
+                    body,
                     data: {
                         obligationId: obligation.id,
                         leagueId: obligation.leagueId,
@@ -73,6 +78,9 @@ export class ParticipationScheduler {
                         currency: obligation.currency,
                         deadlineAt: obligation.deadlineAt.toISOString(),
                     },
+                    leagueId: obligation.leagueId,
+                    dedupeSuffix: `first:${obligation.id}`,
+                    trigger: '[Scheduler] payment reminder T-24h',
                 });
 
                 await this.prisma.participationObligation.update({
@@ -105,7 +113,7 @@ export class ParticipationScheduler {
                 reminder10SentAt: null,
             },
             include: {
-                user: { select: { id: true } },
+                user: { select: { id: true, name: true, phone: true, countryCode: true } },
                 league: { select: { name: true } },
             },
         });
@@ -113,11 +121,16 @@ export class ParticipationScheduler {
         for (const obligation of obligations) {
             try {
                 const deadlineStr = new Date(obligation.deadlineAt).toLocaleString('es-CO');
-                await this.notifications.createInAppNotification({
+                const title = '🚨 Último aviso: pago vence pronto';
+                const body = `Tu participación en ${obligation.league.name} vence el ${deadlineStr}. Sin pago, no participarás en esta categoría.`;
+
+                await this.paymentReminderNotifier.deliver({
                     userId: obligation.userId,
-                    type: 'PAYMENT_CONFIRMED',
-                    title: '🚨 Último aviso: pago vence pronto',
-                    body: `Tu participación en ${obligation.league.name} vence el ${deadlineStr}. Sin pago, no participarás en esta categoría.`,
+                    userName: obligation.user.name,
+                    phone: obligation.user.phone,
+                    countryCode: obligation.user.countryCode,
+                    title,
+                    body,
                     data: {
                         obligationId: obligation.id,
                         leagueId: obligation.leagueId,
@@ -127,6 +140,9 @@ export class ParticipationScheduler {
                         deadlineAt: obligation.deadlineAt.toISOString(),
                         isFinal: true,
                     },
+                    leagueId: obligation.leagueId,
+                    dedupeSuffix: `final:${obligation.id}`,
+                    trigger: '[Scheduler] payment reminder T-2h',
                 });
 
                 await this.prisma.participationObligation.update({

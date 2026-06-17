@@ -1,57 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
-import { WhatsappWebService } from './whatsapp-web.service';
-import { WhatsappGroupService } from './whatsapp-group.service';
+import { Interval } from '@nestjs/schedule';
+import { WhatsappDispatcherService } from './whatsapp-dispatcher.service';
+
+/** Intervalo del barrido de jobs pendientes (reportes PDF/imagen). */
+const WA_GROUP_DISPATCH_INTERVAL_MS = 15_000;
 
 @Injectable()
 export class WhatsappDispatcherScheduler {
   private readonly logger = new Logger(WhatsappDispatcherScheduler.name);
-  private running = false;
 
-  constructor(
-    private readonly waWeb: WhatsappWebService,
-    private readonly waGroup: WhatsappGroupService,
-  ) {}
+  constructor(private readonly dispatcher: WhatsappDispatcherService) {}
 
-  @Cron('* * * * *')
+  @Interval(WA_GROUP_DISPATCH_INTERVAL_MS)
   async dispatchPendingJobs(): Promise<void> {
-    if (this.running) return;
-    if (!this.waWeb.isConnected()) return;
-
-    this.running = true;
     try {
-      const jobs = await this.waGroup.getPendingJobs(10);
-      if (jobs.length === 0) return;
-
-      let sent = 0;
-      let failed = 0;
-
-      for (const job of jobs) {
-        try {
-          await this.waGroup.processJob(job.id);
-          sent++;
-        } catch {
-          failed++;
-        }
-      }
-
-      this.logger.log(
-        JSON.stringify({
-          event: 'wa_dispatcher_batch',
-          sent,
-          failed,
-          total: jobs.length,
-          jobs: jobs.map((j) => ({
-            id: j.id,
-            type: j.type,
-            matchId: j.matchId,
-            leagueId: j.leagueId,
-            dedupeKey: j.dedupeKey,
-          })),
-        }),
-      );
-    } finally {
-      this.running = false;
+      await this.dispatcher.dispatch();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`dispatchPendingJobs failed: ${message}`);
     }
   }
 }

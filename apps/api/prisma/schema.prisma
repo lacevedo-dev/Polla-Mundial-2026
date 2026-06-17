@@ -1119,6 +1119,7 @@ enum EmailJobType {
   PREDICTION_CLOSING
   PREDICTIONS_REPORT
   MATCH_RESULTS_REPORT
+  PAYMENT_REMINDER
 }
 
 enum EmailJobPriority {
@@ -1354,6 +1355,7 @@ enum WhatsappGroupJobType {
   SECOND_HALF_START
   MATCH_LIVE_END
   GOAL_IMPACT
+  PAYMENT_REMINDER
 }
 
 enum WhatsappJobStatus {

@@ -5,7 +5,7 @@ import {
     ArrowLeft, Banknote, Bell, Bot, Check, ChevronDown, Copy, Download,
     Filter, Hash, History, Landmark, Loader2, Mail, MessageCircle, MessageSquare,
     MoreVertical, PieChart, Search, Send, Share2, Smartphone, Sparkles,
-    Trash2, Wallet, X, CheckCircle2,
+    Trash2, Users, Wallet, X, CheckCircle2,
 } from 'lucide-react';
 import { Button, Input, Badge, Card, Checkbox } from '../components/UI';
 import { useLeagueStore } from '../stores/league.store';
@@ -13,8 +13,10 @@ import { request } from '../api';
 
 /* ─── types ─────────────────────────────────────────────────────── */
 
-type ReminderChannel = 'whatsapp' | 'email' | 'sms' | 'push';
+type ReminderChannel = 'whatsapp_group' | 'whatsapp_personal' | 'email' | 'sms' | 'push';
 type TemplateKey = 'friendly' | 'formal' | 'urgent' | 'ai' | 'custom';
+
+const ALL_REMINDER_CHANNELS: ReminderChannel[] = ['whatsapp_group', 'whatsapp_personal', 'email', 'sms', 'push'];
 
 /** Obligation record as returned by GET /leagues/:id/payments */
 interface ObligationRecord {
@@ -50,8 +52,9 @@ const PAYMENT_METHODS = [
     { id: 'B-BRE', label: 'B-BRE', Icon: Smartphone, color: 'text-amber-600' },
 ];
 
-const CHANNEL_CONFIG: Record<ReminderChannel, { label: string; Icon: React.ElementType; color: string; bg: string; border: string }> = {
-    whatsapp: { label: 'WhatsApp', Icon: MessageCircle, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
+const CHANNEL_CONFIG: Record<ReminderChannel, { label: string; Icon: React.ElementType; color: string; bg: string; border: string; hint?: string }> = {
+    whatsapp_group: { label: 'WA Grupo', Icon: Users, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
+    whatsapp_personal: { label: 'WA Personal', Icon: MessageCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', hint: 'Misma sesión WhatsApp Web que WA Grupo' },
     email: { label: 'Email', Icon: Mail, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
     sms: { label: 'SMS', Icon: MessageSquare, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
     push: { label: 'Push', Icon: Bell, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
@@ -59,19 +62,22 @@ const CHANNEL_CONFIG: Record<ReminderChannel, { label: string; Icon: React.Eleme
 
 const TEMPLATES: Record<'friendly' | 'formal' | 'urgent', Record<ReminderChannel, string>> = {
     friendly: {
-        whatsapp: 'Hola {nombre} 👋! Te recuerdo que tienes un saldo pendiente de {deuda} en la polla {liga}. ¡Gracias!',
+        whatsapp_group: '💳 *Recordatorio de pagos* | {liga}\nParticipantes con saldo pendiente:',
+        whatsapp_personal: 'Hola {nombre} 👋! Te recuerdo que tienes un saldo pendiente de {deuda} en la polla {liga}. ¡Gracias!',
         email: 'Hola {nombre},\n\nTe escribimos para recordarte amablemente sobre tu saldo pendiente de {deuda} en {liga}.\n\n¡Gracias por participar!',
         sms: '{nombre}, recuerda tu pago de {deuda} en {liga}. ¡No te quedes fuera!',
         push: '👋 {nombre}, no olvides ponerte al día en {liga}.',
     },
     formal: {
-        whatsapp: 'Estimado(a) {nombre}. Le informamos un saldo vencido de {deuda} en la liga {liga}. Por favor regularizar su estado.',
+        whatsapp_group: '📋 *Aviso de cobro* | {liga}\nSaldos pendientes por participante:',
+        whatsapp_personal: 'Estimado(a) {nombre}. Le informamos un saldo vencido de {deuda} en la liga {liga}. Por favor regularizar su estado.',
         email: 'Estimado/a {nombre},\n\nLe notificamos que presenta un saldo pendiente de {deuda} en la liga {liga}.\n\nAtentamente,\nLa Administración.',
         sms: 'Aviso de Cobro: {nombre}, saldo pendiente {deuda} en {liga}. Regularice hoy.',
         push: 'Aviso: Saldo pendiente de {deuda} en {liga}.',
     },
     urgent: {
-        whatsapp: '🚨 {nombre}, ÚLTIMO AVISO. Tu deuda de {deuda} en {liga} debe ser pagada hoy.',
+        whatsapp_group: '🚨 *ÚLTIMO AVISO* | {liga}\nPagos pendientes que requieren atención:',
+        whatsapp_personal: '🚨 {nombre}, ÚLTIMO AVISO. Tu deuda de {deuda} en {liga} debe ser pagada hoy.',
         email: 'URGENTE: {nombre}, tu participación en {liga} está en riesgo.\n\nSaldo: {deuda}\n\nRealiza el pago inmediatamente.',
         sms: 'URGENTE {nombre}: Paga {deuda} hoy en {liga} para evitar bloqueo.',
         push: '🚨 {nombre}, tu pago de {deuda} en {liga} requiere atención inmediata.',
@@ -433,26 +439,42 @@ const BulkPayModal: React.FC<{
 /* ─── Reminder Modal ────────────────────────────────────────────── */
 
 const ReminderModal: React.FC<{
+    leagueId: string;
     selectedUsers: UserSummary[];
     leagueName: string;
+    userDebts: Record<string, number>;
+    currency: string;
     onClose: () => void;
-}> = ({ selectedUsers, leagueName, onClose }) => {
+}> = ({ leagueId, selectedUsers, leagueName, userDebts, currency, onClose }) => {
     const [step, setStep] = useState<1 | 2>(1);
     const [userChannels, setUserChannels] = useState<Record<string, ReminderChannel[]>>(
-        Object.fromEntries(selectedUsers.map((u) => [u.id, ['whatsapp' as ReminderChannel]])),
+        Object.fromEntries(selectedUsers.map((u) => [u.id, ['whatsapp_group' as ReminderChannel]])),
     );
-    const [activeTab, setActiveTab] = useState<ReminderChannel>('whatsapp');
+    const [activeTab, setActiveTab] = useState<ReminderChannel>('whatsapp_group');
     const [drafts, setDrafts] = useState<Record<ReminderChannel, string>>({
-        whatsapp: TEMPLATES.friendly.whatsapp,
+        whatsapp_group: TEMPLATES.friendly.whatsapp_group,
+        whatsapp_personal: TEMPLATES.friendly.whatsapp_personal,
         email: TEMPLATES.friendly.email,
         sms: TEMPLATES.friendly.sms,
         push: TEMPLATES.friendly.push,
     });
     const [selectedTpl, setSelectedTpl] = useState<Record<ReminderChannel, TemplateKey>>({
-        whatsapp: 'friendly', email: 'friendly', sms: 'friendly', push: 'friendly',
+        whatsapp_group: 'friendly', whatsapp_personal: 'friendly', email: 'friendly', sms: 'friendly', push: 'friendly',
     });
     const [generating, setGenerating] = useState(false);
-    const [copied, setCopied] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [sent, setSent] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
+
+    const fmtDebt = (userId: string) => fmtCurrency(userDebts[userId] ?? 0, currency);
+
+    const allUsersHaveAllChannels = useMemo(
+        () => selectedUsers.every((u) => {
+            const chs = userChannels[u.id] ?? [];
+            return ALL_REMINDER_CHANNELS.every((c) => chs.includes(c));
+        }),
+        [selectedUsers, userChannels],
+    );
 
     const activeChannels = useMemo(() => {
         const set = new Set<ReminderChannel>();
@@ -472,6 +494,17 @@ const ReminderModal: React.FC<{
             return { ...prev, [uid]: cur.includes(ch) ? cur.filter((c) => c !== ch) : [...cur, ch] };
         });
 
+    const setAllChannelsForUser = (uid: string, selectAll: boolean) =>
+        setUserChannels((prev) => ({
+            ...prev,
+            [uid]: selectAll ? [...ALL_REMINDER_CHANNELS] : [],
+        }));
+
+    const setAllChannelsGlobal = (selectAll: boolean) =>
+        setUserChannels(Object.fromEntries(
+            selectedUsers.map((u) => [u.id, selectAll ? [...ALL_REMINDER_CHANNELS] : []]),
+        ));
+
     const applyTemplate = (key: 'friendly' | 'formal' | 'urgent') => {
         setDrafts((p) => ({ ...p, [activeTab]: TEMPLATES[key][activeTab] }));
         setSelectedTpl((p) => ({ ...p, [activeTab]: key }));
@@ -481,7 +514,8 @@ const ReminderModal: React.FC<{
         setGenerating(true);
         setTimeout(() => {
             const aiMsgs: Record<ReminderChannel, string> = {
-                whatsapp: '🤖 Hola {nombre}, noté que se nos pasó la fecha de tu aporte en {liga}. ¿Podrías revisar tu saldo de {deuda}? ¡Gracias!',
+                whatsapp_group: '🤖 Recordatorio amigable: hay pagos pendientes en {liga}. Revisa tu saldo y mantente al día.',
+                whatsapp_personal: '🤖 Hola {nombre}, noté que se nos pasó la fecha de tu aporte en {liga}. ¿Podrías revisar tu saldo de {deuda}? ¡Gracias!',
                 email: 'Asunto: Pequeño recordatorio de {liga}\n\nHola {nombre},\n\nNuestra IA detectó un saldo pendiente de {deuda}. Ayúdanos a mantener la competencia al día.',
                 sms: 'Hola {nombre}, recordatorio amigable: saldo de {deuda} en {liga}.',
                 push: '🤖 {nombre}, no olvides tu aporte pendiente en {liga}.',
@@ -492,16 +526,38 @@ const ReminderModal: React.FC<{
         }, 1500);
     };
 
-    const handleSend = () => {
-        const preview = drafts[activeTab]
-            .replace('{nombre}', selectedUsers[0]?.name ?? 'Usuario')
-            .replace('{liga}', leagueName)
-            .replace('{deuda}', '$0');
-        void navigator.clipboard.writeText(preview).then(() => {
-            setCopied(true);
-            setTimeout(() => { setCopied(false); onClose(); }, 1500);
-        });
+    const handleSend = async () => {
+        setSending(true);
+        setSendError(null);
+        try {
+            const res = await request<{ ok: boolean; errors?: string[] }>(`/leagues/${leagueId}/payments/reminders`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    recipients: selectedUsers.map((u) => ({
+                        userId: u.id,
+                        channels: userChannels[u.id] ?? [],
+                    })),
+                    messages: drafts,
+                }),
+            });
+            if (!res.ok && res.errors?.length) {
+                setSendError(res.errors.slice(0, 3).join(' · '));
+                return;
+            }
+            setSent(true);
+            setTimeout(() => { setSent(false); onClose(); }, 1500);
+        } catch {
+            setSendError('No se pudo enviar el recordatorio. Verifica tu conexión e intenta de nuevo.');
+        } finally {
+            setSending(false);
+        }
     };
+
+    const previewMessage = (ch: ReminderChannel, user = selectedUsers[0]) =>
+        drafts[ch]
+            .replace('{nombre}', user?.name ?? 'Usuario')
+            .replace('{liga}', leagueName)
+            .replace('{deuda}', fmtDebt(user?.id ?? ''));
 
     const insertVar = (v: string) => {
         setDrafts((p) => ({ ...p, [activeTab]: p[activeTab] + ` {${v}}` }));
@@ -539,20 +595,47 @@ const ReminderModal: React.FC<{
                 <div className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: 'thin' }}>
                     {step === 1 ? (
                         <div className="space-y-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Selecciona canales por usuario</p>
-                            {selectedUsers.map((u) => (
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Selecciona canales por usuario</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setAllChannelsGlobal(!allUsersHaveAllChannels)}
+                                    className="text-[10px] font-black uppercase px-3 py-1.5 rounded-xl border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                                >
+                                    {allUsersHaveAllChannels ? 'Quitar todos' : 'Todos los canales'}
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                                WA Grupo publica en el grupo de la polla. WA Personal envía al número de cada usuario con la misma sesión WhatsApp Web (Twilio solo si Web no está conectado).
+                            </p>
+                            {selectedUsers.map((u) => {
+                                const userHasAll = ALL_REMINDER_CHANNELS.every((c) => (userChannels[u.id] ?? []).includes(c));
+                                return (
                                 <div key={u.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <img src={avatarUrl(u.name, u.avatar)} className="w-8 h-8 rounded-lg" alt={u.name} />
-                                        <p className="text-sm font-black text-slate-900">{u.name}</p>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <img src={avatarUrl(u.name, u.avatar)} className="w-8 h-8 rounded-lg shrink-0" alt={u.name} />
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-black text-slate-900 truncate">{u.name}</p>
+                                                <p className="text-[10px] font-bold text-rose-600">{fmtDebt(u.id)} pendiente</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAllChannelsForUser(u.id, !userHasAll)}
+                                            className="text-[9px] font-black uppercase px-2 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-white shrink-0"
+                                        >
+                                            {userHasAll ? 'Quitar' : 'Todos'}
+                                        </button>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {(Object.keys(CHANNEL_CONFIG) as ReminderChannel[]).map((ch) => {
+                                        {ALL_REMINDER_CHANNELS.map((ch) => {
                                             const cfg = CHANNEL_CONFIG[ch];
                                             const active = (userChannels[u.id] ?? []).includes(ch);
                                             return (
                                                 <button
                                                     key={ch}
+                                                    type="button"
                                                     onClick={() => toggleChannel(u.id, ch)}
                                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase transition-all ${active ? `${cfg.bg} ${cfg.border} ${cfg.color}` : 'border-slate-200 text-slate-400 hover:bg-slate-100'}`}
                                                 >
@@ -563,7 +646,8 @@ const ReminderModal: React.FC<{
                                         })}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -619,14 +703,21 @@ const ReminderModal: React.FC<{
                             />
 
                             <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-1">
-                                <p className="text-[9px] font-black uppercase text-slate-400">Preview con {selectedUsers[0]?.name ?? 'usuario'}</p>
-                                <p className="text-xs text-slate-600">
-                                    {drafts[activeTab]
-                                        .replace('{nombre}', selectedUsers[0]?.name ?? 'Usuario')
-                                        .replace('{liga}', leagueName)
-                                        .replace('{deuda}', '$50.000')}
+                                <p className="text-[9px] font-black uppercase text-slate-400">
+                                    Preview {activeTab === 'whatsapp_group' ? '(mensaje al grupo)' : `con ${selectedUsers[0]?.name ?? 'usuario'}`}
+                                </p>
+                                <p className="text-xs text-slate-600 whitespace-pre-wrap">
+                                    {activeTab === 'whatsapp_group' && selectedUsers.length > 1
+                                        ? [
+                                            previewMessage('whatsapp_group'),
+                                            ...selectedUsers.map((u) => `• ${u.name}: ${fmtDebt(u.id)}`),
+                                        ].join('\n')
+                                        : previewMessage(activeTab)}
                                 </p>
                             </div>
+                            {sendError && (
+                                <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl p-3">{sendError}</p>
+                            )}
                         </div>
                     )}
                 </div>
@@ -648,8 +739,11 @@ const ReminderModal: React.FC<{
                                 variant="secondary"
                                 className="flex-1 h-11 font-black uppercase text-xs"
                                 onClick={handleSend}
+                                disabled={sending}
                             >
-                                {copied ? <><Copy size={14} /> Copiado!</> : <><Send size={14} /> Enviar recordatorio</>}
+                                {sending ? <><Loader2 size={14} className="animate-spin" /> Enviando…</> :
+                                    sent ? <><CheckCircle2 size={14} /> ¡Enviado!</> :
+                                    <><Send size={14} /> Enviar recordatorio</>}
                             </Button>
                         </>
                     )}
@@ -849,6 +943,12 @@ const ManagePayments: React.FC = () => {
     const reminderUsers = useMemo(() =>
         users.filter((u) => selectedUserIds.includes(u.id)),
     [users, selectedUserIds]);
+
+    const reminderUserDebts = useMemo(() =>
+        Object.fromEntries(
+            reminderUsers.map((u) => [u.id, getAggregates(u.id).pending]),
+        ),
+    [reminderUsers, getAggregates]);
 
     /* ─ render ─ */
     return (
@@ -1255,8 +1355,11 @@ const ManagePayments: React.FC = () => {
             )}
             {reminderOpen && (
                 <ReminderModal
+                    leagueId={leagueId}
                     selectedUsers={reminderUsers}
                     leagueName={leagueName}
+                    userDebts={reminderUserDebts}
+                    currency={currency}
                     onClose={() => { setReminderOpen(false); setSelectedUserIds([]); }}
                 />
             )}

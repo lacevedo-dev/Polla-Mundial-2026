@@ -6,6 +6,14 @@ import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Phas
 import { randomBytes } from 'crypto';
 import { ParticipationService } from '../participation/participation.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TwilioService } from '../notifications/twilio.service';
+import { WhatsappPersonalService } from '../notifications/whatsapp-personal.service';
+import { EmailQueueService } from '../email/email-queue.service';
+import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+
+const PAYMENT_REMINDER_CHANNELS = ['email', 'whatsapp_group', 'whatsapp_personal', 'sms', 'push'] as const;
+type PaymentReminderChannel = typeof PAYMENT_REMINDER_CHANNELS[number];
 
 @Injectable()
 export class LeaguesService {
@@ -15,6 +23,11 @@ export class LeaguesService {
         private readonly prisma: PrismaService,
         private readonly participationService: ParticipationService,
         private readonly notifications: NotificationsService,
+        private readonly twilio: TwilioService,
+        private readonly emailQueue: EmailQueueService,
+        private readonly waGroup: WhatsappGroupService,
+        private readonly waPersonal: WhatsappPersonalService,
+        private readonly push: PushNotificationsService,
     ) { }
 
     private static readonly DEFAULT_SCORING_RULES = [
@@ -765,5 +778,207 @@ export class LeaguesService {
         });
 
         return { reset: true };
+    }
+
+    async sendPaymentReminders(
+        requestingUserId: string,
+        leagueId: string,
+        body: {
+            recipients: Array<{ userId: string; channels: string[] }>;
+            messages: Record<string, string>;
+        },
+    ) {
+        await this.assertLeagueAdmin(requestingUserId, leagueId);
+
+        if (!body.recipients?.length) {
+            throw new BadRequestException('Selecciona al menos un usuario');
+        }
+
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            select: { name: true },
+        });
+        if (!league) throw new NotFoundException('Liga no encontrada');
+
+        const userIds = [...new Set(body.recipients.map((r) => r.userId))];
+        const users = await this.prisma.user.findMany({
+            where: { id: { in: userIds }, status: 'ACTIVE' },
+            select: { id: true, name: true, email: true, phone: true, countryCode: true },
+        });
+        const userMap = new Map(users.map((u) => [u.id, u]));
+
+        const obligations = await this.prisma.participationObligation.findMany({
+            where: { leagueId, userId: { in: userIds }, status: 'PENDING_PAYMENT' },
+            select: { userId: true, totalAmount: true, currency: true },
+        });
+
+        const pendingByUser = new Map<string, number>();
+        let currency = 'COP';
+        for (const o of obligations) {
+            pendingByUser.set(o.userId, (pendingByUser.get(o.userId) ?? 0) + o.totalAmount);
+            currency = o.currency;
+        }
+
+        const fmtCurrency = (amount: number) =>
+            new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency,
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            }).format(amount);
+
+        const resolveMsg = (template: string, name: string, debt: number) =>
+            template
+                .replace(/\{nombre\}/g, name)
+                .replace(/\{liga\}/g, league.name)
+                .replace(/\{deuda\}/g, fmtCurrency(debt));
+
+        const results: Record<string, boolean | number> = {};
+        const errors: string[] = [];
+        const todayKey = new Date().toISOString().slice(0, 10);
+
+        const groupRecipients = body.recipients.filter((r) =>
+            r.channels.includes('whatsapp_group'),
+        );
+        if (groupRecipients.length > 0 && body.messages.whatsapp_group?.trim()) {
+            const lines = groupRecipients.map((r) => {
+                const user = userMap.get(r.userId);
+                const debt = pendingByUser.get(r.userId) ?? 0;
+                return `• ${user?.name ?? 'Participante'}: ${fmtCurrency(debt)}`;
+            });
+            const header = resolveMsg(body.messages.whatsapp_group, '', 0)
+                .replace(/\{nombre\}/g, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            const caption = [header, ...lines].filter(Boolean).join('\n');
+            const dedupeKey = `PAYMENT_REMINDER:${leagueId}:${Date.now()}:${randomBytes(4).toString('hex')}`;
+
+            try {
+                const queued = await this.waGroup.enqueuePaymentReminder(leagueId, caption, dedupeKey);
+                results.whatsapp_group = queued;
+                if (!queued) {
+                    errors.push('WhatsApp grupo: la polla no tiene grupo configurado o el canal está deshabilitado');
+                }
+            } catch (err) {
+                errors.push(`WhatsApp grupo: ${String(err)}`);
+            }
+        }
+
+        for (const recipient of body.recipients) {
+            const user = userMap.get(recipient.userId);
+            if (!user) {
+                errors.push(`Usuario ${recipient.userId}: no encontrado o inactivo`);
+                continue;
+            }
+
+            const debt = pendingByUser.get(recipient.userId) ?? 0;
+            const channels = recipient.channels.filter((c): c is PaymentReminderChannel =>
+                PAYMENT_REMINDER_CHANNELS.includes(c as PaymentReminderChannel),
+            );
+
+            for (const channel of channels) {
+                if (channel === 'whatsapp_group') continue;
+
+                const template =
+                    body.messages[channel] ??
+                    (channel === 'whatsapp_personal' ? body.messages.whatsapp_group : undefined);
+                if (!template?.trim()) continue;
+
+                const message = resolveMsg(template, user.name, debt);
+
+                try {
+                    if (channel === 'email') {
+                        if (!user.email) {
+                            errors.push(`${user.name}: sin email registrado`);
+                            continue;
+                        }
+                        const lines = message.split('\n');
+                        let subject = `Recordatorio de pago — ${league.name}`;
+                        let textBody = message;
+                        if (lines[0]?.toLowerCase().startsWith('asunto:')) {
+                            subject = lines[0].replace(/^asunto:\s*/i, '').trim();
+                            textBody = lines.slice(1).join('\n').trim();
+                        }
+                        const queued = await this.emailQueue.enqueueEmail({
+                            type: 'PAYMENT_REMINDER',
+                            priority: 'MEDIUM',
+                            required: false,
+                            recipientEmail: user.email,
+                            subject,
+                            html: textBody.replace(/\n/g, '<br/>'),
+                            text: textBody,
+                            dedupeKey: `payment-reminder:${leagueId}:${user.id}:${todayKey}`,
+                            leagueId,
+                        });
+                        results[`email:${user.id}`] = queued;
+                        if (!queued) {
+                            errors.push(`${user.name}: email no encolado (duplicado o bloqueado)`);
+                        }
+                    } else if (channel === 'whatsapp_personal') {
+                        if (!user.phone) {
+                            errors.push(`${user.name}: sin teléfono para WhatsApp personal`);
+                            continue;
+                        }
+                        const { sent, via } = await this.waPersonal.send(
+                            user.countryCode,
+                            user.phone,
+                            message,
+                            user.name,
+                        );
+                        results[`whatsapp_personal:${user.id}`] = sent;
+                        if (sent && via) {
+                            results[`whatsapp_personal_via:${user.id}`] = via;
+                        }
+                        if (!sent) {
+                            errors.push(
+                                `${user.name}: no se pudo enviar WA personal (WhatsApp Web desconectado y Twilio no disponible)`,
+                            );
+                        }
+                    } else if (channel === 'sms') {
+                        if (!user.phone) {
+                            errors.push(`${user.name}: sin teléfono para SMS`);
+                            continue;
+                        }
+                        if (!this.twilio.isEnabled()) {
+                            errors.push('SMS: Twilio no está configurado');
+                            continue;
+                        }
+                        const fullPhone = `${user.countryCode ?? '+57'}${user.phone}`;
+                        const sent = await this.twilio.sendSMS(fullPhone, message);
+                        results[`sms:${user.id}`] = sent;
+                        if (!sent) {
+                            errors.push(`${user.name}: falló SMS`);
+                        }
+                    } else if (channel === 'push') {
+                        const title = 'Recordatorio de pago';
+                        await this.push.sendToUser(user.id, {
+                            title,
+                            body: message,
+                            data: { leagueId, type: 'payment_reminder' },
+                        });
+                        await this.notifications.createInAppNotification({
+                            userId: user.id,
+                            type: 'PAYMENT_CONFIRMED',
+                            title,
+                            body: message,
+                            data: { leagueId, kind: 'payment_reminder' },
+                        });
+                        results[`push:${user.id}`] = true;
+                    }
+                } catch (err) {
+                    errors.push(`${user.name} (${channel}): ${String(err)}`);
+                }
+            }
+        }
+
+        this.logger.log(
+            `Payment reminders for league ${leagueId}: ${Object.keys(results).length} deliveries, ${errors.length} issues`,
+        );
+
+        return {
+            ok: errors.length === 0,
+            deliveries: results,
+            errors,
+        };
     }
 }

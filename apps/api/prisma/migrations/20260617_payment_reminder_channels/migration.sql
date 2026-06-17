@@ -1,0 +1,29 @@
+-- Recordatorios de pago: email + WhatsApp grupo
+ALTER TABLE `EmailJob`
+  MODIFY COLUMN `type`
+    ENUM(
+      'VERIFICATION',
+      'MATCH_REMINDER',
+      'PREDICTION_CLOSING',
+      'PREDICTIONS_REPORT',
+      'MATCH_RESULTS_REPORT',
+      'PAYMENT_REMINDER'
+    ) NOT NULL;
+
+ALTER TABLE `WhatsappGroupJob`
+  MODIFY COLUMN `type`
+    ENUM(
+      'RESULT_REPORT',
+      'PREDICTION_REPORT',
+      'MATCH_REMINDER',
+      'PREDICTION_CLOSED',
+      'RESULT_NOTIFICATION',
+      'GOAL_SCORED',
+      'PRE_MATCH_ESCALATION',
+      'MATCH_START',
+      'HALFTIME',
+      'SECOND_HALF_START',
+      'MATCH_LIVE_END',
+      'GOAL_IMPACT',
+      'PAYMENT_REMINDER'
+    ) NOT NULL;

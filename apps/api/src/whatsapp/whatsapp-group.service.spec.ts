@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ModuleRef } from '@nestjs/core';
 import { WhatsappGroupJobType, WhatsappJobStatus } from '@prisma/client';
 import { WhatsappGroupService } from './whatsapp-group.service';
 import { WhatsappWebService } from './whatsapp-web.service';
@@ -17,6 +18,7 @@ const mockPrisma = {
     upsert: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     findMany: jest.fn(),
     deleteMany: jest.fn(),
     create: jest.fn(),
@@ -52,6 +54,7 @@ describe('WhatsappGroupService', () => {
         { provide: WhatsappWebService, useValue: mockWaWeb },
         { provide: WhatsappImageService, useValue: mockWaImage },
         { provide: PredictionReportService, useValue: mockReportService },
+        { provide: ModuleRef, useValue: { get: jest.fn() } },
       ],
     }).compile();
 
@@ -203,6 +206,7 @@ describe('WhatsappGroupService', () => {
     });
 
     it('skips already SENT jobs', async () => {
+      mockPrisma.whatsappGroupJob.updateMany.mockResolvedValueOnce({ count: 0 });
       mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue({
         ...baseJob,
         status: WhatsappJobStatus.SENT,

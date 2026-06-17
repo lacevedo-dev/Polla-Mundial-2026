@@ -30,6 +30,22 @@ const RECONNECT_DELAY_MS = 10_000;
 const MAX_RECONNECT_ATTEMPTS = 12;
 const PRODUCTION_SESSION_PATH = '/data/wwebjs_auth';
 
+/** Normaliza teléfono de usuario a chatId whatsapp-web.js (`573001234567@c.us`). */
+export function normalizePhoneToWhatsAppChatId(
+  countryCode: string | null | undefined,
+  phone: string,
+): string | null {
+  const phoneDigits = phone.replace(/\D/g, '');
+  if (!phoneDigits) return null;
+
+  const ccDigits = (countryCode ?? '+57').replace(/\D/g, '');
+  const fullDigits = phoneDigits.startsWith(ccDigits)
+    ? phoneDigits
+    : `${ccDigits}${phoneDigits}`;
+
+  return `${fullDigits}@c.us`;
+}
+
 @Injectable()
 export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WhatsappWebService.name);
@@ -306,6 +322,41 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       await this.client.sendMessage(groupId, text);
     } catch (e: any) {
       this.logger.error(`sendTextToGroup error (${groupId}): ${e.message}`);
+      throw e;
+    }
+  }
+
+  /**
+   * Envía texto a un número personal usando la sesión WhatsApp Web (misma cuenta que WA Grupo).
+   */
+  async sendTextToNumber(
+    countryCode: string | null | undefined,
+    phone: string,
+    text: string,
+  ): Promise<void> {
+    if (!this.isConnected() || !this.client) {
+      throw new Error('WhatsApp Web is not connected');
+    }
+
+    const chatId = normalizePhoneToWhatsAppChatId(countryCode, phone);
+    if (!chatId) {
+      throw new Error('Número de teléfono inválido');
+    }
+
+    const digits = chatId.replace('@c.us', '');
+    let targetId = chatId;
+
+    try {
+      if (typeof this.client.getNumberId === 'function') {
+        const numberId = await this.client.getNumberId(digits);
+        if (numberId?._serialized) {
+          targetId = numberId._serialized;
+        }
+      }
+      await this.client.sendMessage(targetId, text);
+      this.logger.log(`WhatsApp Web personal message sent to ${digits}`);
+    } catch (e: any) {
+      this.logger.error(`sendTextToNumber error (${digits}): ${e.message}`);
       throw e;
     }
   }

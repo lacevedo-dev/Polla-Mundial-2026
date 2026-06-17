@@ -6,6 +6,7 @@ import { WhatsappWebService } from './whatsapp-web.service';
 import { WhatsappImageService } from './whatsapp-image.service';
 import { WhatsappGroupService } from './whatsapp-group.service';
 import { WhatsappDispatcherScheduler } from './whatsapp-dispatcher.scheduler';
+import { WhatsappDispatcherService } from './whatsapp-dispatcher.service';
 
 @Module({
   imports: [ScheduleModule, PrismaModule, PredictionReportModule],
@@ -13,8 +14,9 @@ import { WhatsappDispatcherScheduler } from './whatsapp-dispatcher.scheduler';
     WhatsappWebService,
     WhatsappImageService,
     WhatsappGroupService,
+    WhatsappDispatcherService,
     WhatsappDispatcherScheduler,
   ],
-  exports: [WhatsappWebService, WhatsappGroupService],
+  exports: [WhatsappWebService, WhatsappGroupService, WhatsappDispatcherService],
 })
 export class WhatsappModule {}
