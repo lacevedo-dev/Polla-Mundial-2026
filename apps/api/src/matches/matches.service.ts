@@ -6,6 +6,7 @@ import { PredictionsService } from '../predictions/predictions.service';
 import { matchWithTeamsSelect, toMatchResponse } from './match-response.util';
 import { PredictionReportService } from '../prediction-report/prediction-report.service';
 import { GoalLiveNotificationService } from '../automation/live/goal-live-notification.service';
+import { logGoalAutomation } from '../automation/live/goal-automation-observability.util';
 
 @Injectable()
 export class MatchesService {
@@ -73,6 +74,15 @@ export class MatchesService {
         const newAway = updateScoreDto.awayScore;
 
         if (newHome > prevHome || newAway > prevAway) {
+            logGoalAutomation(this.logger, 'goal_detected', {
+                matchId: id,
+                prevScore: `${prevHome}-${prevAway}`,
+                newScore: `${newHome}-${newAway}`,
+                totalGoalsDelta: Math.max(0, newHome - prevHome) + Math.max(0, newAway - prevAway),
+                matchStatus: match.status,
+                source: 'admin_update_score',
+            });
+
             await this.goalLiveNotifications.dispatchScoreIncrease({
                 matchId: id,
                 homeTeamName: match.homeTeam.name,

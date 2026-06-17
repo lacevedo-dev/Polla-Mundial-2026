@@ -26,6 +26,7 @@ import {
   liveEventNotificationDataKey,
   liveEventToAutomationStep,
 } from './live-message.builder';
+import { logGoalAutomation } from './goal-automation-observability.util';
 
 @Injectable()
 export class LiveOrchestratorService {
@@ -74,16 +75,22 @@ export class LiveOrchestratorService {
     ctx: Pick<GoalImpactContext, 'matchId' | 'homeScore' | 'awayScore'>,
   ): Promise<LeagueGoalImpactSummary[] | null> {
     if (!(await this.stepConfig.isStepEnabled(AutomationStep.GOAL_IMPACT))) {
-      this.logger.warn(
-        `GOAL_IMPACT desactivado en configuración — omitido para ${ctx.matchId} (${ctx.homeScore}-${ctx.awayScore})`,
-      );
+      logGoalAutomation(this.logger, 'goal_impact_skipped', {
+        matchId: ctx.matchId,
+        homeScore: ctx.homeScore,
+        awayScore: ctx.awayScore,
+        reason: 'step_disabled',
+      }, 'warn');
       return null;
     }
 
     if (!this.waGroup) {
-      this.logger.warn(
-        `WhatsappGroupService no disponible — GOAL_IMPACT omitido para ${ctx.matchId}`,
-      );
+      logGoalAutomation(this.logger, 'goal_impact_skipped', {
+        matchId: ctx.matchId,
+        homeScore: ctx.homeScore,
+        awayScore: ctx.awayScore,
+        reason: 'whatsapp_group_service_unavailable',
+      }, 'warn');
       return null;
     }
 
@@ -162,9 +169,28 @@ export class LiveOrchestratorService {
       });
 
       if (!enqueued) {
-        this.logger.warn(
-          `GOAL_IMPACT no encolado para liga ${summary.leagueId} (${summary.leagueName}) en partido ${ctx.matchId}`,
-        );
+        logGoalAutomation(this.logger, 'goal_impact_skipped', {
+          matchId: ctx.matchId,
+          leagueId: summary.leagueId,
+          leagueName: summary.leagueName,
+          homeScore: ctx.homeScore,
+          awayScore: ctx.awayScore,
+          reason: 'enqueue_returned_false',
+        }, 'warn');
+      } else {
+        logGoalAutomation(this.logger, 'goal_impact_enqueued', {
+          matchId: ctx.matchId,
+          leagueId: summary.leagueId,
+          leagueName: summary.leagueName,
+          homeScore: ctx.homeScore,
+          awayScore: ctx.awayScore,
+          dedupeKey: goalImpactDedupeKey(
+            ctx.matchId,
+            summary.leagueId,
+            ctx.homeScore,
+            ctx.awayScore,
+          ),
+        });
       }
 
       return enqueued;

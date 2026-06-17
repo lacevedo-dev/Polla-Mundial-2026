@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep, MemberStatus } from '@prisma/client';
+import { logGoalAutomation } from '../automation/live/goal-automation-observability.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWebService } from './whatsapp-web.service';
 import { WhatsappImageService } from './whatsapp-image.service';
@@ -129,6 +130,21 @@ export class WhatsappGroupService {
 
     if (!job || job.status === WhatsappJobStatus.SENT) return;
 
+    const isGoalJob =
+      job.type === WhatsappGroupJobType.GOAL_SCORED ||
+      job.type === WhatsappGroupJobType.GOAL_IMPACT;
+
+    if (isGoalJob) {
+      logGoalAutomation(this.logger, 'goal_wa_job_processing', {
+        jobId: job.id,
+        jobType: job.type,
+        matchId: job.matchId,
+        leagueId: job.leagueId,
+        groupId: job.groupId,
+        attempt: job.attemptCount + 1,
+      });
+    }
+
     await this.prisma.whatsappGroupJob.update({
       where: { id: jobId },
       data: { status: WhatsappJobStatus.SENDING, attemptCount: { increment: 1 } },
@@ -197,6 +213,16 @@ export class WhatsappGroupService {
       });
 
       this.logger.log(`WhatsApp group job ${jobId} (${job.type}) sent to ${job.groupId}`);
+
+      if (isGoalJob) {
+        logGoalAutomation(this.logger, 'goal_wa_job_sent', {
+          jobId: job.id,
+          jobType: job.type,
+          matchId: job.matchId,
+          leagueId: job.leagueId,
+          groupId: job.groupId,
+        });
+      }
     } catch (error: unknown) {
       const lastError =
         error instanceof Error ? error.message : String(error);
@@ -205,6 +231,19 @@ export class WhatsappGroupService {
         select: { attemptCount: true },
       });
       const attempts = current?.attemptCount ?? 1;
+
+      if (isGoalJob) {
+        logGoalAutomation(this.logger, 'goal_wa_job_failed', {
+          jobId,
+          jobType: job?.type ?? 'unknown',
+          matchId: job?.matchId ?? null,
+          leagueId: job?.leagueId ?? null,
+          attempt: attempts,
+          maxAttempts: WA_GROUP_MAX_ATTEMPTS,
+          error: lastError,
+          willRetry: attempts < WA_GROUP_MAX_ATTEMPTS,
+        }, attempts < WA_GROUP_MAX_ATTEMPTS ? 'warn' : 'error');
+      }
 
       if (attempts < WA_GROUP_MAX_ATTEMPTS) {
         await this.prisma.whatsappGroupJob.update({

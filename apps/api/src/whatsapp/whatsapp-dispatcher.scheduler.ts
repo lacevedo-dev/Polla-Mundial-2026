@@ -36,7 +36,19 @@ export class WhatsappDispatcherScheduler {
       }
 
       this.logger.log(
-        `WhatsApp dispatcher: ${sent} sent, ${failed} failed of ${jobs.length} jobs`,
+        JSON.stringify({
+          event: 'wa_dispatcher_batch',
+          sent,
+          failed,
+          total: jobs.length,
+          jobs: jobs.map((j) => ({
+            id: j.id,
+            type: j.type,
+            matchId: j.matchId,
+            leagueId: j.leagueId,
+            dedupeKey: j.dedupeKey,
+          })),
+        }),
       );
     } finally {
       this.running = false;

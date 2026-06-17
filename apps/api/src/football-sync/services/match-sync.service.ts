@@ -23,6 +23,7 @@ import { PushNotificationsService } from '../../push-notifications/push-notifica
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { GoalLiveNotificationService } from '../../automation/live/goal-live-notification.service';
+import { logGoalAutomation } from '../../automation/live/goal-automation-observability.util';
 import { LiveOrchestratorService } from '../../automation/live/live-orchestrator.service';
 import type { LiveMatchContext, LivePhaseEventId } from '../../automation/types/automation.types';
 import {
@@ -534,6 +535,16 @@ export class MatchSyncService {
       ) {
         const elapsed = fixture.fixture.status.elapsed ?? null;
 
+        logGoalAutomation(this.logger, 'goal_detected', {
+          matchId: match.id,
+          externalId: fixture.fixture.id?.toString() ?? null,
+          prevScore: `${prevHome}-${prevAway}`,
+          newScore: `${newHome}-${newAway}`,
+          totalGoalsDelta,
+          matchStatus: status,
+          source: 'football_sync',
+        });
+
         // When goals are detected, fetch the event timeline (if enabled) to identify
         // scorers and minutes — applies to single or multiple goals in one sync gap.
         let goalEvents: ParsedGoalEvent[] = [];
@@ -586,7 +597,7 @@ export class MatchSyncService {
             else runAway++;
             const isOwnGoal = goal.detail === 'Own Goal';
             const scorerOnHome = isOwnGoal ? !goal.isHomeGoal : goal.isHomeGoal;
-            await this.goalLiveNotifications?.dispatchGoalScored({
+            await this.dispatchDetectedGoal({
               matchId: match.id,
               homeTeamName: fixture.teams.home.name,
               awayTeamName: fixture.teams.away.name,
@@ -608,7 +619,7 @@ export class MatchSyncService {
             const isHomeGoal = g < homeGoalsDelta;
             if (isHomeGoal) runHome++;
             else runAway++;
-            await this.goalLiveNotifications?.dispatchGoalScored({
+            await this.dispatchDetectedGoal({
               matchId: match.id,
               homeTeamName: fixture.teams.home.name,
               awayTeamName: fixture.teams.away.name,
@@ -1165,6 +1176,22 @@ export class MatchSyncService {
       teamId: string | null;
       playerName: string | null;
     }) => buildMatchEventDedupeKey(candidate) === incomingKey) ?? null;
+  }
+
+  private async dispatchDetectedGoal(
+    params: Parameters<GoalLiveNotificationService['dispatchGoalScored']>[0],
+  ): Promise<void> {
+    if (!this.goalLiveNotifications) {
+      logGoalAutomation(this.logger, 'goal_dispatch_service_missing', {
+        matchId: params.matchId,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        reason: 'goal_live_notification_service_not_injected',
+      }, 'error');
+      return;
+    }
+
+    await this.goalLiveNotifications.dispatchGoalScored(params);
   }
 
   private async maybeDispatchLiveEvent(

@@ -6,6 +6,7 @@ import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service
 import { LiveOrchestratorService } from './live-orchestrator.service';
 import type { LeagueGoalImpactSummary } from './goal-impact-analyzer.service';
 import type { GoalImpactContext } from '../types/automation.types';
+import { logGoalAutomation } from './goal-automation-observability.util';
 
 export type GoalScoredDispatchParams = {
   matchId: string;
@@ -90,9 +91,26 @@ export class GoalLiveNotificationService {
         select: { userId: true, leagueId: true },
       });
 
-      if (predictions.length === 0) return;
+      if (predictions.length === 0) {
+        logGoalAutomation(this.logger, 'goal_dispatch_skipped', {
+          matchId: params.matchId,
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          reason: 'no_predictions',
+        }, 'debug');
+        return;
+      }
 
       const leagueIds = [...new Set(predictions.map((p) => p.leagueId))];
+
+      logGoalAutomation(this.logger, 'goal_dispatch_started', {
+        matchId: params.matchId,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        leagueCount: leagueIds.length,
+        source: 'goal_live_notification',
+      });
+
       const leagues =
         leagueIds.length > 0
           ? await this.prisma.league.findMany({
@@ -145,13 +163,48 @@ export class GoalLiveNotificationService {
         (impactSummaries ?? []).map((summary) => [summary.leagueId, summary]),
       );
 
+      logGoalAutomation(this.logger, 'goal_impact_summaries_loaded', {
+        matchId: impactCtx.matchId,
+        homeScore: impactCtx.homeScore,
+        awayScore: impactCtx.awayScore,
+        leagueCount: impactSummaries?.length ?? 0,
+        orchestratorAvailable: !!this.liveOrchestrator,
+      }, impactSummaries?.length ? 'log' : 'warn');
+
+      let waScoredEnqueued = 0;
+      let waImpactEnqueued = 0;
+
       await Promise.all([
-        this.enqueueWaGoalJobs(params, leagueIds, leagueNameById, scoringTeam, impactCtx, impactByLeague),
+        this.enqueueWaGoalJobs(
+          params,
+          leagueIds,
+          leagueNameById,
+          scoringTeam,
+          impactCtx,
+          impactByLeague,
+          () => { waScoredEnqueued++; },
+          () => { waImpactEnqueued++; },
+        ),
         this.notifyParticipants(predictions, params, title, body, minuteLabel, scoringTeam),
       ]);
+
+      logGoalAutomation(this.logger, 'goal_dispatch_completed', {
+        matchId: params.matchId,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        waScoredEnqueued,
+        waImpactEnqueued,
+        participantCount: new Set(predictions.map((p) => p.userId)).size,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`dispatchGoalScored failed for ${params.matchId}: ${message}`);
+      logGoalAutomation(this.logger, 'goal_dispatch_completed', {
+        matchId: params.matchId,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        error: message,
+        status: 'failed',
+      }, 'error');
     }
   }
 
@@ -163,10 +216,26 @@ export class GoalLiveNotificationService {
     scoringTeam: string | null,
     impactCtx: GoalImpactContext,
     impactByLeague: Map<string, LeagueGoalImpactSummary>,
+    onScoredEnqueued: () => void,
+    onImpactEnqueued: () => void,
   ): Promise<void> {
-    if (!this.waGroup) return;
+    if (!this.waGroup) {
+      logGoalAutomation(this.logger, 'goal_wa_scored_skipped', {
+        matchId: params.matchId,
+        reason: 'whatsapp_group_service_unavailable',
+      }, 'warn');
+      return;
+    }
+
+    if (!this.liveOrchestrator) {
+      logGoalAutomation(this.logger, 'goal_impact_skipped', {
+        matchId: params.matchId,
+        reason: 'live_orchestrator_unavailable',
+      }, 'warn');
+    }
 
     for (const leagueId of leagueIds) {
+      const leagueName = leagueNameById.get(leagueId) ?? 'Polla';
       try {
         const enqueued = await this.waGroup.enqueueGoalNotification(params.matchId, leagueId, {
           homeTeam: params.homeTeamName,
@@ -175,27 +244,55 @@ export class GoalLiveNotificationService {
           awayScore: params.awayScore,
           scoringTeam,
           elapsed: params.elapsed,
-          leagueName: leagueNameById.get(leagueId) ?? 'Polla',
+          leagueName,
           scorerName: params.scorerInfo?.scorerName ?? null,
           assistName: params.scorerInfo?.assistName ?? null,
           goalDetail: params.scorerInfo?.goalDetail ?? null,
         });
-        if (!enqueued) {
-          this.logger.warn(
-            `GOAL_SCORED no encolado para liga ${leagueId} (${leagueNameById.get(leagueId) ?? 'Polla'}) en partido ${params.matchId} — ${params.homeScore}-${params.awayScore}`,
-          );
+        if (enqueued) {
+          onScoredEnqueued();
+          logGoalAutomation(this.logger, 'goal_wa_scored_enqueued', {
+            matchId: params.matchId,
+            leagueId,
+            leagueName,
+            homeScore: params.homeScore,
+            awayScore: params.awayScore,
+          });
+        } else {
+          logGoalAutomation(this.logger, 'goal_wa_scored_skipped', {
+            matchId: params.matchId,
+            leagueId,
+            leagueName,
+            reason: 'dedupe_or_create_failed',
+          }, 'warn');
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `WA group goal enqueue failed for league ${leagueId}: ${message}`,
-        );
+        logGoalAutomation(this.logger, 'goal_wa_scored_skipped', {
+          matchId: params.matchId,
+          leagueId,
+          leagueName,
+          reason: message,
+        }, 'warn');
       }
 
       const impactSummary = impactByLeague.get(leagueId);
-      if (impactSummary && this.liveOrchestrator) {
-        await this.liveOrchestrator.enqueueGoalImpactForLeague(impactCtx, impactSummary);
+      if (!impactSummary) {
+        logGoalAutomation(this.logger, 'goal_impact_skipped', {
+          matchId: params.matchId,
+          leagueId,
+          leagueName,
+          reason: 'no_impact_summary_for_league',
+        }, 'debug');
+        continue;
       }
+      if (!this.liveOrchestrator) continue;
+
+      const impactOk = await this.liveOrchestrator.enqueueGoalImpactForLeague(
+        impactCtx,
+        impactSummary,
+      );
+      if (impactOk) onImpactEnqueued();
     }
   }
 
@@ -245,6 +342,13 @@ export class GoalLiveNotificationService {
         },
       });
     }
+
+    logGoalAutomation(this.logger, 'goal_participants_notified', {
+      matchId: params.matchId,
+      homeScore: params.homeScore,
+      awayScore: params.awayScore,
+      participantCount: notifiedUsers.size,
+    });
   }
 }
 
