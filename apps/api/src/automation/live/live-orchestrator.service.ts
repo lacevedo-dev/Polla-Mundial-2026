@@ -66,7 +66,12 @@ export class LiveOrchestratorService {
         ctx.homeScore,
         ctx.awayScore,
       );
-      if (summaries.length === 0) return;
+      if (summaries.length === 0) {
+        this.logger.debug(
+          `Goal impact skipped for match ${ctx.matchId}: sin ligas con predicciones`,
+        );
+        return;
+      }
 
       let waEnqueued = 0;
 

@@ -22,6 +22,7 @@ import {
   buildGoalImpactWaCaption,
   buildLiveUserMessage,
   buildLiveWaCaption,
+  goalImpactDedupeKey,
 } from '../live/live-message.builder';
 import { GoalImpactAnalyzerService } from '../live/goal-impact-analyzer.service';
 import {
@@ -72,11 +73,18 @@ export class AutomationMessagePreviewService {
     channel?: MessagePreviewChannel;
   }): Promise<MessagePreviewResult> {
     const channel = params.channel ?? 'waGroup';
-    const jobType = AUTOMATION_STEP_TO_WA_JOB[params.step];
+    const resolvedParams = { ...params };
+    if (params.step === AutomationStep.GOAL_IMPACT && !params.leagueId) {
+      resolvedParams.leagueId = await this.resolveDefaultGoalImpactLeagueId(
+        params.matchId,
+      );
+    }
+
+    const jobType = AUTOMATION_STEP_TO_WA_JOB[resolvedParams.step];
     const dedupeKey = await this.resolveDedupeKey(
-      params.matchId,
-      params.leagueId,
-      params.step,
+      resolvedParams.matchId,
+      resolvedParams.leagueId,
+      resolvedParams.step,
       jobType,
     );
 
@@ -101,7 +109,7 @@ export class AutomationMessagePreviewService {
       };
     }
 
-    const generated = await this.generatePreview(params, channel);
+    const generated = await this.generatePreview(resolvedParams, channel);
     return {
       ...generated,
       dedupeKey,
@@ -122,6 +130,22 @@ export class AutomationMessagePreviewService {
     }
 
     if (jobType === WhatsappGroupJobType.GOAL_IMPACT && leagueId) {
+      const match = await this.prisma.match.findUnique({
+        where: { id: matchId },
+        select: { homeScore: true, awayScore: true },
+      });
+      if (
+        match &&
+        match.homeScore !== null &&
+        match.awayScore !== null
+      ) {
+        return goalImpactDedupeKey(
+          matchId,
+          leagueId,
+          match.homeScore,
+          match.awayScore,
+        );
+      }
       const job = await this.prisma.whatsappGroupJob.findFirst({
         where: { matchId, leagueId, type: jobType },
         orderBy: { createdAt: 'desc' },
@@ -501,6 +525,17 @@ export class AutomationMessagePreviewService {
       },
     });
     return league as MatchAutomationSweepLeague | null;
+  }
+
+  private async resolveDefaultGoalImpactLeagueId(
+    matchId: string,
+  ): Promise<string | undefined> {
+    const row = await this.prisma.prediction.findFirst({
+      where: { matchId },
+      select: { leagueId: true },
+      orderBy: { submittedAt: 'asc' },
+    });
+    return row?.leagueId;
   }
 }
 

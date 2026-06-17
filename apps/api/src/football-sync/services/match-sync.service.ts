@@ -1069,21 +1069,27 @@ export class MatchSyncService {
         homeScore !== null &&
         awayScore !== null
       ) {
-        const matchRow = await this.prisma.match.findUnique({
-          where: { id: matchId },
-          select: { matchDate: true },
-        });
-        await this.liveOrchestrator.handleGoalImpact({
-          matchId,
-          homeTeam: homeTeamName,
-          awayTeam: awayTeamName,
-          homeScore,
-          awayScore,
-          matchDate: matchRow?.matchDate ?? new Date(),
-          elapsed,
-          scoringTeam,
-          scorerName: scorerInfo?.scorerName ?? null,
-        });
+        try {
+          const matchRow = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            select: { matchDate: true },
+          });
+          await this.liveOrchestrator.handleGoalImpact({
+            matchId,
+            homeTeam: homeTeamName,
+            awayTeam: awayTeamName,
+            homeScore,
+            awayScore,
+            matchDate: matchRow?.matchDate ?? new Date(),
+            elapsed,
+            scoringTeam,
+            scorerName: scorerInfo?.scorerName ?? null,
+          });
+        } catch (impactError) {
+          const message =
+            impactError instanceof Error ? impactError.message : String(impactError);
+          this.logger.warn(`Goal impact orchestrator failed for match ${matchId}: ${message}`);
+        }
       }
     } catch (error) {
       this.logger.error(`sendGoalPushNotification failed: ${error.message}`);

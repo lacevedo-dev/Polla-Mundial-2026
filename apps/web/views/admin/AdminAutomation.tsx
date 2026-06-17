@@ -131,6 +131,7 @@ interface OperationsStep {
   scheduledAt?: string | null;
   lastStartedAt?: string | null;
   lastFinishedAt?: string | null;
+  summary?: string | null;
   errorMessage?: string | null;
   trigger: string;
   leagues: StepLeague[];
@@ -1459,7 +1460,7 @@ function IncidentModal({
     (step.status === 'SUCCESS' &&
       stepChannels.some((ch) => channelHasFailure(ch, breakdown, step)));
   const isChannelRetry = incident.channel === 'waGroup' && !!selectedLeagueId;
-  const previewLeagueRequired = ['ESCALATION_T45', 'ESCALATION_T30', 'ESCALATION_FINAL', 'GOAL_IMPACT'].includes(step.key);
+  const previewLeagueRequired = ['ESCALATION_T45', 'ESCALATION_T30', 'ESCALATION_FINAL'].includes(step.key);
 
   useEffect(() => {
     setPreviewChannel(resolveDefaultPreviewChannel(stepChannels));
@@ -1575,8 +1576,11 @@ function IncidentModal({
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Detalle del paso</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
-              <p><span className="text-slate-400">Programado: </span>{step.scheduledAt ? fmtFull(step.scheduledAt) : '—'}</p>
+              <p><span className="text-slate-400">Programado: </span>{step.scheduledAt ? fmtFull(step.scheduledAt) : step.key === 'GOAL_IMPACT' ? 'Tras cada gol (en vivo)' : '—'}</p>
               <p><span className="text-slate-400">Estado: </span>{step.status}</p>
+              {step.summary && step.key === 'GOAL_IMPACT' && !step.lastStartedAt && (
+                <p className="col-span-2 text-slate-500">{step.summary}</p>
+              )}
               <p><span className="text-slate-400">Partido: </span>{incident.match.status}</p>
               {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
             </div>
@@ -1653,7 +1657,7 @@ function IncidentModal({
                 <>
                   <div className="mb-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">
-                      {preview.source === 'job' ? 'Job WA' : preview.source === 'generated' ? 'Generado' : 'N/D'}
+                      {preview.source === 'job' ? 'Job WA' : preview.source === 'generated' ? 'Generado' : preview.source === 'unavailable' ? 'No disponible' : 'N/D'}
                     </span>
                     {preview.jobStatus && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">job: {preview.jobStatus}</span>
@@ -1667,7 +1671,7 @@ function IncidentModal({
                   {preview.title && (
                     <p className="mb-1 text-xs font-semibold text-slate-800">{preview.title}</p>
                   )}
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-50 p-2.5 font-mono text-[11px] leading-relaxed text-slate-700">
+                  <pre className={`max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border p-2.5 font-mono text-[11px] leading-relaxed ${preview.source === 'unavailable' ? 'border-amber-100 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-slate-700'}`}>
                     {preview.body}
                   </pre>
                 </>

@@ -528,7 +528,7 @@ export class AutomationObservabilityService {
       scheduledAt: scheduledAt?.toISOString() ?? null,
       lastStartedAt: latestRun?.startedAt.toISOString() ?? null,
       lastFinishedAt: latestRun?.finishedAt?.toISOString() ?? null,
-      summary: latestRun?.summary ?? this.getDerivedSummary(overallStatus),
+      summary: latestRun?.summary ?? this.getDerivedSummary(overallStatus, params.step),
       errorMessage: latestRun?.errorMessage ?? null,
       trigger: latestRun?.trigger ?? AutomationRunTrigger.SCHEDULER,
       leagues: perLeague,
@@ -581,6 +581,13 @@ export class AutomationObservabilityService {
       return scheduledAt && now < scheduledAt ? 'SCHEDULED' : 'NOT_APPLICABLE';
     }
 
+    if (step === AutomationStep.GOAL_IMPACT) {
+      if (match.status === MatchStatus.LIVE) {
+        return 'SCHEDULED';
+      }
+      return 'NOT_APPLICABLE';
+    }
+
     if (!scheduledAt) {
       return 'NOT_APPLICABLE';
     }
@@ -604,7 +611,10 @@ export class AutomationObservabilityService {
     return 'NOT_APPLICABLE';
   }
 
-  private getDerivedSummary(status: StepState): string {
+  private getDerivedSummary(status: StepState, step?: AutomationStep): string {
+    if (step === AutomationStep.GOAL_IMPACT && status === 'SCHEDULED') {
+      return 'Se envía automáticamente tras cada gol detectado en vivo.';
+    }
     switch (status) {
       case 'SCHEDULED':
         return 'Programado, aún dentro de la ventana esperada.';
