@@ -61,6 +61,19 @@ export class AutomationObservabilityService {
   constructor(private readonly prisma: PrismaService) {}
 
   async startRun(input: StartRunInput): Promise<string | null> {
+    if (!input.step) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'automation_observability',
+          status: 'failed',
+          reason: 'empty_automation_step',
+          matchId: input.matchId,
+          hint: 'Cliente Prisma desactualizado o migración 20260617_automation_live_steps pendiente.',
+        }),
+      );
+      return null;
+    }
+
     try {
       const run = await this.prisma.automationRun.create({
         data: {
@@ -80,10 +93,13 @@ export class AutomationObservabilityService {
 
       return run.id;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const hint =
+        message.includes("enum 'AutomationStep'") || message.includes('empty_automation_step')
+          ? ' Migración 20260617_automation_live_steps pendiente o imagen Docker sin prisma generate.'
+          : '';
       this.logger.warn(
-        `No pude registrar inicio de observabilidad (${input.step}) para match ${input.matchId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `No pude registrar inicio de observabilidad (${input.step || 'EMPTY'}) para match ${input.matchId}: ${message}${hint}`,
       );
       return null;
     }

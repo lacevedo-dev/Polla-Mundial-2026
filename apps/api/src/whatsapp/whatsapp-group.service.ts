@@ -773,6 +773,21 @@ export class WhatsappGroupService {
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
       if (code === 'P2002') return false;
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('AutomationStep') || message.includes('WhatsappGroupJobType')) {
+        this.logger.error(
+          JSON.stringify({
+            event: 'goal_automation',
+            kind: 'goal_impact_enqueue_failed',
+            matchId,
+            leagueId,
+            reason: 'database_enum_missing',
+            error: message,
+            hint: 'Ejecutar npx prisma migrate deploy (20260617_automation_live_steps) y redeploy API.',
+          }),
+        );
+        return false;
+      }
       throw error;
     }
   }
