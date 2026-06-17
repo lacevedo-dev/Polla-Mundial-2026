@@ -833,7 +833,7 @@ export class LeaguesService {
                 .replace(/\{liga\}/g, league.name)
                 .replace(/\{deuda\}/g, fmtCurrency(debt));
 
-        const results: Record<string, boolean | number> = {};
+        const results: Record<string, boolean | number | string> = {};
         const errors: string[] = [];
         const todayKey = new Date().toISOString().slice(0, 10);
 
