@@ -465,8 +465,17 @@ const ReminderModal: React.FC<{
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
+    /** all = todos los canales marcados en paso 1; single = solo el tab activo */
+    const [sendMode, setSendMode] = useState<'all' | 'single'>('all');
 
     const fmtDebt = (userId: string) => fmtCurrency(userDebts[userId] ?? 0, currency);
+
+    const sendChannelCount = useMemo(() => {
+        if (sendMode === 'single') {
+            return selectedUsers.filter((u) => (userChannels[u.id] ?? []).includes(activeTab)).length;
+        }
+        return selectedUsers.reduce((n, u) => n + (userChannels[u.id]?.length ?? 0), 0);
+    }, [sendMode, activeTab, selectedUsers, userChannels]);
 
     const allUsersHaveAllChannels = useMemo(
         () => selectedUsers.every((u) => {
@@ -529,14 +538,18 @@ const ReminderModal: React.FC<{
     const handleSend = async () => {
         setSending(true);
         setSendError(null);
+        const channelsToSend = sendMode === 'single' ? [activeTab] : null;
         try {
             const res = await request<{ ok: boolean; errors?: string[] }>(`/leagues/${leagueId}/payments/reminders`, {
                 method: 'POST',
                 body: JSON.stringify({
-                    recipients: selectedUsers.map((u) => ({
-                        userId: u.id,
-                        channels: userChannels[u.id] ?? [],
-                    })),
+                    recipients: selectedUsers.map((u) => {
+                        const selected = userChannels[u.id] ?? [];
+                        const channels = channelsToSend
+                            ? channelsToSend.filter((c) => selected.includes(c))
+                            : selected;
+                        return { userId: u.id, channels };
+                    }),
                     messages: drafts,
                 }),
             });
@@ -606,8 +619,33 @@ const ReminderModal: React.FC<{
                                 </button>
                             </div>
                             <p className="text-[10px] text-slate-500 leading-relaxed">
-                                WA Grupo publica en el grupo de la polla. WA Personal envía al número de cada usuario con la misma sesión WhatsApp Web (Twilio solo si Web no está conectado).
+                                Marca los canales por usuario o usa <strong className="text-slate-700">Todos los canales</strong>. En el siguiente paso puedes enviar por todos o solo por uno.
                             </p>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setAllChannelsGlobal(true)}
+                                    className={`text-[10px] font-black uppercase px-3 py-2 rounded-xl border transition-colors ${allUsersHaveAllChannels ? 'bg-indigo-600 text-white border-indigo-600' : 'border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}
+                                >
+                                    Todos los canales
+                                </button>
+                                {ALL_REMINDER_CHANNELS.map((ch) => {
+                                    const cfg = CHANNEL_CONFIG[ch];
+                                    const allUsersHaveCh = selectedUsers.every((u) => (userChannels[u.id] ?? []).includes(ch));
+                                    return (
+                                        <button
+                                            key={ch}
+                                            type="button"
+                                            onClick={() => setUserChannels(Object.fromEntries(
+                                                selectedUsers.map((u) => [u.id, [ch]]),
+                                            ))}
+                                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${allUsersHaveCh && !allUsersHaveAllChannels ? `${cfg.bg} ${cfg.border} ${cfg.color}` : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                        >
+                                            <cfg.Icon size={12} /> Solo {cfg.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                             {selectedUsers.map((u) => {
                                 const userHasAll = ALL_REMINDER_CHANNELS.every((c) => (userChannels[u.id] ?? []).includes(c));
                                 return (
@@ -651,8 +689,33 @@ const ReminderModal: React.FC<{
                         </div>
                     ) : (
                         <div className="space-y-4">
+                            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 space-y-2">
+                                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Modo de envío</p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSendMode('all')}
+                                        className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${sendMode === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 text-slate-600 hover:bg-white'}`}
+                                    >
+                                        Todos los canales ({activeChannels.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSendMode('single')}
+                                        className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${sendMode === 'single' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 text-slate-600 hover:bg-white'}`}
+                                    >
+                                        Solo {CHANNEL_CONFIG[activeTab].label}
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                    {sendMode === 'all'
+                                        ? `Se enviará por ${activeChannels.map((c) => CHANNEL_CONFIG[c].label).join(', ')} a quien tenga cada canal activo.`
+                                        : `Solo se enviará por ${CHANNEL_CONFIG[activeTab].label} a los usuarios que lo tengan marcado en Canales.`}
+                                </p>
+                            </div>
+
                             <div className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-                                {activeChannels.map((ch) => {
+                                {(sendMode === 'all' ? activeChannels : ALL_REMINDER_CHANNELS.filter((c) => activeChannels.includes(c) || c === activeTab)).map((ch) => {
                                     const cfg = CHANNEL_CONFIG[ch];
                                     return (
                                         <button
@@ -739,11 +802,13 @@ const ReminderModal: React.FC<{
                                 variant="secondary"
                                 className="flex-1 h-11 font-black uppercase text-xs"
                                 onClick={handleSend}
-                                disabled={sending}
+                                disabled={sending || sendChannelCount === 0}
                             >
                                 {sending ? <><Loader2 size={14} className="animate-spin" /> Enviando…</> :
                                     sent ? <><CheckCircle2 size={14} /> ¡Enviado!</> :
-                                    <><Send size={14} /> Enviar recordatorio</>}
+                                    sendMode === 'all'
+                                        ? <><Send size={14} /> Enviar · {activeChannels.length} canal{activeChannels.length !== 1 ? 'es' : ''}</>
+                                        : <><Send size={14} /> Enviar · {CHANNEL_CONFIG[activeTab].label}</>}
                             </Button>
                         </>
                     )}
