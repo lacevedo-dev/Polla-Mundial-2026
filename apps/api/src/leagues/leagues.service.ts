@@ -659,15 +659,20 @@ export class LeaguesService {
     /* ─── League Payment Obligations (admin endpoints) ─────────────────── */
 
     private async assertLeagueAdmin(userId: string, leagueId: string) {
-        const [member] = await Promise.all([
-            this.prisma.leagueMember.findUnique({
-                where: { userId_leagueId: { userId, leagueId } },
-            }),
-        ]);
-        if (!member || member.role !== MemberRole.ADMIN) {
-            if (!await this.isSuperAdmin(userId)) {
-                throw new ForbiddenException('Solo el administrador de la polla puede gestionar los pagos');
-            }
+        const member = await this.prisma.leagueMember.findUnique({
+            where: { userId_leagueId: { userId, leagueId } },
+            select: { role: true },
+        });
+        if (member?.role === MemberRole.ADMIN) {
+            return;
+        }
+
+        const isSuperAdmin = await this.prisma.user.findFirst({
+            where: { id: userId, status: 'ACTIVE', systemRole: 'SUPERADMIN' },
+            select: { id: true },
+        });
+        if (!isSuperAdmin) {
+            throw new ForbiddenException('Solo el administrador de la polla puede gestionar los pagos');
         }
     }
 

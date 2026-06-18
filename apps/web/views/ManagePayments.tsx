@@ -850,13 +850,17 @@ const ReminderModal: React.FC<{
 const ManagePayments: React.FC = () => {
     const navigate = useNavigate();
     const activeLeague = useLeagueStore((s) => s.activeLeague);
+    const myLeagues = useLeagueStore((s) => s.myLeagues);
+    const leaguesLoading = useLeagueStore((s) => s.isLoading);
+    const fetchMyLeagues = useLeagueStore((s) => s.fetchMyLeagues);
 
     const leagueId = activeLeague?.id ?? '';
     const leagueName = activeLeague?.name ?? 'Polla';
 
     /* ─ backend state ─ */
     const [obligations, setObligations] = useState<ObligationRecord[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [obligationsLoading, setObligationsLoading] = useState(false);
+    const [leaguesBootstrapped, setLeaguesBootstrapped] = useState(myLeagues.length > 0);
     const [error, setError] = useState<string | null>(null);
 
     /* ─ concept filter ─ */
@@ -877,10 +881,34 @@ const ManagePayments: React.FC = () => {
     const [bulkModal, setBulkModal] = useState(false);
     const [reminderOpen, setReminderOpen] = useState(false);
 
+    /* ─ bootstrap league context (needed on direct URL / refresh) ─ */
+    useEffect(() => {
+        let cancelled = false;
+
+        (async () => {
+            if (myLeagues.length > 0) {
+                if (!cancelled) setLeaguesBootstrapped(true);
+                return;
+            }
+
+            try {
+                await fetchMyLeagues();
+            } catch {
+                if (!cancelled) {
+                    setError('No se pudo cargar tu polla activa. Intenta de nuevo.');
+                }
+            } finally {
+                if (!cancelled) setLeaguesBootstrapped(true);
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [fetchMyLeagues, myLeagues.length]);
+
     /* ─ load from backend ─ */
     const loadObligations = useCallback(async () => {
         if (!leagueId) return;
-        setLoading(true);
+        setObligationsLoading(true);
         setError(null);
         try {
             const data = await request<ObligationRecord[]>(`/leagues/${leagueId}/payments`);
@@ -888,11 +916,18 @@ const ManagePayments: React.FC = () => {
         } catch (e) {
             setError('No se pudieron cargar los pagos. Verifica que eres administrador de la polla.');
         } finally {
-            setLoading(false);
+            setObligationsLoading(false);
         }
     }, [leagueId]);
 
-    useEffect(() => { void loadObligations(); }, [loadObligations]);
+    useEffect(() => {
+        if (!leaguesBootstrapped || !leagueId) return;
+        void loadObligations();
+    }, [leaguesBootstrapped, leagueId, loadObligations]);
+
+    const bootstrappingLeague = !leaguesBootstrapped || (leaguesLoading && !leagueId);
+    const loading = bootstrappingLeague || obligationsLoading;
+    const loadingMessage = bootstrappingLeague ? 'Preparando polla…' : 'Cargando pagos…';
 
     /* ─ derived: unique concepts from obligations ─ */
     const concepts = useMemo(() => {
@@ -1119,7 +1154,14 @@ const ManagePayments: React.FC = () => {
             {loading && (
                 <div className="flex items-center justify-center py-20 text-slate-400 gap-3">
                     <Loader2 className="h-6 w-6 animate-spin" />
-                    <span className="text-sm font-bold">Cargando pagos...</span>
+                    <span className="text-sm font-bold">{loadingMessage}</span>
+                </div>
+            )}
+
+            {!loading && leaguesBootstrapped && !leagueId && !error && (
+                <div className="bg-white border border-slate-200 border-dashed rounded-2xl p-12 text-center space-y-3">
+                    <p className="text-slate-500 text-sm font-bold">No hay polla activa</p>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/my-leagues')}>Ir a Mis Pollas</Button>
                 </div>
             )}
 
