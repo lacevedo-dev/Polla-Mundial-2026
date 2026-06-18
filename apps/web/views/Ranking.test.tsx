@@ -6,6 +6,7 @@ const fetchMyLeaguesMock = vi.fn();
 const fetchLeagueDetailsMock = vi.fn();
 const setActiveLeagueMock = vi.fn();
 const fetchLeaderboardMock = vi.fn();
+const fetchLeaderboardBreakdownMock = vi.fn();
 
 let leagueState: any;
 let predictionState: any;
@@ -61,10 +62,13 @@ describe('Ranking view', () => {
                 { id: 'user-1', rank: 1, name: 'Juan P?rez', username: 'juan', avatar: '', points: 15, trend: 'same' },
                 { id: 'user-2', rank: 2, name: 'Mar?a L?pez', username: 'maria', avatar: '', points: 10, trend: 'same' },
             ],
+            leaderboardBreakdowns: {},
             isLoading: false,
             fetchLeaderboard: fetchLeaderboardMock,
+            fetchLeaderboardBreakdown: fetchLeaderboardBreakdownMock,
         };
         fetchLeaderboardMock.mockResolvedValue(undefined);
+        fetchLeaderboardBreakdownMock.mockResolvedValue(undefined);
         fetchLeagueDetailsMock.mockResolvedValue(undefined);
         fetchMyLeaguesMock.mockResolvedValue(undefined);
     });
@@ -73,7 +77,7 @@ describe('Ranking view', () => {
         render(<Ranking />);
 
         await waitFor(() => expect(fetchLeaderboardMock).toHaveBeenCalledWith('league-1', 'GENERAL'));
-        expect(screen.getByText('@maria')).toBeTruthy();
+        expect(screen.getByText(/Mar.a L.pez/i)).toBeTruthy();
         expect(screen.getByRole('button', { name: /General/i })).toBeTruthy();
     }, 20000);
 
