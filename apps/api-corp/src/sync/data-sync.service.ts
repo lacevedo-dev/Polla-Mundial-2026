@@ -413,6 +413,12 @@ export class DataSyncService implements OnModuleInit {
             const teams = Array.isArray(response.data) ? response.data : [];
 
             for (const team of teams) {
+                const apiFootballTeamId = normalizeNullableInt(team.apiFootballTeamId ?? team.externalId);
+
+                if (apiFootballTeamId !== null) {
+                    await this.claimApiFootballTeamId(apiFootballTeamId, team.id);
+                }
+
                 await this.prisma.team.upsert({
                     where: { id: team.id },
                     create: {
@@ -422,7 +428,7 @@ export class DataSyncService implements OnModuleInit {
                         group: team.group ?? null,
                         flagUrl: team.flagUrl ?? team.logo ?? null,
                         shortCode: team.shortCode ?? team.code ?? null,
-                        apiFootballTeamId: normalizeNullableInt(team.apiFootballTeamId ?? team.externalId),
+                        apiFootballTeamId,
                     } as any,
                     update: {
                         name: team.name,
@@ -430,7 +436,7 @@ export class DataSyncService implements OnModuleInit {
                         group: team.group ?? null,
                         flagUrl: team.flagUrl ?? team.logo ?? null,
                         shortCode: team.shortCode ?? team.code ?? null,
-                        apiFootballTeamId: normalizeNullableInt(team.apiFootballTeamId ?? team.externalId),
+                        apiFootballTeamId,
                     } as any,
                 });
             }
@@ -809,6 +815,17 @@ export class DataSyncService implements OnModuleInit {
         }
 
         return error instanceof Error ? error.message : String(error);
+    }
+
+    /** Evita violar Team_apiFootballTeamId_key al reasignar el ID externo a otro equipo local. */
+    private async claimApiFootballTeamId(apiFootballTeamId: number, targetTeamId: string): Promise<void> {
+        await this.prisma.team.updateMany({
+            where: {
+                apiFootballTeamId,
+                id: { not: targetTeamId },
+            },
+            data: { apiFootballTeamId: null },
+        });
     }
 }
 
