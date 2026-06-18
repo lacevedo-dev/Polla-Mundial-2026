@@ -98,6 +98,8 @@ describe('FootballSync ConfigService', () => {
       enabled: true,
       eventSyncEnabled: true,
       eventWaRedCardEnabled: true,
+      updatedAt: new Date('2026-03-28T00:00:00.000Z'),
+      createdAt: new Date('2026-03-28T00:00:00.000Z'),
     });
 
     await expect(service.isEventWaRedCardEnabled()).resolves.toBe(true);
@@ -109,6 +111,8 @@ describe('FootballSync ConfigService', () => {
       enabled: true,
       eventSyncEnabled: true,
       eventWaRedCardEnabled: false,
+      updatedAt: new Date('2026-03-28T00:00:00.000Z'),
+      createdAt: new Date('2026-03-28T00:00:00.000Z'),
     });
 
     await expect(service.isEventWaRedCardEnabled()).resolves.toBe(false);
@@ -120,6 +124,8 @@ describe('FootballSync ConfigService', () => {
       enabled: true,
       eventSyncEnabled: true,
       eventWaYellowCardEnabled: true,
+      updatedAt: new Date('2026-03-28T00:00:00.000Z'),
+      createdAt: new Date('2026-03-28T00:00:00.000Z'),
     });
 
     await expect(service.isEventWaYellowCardEnabled()).resolves.toBe(true);
@@ -131,6 +137,8 @@ describe('FootballSync ConfigService', () => {
       enabled: true,
       eventSyncEnabled: true,
       eventWaSubstitutionEnabled: false,
+      updatedAt: new Date('2026-03-28T00:00:00.000Z'),
+      createdAt: new Date('2026-03-28T00:00:00.000Z'),
     });
 
     await expect(service.isEventWaSubstitutionEnabled()).resolves.toBe(false);
