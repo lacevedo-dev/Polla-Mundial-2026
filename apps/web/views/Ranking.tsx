@@ -399,8 +399,10 @@ const Ranking: React.FC = () => {
         />
     ) : null;
 
+    const showMyPositionBar = Boolean(myEntry && tournamentStarted);
+
     return (
-        <div className="space-y-4 md:space-y-6">
+        <div className={`space-y-4 md:space-y-6 ${showMyPositionBar ? 'pb-32 md:pb-28' : ''}`}>
 
             {/* ── Compact header ── */}
             <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -465,25 +467,6 @@ const Ranking: React.FC = () => {
                         </div>
                     )}
                     <RankingGuidePanel />
-                </div>
-            )}
-
-            {/* ── My position (inline, no sticky) ── */}
-            {myEntry && tournamentStarted && (
-                <div className="rounded-2xl bg-slate-900 px-4 py-3 flex items-center gap-3 text-white shadow-lg">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lime-400">
-                        <span className="text-sm font-black text-slate-900">#{myEntry.rank}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">Tu posición</p>
-                        <p className="font-black text-sm truncate">
-                            {myEntry.name} <span className="text-lime-400">(tú)</span>
-                        </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                        <p className="text-xl font-black text-lime-400">{myEntry.points}</p>
-                        <p className="text-[9px] font-bold uppercase text-white/40">pts</p>
-                    </div>
                 </div>
             )}
 
@@ -581,6 +564,37 @@ const Ranking: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* ── Sticky: tu posición (sobre el menú en móvil, abajo en escritorio) ── */}
+            {showMyPositionBar && myEntry && (
+                <motion.div
+                    initial={{ y: 80, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 22 }}
+                    className="fixed bottom-20 left-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 md:bottom-6"
+                    role="status"
+                    aria-live="polite"
+                    aria-label={`Tu posición: número ${myEntry.rank}, ${myEntry.points} puntos`}
+                >
+                    <div className="flex items-center justify-between rounded-[2rem] border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:px-5 sm:py-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-lime-400 sm:h-11 sm:w-11">
+                                <span className="text-sm font-black text-slate-900">#{myEntry.rank}</span>
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Tu posición</p>
+                                <p className="truncate font-black text-white">
+                                    {myEntry.name} <span className="text-lime-400">(Tú)</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Puntos</p>
+                            <p className="text-2xl font-black text-lime-400">{myEntry.points}</p>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
         </div>
     );
 };
