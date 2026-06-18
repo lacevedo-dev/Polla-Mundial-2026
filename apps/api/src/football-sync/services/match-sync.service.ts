@@ -13,6 +13,7 @@ import { MonitoringService } from './monitoring.service';
 import { SyncEventsService } from './sync-events.service';
 import {
   buildMatchEventDedupeKey,
+  eventsAreSameMatchEvent,
   filterActiveGoalEventsFromTimeline,
   formatAnnulledReason,
   isRedCardDetail,
@@ -1396,21 +1397,30 @@ export class MatchSyncService {
       },
     });
 
-    const incomingKey = buildMatchEventDedupeKey({
-      type: params.eventType,
-      minute: params.minute,
-      extraMin: params.extraMin,
-      teamId: params.teamId,
-      playerName: params.playerName,
-    });
-
     return candidates.find((candidate: {
       type: string;
       minute: number;
       extraMin: number | null;
       teamId: string | null;
       playerName: string | null;
-    }) => buildMatchEventDedupeKey(candidate) === incomingKey) ?? null;
+    }) =>
+      eventsAreSameMatchEvent(
+        {
+          type: params.eventType,
+          minute: params.minute,
+          extraMin: params.extraMin,
+          teamId: params.teamId,
+          playerName: params.playerName,
+        },
+        {
+          type: candidate.type,
+          minute: candidate.minute,
+          extraMin: candidate.extraMin,
+          teamId: candidate.teamId,
+          playerName: candidate.playerName,
+        },
+      ),
+    ) ?? null;
   }
 
   private async dispatchDetectedGoal(

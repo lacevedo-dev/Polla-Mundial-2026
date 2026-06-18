@@ -9,6 +9,7 @@ import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents, type MatchEventItem } from '../hooks/useLiveSyncEvents';
+import { dedupeMatchEvents } from '../utils/matchEvents';
 import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
@@ -246,7 +247,7 @@ const Dashboard: React.FC = () => {
         ).then((results) => {
             setMatchEvents((prev) => {
                 const next = new Map(prev);
-                results.forEach((r) => next.set(r.id, r.events));
+                results.forEach((r) => next.set(r.id, dedupeMatchEvents(r.events)));
                 return next;
             });
         });
@@ -264,7 +265,7 @@ const Dashboard: React.FC = () => {
         ).then((results) => {
             setMatchEvents((prev) => {
                 const next = new Map(prev);
-                results.forEach((r) => next.set(r.id, r.events));
+                results.forEach((r) => next.set(r.id, dedupeMatchEvents(r.events)));
                 return next;
             });
         });
@@ -293,7 +294,7 @@ const Dashboard: React.FC = () => {
                 );
                 setMatchEvents((prev) => {
                     const next = new Map(prev);
-                    results.forEach((r) => next.set(r.id, r.events));
+                    results.forEach((r) => next.set(r.id, dedupeMatchEvents(r.events)));
                     return next;
                 });
             } catch {

@@ -6,6 +6,7 @@ import { LiveMatchTimer } from '../live/LiveMatchTimer';
 import LiveMatchExpandedCard from './LiveMatchExpandedCard';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
+import { dedupeMatchEvents } from '../../utils/matchEvents';
 import { calcLivePoints } from '../../utils/dashboard';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
@@ -352,7 +353,9 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
         else expandedStatus = Math.sign(expandedPredHome - expandedPredAway) === Math.sign(expandedRealHome - expandedRealAway) ? 'winning' : 'losing';
     }
     const expandedStatusColor = expandedStatus === 'exact' ? 'text-lime-300' : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
-    const expandedEvents = (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD'].includes(e.type));
+    const expandedEvents = dedupeMatchEvents(
+        (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD'].includes(e.type)),
+    );
 
     return (
         <div className="rounded-lg bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 p-2.5 max-w-sm mx-auto">

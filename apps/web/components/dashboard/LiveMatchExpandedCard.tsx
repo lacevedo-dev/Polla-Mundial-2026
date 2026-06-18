@@ -4,8 +4,7 @@ import { LiveMatchTimer, MatchProgressBar } from '../live/LiveMatchTimer';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { calcLivePoints } from '../../utils/dashboard';
-import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
-import { formatAnnulledGoalLabel, splitGoalEvents } from '../../utils/matchEvents';
+import { formatAnnulledGoalLabel, splitGoalEvents, dedupeMatchEvents, buildMatchEventRowKey } from '../../utils/matchEvents';
 
 function partitionGoalsByTeam(
     goals: MatchEventItem[],
@@ -63,7 +62,7 @@ function renderGoalLine(
 
     if (align === 'left') {
         return (
-            <span key={`${event.minute}-${event.playerName}-${annulled ? 'x' : 'o'}`} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
+            <span key={buildMatchEventRowKey(event)} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
                 <span className={`text-[10px] ${annulled ? 'opacity-40' : ''}`}>{annulled ? '🚫' : '⚽'}</span>
                 <span className="truncate">{player}</span>
                 <span className="text-white/30 shrink-0">{min}</span>
@@ -77,7 +76,7 @@ function renderGoalLine(
     }
 
     return (
-        <span key={`${event.minute}-${event.playerName}-${annulled ? 'x' : 'o'}`} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
+        <span key={buildMatchEventRowKey(event)} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
             {annulled && (
                 <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide text-rose-300/90 bg-rose-500/10">
                     {formatAnnulledGoalLabel(event.annulledReason)}
@@ -132,7 +131,9 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
         ? 'text-lime-300'
         : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
 
-    const expandedEvents = (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD', 'VAR'].includes(e.type));
+    const expandedEvents = dedupeMatchEvents(
+        (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD', 'VAR'].includes(e.type)),
+    );
     const { active: activeGoals, annulled: annulledGoals } = splitGoalEvents(
         expandedEvents.filter((e) => e.type === 'GOAL'),
     );
@@ -277,7 +278,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                                 ? `${e.playerName ?? '—'} · ${formatAnnulledGoalLabel(e.annulledReason)}`
                                                 : (e.playerName ?? '—');
                                         return (
-                                            <div key={i} className="flex items-center gap-2">
+                                            <div key={buildMatchEventRowKey(e)} className="flex items-center gap-2">
                                                 <span className="w-8 shrink-0 text-right text-[9px] font-black text-white/30 tabular-nums">{min}</span>
                                                 <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black ${iconBg}`}>{icon}</span>
                                                 <span className={`min-w-0 flex-1 truncate text-[9px] font-bold ${isVar || isAnnulledGoal ? 'text-rose-200/80 line-through decoration-rose-200/30' : 'text-white/60'}`}>

@@ -16,6 +16,19 @@ interface ComputedTime {
     isStoppage: boolean;
 }
 
+const LIVE_TICK_MS = 60_000;
+
+function resolvePeriodBase(
+    statusShort?: string | null,
+    elapsed?: number | null,
+): number {
+    if (statusShort === 'HT') return 45;
+    if (statusShort === '2H' || statusShort === 'ET') return 90;
+    if (statusShort === '1H') return 45;
+    if (elapsed != null && elapsed > 45) return 90;
+    return 45;
+}
+
 function computeMinute(
     matchDate: string,
     elapsed: number | null,
@@ -23,9 +36,7 @@ function computeMinute(
     statusShort?: string | null,
 ): ComputedTime {
     const now = Date.now();
-
-    // Periodos fijos
-    const base = (statusShort === '2H' || statusShort === 'ET') ? 90 : 45;
+    const base = resolvePeriodBase(statusShort, elapsed);
 
     if (statusShort === 'HT')  return { minute: 45,  base: 45,  stoppage: 0, isStoppage: false };
     if (statusShort === 'FT' || statusShort === 'AET') return { minute: 90, base: 90, stoppage: 0, isStoppage: false };
@@ -34,27 +45,38 @@ function computeMinute(
     if (elapsed !== null && lastSyncAt !== null) {
         const minutesSinceSync = Math.floor((now - lastSyncAt) / 60000);
         const current = elapsed + minutesSinceSync;
-        const capped   = Math.min(current, base + 15); // hasta +15 de tiempo añadido
+        const capped   = Math.min(current, base + 15);
         const stoppage = Math.max(0, capped - base);
         return { minute: capped, base, stoppage, isStoppage: stoppage > 0 };
     }
 
-    // Fallback desde la hora de inicio
     const kickoff = new Date(matchDate).getTime();
     if (now < kickoff) return { minute: 0, base, stoppage: 0, isStoppage: false };
     const raw      = Math.floor((now - kickoff) / 60000);
-    const capped   = Math.min(raw, 95);
+    const capped   = Math.min(raw, base + 15);
     const stop     = Math.max(0, capped - base);
     return { minute: capped, base, stoppage: stop, isStoppage: stop > 0 };
 }
 
-function halfLabel(statusShort?: string | null): string | null {
+function halfLabel(statusShort?: string | null, elapsed?: number | null): string | null {
     if (statusShort === '1H')  return '1T';
     if (statusShort === 'HT')  return 'ET';
     if (statusShort === '2H')  return '2T';
     if (statusShort === 'ET')  return 'Prórroga';
     if (statusShort === 'PEN') return 'Penales';
-    return null;
+    if (elapsed != null && elapsed > 45) return '2T';
+    return '1T';
+}
+
+function ClockDigits({ minute, base, stoppage, isStoppage }: ComputedTime) {
+    if (isStoppage) {
+        return (
+            <>
+                {base}<span className="text-rose-400">+{stoppage}</span><span className="text-[8px]">'</span>
+            </>
+        );
+    }
+    return <>{minute}<span className="text-[8px]">'</span></>;
 }
 
 export function LiveMatchTimer({ matchDate, elapsed, lastSyncAt, statusShort, finished }: Props) {
@@ -62,7 +84,7 @@ export function LiveMatchTimer({ matchDate, elapsed, lastSyncAt, statusShort, fi
 
     React.useEffect(() => {
         if (finished) return;
-        const interval = setInterval(() => setTick(t => t + 1), 30_000);
+        const interval = setInterval(() => setTick(t => t + 1), LIVE_TICK_MS);
         return () => clearInterval(interval);
     }, [finished]);
 
@@ -90,17 +112,13 @@ export function LiveMatchTimer({ matchDate, elapsed, lastSyncAt, statusShort, fi
         );
     }
 
-    const { base, stoppage, isStoppage } = computeMinute(matchDate, elapsed, lastSyncAt, statusShort);
-    const half = halfLabel(statusShort);
+    const computed = computeMinute(matchDate, elapsed, lastSyncAt, statusShort);
+    const half = halfLabel(statusShort, elapsed);
 
     return (
         <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 font-mono text-[10px] font-black text-rose-700">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
-            {isStoppage ? (
-                <>{base}<span className="text-rose-400">+{stoppage}</span><span className="text-[8px]">'</span></>
-            ) : (
-                <>{base}<span className="text-[8px]">'</span></>
-            )}
+            <ClockDigits {...computed} />
             {half && <span className="ml-0.5 text-rose-400">{half}</span>}
         </span>
     );
@@ -112,7 +130,7 @@ export function LiveMatchTimerInline({ matchDate, elapsed, lastSyncAt, statusSho
 
     React.useEffect(() => {
         if (finished) return;
-        const interval = setInterval(() => setTick(t => t + 1), 30_000);
+        const interval = setInterval(() => setTick(t => t + 1), LIVE_TICK_MS);
         return () => clearInterval(interval);
     }, [finished]);
 
@@ -120,16 +138,12 @@ export function LiveMatchTimerInline({ matchDate, elapsed, lastSyncAt, statusSho
     if (statusShort === 'FT' || statusShort === 'AET') return <span className={`font-mono text-[9px] font-black text-slate-500 ${className || ''}`}>FT</span>;
     if (statusShort === 'PEN') return <span className={`font-mono text-[9px] font-black text-purple-600 ${className || ''}`}>PEN</span>;
 
-    const { base, stoppage, isStoppage } = computeMinute(matchDate, elapsed, lastSyncAt, statusShort);
+    const computed = computeMinute(matchDate, elapsed, lastSyncAt, statusShort);
 
     return (
         <span className={`inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 font-mono text-[10px] font-black text-rose-700 ${className || ''}`}>
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
-            {isStoppage ? (
-                <>{base}<span className="text-rose-400">+{stoppage}</span><span className="text-[8px]">'</span></>
-            ) : (
-                <>{base}<span className="text-[8px]">'</span></>
-            )}
+            <ClockDigits {...computed} />
         </span>
     );
 }
@@ -142,7 +156,7 @@ export function MatchProgressBar({
 
     React.useEffect(() => {
         if (finished) return;
-        const interval = setInterval(() => setTick(t => t + 1), 30_000);
+        const interval = setInterval(() => setTick(t => t + 1), LIVE_TICK_MS);
         return () => clearInterval(interval);
     }, [finished]);
 
@@ -163,7 +177,6 @@ export function MatchProgressBar({
     }
 
     const { minute } = computeMinute(matchDate, elapsed, lastSyncAt, statusShort);
-    // Normalize to 0–100% over 90 minutes (cap at 100)
     const pct = Math.min(100, Math.round((minute / 90) * 100));
 
     return (

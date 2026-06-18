@@ -165,4 +165,30 @@ describe('match-events.util', () => {
       }),
     ]);
   });
+
+  it('deduplica goles con teamId faltante en un registro', () => {
+    const events = dedupeMatchEvents([
+      {
+        id: '1',
+        type: 'GOAL',
+        minute: 33,
+        extraMin: null,
+        teamId: null,
+        playerName: 'L. Messi',
+      },
+      {
+        id: '2',
+        type: 'GOAL',
+        minute: 33,
+        extraMin: null,
+        teamId: 'home',
+        playerName: 'Messi',
+        assistName: 'Alvarez',
+      },
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].teamId).toBe('home');
+    expect(events[0].assistName).toBe('Alvarez');
+  });
 });

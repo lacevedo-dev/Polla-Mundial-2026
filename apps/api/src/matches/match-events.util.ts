@@ -38,6 +38,39 @@ export function buildMatchEventDedupeKey(event: MatchEventRecord): string {
   return `${type}|${event.minute}|${extra}|${team}|${player}`;
 }
 
+function eventInformativeness(event: MatchEventRecord): number {
+  let score = 0;
+  if (event.teamId) score += 4;
+  if ((event.playerName ?? '').trim()) score += 2;
+  if ((event.assistName ?? '').trim()) score += 1;
+  if ((event.detail ?? '').trim()) score += 1;
+  if (event.annulled) score += 8;
+  if (event.annulledReason) score += 2;
+  return score;
+}
+
+/** Mismo evento lógico aunque falte teamId o varíe ligeramente el nombre. */
+export function eventsAreSameMatchEvent(
+  a: MatchEventRecord,
+  b: MatchEventRecord,
+): boolean {
+  if (a.type.toUpperCase() !== b.type.toUpperCase()) return false;
+  if (a.minute !== b.minute) return false;
+  if ((a.extraMin ?? 0) !== (b.extraMin ?? 0)) return false;
+
+  const playerA = normalizeEventPlayerKey(a.playerName);
+  const playerB = normalizeEventPlayerKey(b.playerName);
+  if (playerA && playerB && playerA !== playerB) return false;
+  if (a.teamId && b.teamId && a.teamId !== b.teamId) return false;
+  return true;
+}
+
+function pickRicherEvent<T extends MatchEventRecord>(existing: T, incoming: T): T {
+  return eventInformativeness(incoming) > eventInformativeness(existing)
+    ? incoming
+    : existing;
+}
+
 function parseDedupeKey(key: string): {
   teamId: string;
   playerKey: string;
@@ -51,15 +84,16 @@ function parseDedupeKey(key: string): {
 
 /** Elimina duplicados conservando el registro más informativo (anulado > vigente). */
 export function dedupeMatchEvents<T extends MatchEventRecord>(events: T[]): T[] {
-  const byKey = new Map<string, T>();
+  const merged: T[] = [];
   for (const event of events) {
-    const key = buildMatchEventDedupeKey(event);
-    const existing = byKey.get(key);
-    if (!existing || event.annulled || (event.annulledReason && !existing.annulledReason)) {
-      byKey.set(key, event);
+    const idx = merged.findIndex((existing) => eventsAreSameMatchEvent(existing, event));
+    if (idx === -1) {
+      merged.push(event);
+      continue;
     }
+    merged[idx] = pickRicherEvent(merged[idx], event);
   }
-  return Array.from(byKey.values()).sort(
+  return merged.sort(
     (a, b) => a.minute - b.minute || (a.extraMin ?? 0) - (b.extraMin ?? 0),
   );
 }
