@@ -21,10 +21,8 @@ import {
   BOGOTA_TIME_LABEL,
   formatMatchDateTimeBogota,
 } from '../automation/config/automation-datetime.util';
-import {
-  isTextOnlyWhatsappGroupJob,
-  WhatsappDispatcherService,
-} from './whatsapp-dispatcher.service';
+import { isTextOnlyWhatsappGroupJob } from './whatsapp-group-job.util';
+import { WhatsappDispatcherService } from './whatsapp-dispatcher.service';
 import {
   formatRedCardReason,
   normalizeEventPlayerKey,
