@@ -6,6 +6,7 @@ import {
   formatAnnulledReason,
   formatRedCardReason,
   isRedCardDetail,
+  isYellowCardDetail,
   normalizeEventPlayerKey,
   resolveGoalBeneficiaryIsHome,
 } from './match-events.util';
@@ -15,6 +16,12 @@ describe('match-events.util', () => {
     expect(isRedCardDetail('Red Card')).toBe(true);
     expect(isRedCardDetail('Second Yellow card')).toBe(true);
     expect(isRedCardDetail('Yellow Card')).toBe(false);
+  });
+
+  it('detecta tarjetas amarillas sin confundirlas con rojas', () => {
+    expect(isYellowCardDetail('Yellow Card')).toBe(true);
+    expect(isYellowCardDetail('Red Card')).toBe(false);
+    expect(isYellowCardDetail('Second Yellow card')).toBe(false);
   });
 
   it('formatea motivo de expulsión', () => {

@@ -164,6 +164,24 @@ export class ConfigService {
       );
     }
 
+    if (
+      data.eventWaYellowCardEnabled !== undefined &&
+      data.eventWaYellowCardEnabled !== config.eventWaYellowCardEnabled
+    ) {
+      criticalChanges.push(
+        `WA tarjetas amarillas ${data.eventWaYellowCardEnabled ? 'habilitadas' : 'deshabilitadas'}`,
+      );
+    }
+
+    if (
+      data.eventWaSubstitutionEnabled !== undefined &&
+      data.eventWaSubstitutionEnabled !== config.eventWaSubstitutionEnabled
+    ) {
+      criticalChanges.push(
+        `WA sustituciones ${data.eventWaSubstitutionEnabled ? 'habilitadas' : 'deshabilitadas'}`,
+      );
+    }
+
     const updated = await this.prisma.footballSyncConfig.update({
       where: { id: config.id },
       data: {
@@ -221,6 +239,8 @@ export class ConfigService {
         eventSyncEnabled: false,
         eventSyncIntervalMinutes: 1,
         eventWaRedCardEnabled: true,
+        eventWaYellowCardEnabled: true,
+        eventWaSubstitutionEnabled: true,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -304,6 +324,24 @@ export class ConfigService {
     );
   }
 
+  async isEventWaYellowCardEnabled(): Promise<boolean> {
+    const config = await this.getConfig();
+    return (
+      config.enabled &&
+      config.eventSyncEnabled &&
+      (config.eventWaYellowCardEnabled ?? true)
+    );
+  }
+
+  async isEventWaSubstitutionEnabled(): Promise<boolean> {
+    const config = await this.getConfig();
+    return (
+      config.enabled &&
+      config.eventSyncEnabled &&
+      (config.eventWaSubstitutionEnabled ?? true)
+    );
+  }
+
   /**
    * Verificar si la sincronización en horas pico está habilitada
    */
@@ -373,6 +411,8 @@ export class ConfigService {
         eventSyncEnabled: false,
         eventSyncIntervalMinutes: 1,
         eventWaRedCardEnabled: true,
+        eventWaYellowCardEnabled: true,
+        eventWaSubstitutionEnabled: true,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -447,6 +487,8 @@ export class ConfigService {
       eventSyncEnabled: config.eventSyncEnabled,
       eventSyncIntervalMinutes: config.eventSyncIntervalMinutes ?? 1,
       eventWaRedCardEnabled: config.eventWaRedCardEnabled ?? true,
+      eventWaYellowCardEnabled: config.eventWaYellowCardEnabled ?? true,
+      eventWaSubstitutionEnabled: config.eventWaSubstitutionEnabled ?? true,
       peakHoursSyncEnabled: config.peakHoursSyncEnabled,
       emergencyModeThreshold: config.emergencyModeThreshold,
       notifyOnError: config.notifyOnError,

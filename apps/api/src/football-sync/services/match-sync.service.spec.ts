@@ -1035,4 +1035,86 @@ describe('MatchSyncService', () => {
       }),
     );
   });
+
+  it('finalizes orphaned LIVE matches absent from the live feed via /fixtures?id=', async () => {
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+    mockApiFootballClient.getLiveFixtures.mockResolvedValue({
+      results: 0,
+      response: [],
+    });
+    mockPrismaService.match.findMany.mockResolvedValueOnce([
+      { id: 'match-orphan', externalId: '888' },
+    ]);
+    mockApiFootballClient.getFixtureById.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: { id: 888, status: { short: 'FT', elapsed: 90 } },
+          teams: {
+            home: { id: 10, name: 'Uzbekistan', logo: '', winner: false },
+            away: { id: 20, name: 'Colombia', logo: '', winner: true },
+          },
+          goals: { home: 1, away: 3 },
+        },
+      ],
+    });
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-orphan',
+      externalId: '888',
+      homeTeamId: 'team-uzb',
+      awayTeamId: 'team-col',
+      homeScore: 1,
+      awayScore: 3,
+      status: MatchStatus.LIVE,
+      statusShort: '2H',
+      eventsNoDataAt: null,
+      resultNotificationSentAt: null,
+      matchDate: new Date('2026-06-17T20:00:00.000Z'),
+      phase: 'GROUP',
+      homeTeam: {
+        id: 'team-uzb',
+        name: 'Uzbekistán',
+        code: 'UZB',
+        shortCode: 'UZB',
+        apiFootballTeamId: 10,
+        flagUrl: null,
+        group: 'A',
+      },
+      awayTeam: {
+        id: 'team-col',
+        name: 'Colombia',
+        code: 'COL',
+        shortCode: 'COL',
+        apiFootballTeamId: 20,
+        flagUrl: null,
+        group: 'A',
+      },
+    });
+    mockPrismaService.team.findUnique.mockResolvedValue(null);
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-orphan',
+      status: MatchStatus.FINISHED,
+      homeTeamId: 'team-uzb',
+      awayTeamId: 'team-col',
+    });
+
+    await service.syncLiveMatches();
+
+    expect(mockApiFootballClient.getFixtureById).toHaveBeenCalledWith(888);
+    expect(mockPrismaService.match.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'match-orphan' },
+        data: expect.objectContaining({
+          status: MatchStatus.FINISHED,
+          statusShort: 'FT',
+          homeScore: 1,
+          awayScore: 3,
+        }),
+      }),
+    );
+    expect(mockPredictionsService.calculateMatchPoints).toHaveBeenCalledWith(
+      'match-orphan',
+    );
+  });
 });

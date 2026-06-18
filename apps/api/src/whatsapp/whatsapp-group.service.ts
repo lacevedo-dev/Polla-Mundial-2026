@@ -50,6 +50,8 @@ const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.MATCH_LIVE_END]: 'live_match_end',
   [WhatsappGroupJobType.GOAL_IMPACT]: 'live_goal_impact',
   [WhatsappGroupJobType.RED_CARD]: 'live_red_card',
+  [WhatsappGroupJobType.YELLOW_CARD]: 'live_yellow_card',
+  [WhatsappGroupJobType.SUBSTITUTION]: 'live_substitution',
   [WhatsappGroupJobType.PAYMENT_REMINDER]: 'payment_reminder',
 };
 
@@ -539,6 +541,147 @@ export class WhatsappGroupService {
       const code = (error as { code?: string })?.code;
       if (code === 'P2002') {
         this.logger.warn(`RED_CARD: job duplicado ${dedupeKey}`);
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Encola tarjeta amarilla en vivo. Dedupe por partido, liga, minuto y jugador.
+   */
+  async enqueueYellowCardNotification(
+    matchId: string,
+    leagueId: string,
+    params: {
+      homeTeam: string;
+      awayTeam: string;
+      homeScore: number;
+      awayScore: number;
+      elapsed: number | null;
+      leagueName: string;
+      playerName?: string | null;
+      teamName?: string | null;
+      minute: number;
+      extraMin?: number | null;
+    },
+  ): Promise<boolean> {
+    return this.enqueueLiveTextNotification({
+      type: WhatsappGroupJobType.YELLOW_CARD,
+      schedulerId: 'live_yellow_card',
+      logPrefix: 'YELLOW_CARD',
+      matchId,
+      leagueId,
+      caption: buildYellowCardCaption(params),
+      dedupeKey: `YELLOW_CARD:${matchId}:${leagueId}:${params.minute}:${params.extraMin ?? 0}:${normalizeEventPlayerKey(params.playerName)}`,
+    });
+  }
+
+  /**
+   * Encola sustitución en vivo. Dedupe por partido, liga, minuto y jugadores.
+   */
+  async enqueueSubstitutionNotification(
+    matchId: string,
+    leagueId: string,
+    params: {
+      homeTeam: string;
+      awayTeam: string;
+      homeScore: number;
+      awayScore: number;
+      elapsed: number | null;
+      leagueName: string;
+      playerInName?: string | null;
+      playerOutName?: string | null;
+      teamName?: string | null;
+      minute: number;
+      extraMin?: number | null;
+    },
+  ): Promise<boolean> {
+    const inKey = normalizeEventPlayerKey(params.playerInName);
+    const outKey = normalizeEventPlayerKey(params.playerOutName);
+    return this.enqueueLiveTextNotification({
+      type: WhatsappGroupJobType.SUBSTITUTION,
+      schedulerId: 'live_substitution',
+      logPrefix: 'SUBSTITUTION',
+      matchId,
+      leagueId,
+      caption: buildSubstitutionCaption(params),
+      dedupeKey: `SUBSTITUTION:${matchId}:${leagueId}:${params.minute}:${params.extraMin ?? 0}:${inKey}:${outKey}`,
+    });
+  }
+
+  private async enqueueLiveTextNotification(params: {
+    type: WhatsappGroupJobType;
+    schedulerId: string;
+    logPrefix: string;
+    matchId: string;
+    leagueId: string;
+    caption: string;
+    dedupeKey: string;
+  }): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(params.type))) {
+      this.logger.warn(
+        `${params.logPrefix}: canal WA Grupo deshabilitado (${params.schedulerId}) para liga ${params.leagueId}`,
+      );
+      return false;
+    }
+
+    const league = await this.prisma.league.findUnique({
+      where: { id: params.leagueId },
+      select: { whatsappGroupId: true, name: true },
+    });
+    if (!league?.whatsappGroupId) {
+      this.logger.warn(
+        `${params.logPrefix}: liga ${league?.name ?? params.leagueId} sin whatsappGroupId configurado`,
+      );
+      return false;
+    }
+
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey: params.dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return true;
+    }
+
+    if (existing?.status === WhatsappJobStatus.FAILED) {
+      await this.prisma.whatsappGroupJob.update({
+        where: { id: existing.id },
+        data: {
+          status: WhatsappJobStatus.PENDING,
+          caption: params.caption,
+          lastError: null,
+          attemptCount: 0,
+        },
+      });
+      this.scheduleTextJobDispatch(existing.id, params.type);
+      return true;
+    }
+
+    if (existing) {
+      return true;
+    }
+
+    try {
+      const job = await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: params.type,
+          matchId: params.matchId,
+          leagueId: params.leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey: params.dedupeKey,
+          caption: params.caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      this.scheduleTextJobDispatch(job.id, params.type);
+      return true;
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') {
+        this.logger.warn(`${params.logPrefix}: job duplicado ${params.dedupeKey}`);
         return false;
       }
       throw error;
@@ -1101,6 +1244,17 @@ function buildResultNotifCaption(
   ].join('\n');
 }
 
+function formatLiveMinuteLabel(params: {
+  minute: number;
+  extraMin?: number | null;
+  elapsed?: number | null;
+}): string {
+  if (params.minute != null) {
+    return params.extraMin ? ` ${params.minute}+${params.extraMin}'` : ` ${params.minute}'`;
+  }
+  return params.elapsed ? ` ${params.elapsed}'` : '';
+}
+
 function buildRedCardCaption(params: {
   homeTeam: string;
   awayTeam: string;
@@ -1114,14 +1268,7 @@ function buildRedCardCaption(params: {
   minute: number;
   extraMin?: number | null;
 }): string {
-  const minuteLabel =
-    params.minute != null
-      ? params.extraMin
-        ? ` ${params.minute}+${params.extraMin}'`
-        : ` ${params.minute}'`
-      : params.elapsed
-        ? ` ${params.elapsed}'`
-        : '';
+  const minuteLabel = formatLiveMinuteLabel(params);
   const score = `${params.homeScore} – ${params.awayScore}`;
   const reason = formatRedCardReason(params.cardDetail);
   const reasonSuffix = reason ? ` (${reason})` : '';
@@ -1136,6 +1283,63 @@ function buildRedCardCaption(params: {
   return [
     `🟥 *¡Tarjeta roja!* | ${params.leagueName}`,
     `${playerLine} — ${params.homeTeam} ${score} ${params.awayTeam}${minuteLabel}`,
+  ].join('\n');
+}
+
+function buildYellowCardCaption(params: {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  elapsed: number | null;
+  leagueName: string;
+  playerName?: string | null;
+  teamName?: string | null;
+  minute: number;
+  extraMin?: number | null;
+}): string {
+  const minuteLabel = formatLiveMinuteLabel(params);
+  const score = `${params.homeScore} – ${params.awayScore}`;
+  const playerLine = params.playerName
+    ? params.teamName
+      ? `${params.playerName} (${params.teamName})`
+      : params.playerName
+    : params.teamName ?? 'Jugador';
+
+  return [
+    `🟨 *¡Tarjeta amarilla!* | ${params.leagueName}`,
+    `${playerLine} — ${params.homeTeam} ${score} ${params.awayTeam}${minuteLabel}`,
+  ].join('\n');
+}
+
+function buildSubstitutionCaption(params: {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  elapsed: number | null;
+  leagueName: string;
+  playerInName?: string | null;
+  playerOutName?: string | null;
+  teamName?: string | null;
+  minute: number;
+  extraMin?: number | null;
+}): string {
+  const minuteLabel = formatLiveMinuteLabel(params);
+  const score = `${params.homeScore} – ${params.awayScore}`;
+  const teamSuffix = params.teamName ? ` (${params.teamName})` : '';
+  const changeLine =
+    params.playerInName && params.playerOutName
+      ? `${params.playerInName} entra por ${params.playerOutName}${teamSuffix}`
+      : params.playerInName
+        ? `${params.playerInName} entra${teamSuffix}`
+        : params.playerOutName
+          ? `Sale ${params.playerOutName}${teamSuffix}`
+          : `Cambio${teamSuffix}`;
+
+  return [
+    `🔄 *¡Cambio!* | ${params.leagueName}`,
+    `${changeLine} — ${params.homeTeam} ${score} ${params.awayTeam}${minuteLabel}`,
   ].join('\n');
 }
 

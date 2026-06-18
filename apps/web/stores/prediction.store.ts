@@ -246,7 +246,15 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                     }
                 }
 
-                const normalizedStatus = status === 'LIVE' ? 'live' : status === 'FINISHED' ? 'finished' : status === 'SCHEDULED' ? 'open' : m.status;
+                const normalizedStatus = (() => {
+                    if (statusShort && ['FT', 'AET', 'PEN'].includes(statusShort)) {
+                        return 'finished';
+                    }
+                    if (status === 'LIVE') return 'live';
+                    if (status === 'FINISHED') return 'finished';
+                    if (status === 'SCHEDULED') return 'open';
+                    return m.status;
+                })();
                 return {
                     ...m,
                     status: normalizedStatus as MatchViewModel['status'],
@@ -294,7 +302,15 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                 }
             }
 
-            const normalizedStatus = status === 'LIVE' ? 'live' : status === 'FINISHED' ? 'finished' : status === 'SCHEDULED' ? 'open' : (prev?.status ?? 'open');
+            const normalizedStatus = (() => {
+                if (statusShort && ['FT', 'AET', 'PEN'].includes(statusShort)) {
+                    return 'finished';
+                }
+                if (status === 'LIVE') return 'live';
+                if (status === 'FINISHED') return 'finished';
+                if (status === 'SCHEDULED') return 'open';
+                return prev?.status ?? 'open';
+            })();
             return {
                 matches: state.matches.map((m) => {
                     if (m.id !== matchId) return m;

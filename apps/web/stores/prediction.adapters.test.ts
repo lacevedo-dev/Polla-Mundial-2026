@@ -126,4 +126,21 @@ describe('prediction.adapters', () => {
             },
         ]);
     });
+
+    it('treats statusShort FT as finished even when backend status is still LIVE', () => {
+        const viewModel = toMatchViewModel({
+            id: 'match-live-ft',
+            matchDate: '2026-06-17T20:00:00.000Z',
+            status: 'LIVE',
+            statusShort: 'FT',
+            phase: 'GROUP',
+            homeScore: 1,
+            awayScore: 3,
+            homeTeam: { name: 'Uzbekistán', shortCode: 'UZB' },
+            awayTeam: { name: 'Colombia', shortCode: 'COL' },
+        });
+
+        expect(viewModel.status).toBe('finished');
+        expect(viewModel.result).toEqual({ home: 1, away: 3 });
+    });
 });

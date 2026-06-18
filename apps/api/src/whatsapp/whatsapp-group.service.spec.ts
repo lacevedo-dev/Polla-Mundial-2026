@@ -185,6 +185,69 @@ describe('WhatsappGroupService', () => {
     });
   });
 
+  describe('enqueueYellowCardNotification', () => {
+    it('creates YELLOW_CARD job with dedupeKey', async () => {
+      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us', name: 'Liga' });
+      mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue(null);
+      mockPrisma.whatsappGroupJob.create.mockResolvedValue({});
+
+      const ok = await service.enqueueYellowCardNotification('m1', 'l1', {
+        homeTeam: 'A',
+        awayTeam: 'B',
+        homeScore: 0,
+        awayScore: 0,
+        elapsed: 30,
+        leagueName: 'Liga',
+        playerName: 'Pérez',
+        teamName: 'A',
+        minute: 30,
+        extraMin: null,
+      });
+
+      expect(ok).toBe(true);
+      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: WhatsappGroupJobType.YELLOW_CARD,
+            dedupeKey: 'YELLOW_CARD:m1:l1:30:0:pérez',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('enqueueSubstitutionNotification', () => {
+    it('creates SUBSTITUTION job with in/out dedupeKey', async () => {
+      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us', name: 'Liga' });
+      mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue(null);
+      mockPrisma.whatsappGroupJob.create.mockResolvedValue({});
+
+      const ok = await service.enqueueSubstitutionNotification('m1', 'l1', {
+        homeTeam: 'A',
+        awayTeam: 'B',
+        homeScore: 1,
+        awayScore: 1,
+        elapsed: 70,
+        leagueName: 'Liga',
+        playerInName: 'García',
+        playerOutName: 'López',
+        teamName: 'A',
+        minute: 70,
+        extraMin: null,
+      });
+
+      expect(ok).toBe(true);
+      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: WhatsappGroupJobType.SUBSTITUTION,
+            dedupeKey: 'SUBSTITUTION:m1:l1:70:0:garcía:lópez',
+          }),
+        }),
+      );
+    });
+  });
+
   describe('processJob', () => {
     const baseJob = {
       id: 'job1',

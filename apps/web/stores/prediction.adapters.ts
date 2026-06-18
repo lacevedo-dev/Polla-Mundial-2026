@@ -10,6 +10,8 @@ export interface MatchResponse {
     homeScore?: number | null;
     awayScore?: number | null;
     advancingTeamId?: string | null;
+    elapsed?: number | null;
+    statusShort?: string | null;
     homeTeam: {
         id?: string;
         name: string;
@@ -239,7 +241,14 @@ function normalizeMatchStatus(status: string): MatchViewModel['status'] {
 }
 
 /** Si el partido aún figura como SCHEDULED pero ya pasó su hora, lo cerramos en el frontend. */
-function resolveMatchStatus(apiStatus: string, matchDate: string): MatchViewModel['status'] {
+function resolveMatchStatus(
+    apiStatus: string,
+    matchDate: string,
+    statusShort?: string | null,
+): MatchViewModel['status'] {
+    if (statusShort && ['FT', 'AET', 'PEN'].includes(statusShort)) {
+        return 'finished';
+    }
     const base = normalizeMatchStatus(apiStatus);
     if (base === 'open' && new Date(matchDate).getTime() < Date.now()) {
         return 'closed';
@@ -330,7 +339,7 @@ export function toMatchViewModel(
         awayFlag: resolveFlagUrl(match.awayTeam.flagUrl, match.awayTeam.code),
         date: match.matchDate,
         displayDate: toDisplayDate(match.matchDate),
-        status: resolveMatchStatus(match.status, match.matchDate),
+        status: resolveMatchStatus(match.status, match.matchDate, match.statusShort),
         phase: match.phase,
         group: match.group ?? undefined,
         venue: match.venue ?? 'Por definir',
@@ -348,6 +357,8 @@ export function toMatchViewModel(
                       away: match.awayScore,
                   }
                 : undefined,
+        elapsed: match.elapsed ?? undefined,
+        statusShort: match.statusShort ?? undefined,
         pointsEarned: prediction?.points ?? undefined,
         saved: hasPrediction,
     };

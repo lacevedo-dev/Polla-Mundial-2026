@@ -18,9 +18,12 @@ import {
   filterActiveGoalEventsFromTimeline,
   formatAnnulledReason,
   isRedCardDetail,
+  isYellowCardDetail,
   isVarGoalCancelledDetail,
   resolveGoalAnnulments,
   type NewRedCardEvent,
+  type NewSubstitutionEvent,
+  type NewYellowCardEvent,
 } from '../../matches/match-events.util';
 import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
@@ -470,6 +473,9 @@ export class MatchSyncService {
           await this.syncPlan.incrementRequestsUsed(1);
           requestsUsed += 1;
 
+          const eventSyncEnabled =
+            await this.footballConfigService.isEventSyncEnabled();
+
           await this.syncMatchEvents(
             fixtureId,
             match.id,
@@ -483,7 +489,7 @@ export class MatchSyncService {
               awayTeamApiId,
             },
           ).then((eventSyncResult) =>
-            this.dispatchNewRedCards({
+            this.dispatchNewLiveEventNotifications({
               matchId: match.id,
               homeTeamName: match.homeTeam.name,
               awayTeamName: match.awayTeam.name,
@@ -491,8 +497,33 @@ export class MatchSyncService {
               awayScore: match.awayScore ?? 0,
               elapsed: match.elapsed,
               newRedCards: eventSyncResult.newRedCards,
+              newYellowCards: eventSyncResult.newYellowCards,
+              newSubstitutions: eventSyncResult.newSubstitutions,
             }),
           );
+
+          if (await this.rateLimiter.canMakeRequest()) {
+            const fixtureResponse = await this.apiClient.getFixtureById(fixtureId);
+            await this.rateLimiter.logRequest(
+              '/fixtures',
+              { id: match.externalId, source: 'live-poll-status' },
+              200,
+              fixtureResponse.results,
+            );
+            await this.syncPlan.incrementRequestsUsed(1);
+            requestsUsed += 1;
+
+            if (fixtureResponse.results > 0) {
+              await this.updateMatchFromFixture(fixtureResponse.response[0], {
+                eventSyncEnabled,
+              });
+            }
+          } else {
+            this.logger.warn(
+              `Live poll skipped fixture refresh for match ${match.id}: no request budget`,
+            );
+          }
+
           matchesPolled += 1;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -597,19 +628,30 @@ export class MatchSyncService {
         }
       }
 
+      const liveExternalIds = new Set(
+        response.response.map((fixture) => fixture.fixture.id.toString()),
+      );
+      const orphanRefresh = await this.refreshOrphanedLiveMatches(
+        liveExternalIds,
+        eventSyncEnabled,
+      );
+      updatedCount += orphanRefresh.updatedCount;
+      const requestsUsed = 1 + orphanRefresh.requestsUsed;
+
       this.logger.log(
-        `Live sync completed: ${updatedCount} matches updated from ${response.results} live fixtures`,
+        `Live sync completed: ${updatedCount} matches updated from ${response.results} live fixtures (${orphanRefresh.updatedCount} orphaned finalized)`,
       );
 
       await this.monitoring.createLog({
         type: SyncLogType.AUTO_SYNC,
         status: SyncLogStatus.SUCCESS,
         message: 'Live sync completed successfully',
-        requestsUsed: 1,
+        requestsUsed,
         matchesUpdated: updatedCount,
         duration: Date.now() - startedAt,
         details: JSON.stringify({
           fixturesFetched: response.results,
+          orphanedRefreshed: orphanRefresh.updatedCount,
           live: true,
         }),
       });
@@ -635,6 +677,76 @@ export class MatchSyncService {
         error: error.message,
       };
     }
+  }
+
+  /**
+   * LIVE matches in our DB that no longer appear in /fixtures?live=all have
+   * usually finished — refresh each via /fixtures?id= to pick up FT status.
+   */
+  private async refreshOrphanedLiveMatches(
+    liveExternalIds: Set<string>,
+    eventSyncEnabled: boolean,
+  ): Promise<{ updatedCount: number; requestsUsed: number }> {
+    const orphanedMatches = await this.prisma.match.findMany({
+      where: {
+        status: MatchStatus.LIVE,
+        externalId: { not: null },
+      },
+      select: { id: true, externalId: true },
+    });
+
+    const toRefresh = orphanedMatches.filter(
+      (match) => match.externalId && !liveExternalIds.has(match.externalId),
+    );
+
+    if (toRefresh.length === 0) {
+      return { updatedCount: 0, requestsUsed: 0 };
+    }
+
+    this.logger.log(
+      `Refreshing ${toRefresh.length} orphaned LIVE match(es) absent from live feed`,
+    );
+
+    let updatedCount = 0;
+    let requestsUsed = 0;
+
+    for (const match of toRefresh) {
+      if (!(await this.rateLimiter.canMakeRequest())) {
+        this.logger.warn(
+          'Orphaned live refresh stopped: request budget exhausted',
+        );
+        break;
+      }
+
+      const fixtureId = Number.parseInt(match.externalId!, 10);
+      if (!Number.isFinite(fixtureId)) continue;
+
+      try {
+        const response = await this.apiClient.getFixtureById(fixtureId);
+        await this.rateLimiter.logRequest(
+          '/fixtures',
+          { id: match.externalId, source: 'orphan-live' },
+          200,
+          response.results,
+        );
+        await this.syncPlan.incrementRequestsUsed(1);
+        requestsUsed += 1;
+
+        if (response.results > 0) {
+          const updated = await this.updateMatchFromFixture(response.response[0], {
+            eventSyncEnabled,
+          });
+          if (updated) updatedCount += 1;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Orphaned live refresh failed for match ${match.id}: ${message}`,
+        );
+      }
+    }
+
+    return { updatedCount, requestsUsed };
   }
 
   /**
@@ -894,7 +1006,7 @@ export class MatchSyncService {
               cachedFixtureEvents,
               eventSyncContext,
             );
-            await this.dispatchNewRedCards({
+            await this.dispatchNewLiveEventNotifications({
               matchId: match.id,
               homeTeamName: fixture.teams.home.name,
               awayTeamName: fixture.teams.away.name,
@@ -902,6 +1014,8 @@ export class MatchSyncService {
               awayScore: fixture.goals.away ?? 0,
               elapsed: fixture.fixture.status.elapsed ?? null,
               newRedCards: eventSyncResult.newRedCards,
+              newYellowCards: eventSyncResult.newYellowCards,
+              newSubstitutions: eventSyncResult.newSubstitutions,
             });
             if (eventSyncResult.relevantEvents === 0) {
               await this.prisma.match.update({
@@ -927,7 +1041,7 @@ export class MatchSyncService {
                 undefined,
                 eventSyncContext,
               );
-              await this.dispatchNewRedCards({
+              await this.dispatchNewLiveEventNotifications({
                 matchId: match.id,
                 homeTeamName: fixture.teams.home.name,
                 awayTeamName: fixture.teams.away.name,
@@ -935,6 +1049,8 @@ export class MatchSyncService {
                 awayScore: fixture.goals.away ?? 0,
                 elapsed: fixture.fixture.status.elapsed ?? null,
                 newRedCards: eventSyncResult.newRedCards,
+                newYellowCards: eventSyncResult.newYellowCards,
+                newSubstitutions: eventSyncResult.newSubstitutions,
               });
               if (eventSyncResult.relevantEvents === 0) {
                 await this.prisma.match.update({
@@ -1126,13 +1242,21 @@ export class MatchSyncService {
     relevantEvents: number;
     rawEvents: number;
     newRedCards: NewRedCardEvent[];
+    newYellowCards: NewYellowCardEvent[];
+    newSubstitutions: NewSubstitutionEvent[];
   }> {
     const events: any[] =
       preloadedEvents ??
       (await this.apiClient.getFixtureEvents(fixtureId))?.response ??
       [];
     if (!events.length) {
-      return { relevantEvents: 0, rawEvents: 0, newRedCards: [] };
+      return {
+        relevantEvents: 0,
+        rawEvents: 0,
+        newRedCards: [],
+        newYellowCards: [],
+        newSubstitutions: [],
+      };
     }
 
     const match = await this.prisma.match.findUnique({
@@ -1161,6 +1285,8 @@ export class MatchSyncService {
 
     let relevantEvents = 0;
     const newRedCards: NewRedCardEvent[] = [];
+    const newYellowCards: NewYellowCardEvent[] = [];
+    const newSubstitutions: NewSubstitutionEvent[] = [];
     for (const ev of events) {
       const type: string   = ev.type   ?? 'UNKNOWN';
       const detail: string = ev.detail ?? '';
@@ -1278,6 +1404,22 @@ export class MatchSyncService {
             minute,
             extraMin,
           });
+        } else if (eventType === 'CARD' && isYellowCardDetail(detail)) {
+          newYellowCards.push({
+            playerName: normalizedPlayerName || null,
+            teamName: resolveTeamName(teamId),
+            detail,
+            minute,
+            extraMin,
+          });
+        } else if (eventType === 'SUBSTITUTION') {
+          newSubstitutions.push({
+            playerInName: normalizedPlayerName || null,
+            playerOutName: (assistName ?? '').trim() || null,
+            teamName: resolveTeamName(teamId),
+            minute,
+            extraMin,
+          });
         }
       } catch {
         // Ignore constraint errors (duplicate event at same minute)
@@ -1292,10 +1434,12 @@ export class MatchSyncService {
       relevantEvents,
       rawEvents: events.length,
       newRedCards,
+      newYellowCards,
+      newSubstitutions,
     };
   }
 
-  private async dispatchNewRedCards(params: {
+  private async dispatchNewLiveEventNotifications(params: {
     matchId: string;
     homeTeamName: string;
     awayTeamName: string;
@@ -1303,27 +1447,59 @@ export class MatchSyncService {
     awayScore: number;
     elapsed: number | null;
     newRedCards: NewRedCardEvent[];
+    newYellowCards: NewYellowCardEvent[];
+    newSubstitutions: NewSubstitutionEvent[];
   }): Promise<void> {
-    if (params.newRedCards.length === 0) return;
-    if (!(await this.footballConfigService.isEventWaRedCardEnabled())) return;
     if (!this.cardLiveNotifications) return;
 
-    for (const card of params.newRedCards) {
-      try {
-        await this.cardLiveNotifications.dispatchRedCard({
-          matchId: params.matchId,
-          homeTeamName: params.homeTeamName,
-          awayTeamName: params.awayTeamName,
-          homeScore: params.homeScore,
-          awayScore: params.awayScore,
-          elapsed: params.elapsed,
-          card,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        this.logger.warn(
-          `RED_CARD dispatch failed for match ${params.matchId}: ${message}`,
-        );
+    const base = {
+      matchId: params.matchId,
+      homeTeamName: params.homeTeamName,
+      awayTeamName: params.awayTeamName,
+      homeScore: params.homeScore,
+      awayScore: params.awayScore,
+      elapsed: params.elapsed,
+    };
+
+    if (
+      params.newRedCards.length > 0 &&
+      (await this.footballConfigService.isEventWaRedCardEnabled())
+    ) {
+      for (const card of params.newRedCards) {
+        try {
+          await this.cardLiveNotifications.dispatchRedCard({ ...base, card });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`RED_CARD dispatch failed for match ${params.matchId}: ${message}`);
+        }
+      }
+    }
+
+    if (
+      params.newYellowCards.length > 0 &&
+      (await this.footballConfigService.isEventWaYellowCardEnabled())
+    ) {
+      for (const card of params.newYellowCards) {
+        try {
+          await this.cardLiveNotifications.dispatchYellowCard({ ...base, card });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`YELLOW_CARD dispatch failed for match ${params.matchId}: ${message}`);
+        }
+      }
+    }
+
+    if (
+      params.newSubstitutions.length > 0 &&
+      (await this.footballConfigService.isEventWaSubstitutionEnabled())
+    ) {
+      for (const substitution of params.newSubstitutions) {
+        try {
+          await this.cardLiveNotifications.dispatchSubstitution({ ...base, substitution });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`SUBSTITUTION dispatch failed for match ${params.matchId}: ${message}`);
+        }
       }
     }
   }

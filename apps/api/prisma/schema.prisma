@@ -548,6 +548,8 @@ model FootballSyncConfig {
   eventSyncEnabled        Boolean  @default(false)
   eventSyncIntervalMinutes Int     @default(1)
   eventWaRedCardEnabled   Boolean  @default(true)
+  eventWaYellowCardEnabled Boolean @default(true)
+  eventWaSubstitutionEnabled Boolean @default(true)
 
   // === SISTEMA AUTO-ADAPTABLE ===
   // Modo de operación: MANUAL, SEMI_AUTO, AUTO
@@ -1359,6 +1361,8 @@ enum WhatsappGroupJobType {
   MATCH_LIVE_END
   GOAL_IMPACT
   RED_CARD
+  YELLOW_CARD
+  SUBSTITUTION
   PAYMENT_REMINDER
 }
 

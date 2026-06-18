@@ -128,10 +128,33 @@ export type NewRedCardEvent = {
   extraMin: number | null;
 };
 
+export type NewYellowCardEvent = {
+  playerName: string | null;
+  teamName: string | null;
+  detail: string;
+  minute: number;
+  extraMin: number | null;
+};
+
+export type NewSubstitutionEvent = {
+  playerInName: string | null;
+  playerOutName: string | null;
+  teamName: string | null;
+  minute: number;
+  extraMin: number | null;
+};
+
 /** Tarjeta roja directa o por doble amarilla (API-Football). */
 export function isRedCardDetail(detail: string | null | undefined): boolean {
   const normalized = (detail ?? '').trim().toLowerCase();
   return normalized === 'red card' || normalized.includes('second yellow');
+}
+
+/** Tarjeta amarilla simple (excluye doble amarilla → roja). */
+export function isYellowCardDetail(detail: string | null | undefined): boolean {
+  const normalized = (detail ?? '').trim().toLowerCase();
+  if (isRedCardDetail(detail)) return false;
+  return normalized === 'yellow card';
 }
 
 export function formatRedCardReason(detail: string | null | undefined): string | null {

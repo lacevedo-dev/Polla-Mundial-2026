@@ -11,6 +11,8 @@ describe('CardLiveNotificationService', () => {
   };
   const mockWaGroup = {
     enqueueRedCardNotification: jest.fn(),
+    enqueueYellowCardNotification: jest.fn(),
+    enqueueSubstitutionNotification: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -81,5 +83,53 @@ describe('CardLiveNotificationService', () => {
       'l1',
       expect.objectContaining({ playerName: 'Messi', leagueName: 'Liga 1' }),
     );
+  });
+
+  it('enqueues YELLOW_CARD for each league with predictions', async () => {
+    mockPrisma.prediction.findMany.mockResolvedValue([{ leagueId: 'l1' }]);
+    mockPrisma.league.findMany.mockResolvedValue([{ id: 'l1', name: 'Liga 1' }]);
+    mockWaGroup.enqueueYellowCardNotification.mockResolvedValue(true);
+
+    await service.dispatchYellowCard({
+      matchId: 'm1',
+      homeTeamName: 'A',
+      awayTeamName: 'B',
+      homeScore: 0,
+      awayScore: 0,
+      elapsed: 30,
+      card: {
+        playerName: 'Pérez',
+        teamName: 'A',
+        detail: 'Yellow Card',
+        minute: 30,
+        extraMin: null,
+      },
+    });
+
+    expect(mockWaGroup.enqueueYellowCardNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('enqueues SUBSTITUTION for each league with predictions', async () => {
+    mockPrisma.prediction.findMany.mockResolvedValue([{ leagueId: 'l1' }]);
+    mockPrisma.league.findMany.mockResolvedValue([{ id: 'l1', name: 'Liga 1' }]);
+    mockWaGroup.enqueueSubstitutionNotification.mockResolvedValue(true);
+
+    await service.dispatchSubstitution({
+      matchId: 'm1',
+      homeTeamName: 'A',
+      awayTeamName: 'B',
+      homeScore: 1,
+      awayScore: 1,
+      elapsed: 70,
+      substitution: {
+        playerInName: 'García',
+        playerOutName: 'López',
+        teamName: 'A',
+        minute: 70,
+        extraMin: null,
+      },
+    });
+
+    expect(mockWaGroup.enqueueSubstitutionNotification).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,23 @@
+ALTER TABLE `FootballSyncConfig`
+  ADD COLUMN `eventWaYellowCardEnabled` BOOLEAN NOT NULL DEFAULT true AFTER `eventWaRedCardEnabled`,
+  ADD COLUMN `eventWaSubstitutionEnabled` BOOLEAN NOT NULL DEFAULT true AFTER `eventWaYellowCardEnabled`;
+
+ALTER TABLE `WhatsappGroupJob`
+  MODIFY COLUMN `type` ENUM(
+    'RESULT_REPORT',
+    'PREDICTION_REPORT',
+    'MATCH_REMINDER',
+    'PREDICTION_CLOSED',
+    'RESULT_NOTIFICATION',
+    'GOAL_SCORED',
+    'PRE_MATCH_ESCALATION',
+    'MATCH_START',
+    'HALFTIME',
+    'SECOND_HALF_START',
+    'MATCH_LIVE_END',
+    'GOAL_IMPACT',
+    'RED_CARD',
+    'YELLOW_CARD',
+    'SUBSTITUTION',
+    'PAYMENT_REMINDER'
+  ) NOT NULL;

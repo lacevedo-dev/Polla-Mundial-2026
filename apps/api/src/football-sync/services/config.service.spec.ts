@@ -113,4 +113,26 @@ describe('FootballSync ConfigService', () => {
 
     await expect(service.isEventWaRedCardEnabled()).resolves.toBe(false);
   });
+
+  it('returns event WA yellow card enabled when event sync and toggle are on', async () => {
+    mockPrismaService.footballSyncConfig.findFirst.mockResolvedValue({
+      id: 'default_config',
+      enabled: true,
+      eventSyncEnabled: true,
+      eventWaYellowCardEnabled: true,
+    });
+
+    await expect(service.isEventWaYellowCardEnabled()).resolves.toBe(true);
+  });
+
+  it('returns event WA substitution disabled when toggle is off', async () => {
+    mockPrismaService.footballSyncConfig.findFirst.mockResolvedValue({
+      id: 'default_config',
+      enabled: true,
+      eventSyncEnabled: true,
+      eventWaSubstitutionEnabled: false,
+    });
+
+    await expect(service.isEventWaSubstitutionEnabled()).resolves.toBe(false);
+  });
 });
