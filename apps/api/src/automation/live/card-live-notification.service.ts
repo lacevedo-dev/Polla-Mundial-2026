@@ -1,6 +1,6 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import type { NewRedCardEvent } from '../../matches/match-events.util';
 
 export type RedCardDispatchParams = {
@@ -19,7 +19,7 @@ export class CardLiveNotificationService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   /** Encola RED_CARD en grupos WA de ligas con predicciones en el partido. */
