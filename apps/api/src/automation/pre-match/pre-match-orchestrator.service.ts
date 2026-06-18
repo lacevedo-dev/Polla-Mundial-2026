@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   AutomationStep,
   MatchStatus,
@@ -42,7 +42,7 @@ import {
   escalationDedupeKey,
   escalationNotificationDataKey,
 } from './pre-match-message.builder';
-import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 
 @Injectable()
 export class PreMatchOrchestratorService {
@@ -53,7 +53,7 @@ export class PreMatchOrchestratorService {
     private readonly observability: AutomationObservabilityService,
     private readonly notificationScheduler: NotificationScheduler,
     private readonly stepConfig: AutomationStepConfigService,
-    @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   async run(context: MatchAutomationSweepContext): Promise<SchedulerObservationOutcome> {

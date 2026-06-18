@@ -1,8 +1,8 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { LiveOrchestratorService } from './live-orchestrator.service';
 import type { LeagueGoalImpactSummary } from './goal-impact-analyzer.service';
 import type { GoalImpactContext } from '../types/automation.types';
@@ -33,7 +33,7 @@ export class GoalLiveNotificationService {
     private readonly prisma: PrismaService,
     private readonly push: PushNotificationsService,
     private readonly notifications: NotificationsService,
-    @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
     @Optional() private readonly liveOrchestrator?: LiveOrchestratorService,
   ) {}
 

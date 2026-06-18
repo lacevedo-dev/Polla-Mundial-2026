@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   AutomationStep,
   MatchStatus,
@@ -8,7 +8,7 @@ import {
 import { AutomationObservabilityService } from '../../automation-observability/automation-observability.service';
 import { NotificationScheduler } from '../../notifications/notification.scheduler';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { automationStepToLiveEvent } from '../config/automation-step-scheduler.util';
 import type {
@@ -38,7 +38,7 @@ export class LiveOrchestratorService {
     private readonly observability: AutomationObservabilityService,
     private readonly notificationScheduler: NotificationScheduler,
     private readonly goalImpactAnalyzer: GoalImpactAnalyzerService,
-    @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   async handleMatchStart(ctx: LiveMatchContext): Promise<void> {

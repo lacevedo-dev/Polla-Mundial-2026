@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationStep, EmailJobPriority, EmailJobType, MatchStatus, NotificationType, WhatsappGroupJobType } from '@prisma/client';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import { SchedulerObservationOutcome } from '../common/scheduler-observability.util';
@@ -23,7 +23,7 @@ import {
 } from './match-automation-sweep-context';
 import { NotificationsService } from './notifications.service';
 import { WhatsappPersonalService } from './whatsapp-personal.service';
-import type { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
+import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
 
 @Injectable()
 export class NotificationScheduler {
@@ -39,7 +39,7 @@ export class NotificationScheduler {
     private readonly push: PushNotificationsService,
     private readonly notificationsService: NotificationsService,
     private readonly waPersonal: WhatsappPersonalService,
-    @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   /**

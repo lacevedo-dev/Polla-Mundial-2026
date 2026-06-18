@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   AutomationStep,
   MatchStatus,
@@ -13,7 +13,7 @@ import {
 } from '../../prisma/background-job-lock.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationScheduler } from '../../notifications/notification.scheduler';
-import type { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AutomationFeatureFlagsService } from '../config/automation-feature-flags.service';
 import { buildMatchResultNotificationKey } from './post-match-dedupe.util';
 import {
@@ -32,7 +32,7 @@ export class PostMatchOrchestratorService {
     private readonly featureFlags: AutomationFeatureFlagsService,
     private readonly observability: AutomationObservabilityService,
     private readonly notificationScheduler: NotificationScheduler,
-    @Optional() private readonly waGroup?: WhatsappGroupService,
+    @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
 
   async runResultNotifications(): Promise<SchedulerObservationOutcome> {
