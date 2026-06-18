@@ -1,0 +1,20 @@
+ALTER TABLE `FootballSyncConfig`
+  ADD COLUMN `eventWaRedCardEnabled` BOOLEAN NOT NULL DEFAULT true AFTER `eventSyncIntervalMinutes`;
+
+ALTER TABLE `WhatsappGroupJob`
+  MODIFY COLUMN `type` ENUM(
+    'RESULT_REPORT',
+    'PREDICTION_REPORT',
+    'MATCH_REMINDER',
+    'PREDICTION_CLOSED',
+    'RESULT_NOTIFICATION',
+    'GOAL_SCORED',
+    'PRE_MATCH_ESCALATION',
+    'MATCH_START',
+    'HALFTIME',
+    'SECOND_HALF_START',
+    'MATCH_LIVE_END',
+    'GOAL_IMPACT',
+    'RED_CARD',
+    'PAYMENT_REMINDER'
+  ) NOT NULL;

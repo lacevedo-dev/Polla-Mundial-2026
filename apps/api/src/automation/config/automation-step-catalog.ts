@@ -145,10 +145,10 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
   },
   {
     key: AutomationStep.PREDICTION_REPORT,
-    phase: 'POST_MATCH',
+    phase: 'PRE_MATCH',
     label: 'Reporte predicciones',
     shortLabel: 'P.Rep',
-    description: 'Imagen/PDF al grupo WA tras cierre',
+    description: 'Imagen/PDF al grupo WA T-N min antes del kickoff (ajustable en Admin)',
     schedulerId: 'prediction_report',
     channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
     defaultEnabled: true,

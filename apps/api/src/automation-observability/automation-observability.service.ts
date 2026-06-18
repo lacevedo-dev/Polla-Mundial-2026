@@ -12,6 +12,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { buildWaGroupChannelBreakdown } from '../whatsapp/whatsapp-channel-status.util';
 import { AUTOMATION_STEP_ORDER, getCatalogEntry } from '../automation/config/automation-step-catalog';
 import { BOGOTA_LOCALE, BOGOTA_TIMEZONE } from '../automation/config/automation-datetime.util';
+import {
+  DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE,
+  parsePredictionReportMinutesBeforeConfig,
+  PREDICTION_REPORT_MINUTES_BEFORE_KEY,
+} from '../automation/config/automation-timing.util';
 
 type StepState =
   | 'NOT_APPLICABLE'
@@ -29,6 +34,7 @@ type OperationSyncStatus = Exclude<StepState, 'NOT_APPLICABLE' | 'MANUAL'>;
 type StepScheduledContext = {
   matchDate: Date;
   closeMinutes: number | null;
+  reportMinutesBeforeKickoff?: number | null;
   matchStatus: MatchStatus;
 };
 
@@ -154,8 +160,16 @@ export class AutomationObservabilityService {
       case AutomationStep.MATCH_REMINDER:
         return new Date(matchDate.getTime() - 60 * 60 * 1000);
       case AutomationStep.PREDICTION_CLOSING:
-      case AutomationStep.PREDICTION_REPORT:
         return new Date(matchDate.getTime() - (closeMinutes ?? 15) * 60 * 1000);
+      case AutomationStep.PREDICTION_REPORT:
+        return new Date(
+          matchDate.getTime() -
+            (context.reportMinutesBeforeKickoff ??
+              closeMinutes ??
+              DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE) *
+              60 *
+              1000,
+        );
       case AutomationStep.ESCALATION_T45:
         return new Date(matchDate.getTime() - 45 * 60 * 1000);
       case AutomationStep.ESCALATION_T30:
@@ -229,7 +243,7 @@ export class AutomationObservabilityService {
     }
 
     const matchIds = matches.map((match) => match.id);
-    const [activeLeagues, runs, syncLogs, waJobs] = await Promise.all([
+    const [activeLeagues, runs, syncLogs, waJobs, reportTimingRow] = await Promise.all([
       this.prisma.league.findMany({
         where: { status: 'ACTIVE' },
         select: {
@@ -275,7 +289,15 @@ export class AutomationObservabilityService {
           dedupeKey: true,
         },
       }),
+      this.prisma.systemConfig.findUnique({
+        where: { key: PREDICTION_REPORT_MINUTES_BEFORE_KEY },
+        select: { value: true },
+      }),
     ]);
+
+    const reportMinutesBeforeKickoff = parsePredictionReportMinutesBeforeConfig(
+      reportTimingRow?.value,
+    );
 
     const waJobsByDedupeKey = new Map(
       waJobs.map((job) => [job.dedupeKey, job]),
@@ -333,6 +355,7 @@ export class AutomationObservabilityService {
           matchRuns,
           relevantLeagues,
           closeMinutes,
+          reportMinutesBeforeKickoff,
           now,
         });
 
@@ -483,11 +506,16 @@ export class AutomationObservabilityService {
     matchRuns: Array<AutomationRun & { league: { id: string; code: string; name: string } | null }>;
     relevantLeagues: Array<{ id: string; code: string; name: string; closePredictionMinutes: number }>;
     closeMinutes: number;
+    reportMinutesBeforeKickoff: number;
     now: Date;
   }) {
     const scheduledAt = this.getScheduledAt(params.step, {
       matchDate: params.match.matchDate,
       closeMinutes: params.closeMinutes,
+      reportMinutesBeforeKickoff:
+        params.step === AutomationStep.PREDICTION_REPORT
+          ? params.reportMinutesBeforeKickoff
+          : undefined,
       matchStatus: params.match.status,
     });
 

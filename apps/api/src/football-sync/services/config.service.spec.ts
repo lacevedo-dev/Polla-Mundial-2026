@@ -47,6 +47,8 @@ describe('FootballSync ConfigService', () => {
       alertThreshold: 90,
       autoSyncEnabled: true,
       eventSyncEnabled: false,
+      eventSyncIntervalMinutes: 1,
+      eventWaRedCardEnabled: true,
       peakHoursSyncEnabled: true,
       emergencyModeThreshold: 10,
       notifyOnError: true,
@@ -76,6 +78,8 @@ describe('FootballSync ConfigService', () => {
       alertThreshold: 90,
       autoSyncEnabled: true,
       eventSyncEnabled: true,
+      eventSyncIntervalMinutes: 1,
+      eventWaRedCardEnabled: true,
       peakHoursSyncEnabled: true,
       emergencyModeThreshold: 10,
       notifyOnError: true,
@@ -86,5 +90,27 @@ describe('FootballSync ConfigService', () => {
     });
 
     await expect(service.isEventSyncEnabled()).resolves.toBe(true);
+  });
+
+  it('returns event WA red card enabled when event sync and toggle are on', async () => {
+    mockPrismaService.footballSyncConfig.findFirst.mockResolvedValue({
+      id: 'default_config',
+      enabled: true,
+      eventSyncEnabled: true,
+      eventWaRedCardEnabled: true,
+    });
+
+    await expect(service.isEventWaRedCardEnabled()).resolves.toBe(true);
+  });
+
+  it('returns event WA red card disabled when toggle is off', async () => {
+    mockPrismaService.footballSyncConfig.findFirst.mockResolvedValue({
+      id: 'default_config',
+      enabled: true,
+      eventSyncEnabled: true,
+      eventWaRedCardEnabled: false,
+    });
+
+    await expect(service.isEventWaRedCardEnabled()).resolves.toBe(false);
   });
 });

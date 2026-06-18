@@ -1,6 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationStep, EmailJobType, MatchStatus, MemberStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AutomationTimingConfigService } from '../automation/config/automation-timing-config.service';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import {
   getPendingReportMatches,
@@ -41,6 +42,7 @@ export class PredictionReportService {
     private readonly observability: AutomationObservabilityService,
     private readonly emailService: PredictionReportEmailService,
     private readonly pdfReport: PdfReportService,
+    private readonly timingConfig: AutomationTimingConfigService,
     @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
 
@@ -59,6 +61,8 @@ async sendPendingReports(
     context?: MatchAutomationSweepContext,
   ): Promise<void> {
     const now = context?.now ?? new Date();
+    const reportMinutesBeforeKickoff =
+      await this.timingConfig.getPredictionReportMinutesBefore();
 
     const leagues: PendingReportLeague[] = context
       ? context.activeLeagues.map((league) => ({
@@ -93,17 +97,20 @@ async sendPendingReports(
         ? getPendingReportMatches(
             context,
             league.id,
-            league.closePredictionMinutes,
+            reportMinutesBeforeKickoff,
           )
         : await this.prisma.match.findMany({
             where: {
               predictionReportSentAt: null,
               matchDate: {
                 gt: new Date(
-                  now.getTime() - league.closePredictionMinutes * 60_000,
+                  now.getTime() - reportMinutesBeforeKickoff * 60_000,
                 ),
                 lte: new Date(
-                  now.getTime() + league.closePredictionMinutes * 60_000,
+                  now.getTime() +
+                    (reportMinutesBeforeKickoff +
+                      10) *
+                      60_000,
                 ),
               },
               predictions: {
@@ -189,7 +196,7 @@ async sendPendingReports(
         AutomationStep.PREDICTION_REPORT,
         {
           matchDate: data.match.matchDate,
-          closeMinutes: 30,
+          closeMinutes: reportMinutesBeforeKickoff,
           matchStatus: MatchStatus.SCHEDULED,
         },
       );

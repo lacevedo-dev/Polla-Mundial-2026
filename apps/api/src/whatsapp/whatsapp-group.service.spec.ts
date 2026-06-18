@@ -153,6 +153,38 @@ describe('WhatsappGroupService', () => {
     });
   });
 
+  describe('enqueueRedCardNotification', () => {
+    it('creates job with minute and player dedupeKey', async () => {
+      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us', name: 'Liga' });
+      mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue(null);
+      mockPrisma.whatsappGroupJob.create.mockResolvedValue({});
+
+      const ok = await service.enqueueRedCardNotification('m1', 'l1', {
+        homeTeam: 'A',
+        awayTeam: 'B',
+        homeScore: 1,
+        awayScore: 0,
+        elapsed: 67,
+        leagueName: 'Liga',
+        playerName: 'Messi',
+        teamName: 'A',
+        cardDetail: 'Red Card',
+        minute: 67,
+        extraMin: null,
+      });
+
+      expect(ok).toBe(true);
+      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: WhatsappGroupJobType.RED_CARD,
+            dedupeKey: 'RED_CARD:m1:l1:67:0:messi',
+          }),
+        }),
+      );
+    });
+  });
+
   describe('processJob', () => {
     const baseJob = {
       id: 'job1',

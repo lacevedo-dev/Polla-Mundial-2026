@@ -97,6 +97,13 @@ export class ConfigService {
     }
 
     if (
+      data.eventSyncIntervalMinutes !== undefined &&
+      (data.eventSyncIntervalMinutes < 1 || data.eventSyncIntervalMinutes > 30)
+    ) {
+      throw new Error('eventSyncIntervalMinutes debe estar entre 1 y 30');
+    }
+
+    if (
       data.syncMode !== undefined &&
       !['MANUAL', 'SEMI_AUTO', 'AUTO'].includes(data.syncMode)
     ) {
@@ -130,13 +137,30 @@ export class ConfigService {
       );
     }
 
-    // Actualizar configuración
     if (
       data.eventSyncEnabled !== undefined &&
       data.eventSyncEnabled !== config.eventSyncEnabled
     ) {
       criticalChanges.push(
         `Consultas de eventos ${data.eventSyncEnabled ? 'habilitadas' : 'deshabilitadas'}`,
+      );
+    }
+
+    if (
+      data.eventSyncIntervalMinutes !== undefined &&
+      data.eventSyncIntervalMinutes !== config.eventSyncIntervalMinutes
+    ) {
+      criticalChanges.push(
+        `Intervalo de eventos en vivo: ${config.eventSyncIntervalMinutes ?? 1} → ${data.eventSyncIntervalMinutes} min`,
+      );
+    }
+
+    if (
+      data.eventWaRedCardEnabled !== undefined &&
+      data.eventWaRedCardEnabled !== config.eventWaRedCardEnabled
+    ) {
+      criticalChanges.push(
+        `WA tarjetas rojas ${data.eventWaRedCardEnabled ? 'habilitadas' : 'deshabilitadas'}`,
       );
     }
 
@@ -195,6 +219,8 @@ export class ConfigService {
         alertThreshold: 90,
         autoSyncEnabled: true,
         eventSyncEnabled: false,
+        eventSyncIntervalMinutes: 1,
+        eventWaRedCardEnabled: true,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -264,6 +290,20 @@ export class ConfigService {
     return config.enabled && config.eventSyncEnabled;
   }
 
+  async getEventSyncIntervalMinutes(): Promise<number> {
+    const config = await this.getConfig();
+    return Math.max(1, Math.min(30, config.eventSyncIntervalMinutes ?? 1));
+  }
+
+  async isEventWaRedCardEnabled(): Promise<boolean> {
+    const config = await this.getConfig();
+    return (
+      config.enabled &&
+      config.eventSyncEnabled &&
+      (config.eventWaRedCardEnabled ?? true)
+    );
+  }
+
   /**
    * Verificar si la sincronización en horas pico está habilitada
    */
@@ -331,6 +371,8 @@ export class ConfigService {
         alertThreshold: 90,
         autoSyncEnabled: true,
         eventSyncEnabled: false,
+        eventSyncIntervalMinutes: 1,
+        eventWaRedCardEnabled: true,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -403,6 +445,8 @@ export class ConfigService {
       alertThreshold: config.alertThreshold,
       autoSyncEnabled: config.autoSyncEnabled,
       eventSyncEnabled: config.eventSyncEnabled,
+      eventSyncIntervalMinutes: config.eventSyncIntervalMinutes ?? 1,
+      eventWaRedCardEnabled: config.eventWaRedCardEnabled ?? true,
       peakHoursSyncEnabled: config.peakHoursSyncEnabled,
       emergencyModeThreshold: config.emergencyModeThreshold,
       notifyOnError: config.notifyOnError,

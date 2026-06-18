@@ -4,6 +4,46 @@ import type { EscalationCheckpointId } from '../types/automation.types';
 /** Minutos antes del kickoff en los que cierran las predicciones (por polla). */
 export const DEFAULT_CLOSE_PREDICTION_MINUTES = 15;
 
+/** Clave SystemConfig: minutos antes del kickoff para enviar el reporte de predicciones. */
+export const PREDICTION_REPORT_MINUTES_BEFORE_KEY =
+  'automation:prediction_report_minutes_before';
+
+/** Valor por defecto: reporte T-15 (alineado con cierre típico de pollas). */
+export const DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE = 15;
+
+/** Ventana de gracia (min) tras el kickoff para catch-up del reporte si el cron se retrasó. */
+export const PREDICTION_REPORT_CATCHUP_GRACE_MINUTES = 10;
+
+/** Ventana anticipada (min) para el primer disparo del cron antes del instante exacto T-N. */
+export const PREDICTION_REPORT_WINDOW_GRACE_MINUTES = 2;
+
+export function normalizePredictionReportMinutesBefore(
+  value: number | null | undefined,
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE;
+  }
+  return Math.max(1, Math.min(120, Math.round(value)));
+}
+
+export function parsePredictionReportMinutesBeforeConfig(
+  raw: string | null | undefined,
+): number {
+  if (!raw) return DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE;
+  try {
+    const parsed = JSON.parse(raw) as { minutes?: unknown };
+    if (typeof parsed.minutes === 'number') {
+      return normalizePredictionReportMinutesBefore(parsed.minutes);
+    }
+  } catch {
+    const asNumber = Number(raw);
+    if (Number.isFinite(asNumber)) {
+      return normalizePredictionReportMinutesBefore(asNumber);
+    }
+  }
+  return DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE;
+}
+
 /** Ventana de gracia del cron (minutos) para disparar un checkpoint. */
 export const CHECKPOINT_WINDOW_GRACE_MINUTES = 5;
 

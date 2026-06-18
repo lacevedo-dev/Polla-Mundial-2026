@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AutomationTimingConfigService } from '../automation/config/automation-timing-config.service';
 import { AutomationObservabilityModule } from '../automation-observability/automation-observability.module';
 import { EmailModule } from '../email/email.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -18,6 +19,7 @@ import { PdfReportService } from './pdf-report.service';
     PredictionReportEmailService,
     PredictionReportScheduler,
     PdfReportService,
+    AutomationTimingConfigService,
   ],
   exports: [PredictionReportService, PredictionReportScheduler],
 })

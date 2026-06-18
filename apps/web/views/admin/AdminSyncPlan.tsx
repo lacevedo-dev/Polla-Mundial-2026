@@ -35,7 +35,8 @@ interface PlannedRequest {
     | 'STATUS_BATCH_WITH_CARRY_OVER'
     | 'LINK_AND_STATUS'
     | 'EVENTS_HALFTIME'
-    | 'EVENTS_FINAL';
+    | 'EVENTS_FINAL'
+    | 'EVENTS_LIVE_POLL';
   label: string;
   scheduledAt: string;
   requestCost: number;
@@ -120,6 +121,7 @@ const REQUEST_STYLES: Record<PlannedRequest['type'], string> = {
   LINK_AND_STATUS: 'border-amber-200 bg-amber-50 text-amber-700',
   EVENTS_HALFTIME: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
   EVENTS_FINAL: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  EVENTS_LIVE_POLL: 'border-indigo-200 bg-indigo-50 text-indigo-700',
 };
 
 const EXECUTION_STATE_STYLES: Record<NonNullable<PlannedRequest['executionState']>, string> = {
@@ -346,7 +348,7 @@ function HeatmapChart({ buckets, plannedRequests }: { buckets: HourBucket[]; pla
       {Object.values(byHourType).some(t => Object.keys(t).length > 0) && (
         <div className="space-y-1.5">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Por tipo de consulta</span>
-          {(['STATUS_BATCH','STATUS_BATCH_WITH_CARRY_OVER','LINK_AND_STATUS','EVENTS_HALFTIME','EVENTS_FINAL'] as PlannedRequest['type'][]).map((type) => {
+          {(['STATUS_BATCH','STATUS_BATCH_WITH_CARRY_OVER','LINK_AND_STATUS','EVENTS_LIVE_POLL','EVENTS_HALFTIME','EVENTS_FINAL'] as PlannedRequest['type'][]).map((type) => {
             const count = plannedRequests.filter((p) => p.type === type && p.executionState !== 'disabled_by_config').length;
             const disabledForType = plannedRequests.filter((p) => p.type === type && p.executionState === 'disabled_by_config').length;
             if (count + disabledForType === 0) return null;
@@ -355,6 +357,7 @@ function HeatmapChart({ buckets, plannedRequests }: { buckets: HourBucket[]; pla
               STATUS_BATCH: 'Estados del día',
               STATUS_BATCH_WITH_CARRY_OVER: 'Estados + arrastres',
               LINK_AND_STATUS: 'Sin vínculo + estado',
+              EVENTS_LIVE_POLL: 'Eventos en vivo (polling)',
               EVENTS_HALFTIME: 'Eventos entretiempo',
               EVENTS_FINAL: 'Eventos final',
             };
@@ -613,6 +616,7 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
             ['STATUS_BATCH', 'Estados del dia'],
             ['STATUS_BATCH_WITH_CARRY_OVER', 'Estados + arrastres'],
             ['LINK_AND_STATUS', 'Sin vinculo + estado'],
+            ['EVENTS_LIVE_POLL', 'Eventos en vivo (polling)'],
             ['EVENTS_HALFTIME', 'Eventos entretiempo'],
             ['EVENTS_FINAL', 'Eventos final'],
           ].map(([type, label]) => (
@@ -628,7 +632,8 @@ const AdminSyncPlan: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =
           ))}
         </div>
         <p className="mt-3 text-[11px] text-slate-500">
-          Los eventos son opcionales: se planean solo si sobra presupuesto y, si no aportan eventos útiles para un fixture, no se reintentan para no gastar requests del resto.
+          Con eventos habilitados, el polling en vivo consulta /fixtures/events cada N minutos (configurable) mientras el partido esté LIVE.
+          Los hitos de entretiempo y final siguen siendo opcionales si sobra presupuesto.
         </p>
         <p className="mt-2 text-[11px] text-slate-500">
           Cuando un evento aparece desactivado por configuración, igual se muestra en el plan para dejar claro el costo potencial aunque no se ejecute.

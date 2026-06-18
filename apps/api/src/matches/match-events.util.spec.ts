@@ -4,11 +4,24 @@ import {
   computeScoreExcessAnnulments,
   dedupeMatchEvents,
   formatAnnulledReason,
+  formatRedCardReason,
+  isRedCardDetail,
   normalizeEventPlayerKey,
   resolveGoalBeneficiaryIsHome,
 } from './match-events.util';
 
 describe('match-events.util', () => {
+  it('detecta tarjetas rojas directas y por doble amarilla', () => {
+    expect(isRedCardDetail('Red Card')).toBe(true);
+    expect(isRedCardDetail('Second Yellow card')).toBe(true);
+    expect(isRedCardDetail('Yellow Card')).toBe(false);
+  });
+
+  it('formatea motivo de expulsión', () => {
+    expect(formatRedCardReason('Second Yellow card')).toBe('doble amarilla');
+    expect(formatRedCardReason('Red Card')).toBeNull();
+  });
+
   it('normaliza apellidos para comparar variantes del nombre', () => {
     expect(normalizeEventPlayerKey('Marco Schmid')).toBe('schmid');
     expect(normalizeEventPlayerKey('Schmid')).toBe('schmid');

@@ -64,6 +64,26 @@ export function dedupeMatchEvents<T extends MatchEventRecord>(events: T[]): T[] 
   );
 }
 
+export type NewRedCardEvent = {
+  playerName: string | null;
+  teamName: string | null;
+  detail: string;
+  minute: number;
+  extraMin: number | null;
+};
+
+/** Tarjeta roja directa o por doble amarilla (API-Football). */
+export function isRedCardDetail(detail: string | null | undefined): boolean {
+  const normalized = (detail ?? '').trim().toLowerCase();
+  return normalized === 'red card' || normalized.includes('second yellow');
+}
+
+export function formatRedCardReason(detail: string | null | undefined): string | null {
+  const normalized = (detail ?? '').trim().toLowerCase();
+  if (normalized.includes('second yellow')) return 'doble amarilla';
+  return null;
+}
+
 export function isVarGoalCancelledDetail(detail: string | null | undefined): boolean {
   const normalized = (detail ?? '').toLowerCase();
   return (

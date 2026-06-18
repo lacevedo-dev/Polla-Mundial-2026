@@ -500,6 +500,7 @@ model DailySyncPlan {
   requestsBudget   Int
   strategy         SyncStrategy
   lastSyncAt       DateTime?
+  lastEventPollAt  DateTime?
   plannedTimeline  Json?
   timelineVersion  Int          @default(1)
   createdAt        DateTime     @default(now())
@@ -545,6 +546,8 @@ model FootballSyncConfig {
   updatedAt               DateTime @updatedAt
   createdAt               DateTime @default(now())
   eventSyncEnabled        Boolean  @default(false)
+  eventSyncIntervalMinutes Int     @default(1)
+  eventWaRedCardEnabled   Boolean  @default(true)
 
   // === SISTEMA AUTO-ADAPTABLE ===
   // Modo de operación: MANUAL, SEMI_AUTO, AUTO
@@ -1355,6 +1358,7 @@ enum WhatsappGroupJobType {
   SECOND_HALF_START
   MATCH_LIVE_END
   GOAL_IMPACT
+  RED_CARD
   PAYMENT_REMINDER
 }
 

@@ -33,7 +33,7 @@ export class AdaptiveSyncScheduler {
         };
       }
 
-      this.isSyncing = true; // Claim lock before any await to prevent race condition
+      this.isSyncing = true;
       try {
         if (!(await this.footballConfigService.isAutoSyncEnabled())) {
           return {
@@ -42,27 +42,62 @@ export class AdaptiveSyncScheduler {
           };
         }
 
-        const decision = await this.resolveFrequentSyncDecision();
-        if (!decision.shouldSync) {
+        const statusDecision = await this.resolveFrequentSyncDecision();
+        let statusExecution:
+          | {
+              success: boolean;
+              matchesUpdated?: number;
+              requestsUsed?: number;
+              error?: string;
+            }
+          | null = null;
+
+        if (statusDecision.shouldSync) {
+          this.logger.log(statusDecision.logMessage);
+          statusExecution = await this.executeSyncWithLock(statusDecision.trigger);
+        }
+
+        let eventsExecution:
+          | {
+              success: boolean;
+              matchesPolled?: number;
+              requestsUsed?: number;
+              error?: string;
+            }
+          | null = null;
+
+        if (await this.syncPlan.shouldPollLiveEventsNow()) {
+          this.logger.log('Live events poll triggered');
+          eventsExecution = await this.matchSync.pollLiveMatchEvents();
+        }
+
+        if (!statusExecution && !eventsExecution) {
           return {
             status: 'skipped',
-            summary: decision.summary,
+            summary: statusDecision.shouldSync
+              ? statusDecision.summary
+              : { reason: 'plan_not_due' },
           };
         }
 
-        this.logger.log(decision.logMessage);
-        const execution = await this.executeSyncWithLock(decision.trigger);
-
         return {
           status: 'completed',
-          level: execution.success ? 'log' : 'warn',
+          level:
+            (statusExecution?.success ?? true) && (eventsExecution?.success ?? true)
+              ? 'log'
+              : 'warn',
           summary: {
-            ...decision.summary,
-            trigger: decision.trigger,
-            success: execution.success,
-            matchesUpdated: execution.matchesUpdated ?? 0,
-            requestsUsed: execution.requestsUsed ?? 0,
-            ...(execution.error ? { error: execution.error } : {}),
+            reason: 'adaptive_tick',
+            statusSyncRan: Boolean(statusExecution),
+            statusSuccess: statusExecution?.success ?? null,
+            statusMatchesUpdated: statusExecution?.matchesUpdated ?? 0,
+            statusRequestsUsed: statusExecution?.requestsUsed ?? 0,
+            eventsPollRan: Boolean(eventsExecution),
+            eventsSuccess: eventsExecution?.success ?? null,
+            eventsMatchesPolled: eventsExecution?.matchesPolled ?? 0,
+            eventsRequestsUsed: eventsExecution?.requestsUsed ?? 0,
+            ...(statusExecution?.error ? { statusError: statusExecution.error } : {}),
+            ...(eventsExecution?.error ? { eventsError: eventsExecution.error } : {}),
           },
         };
       } catch (error) {

@@ -10,6 +10,7 @@ describe('AdaptiveSyncScheduler', () => {
 
   const mockSyncPlanService = {
     shouldSyncNow: jest.fn(),
+    shouldPollLiveEventsNow: jest.fn(),
     calculateDailyPlan: jest.fn(),
     countPotentiallyLiveMatches: jest.fn(),
   };
@@ -18,6 +19,7 @@ describe('AdaptiveSyncScheduler', () => {
     syncTodayMatches: jest.fn(),
     syncTodayMatchesForTrigger: jest.fn(),
     syncLiveMatches: jest.fn(),
+    pollLiveMatchEvents: jest.fn(),
   };
 
   const mockFootballConfigService = {
@@ -51,6 +53,7 @@ describe('AdaptiveSyncScheduler', () => {
     mockFootballConfigService.isAutoSyncEnabled.mockResolvedValue(true);
     mockFootballConfigService.isPeakHoursSyncEnabled.mockResolvedValue(true);
     mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
+    mockSyncPlanService.shouldPollLiveEventsNow.mockResolvedValue(false);
     mockSyncPlanService.countPotentiallyLiveMatches.mockResolvedValue(0);
     mockSyncPlanService.calculateDailyPlan.mockResolvedValue({
       date: '2026-03-28',
@@ -70,6 +73,11 @@ describe('AdaptiveSyncScheduler', () => {
     mockMatchSyncService.syncLiveMatches.mockResolvedValue({
       success: true,
       matchesUpdated: 1,
+    });
+    mockMatchSyncService.pollLiveMatchEvents.mockResolvedValue({
+      success: true,
+      matchesPolled: 0,
+      requestsUsed: 0,
     });
   });
 
@@ -92,7 +100,7 @@ describe('AdaptiveSyncScheduler', () => {
 
     expect(mockFootballConfigService.isPeakHoursSyncEnabled).toHaveBeenCalled();
     expect(mockSyncPlanService.calculateDailyPlan).toHaveBeenCalled();
-    expect(mockMatchSyncService.syncTodayMatchesForTrigger).toHaveBeenCalledTimes(1);
+    expect(mockMatchSyncService.syncLiveMatches).toHaveBeenCalledTimes(1);
   });
 
   it('skips peak-hours override when boundary is not reached', async () => {
@@ -116,13 +124,28 @@ describe('AdaptiveSyncScheduler', () => {
     expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
   });
 
+  it('polls live events when status sync is not due', async () => {
+    mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
+    mockSyncPlanService.shouldPollLiveEventsNow.mockResolvedValue(true);
+    mockMatchSyncService.pollLiveMatchEvents.mockResolvedValue({
+      success: true,
+      matchesPolled: 2,
+      requestsUsed: 2,
+    });
+
+    await scheduler.adaptiveSyncTick();
+
+    expect(mockMatchSyncService.pollLiveMatchEvents).toHaveBeenCalledTimes(1);
+    expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
+  });
+
   it('blocks manual sync when the module is disabled', async () => {
     mockFootballConfigService.isEnabled.mockResolvedValue(false);
 
     const result = await scheduler.triggerManualSync();
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/disabled/i);
+    expect(result.message).toMatch(/deshabilitado/i);
     expect(mockMatchSyncService.syncTodayMatches).not.toHaveBeenCalled();
     expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
   });

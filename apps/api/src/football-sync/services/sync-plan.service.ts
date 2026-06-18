@@ -37,7 +37,8 @@ export interface PlannedSyncRequest {
     | 'STATUS_BATCH_WITH_CARRY_OVER'
     | 'LINK_AND_STATUS'
     | 'EVENTS_HALFTIME'
-    | 'EVENTS_FINAL';
+    | 'EVENTS_FINAL'
+    | 'EVENTS_LIVE_POLL';
   label: string;
   scheduledAt: string;
   requestCost: number;
@@ -324,6 +325,56 @@ export class SyncPlanService {
     });
   }
 
+  async updateLastEventPollTime(): Promise<void> {
+    const today = this.getToday();
+
+    await this.prisma.dailySyncPlan.updateMany({
+      where: { date: today },
+      data: { lastEventPollAt: new Date() },
+    });
+  }
+
+  async countLiveMatchesWithExternalId(): Promise<number> {
+    return this.prisma.match.count({
+      where: {
+        status: MatchStatus.LIVE,
+        externalId: { not: null },
+        eventsNoDataAt: null,
+      },
+    });
+  }
+
+  async shouldPollLiveEventsNow(): Promise<boolean> {
+    if (!(await this.footballConfigService.isEventSyncEnabled())) {
+      return false;
+    }
+
+    const liveCount = await this.countLiveMatchesWithExternalId();
+    if (liveCount === 0) {
+      return false;
+    }
+
+    const available = await this.rateLimiter.getAvailableRequests();
+    if (available <= 0) {
+      return false;
+    }
+
+    const intervalMinutes =
+      await this.footballConfigService.getEventSyncIntervalMinutes();
+    const today = this.getToday();
+    const plan = await this.prisma.dailySyncPlan.findUnique({
+      where: { date: today },
+      select: { lastEventPollAt: true },
+    });
+
+    if (!plan?.lastEventPollAt) {
+      return true;
+    }
+
+    const elapsedMs = Date.now() - plan.lastEventPollAt.getTime();
+    return elapsedMs >= intervalMinutes * 60 * 1000;
+  }
+
   /**
    * Check if sync should happen now based on plan
    */
@@ -465,6 +516,9 @@ export class SyncPlanService {
 
     const plan = await this.calculateDailyPlan();
     const eventSyncEnabled = await this.footballConfigService.isEventSyncEnabled();
+    const eventSyncIntervalMinutes =
+      await this.footballConfigService.getEventSyncIntervalMinutes();
+    const eventIntervalMs = eventSyncIntervalMinutes * 60 * 1000;
     const [used, limit] = await Promise.all([
       this.rateLimiter.getUsedRequestsToday(),
       this.rateLimiter.getDailyLimit(),
@@ -765,6 +819,33 @@ export class SyncPlanService {
       }
 
       if (this.shouldPlanEventRequests(match)) {
+        const matchStart = new Date(match.matchDate);
+        const matchEnd = new Date(matchStart.getTime() + 130 * 60 * 1000);
+        const pollOrigin = new Date(matchStart.getTime() - 5 * 60 * 1000);
+        let pollCursor = pollOrigin;
+        let pollIndex = 0;
+
+        while (pollCursor <= matchEnd && pollCursor < todayEnd) {
+          if (pollCursor >= now) {
+            eventCandidates.push({
+              id: `events-live-poll-${match.matchId}-${pollIndex}`,
+              type: 'EVENTS_LIVE_POLL',
+              label: `Eventos en vivo (cada ${eventSyncIntervalMinutes} min)`,
+              scheduledAt: pollCursor.toISOString(),
+              requestCost: 1,
+              matchIds: [match.matchId],
+              optional: true,
+              executionState: eventSyncEnabled ? 'enabled' : 'disabled_by_config',
+              disabledReason: eventSyncEnabled ? undefined : 'event_sync_disabled',
+              notes:
+                'Polling periódico de /fixtures/events mientras el partido esté LIVE. Alimenta timeline en App y detecta goles/tarjetas/sustituciones.',
+              priority: 3,
+            });
+            pollIndex += 1;
+          }
+          pollCursor = new Date(pollCursor.getTime() + eventIntervalMs);
+        }
+
         const halftimeAt = new Date(
           new Date(match.matchDate).getTime() + 50 * 60 * 1000,
         ).toISOString();

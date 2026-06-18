@@ -15,6 +15,7 @@ export const TEXT_ONLY_WHATSAPP_GROUP_JOB_TYPES = new Set<WhatsappGroupJobType>(
   WhatsappGroupJobType.SECOND_HALF_START,
   WhatsappGroupJobType.MATCH_LIVE_END,
   WhatsappGroupJobType.GOAL_IMPACT,
+  WhatsappGroupJobType.RED_CARD,
   WhatsappGroupJobType.PAYMENT_REMINDER,
 ]);
 

@@ -73,6 +73,7 @@ interface AutomationStatus {
   timingHints?: {
     defaultCloseMinutes: number;
     finalEscalationMinutesBeforeKickoff: number;
+    predictionReportMinutesBefore: number;
     timezone: string;
   };
 }
@@ -1172,6 +1173,86 @@ function ChannelCard({ id, info }: { id: string; info: ChannelInfo }) {
   );
 }
 
+function AutomationTimingPanel({
+  timingHints,
+  onSaved,
+}: {
+  timingHints?: AutomationStatus['timingHints'];
+  onSaved: (minutes: number) => void;
+}) {
+  const [minutes, setMinutes] = React.useState(
+    timingHints?.predictionReportMinutesBefore ?? 15,
+  );
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+
+  React.useEffect(() => {
+    if (timingHints) {
+      setMinutes(timingHints.predictionReportMinutesBefore);
+    }
+  }, [timingHints?.predictionReportMinutesBefore]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const result = await request<{ predictionReportMinutesBefore: number }>(
+        '/admin/automation/timing-settings',
+        { method: 'PUT', body: JSON.stringify({ predictionReportMinutesBefore: minutes }) },
+      );
+      onSaved(result.predictionReportMinutesBefore);
+      setMsg({ ok: true, text: 'Ajuste guardado correctamente' });
+    } catch (e: unknown) {
+      const text = e instanceof ApiError ? e.message : 'Error al guardar el ajuste';
+      setMsg({ ok: false, text });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <Clock size={14} className="text-sky-500" />
+        <p className="text-sm font-semibold text-slate-900">Timing del reporte de predicciones</p>
+      </div>
+      <p className="mb-4 text-xs leading-relaxed text-slate-600">
+        Minutos antes del kickoff en que se publica el reporte de cierre (email + PDF/imagen al WA Grupo).
+        El cron revisa cada minuto; con <strong>15</strong> el envío ocurre en T-15 (o catch-up inmediato si hubo retraso).
+        Es independiente del cierre de pronósticos por polla (<code className="text-[10px]">closePredictionMinutes</code>).
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">
+            Minutos antes del partido
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={minutes}
+            onChange={(e) => setMinutes(Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 15)))}
+            className="w-28 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving}
+          className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-60"
+        >
+          {saving ? 'Guardando…' : 'Guardar timing'}
+        </button>
+      </div>
+      {msg && (
+        <p className={`mt-3 text-xs font-medium ${msg.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function StepConfigMatrix({
   stepCatalog,
   channelStatus,
@@ -1897,6 +1978,20 @@ export default function AdminAutomation() {
     }
   };
 
+  const handleSaveTimingSettings = (minutes: number) => {
+    setStatus((prev) =>
+      prev && prev.timingHints
+        ? {
+            ...prev,
+            timingHints: {
+              ...prev.timingHints,
+              predictionReportMinutesBefore: minutes,
+            },
+          }
+        : prev,
+    );
+  };
+
   const loadBase = async () => {
     setLoading(true);
     try {
@@ -2256,6 +2351,10 @@ export default function AdminAutomation() {
 
       {tab === 'config' && status && (
         <div className="space-y-4">
+          <AutomationTimingPanel
+            timingHints={status.timingHints}
+            onSaved={handleSaveTimingSettings}
+          />
           <StepConfigMatrix
             stepCatalog={resolvedStepCatalog}
             channelStatus={status.channels}
@@ -2265,13 +2364,14 @@ export default function AdminAutomation() {
             onToggleStep={handleToggleStep}
           />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-900">Regla de timing (solo lectura)</p>
+            <p className="text-sm font-semibold text-slate-900">Reglas de timing (referencia)</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               Última escalada = <strong>cierre + 5 min</strong> antes del kickoff.
               {status.timingHints && (
                 <>
                   {' '}Con cierre default {status.timingHints.defaultCloseMinutes} min → columna{' '}
                   <strong>{resolveEscalationFinalShortLabel(status.timingHints)}</strong>.
+                  {' '}Reporte de predicciones: <strong>T-{status.timingHints.predictionReportMinutesBefore}</strong>.
                 </>
               )}
             </p>

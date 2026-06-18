@@ -19,6 +19,7 @@ import { AdminAutomationMessagePreviewQueryDto } from './dto/admin-automation-me
 import { AdminAutomationFeatureFlagsDto } from './dto/admin-automation-feature-flags.dto';
 import { AdminAutomationStepOverrideDto } from './dto/admin-automation-step-override.dto';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
+import { AutomationTimingConfigService } from '../automation/config/automation-timing-config.service';
 import { getFinalEscalationMinutesBeforeKickoff } from '../automation/config/automation-timing.util';
 import { AutomationRetryService } from '../automation/retry/automation-retry.service';
 import { AutomationMessagePreviewService } from '../automation/preview/automation-message-preview.service';
@@ -49,6 +50,7 @@ export class AdminAutomationController {
     private readonly messagePreview: AutomationMessagePreviewService,
     private readonly featureFlags: AutomationFeatureFlagsService,
     private readonly stepConfig: AutomationStepConfigService,
+    private readonly timingConfig: AutomationTimingConfigService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -218,10 +220,20 @@ export class AdminAutomationController {
         channels: ['waGroup'],
       },
       {
+        id: 'live_red_card',
+        name: 'Tarjeta roja en vivo',
+        cron: 'Football Sync',
+        description: 'Al detectar tarjeta roja vía polling /fixtures/events (requiere event sync + eventWaRedCardEnabled)',
+        notifType: null,
+        icon: '🟥',
+        audience: 'Grupos WA de ligas con predicciones en el partido',
+        channels: ['waGroup'],
+      },
+      {
         id: 'prediction_report',
         name: 'Reporte de pronósticos',
         cron: '* * * * *',
-        description: 'Tras cierre de predicciones — imagen + PDF al grupo WA',
+        description: 'T-N min antes del kickoff (configurable en Ajustes) — imagen + PDF al grupo WA',
         notifType: 'PREDICTION_CLOSED',
         icon: '📋',
         audience: 'Grupos WA de ligas con pronósticos cerrados',
@@ -259,6 +271,7 @@ export class AdminAutomationController {
     const featureFlags = await this.featureFlags.getAllFlagStates();
     const stepCatalog = await this.stepConfig.getResolvedCatalog();
     const defaultCloseMinutes = 15;
+    const timingSettings = await this.timingConfig.getSettings();
 
     return {
       channels,
@@ -271,6 +284,7 @@ export class AdminAutomationController {
         defaultCloseMinutes,
         finalEscalationMinutesBeforeKickoff:
           getFinalEscalationMinutesBeforeKickoff(defaultCloseMinutes),
+        predictionReportMinutesBefore: timingSettings.predictionReportMinutesBefore,
         timezone: 'America/Bogota',
       },
       automation: {
@@ -710,6 +724,25 @@ export class AdminAutomationController {
       jobId: result.jobId ?? null,
       summary: result.message,
     };
+  }
+
+  /** Lee ajustes de timing de automatización (reporte de predicciones, etc.) */
+  @Get('timing-settings')
+  async getTimingSettings() {
+    return this.timingConfig.getSettings();
+  }
+
+  /** Actualiza minutos antes del kickoff para el reporte de cierre de predicciones */
+  @Put('timing-settings')
+  async updateTimingSettings(
+    @Body() dto: { predictionReportMinutesBefore?: number },
+  ) {
+    if (dto.predictionReportMinutesBefore === undefined) {
+      throw new BadRequestException('predictionReportMinutesBefore es requerido');
+    }
+    return this.timingConfig.updateSettings({
+      predictionReportMinutesBefore: dto.predictionReportMinutesBefore,
+    });
   }
 
   /** Lee los overrides de canal por scheduler */

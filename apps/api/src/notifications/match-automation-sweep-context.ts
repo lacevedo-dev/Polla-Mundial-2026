@@ -1,5 +1,10 @@
 import { MatchStatus, MemberStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE,
+  PREDICTION_REPORT_CATCHUP_GRACE_MINUTES,
+  PREDICTION_REPORT_WINDOW_GRACE_MINUTES,
+} from '../automation/config/automation-timing.util';
 
 const DEFAULT_CLOSE_PREDICTION_MINUTES = 15;
 /** Más cercano al kickoff: aún se envía recordatorio si no se hizo antes */
@@ -288,26 +293,58 @@ export function getClosingAlertMatches(
 export function getPendingReportMatches(
   context: MatchAutomationSweepContext,
   leagueId: string,
-  closeMinutes: number,
+  reportMinutesBeforeKickoff: number = DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE,
 ): MatchAutomationSweepMatch[] {
-  const lowerBound = new Date(context.now.getTime() - closeMinutes * 60_000);
-  const upperBound = new Date(context.now.getTime() + closeMinutes * 60_000);
-  const now = context.now.getTime();
-
-  return context.scheduledMatches.filter(
-    (match) => {
-      if (match.predictionReportSentAt !== null) return false;
-      if (!match.predictions.some((prediction) => prediction.leagueId === leagueId)) {
-        return false;
-      }
-      const kickoffMs = match.matchDate.getTime();
-      const closingDueAt = kickoffMs - closeMinutes * 60_000;
-      if (now >= closingDueAt && now < kickoffMs + closeMinutes * 60_000) {
-        return true;
-      }
-      return match.matchDate > lowerBound && match.matchDate <= upperBound;
-    },
+  const normalizedMinutes = Math.max(1, Math.round(reportMinutesBeforeKickoff));
+  const primary = filterMatchesInFutureWindow(
+    context.scheduledMatches.filter(
+      (match) =>
+        match.predictionReportSentAt === null &&
+        match.predictions.some((prediction) => prediction.leagueId === leagueId),
+    ),
+    context.now,
+    normalizedMinutes,
+    normalizedMinutes + PREDICTION_REPORT_WINDOW_GRACE_MINUTES,
   );
+  const catchUp = getCatchUpPredictionReportMatches(
+    context,
+    leagueId,
+    normalizedMinutes,
+  );
+  const seen = new Set<string>();
+  const merged: MatchAutomationSweepMatch[] = [];
+  for (const match of [...primary, ...catchUp]) {
+    if (seen.has(match.id)) continue;
+    seen.add(match.id);
+    merged.push(match);
+  }
+  return merged;
+}
+
+/** Partidos cuyo reporte T-N ya debió enviarse pero el kickoff aún no pasó (+ gracia). */
+export function getCatchUpPredictionReportMatches(
+  context: MatchAutomationSweepContext,
+  leagueId: string,
+  reportMinutesBeforeKickoff: number,
+): MatchAutomationSweepMatch[] {
+  const now = context.now.getTime();
+  const catchUpEndMs = reportMinutesBeforeKickoff * 60_000;
+
+  return context.scheduledMatches.filter((match) => {
+    if (match.predictionReportSentAt !== null) return false;
+    if (!match.predictions.some((prediction) => prediction.leagueId === leagueId)) {
+      return false;
+    }
+    const kickoffMs = match.matchDate.getTime();
+    const reportDueAt = kickoffMs - reportMinutesBeforeKickoff * 60_000;
+    const reportCatchUpUntil =
+      kickoffMs + PREDICTION_REPORT_CATCHUP_GRACE_MINUTES * 60_000;
+    if (now < reportDueAt) return false;
+    if (now >= reportCatchUpUntil) return false;
+    // Evita duplicar el rango ya cubierto por la ventana primaria hacia el futuro.
+    if (kickoffMs > now + catchUpEndMs) return false;
+    return true;
+  });
 }
 
 export function getRelevantLeaguesForScheduledMatch(

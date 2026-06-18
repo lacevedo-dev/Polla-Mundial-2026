@@ -15,11 +15,17 @@ describe('PredictionReportService', () => {
   } as any;
 
   const observability = {
+    getScheduledAt: jest.fn(),
     recordStep: jest.fn(),
+  } as any;
+
+  const timingConfig = {
+    getPredictionReportMinutesBefore: jest.fn().mockResolvedValue(15),
   } as any;
 
   const emailService = {
     sendPredictionsReport: jest.fn(),
+    sendMultiLeaguePredictionsReport: jest.fn(),
     sendResultsReport: jest.fn(),
   } as any;
 
@@ -32,7 +38,7 @@ describe('PredictionReportService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PredictionReportService(prisma, observability, emailService, pdfReport);
+    service = new PredictionReportService(prisma, observability, emailService, pdfReport, timingConfig);
     prisma.prediction.findMany.mockResolvedValue([
       { userId: 'user-1', points: 7 },
       { userId: 'user-2', points: 3 },
@@ -40,7 +46,7 @@ describe('PredictionReportService', () => {
     prisma.match.update.mockResolvedValue({});
     prisma.match.findMany.mockResolvedValue([]);
     prisma.emailJob.findFirst.mockResolvedValue(null);
-    emailService.sendPredictionsReport.mockResolvedValue(undefined);
+    emailService.sendMultiLeaguePredictionsReport.mockResolvedValue(undefined);
     emailService.sendResultsReport.mockResolvedValue(undefined);
   });
 
@@ -98,7 +104,7 @@ describe('PredictionReportService', () => {
 
     await service.sendPendingReports(context);
 
-    expect(emailService.sendPredictionsReport).toHaveBeenCalledTimes(1);
+    expect(emailService.sendMultiLeaguePredictionsReport).toHaveBeenCalledTimes(1);
     expect(prisma.match.update).toHaveBeenCalledWith({
       where: { id: 'match-1' },
       data: { predictionReportSentAt: now },

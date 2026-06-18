@@ -15,14 +15,17 @@ import {
   buildMatchEventDedupeKey,
   filterActiveGoalEventsFromTimeline,
   formatAnnulledReason,
+  isRedCardDetail,
   isVarGoalCancelledDetail,
   resolveGoalAnnulments,
+  type NewRedCardEvent,
 } from '../../matches/match-events.util';
 import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { GoalLiveNotificationService } from '../../automation/live/goal-live-notification.service';
+import { CardLiveNotificationService } from '../../automation/live/card-live-notification.service';
 import { logGoalAutomation } from '../../automation/live/goal-automation-observability.util';
 import { LiveOrchestratorService } from '../../automation/live/live-orchestrator.service';
 import type { LiveMatchContext, LivePhaseEventId } from '../../automation/types/automation.types';
@@ -68,6 +71,7 @@ export class MatchSyncService {
     @Optional() private readonly waGroup?: WhatsappGroupService,
     @Optional() private readonly liveOrchestrator?: LiveOrchestratorService,
     @Optional() private readonly goalLiveNotifications?: GoalLiveNotificationService,
+    @Optional() private readonly cardLiveNotifications?: CardLiveNotificationService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -372,6 +376,166 @@ export class MatchSyncService {
     }
 
     return execution.result;
+  }
+
+  /**
+   * Poll /fixtures/events for all LIVE matches on the configured interval.
+   */
+  async pollLiveMatchEvents(): Promise<{
+    success: boolean;
+    matchesPolled: number;
+    requestsUsed: number;
+    error?: string;
+  }> {
+    const execution = await tryRunExclusiveBackgroundJob(
+      MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      'pollLiveMatchEvents',
+      () => this.pollLiveMatchEventsInternal(),
+    );
+
+    if (!execution.ran) {
+      logExclusiveBackgroundJobSkip(this.logger, 'Live events poll', execution);
+      return {
+        success: false,
+        matchesPolled: 0,
+        requestsUsed: 0,
+        error: 'Another DB-heavy background job is running',
+      };
+    }
+
+    return execution.result;
+  }
+
+  private async pollLiveMatchEventsInternal(): Promise<{
+    success: boolean;
+    matchesPolled: number;
+    requestsUsed: number;
+    error?: string;
+  }> {
+    const startedAt = Date.now();
+    try {
+      if (!(await this.footballConfigService.isEventSyncEnabled())) {
+        return { success: true, matchesPolled: 0, requestsUsed: 0 };
+      }
+
+      const liveMatches = await this.prisma.match.findMany({
+        where: {
+          status: MatchStatus.LIVE,
+          externalId: { not: null },
+          eventsNoDataAt: null,
+        },
+        select: {
+          id: true,
+          externalId: true,
+          homeScore: true,
+          awayScore: true,
+          elapsed: true,
+          homeTeamId: true,
+          awayTeamId: true,
+          homeTeam: { select: { apiFootballTeamId: true, name: true } },
+          awayTeam: { select: { apiFootballTeamId: true, name: true } },
+        },
+      });
+
+      if (liveMatches.length === 0) {
+        return { success: true, matchesPolled: 0, requestsUsed: 0 };
+      }
+
+      let requestsUsed = 0;
+      let matchesPolled = 0;
+
+      for (const match of liveMatches) {
+        if (!(await this.rateLimiter.canMakeRequest())) {
+          this.logger.warn('Live events poll stopped: request budget exhausted');
+          break;
+        }
+
+        const fixtureId = Number.parseInt(match.externalId!, 10);
+        if (!Number.isFinite(fixtureId)) continue;
+
+        const homeTeamApiId = match.homeTeam.apiFootballTeamId;
+        const awayTeamApiId = match.awayTeam.apiFootballTeamId;
+        if (homeTeamApiId == null || awayTeamApiId == null) continue;
+
+        try {
+          const eventsResponse = await this.apiClient.getFixtureEvents(fixtureId);
+          await this.rateLimiter.logRequest(
+            '/fixtures/events',
+            { fixture: fixtureId, source: 'live-poll' },
+            200,
+            eventsResponse?.response?.length ?? 0,
+          );
+          await this.syncPlan.incrementRequestsUsed(1);
+          requestsUsed += 1;
+
+          await this.syncMatchEvents(
+            fixtureId,
+            match.id,
+            eventsResponse?.response ?? [],
+            {
+              homeScore: match.homeScore ?? 0,
+              awayScore: match.awayScore ?? 0,
+              homeTeamId: match.homeTeamId,
+              awayTeamId: match.awayTeamId,
+              homeTeamApiId,
+              awayTeamApiId,
+            },
+          ).then((eventSyncResult) =>
+            this.dispatchNewRedCards({
+              matchId: match.id,
+              homeTeamName: match.homeTeam.name,
+              awayTeamName: match.awayTeam.name,
+              homeScore: match.homeScore ?? 0,
+              awayScore: match.awayScore ?? 0,
+              elapsed: match.elapsed,
+              newRedCards: eventSyncResult.newRedCards,
+            }),
+          );
+          matchesPolled += 1;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Live events poll failed for match ${match.id}: ${message}`);
+        }
+      }
+
+      if (requestsUsed > 0) {
+        await this.syncPlan.updateLastEventPollTime();
+      }
+
+      await this.monitoring.createLog({
+        type: SyncLogType.AUTO_SYNC,
+        status: SyncLogStatus.SUCCESS,
+        message: `Live events poll: ${matchesPolled} match(es), ${requestsUsed} request(s)`,
+        requestsUsed,
+        matchesUpdated: matchesPolled,
+        duration: Date.now() - startedAt,
+        details: JSON.stringify({ livePoll: true, matchesPolled, requestsUsed }),
+      });
+
+      return {
+        success: true,
+        matchesPolled,
+        requestsUsed,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Live events poll failed: ${message}`);
+      await this.monitoring.createLog({
+        type: SyncLogType.AUTO_SYNC,
+        status: SyncLogStatus.FAILED,
+        message: 'Live events poll failed',
+        requestsUsed: 0,
+        matchesUpdated: 0,
+        duration: Date.now() - startedAt,
+        error: message,
+      });
+      return {
+        success: false,
+        matchesPolled: 0,
+        requestsUsed: 0,
+        error: message,
+      };
+    }
   }
 
   private async syncLiveMatchesInternal(): Promise<{
@@ -728,6 +892,15 @@ export class MatchSyncService {
               cachedFixtureEvents,
               eventSyncContext,
             );
+            await this.dispatchNewRedCards({
+              matchId: match.id,
+              homeTeamName: fixture.teams.home.name,
+              awayTeamName: fixture.teams.away.name,
+              homeScore: fixture.goals.home ?? 0,
+              awayScore: fixture.goals.away ?? 0,
+              elapsed: fixture.fixture.status.elapsed ?? null,
+              newRedCards: eventSyncResult.newRedCards,
+            });
             if (eventSyncResult.relevantEvents === 0) {
               await this.prisma.match.update({
                 where: { id: match.id },
@@ -752,6 +925,15 @@ export class MatchSyncService {
                 undefined,
                 eventSyncContext,
               );
+              await this.dispatchNewRedCards({
+                matchId: match.id,
+                homeTeamName: fixture.teams.home.name,
+                awayTeamName: fixture.teams.away.name,
+                homeScore: fixture.goals.home ?? 0,
+                awayScore: fixture.goals.away ?? 0,
+                elapsed: fixture.fixture.status.elapsed ?? null,
+                newRedCards: eventSyncResult.newRedCards,
+              });
               if (eventSyncResult.relevantEvents === 0) {
                 await this.prisma.match.update({
                   where: { id: match.id },
@@ -941,13 +1123,14 @@ export class MatchSyncService {
   ): Promise<{
     relevantEvents: number;
     rawEvents: number;
+    newRedCards: NewRedCardEvent[];
   }> {
     const events: any[] =
       preloadedEvents ??
       (await this.apiClient.getFixtureEvents(fixtureId))?.response ??
       [];
     if (!events.length) {
-      return { relevantEvents: 0, rawEvents: 0 };
+      return { relevantEvents: 0, rawEvents: 0, newRedCards: [] };
     }
 
     const match = await this.prisma.match.findUnique({
@@ -955,8 +1138,8 @@ export class MatchSyncService {
       select: {
         homeTeamId: true,
         awayTeamId: true,
-        homeTeam: { select: { apiFootballTeamId: true } },
-        awayTeam: { select: { apiFootballTeamId: true } },
+        homeTeam: { select: { apiFootballTeamId: true, name: true } },
+        awayTeam: { select: { apiFootballTeamId: true, name: true } },
       },
     });
 
@@ -967,7 +1150,15 @@ export class MatchSyncService {
       return null;
     };
 
+    const resolveTeamName = (teamId: string | null): string | null => {
+      if (!match || !teamId) return null;
+      if (teamId === match.homeTeamId) return match.homeTeam.name;
+      if (teamId === match.awayTeamId) return match.awayTeam.name;
+      return null;
+    };
+
     let relevantEvents = 0;
+    const newRedCards: NewRedCardEvent[] = [];
     for (const ev of events) {
       const type: string   = ev.type   ?? 'UNKNOWN';
       const detail: string = ev.detail ?? '';
@@ -1022,11 +1213,11 @@ export class MatchSyncService {
         continue;
       }
 
-      // Only store goals and cards (skip substitutions to keep list clean)
-      if (!['Goal', 'Card'].includes(type)) continue;
+      // Store goals, cards and substitutions for a richer live timeline
+      if (!['Goal', 'Card', 'subst'].includes(type)) continue;
       relevantEvents++;
 
-      const eventType = type.toUpperCase();
+      const eventType = type === 'subst' ? 'SUBSTITUTION' : type.toUpperCase();
       const normalizedPlayerName = (playerName ?? '').trim();
 
       try {
@@ -1075,6 +1266,16 @@ export class MatchSyncService {
             teamId,
           },
         });
+
+        if (eventType === 'CARD' && isRedCardDetail(detail)) {
+          newRedCards.push({
+            playerName: normalizedPlayerName || null,
+            teamName: resolveTeamName(teamId),
+            detail,
+            minute,
+            extraMin,
+          });
+        }
       } catch {
         // Ignore constraint errors (duplicate event at same minute)
       }
@@ -1087,7 +1288,41 @@ export class MatchSyncService {
     return {
       relevantEvents,
       rawEvents: events.length,
+      newRedCards,
     };
+  }
+
+  private async dispatchNewRedCards(params: {
+    matchId: string;
+    homeTeamName: string;
+    awayTeamName: string;
+    homeScore: number;
+    awayScore: number;
+    elapsed: number | null;
+    newRedCards: NewRedCardEvent[];
+  }): Promise<void> {
+    if (params.newRedCards.length === 0) return;
+    if (!(await this.footballConfigService.isEventWaRedCardEnabled())) return;
+    if (!this.cardLiveNotifications) return;
+
+    for (const card of params.newRedCards) {
+      try {
+        await this.cardLiveNotifications.dispatchRedCard({
+          matchId: params.matchId,
+          homeTeamName: params.homeTeamName,
+          awayTeamName: params.awayTeamName,
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          elapsed: params.elapsed,
+          card,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `RED_CARD dispatch failed for match ${params.matchId}: ${message}`,
+        );
+      }
+    }
   }
 
   private async reconcileGoalAnnulments(

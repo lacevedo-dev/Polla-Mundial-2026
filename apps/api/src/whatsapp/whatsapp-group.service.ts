@@ -25,6 +25,10 @@ import {
   isTextOnlyWhatsappGroupJob,
   WhatsappDispatcherService,
 } from './whatsapp-dispatcher.service';
+import {
+  formatRedCardReason,
+  normalizeEventPlayerKey,
+} from '../matches/match-events.util';
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
@@ -45,6 +49,7 @@ const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.SECOND_HALF_START]: 'live_second_half',
   [WhatsappGroupJobType.MATCH_LIVE_END]: 'live_match_end',
   [WhatsappGroupJobType.GOAL_IMPACT]: 'live_goal_impact',
+  [WhatsappGroupJobType.RED_CARD]: 'live_red_card',
   [WhatsappGroupJobType.PAYMENT_REMINDER]: 'payment_reminder',
 };
 
@@ -439,6 +444,101 @@ export class WhatsappGroupService {
       const code = (error as { code?: string })?.code;
       if (code === 'P2002') {
         this.logger.warn(`GOAL_SCORED: job duplicado ${dedupeKey}`);
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Encola tarjeta roja en vivo. Dedupe por partido, liga, minuto y jugador.
+   */
+  async enqueueRedCardNotification(
+    matchId: string,
+    leagueId: string,
+    params: {
+      homeTeam: string;
+      awayTeam: string;
+      homeScore: number;
+      awayScore: number;
+      elapsed: number | null;
+      leagueName: string;
+      playerName?: string | null;
+      teamName?: string | null;
+      cardDetail?: string | null;
+      minute: number;
+      extraMin?: number | null;
+    },
+  ): Promise<boolean> {
+    if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.RED_CARD))) {
+      this.logger.warn(
+        `RED_CARD: canal WA Grupo deshabilitado (scheduler live_red_card) para liga ${leagueId}`,
+      );
+      return false;
+    }
+
+    const league = await this.prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { whatsappGroupId: true, name: true },
+    });
+    if (!league?.whatsappGroupId) {
+      this.logger.warn(
+        `RED_CARD: liga ${league?.name ?? leagueId} sin whatsappGroupId configurado`,
+      );
+      return false;
+    }
+
+    const caption = buildRedCardCaption(params);
+    const playerKey = normalizeEventPlayerKey(params.playerName);
+    const extra = params.extraMin ?? 0;
+    const dedupeKey =
+      `RED_CARD:${matchId}:${leagueId}:${params.minute}:${extra}:${playerKey}`;
+
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return true;
+    }
+
+    if (existing?.status === WhatsappJobStatus.FAILED) {
+      await this.prisma.whatsappGroupJob.update({
+        where: { id: existing.id },
+        data: {
+          status: WhatsappJobStatus.PENDING,
+          caption,
+          lastError: null,
+          attemptCount: 0,
+        },
+      });
+      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.RED_CARD);
+      return true;
+    }
+
+    if (existing) {
+      return true;
+    }
+
+    try {
+      const job = await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: WhatsappGroupJobType.RED_CARD,
+          matchId,
+          leagueId,
+          groupId: league.whatsappGroupId,
+          dedupeKey,
+          caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.RED_CARD);
+      return true;
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') {
+        this.logger.warn(`RED_CARD: job duplicado ${dedupeKey}`);
         return false;
       }
       throw error;
@@ -998,6 +1098,44 @@ function buildResultNotifCaption(
     `⚽ ${home} ${score} ${away}`,
     '',
     '¡El partido terminó! Los puntos serán calculados y el reporte completo llegará en breve.',
+  ].join('\n');
+}
+
+function buildRedCardCaption(params: {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  elapsed: number | null;
+  leagueName: string;
+  playerName?: string | null;
+  teamName?: string | null;
+  cardDetail?: string | null;
+  minute: number;
+  extraMin?: number | null;
+}): string {
+  const minuteLabel =
+    params.minute != null
+      ? params.extraMin
+        ? ` ${params.minute}+${params.extraMin}'`
+        : ` ${params.minute}'`
+      : params.elapsed
+        ? ` ${params.elapsed}'`
+        : '';
+  const score = `${params.homeScore} – ${params.awayScore}`;
+  const reason = formatRedCardReason(params.cardDetail);
+  const reasonSuffix = reason ? ` (${reason})` : '';
+  const playerLine = params.playerName
+    ? params.teamName
+      ? `${params.playerName} (${params.teamName})${reasonSuffix}`
+      : `${params.playerName}${reasonSuffix}`
+    : params.teamName
+      ? `${params.teamName}${reasonSuffix}`
+      : `Expulsión${reasonSuffix}`;
+
+  return [
+    `🟥 *¡Tarjeta roja!* | ${params.leagueName}`,
+    `${playerLine} — ${params.homeTeam} ${score} ${params.awayTeam}${minuteLabel}`,
   ].join('\n');
 }
 
