@@ -97,7 +97,10 @@ export class AutomationFeatureFlagsService {
       };
     }
 
-    return { enabled: false, source: 'default', locked: false };
+    // Pre/live v2 ON por defecto para que WA Grupo en vivo funcione sin config manual.
+    const enabledByDefault =
+      flagId === 'preMatchV2' || flagId === 'livePhaseV2';
+    return { enabled: enabledByDefault, source: 'default', locked: false };
   }
 
   private readEnvOverride(envKey: string): boolean | null {

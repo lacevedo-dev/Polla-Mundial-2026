@@ -52,6 +52,7 @@ const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.RED_CARD]: 'live_red_card',
   [WhatsappGroupJobType.YELLOW_CARD]: 'live_yellow_card',
   [WhatsappGroupJobType.SUBSTITUTION]: 'live_substitution',
+  [WhatsappGroupJobType.GOAL_ANNULLED]: 'live_goal_annulled',
   [WhatsappGroupJobType.PAYMENT_REMINDER]: 'payment_reminder',
 };
 
@@ -75,6 +76,39 @@ export class WhatsappGroupService {
     } catch {
       // Dispatcher aún no registrado (arranque).
     }
+  }
+
+  /**
+   * Reencola jobs PENDING/FAILED; evita dejar GOAL_IMPACT u otros atascados sin dispatch.
+   */
+  private async reconcileExistingTextJob(params: {
+    existing: { id: string; status: WhatsappJobStatus } | null;
+    caption: string;
+    type: WhatsappGroupJobType;
+  }): Promise<'already_sent' | 'requeued' | 'none'> {
+    if (!params.existing) return 'none';
+    if (params.existing.status === WhatsappJobStatus.SENT) {
+      return 'already_sent';
+    }
+    if (
+      params.existing.status === WhatsappJobStatus.FAILED ||
+      params.existing.status === WhatsappJobStatus.PENDING
+    ) {
+      await this.prisma.whatsappGroupJob.update({
+        where: { id: params.existing.id },
+        data: {
+          status: WhatsappJobStatus.PENDING,
+          caption: params.caption,
+          lastError: null,
+          ...(params.existing.status === WhatsappJobStatus.FAILED
+            ? { attemptCount: 0 }
+            : {}),
+        },
+      });
+      this.scheduleTextJobDispatch(params.existing.id, params.type);
+      return 'requeued';
+    }
+    return 'already_sent';
   }
 
   @OnEvent(WA_RESULT_REPORT_EVENT)
@@ -406,25 +440,12 @@ export class WhatsappGroupService {
       select: { id: true, status: true },
     });
 
-    if (existing?.status === WhatsappJobStatus.SENT) {
-      return true;
-    }
-
-    if (existing?.status === WhatsappJobStatus.FAILED) {
-      await this.prisma.whatsappGroupJob.update({
-        where: { id: existing.id },
-        data: {
-          status: WhatsappJobStatus.PENDING,
-          caption,
-          lastError: null,
-          attemptCount: 0,
-        },
-      });
-      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.GOAL_SCORED);
-      return true;
-    }
-
-    if (existing) {
+    const reconciled = await this.reconcileExistingTextJob({
+      existing,
+      caption,
+      type: WhatsappGroupJobType.GOAL_SCORED,
+    });
+    if (reconciled !== 'none') {
       return true;
     }
 
@@ -472,79 +493,17 @@ export class WhatsappGroupService {
       extraMin?: number | null;
     },
   ): Promise<boolean> {
-    if (!(await this.isChannelEnabledForType(WhatsappGroupJobType.RED_CARD))) {
-      this.logger.warn(
-        `RED_CARD: canal WA Grupo deshabilitado (scheduler live_red_card) para liga ${leagueId}`,
-      );
-      return false;
-    }
-
-    const league = await this.prisma.league.findUnique({
-      where: { id: leagueId },
-      select: { whatsappGroupId: true, name: true },
-    });
-    if (!league?.whatsappGroupId) {
-      this.logger.warn(
-        `RED_CARD: liga ${league?.name ?? leagueId} sin whatsappGroupId configurado`,
-      );
-      return false;
-    }
-
-    const caption = buildRedCardCaption(params);
     const playerKey = normalizeEventPlayerKey(params.playerName);
     const extra = params.extraMin ?? 0;
-    const dedupeKey =
-      `RED_CARD:${matchId}:${leagueId}:${params.minute}:${extra}:${playerKey}`;
-
-    const existing = await this.prisma.whatsappGroupJob.findUnique({
-      where: { dedupeKey },
-      select: { id: true, status: true },
+    return this.enqueueLiveTextNotification({
+      type: WhatsappGroupJobType.RED_CARD,
+      schedulerId: 'live_red_card',
+      logPrefix: 'RED_CARD',
+      matchId,
+      leagueId,
+      caption: buildRedCardCaption(params),
+      dedupeKey: `RED_CARD:${matchId}:${leagueId}:${params.minute}:${extra}:${playerKey}`,
     });
-
-    if (existing?.status === WhatsappJobStatus.SENT) {
-      return true;
-    }
-
-    if (existing?.status === WhatsappJobStatus.FAILED) {
-      await this.prisma.whatsappGroupJob.update({
-        where: { id: existing.id },
-        data: {
-          status: WhatsappJobStatus.PENDING,
-          caption,
-          lastError: null,
-          attemptCount: 0,
-        },
-      });
-      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.RED_CARD);
-      return true;
-    }
-
-    if (existing) {
-      return true;
-    }
-
-    try {
-      const job = await this.prisma.whatsappGroupJob.create({
-        data: {
-          type: WhatsappGroupJobType.RED_CARD,
-          matchId,
-          leagueId,
-          groupId: league.whatsappGroupId,
-          dedupeKey,
-          caption,
-          status: WhatsappJobStatus.PENDING,
-        },
-      });
-      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.RED_CARD);
-      return true;
-    } catch (error: unknown) {
-      const code = (error as { code?: string })?.code;
-      if (code === 'P2002') {
-        this.logger.warn(`RED_CARD: job duplicado ${dedupeKey}`);
-        return false;
-      }
-      throw error;
-    }
   }
 
   /**
@@ -577,9 +536,6 @@ export class WhatsappGroupService {
     });
   }
 
-  /**
-   * Encola sustitución en vivo. Dedupe por partido, liga, minuto y jugadores.
-   */
   async enqueueSubstitutionNotification(
     matchId: string,
     leagueId: string,
@@ -607,6 +563,37 @@ export class WhatsappGroupService {
       leagueId,
       caption: buildSubstitutionCaption(params),
       dedupeKey: `SUBSTITUTION:${matchId}:${leagueId}:${params.minute}:${params.extraMin ?? 0}:${inKey}:${outKey}`,
+    });
+  }
+
+  /** Encola gol anulado por VAR. Dedupe por partido, liga, minuto y jugador. */
+  async enqueueVarGoalAnnulledNotification(
+    matchId: string,
+    leagueId: string,
+    params: {
+      homeTeam: string;
+      awayTeam: string;
+      homeScore: number;
+      awayScore: number;
+      elapsed: number | null;
+      leagueName: string;
+      playerName?: string | null;
+      teamName?: string | null;
+      reason?: string | null;
+      minute: number;
+      extraMin?: number | null;
+    },
+  ): Promise<boolean> {
+    const playerKey = normalizeEventPlayerKey(params.playerName);
+    const extra = params.extraMin ?? 0;
+    return this.enqueueLiveTextNotification({
+      type: WhatsappGroupJobType.GOAL_ANNULLED,
+      schedulerId: 'live_goal_annulled',
+      logPrefix: 'GOAL_ANNULLED',
+      matchId,
+      leagueId,
+      caption: buildVarGoalAnnulledCaption(params),
+      dedupeKey: `GOAL_ANNULLED:${matchId}:${leagueId}:${params.minute}:${extra}:${playerKey}`,
     });
   }
 
@@ -642,25 +629,12 @@ export class WhatsappGroupService {
       select: { id: true, status: true },
     });
 
-    if (existing?.status === WhatsappJobStatus.SENT) {
-      return true;
-    }
-
-    if (existing?.status === WhatsappJobStatus.FAILED) {
-      await this.prisma.whatsappGroupJob.update({
-        where: { id: existing.id },
-        data: {
-          status: WhatsappJobStatus.PENDING,
-          caption: params.caption,
-          lastError: null,
-          attemptCount: 0,
-        },
-      });
-      this.scheduleTextJobDispatch(existing.id, params.type);
-      return true;
-    }
-
-    if (existing) {
+    const reconciled = await this.reconcileExistingTextJob({
+      existing,
+      caption: params.caption,
+      type: params.type,
+    });
+    if (reconciled !== 'none') {
       return true;
     }
 
@@ -865,17 +839,12 @@ export class WhatsappGroupService {
       select: { id: true, status: true },
     });
 
-    if (existing?.status === WhatsappJobStatus.SENT) {
-      return true;
-    }
-
-    if (existing?.status === WhatsappJobStatus.FAILED) {
-      await this.resetFailedJob(existing.id);
-      this.scheduleTextJobDispatch(existing.id, type);
-      return true;
-    }
-
-    if (existing) {
+    const reconciled = await this.reconcileExistingTextJob({
+      existing,
+      caption,
+      type,
+    });
+    if (reconciled !== 'none') {
       return true;
     }
 
@@ -985,17 +954,12 @@ export class WhatsappGroupService {
       select: { id: true, status: true },
     });
 
-    if (existing?.status === WhatsappJobStatus.SENT) {
-      return true;
-    }
-
-    if (existing?.status === WhatsappJobStatus.FAILED) {
-      await this.resetFailedJob(existing.id);
-      this.scheduleTextJobDispatch(existing.id, WhatsappGroupJobType.GOAL_IMPACT);
-      return true;
-    }
-
-    if (existing) {
+    const reconciled = await this.reconcileExistingTextJob({
+      existing,
+      caption,
+      type: WhatsappGroupJobType.GOAL_IMPACT,
+    });
+    if (reconciled !== 'none') {
       return true;
     }
 
@@ -1340,6 +1304,35 @@ function buildSubstitutionCaption(params: {
   return [
     `🔄 *¡Cambio!* | ${params.leagueName}`,
     `${changeLine} — ${params.homeTeam} ${score} ${params.awayTeam}${minuteLabel}`,
+  ].join('\n');
+}
+
+function buildVarGoalAnnulledCaption(params: {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  elapsed: number | null;
+  leagueName: string;
+  playerName?: string | null;
+  teamName?: string | null;
+  reason?: string | null;
+  minute: number;
+  extraMin?: number | null;
+}): string {
+  const minuteLabel = formatLiveMinuteLabel(params);
+  const score = `${params.homeScore} – ${params.awayScore}`;
+  const reason = (params.reason ?? 'VAR').trim();
+  const playerLine = params.playerName
+    ? params.teamName
+      ? `${params.playerName} (${params.teamName})`
+      : params.playerName
+    : params.teamName ?? 'Gol';
+
+  return [
+    `🚫 *¡Gol anulado!* | ${params.leagueName}`,
+    `${playerLine} — ${reason}`,
+    `${params.homeTeam} ${score} ${params.awayTeam}${minuteLabel}`,
   ].join('\n');
 }
 

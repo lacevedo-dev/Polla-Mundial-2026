@@ -74,7 +74,7 @@ export class LiveOrchestratorService {
   async loadGoalImpactSummaries(
     ctx: Pick<GoalImpactContext, 'matchId' | 'homeScore' | 'awayScore'>,
   ): Promise<LeagueGoalImpactSummary[] | null> {
-    if (!(await this.stepConfig.isStepEnabled(AutomationStep.GOAL_IMPACT))) {
+    if (!(await this.stepConfig.isStepOperational(AutomationStep.GOAL_IMPACT))) {
       logGoalAutomation(this.logger, 'goal_impact_skipped', {
         matchId: ctx.matchId,
         homeScore: ctx.homeScore,
@@ -211,7 +211,7 @@ export class LiveOrchestratorService {
     if (event === 'GOAL_IMPACT') return;
 
     const automationStep = liveEventToAutomationStep(event);
-    if (!(await this.stepConfig.isStepEnabled(automationStep))) {
+    if (!(await this.stepConfig.isStepOperational(automationStep))) {
       return;
     }
 

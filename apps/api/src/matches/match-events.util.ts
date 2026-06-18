@@ -144,6 +144,14 @@ export type NewSubstitutionEvent = {
   extraMin: number | null;
 };
 
+export type NewVarGoalAnnulmentEvent = {
+  playerName: string | null;
+  teamName: string | null;
+  reason: string;
+  minute: number;
+  extraMin: number | null;
+};
+
 /** Tarjeta roja directa o por doble amarilla (API-Football). */
 export function isRedCardDetail(detail: string | null | undefined): boolean {
   const normalized = (detail ?? '').trim().toLowerCase();

@@ -176,6 +176,7 @@ export interface FootballSyncConfigDto {
   eventWaRedCardEnabled: boolean;
   eventWaYellowCardEnabled: boolean;
   eventWaSubstitutionEnabled: boolean;
+  eventWaVarGoalEnabled: boolean;
   peakHoursSyncEnabled: boolean;
   emergencyModeThreshold: number;
   notifyOnError: boolean;
@@ -391,6 +392,7 @@ export interface UpdateConfigDto {
   eventWaRedCardEnabled?: boolean;
   eventWaYellowCardEnabled?: boolean;
   eventWaSubstitutionEnabled?: boolean;
+  eventWaVarGoalEnabled?: boolean;
   peakHoursSyncEnabled?: boolean;
   emergencyModeThreshold?: number;
   notifyOnError?: boolean;

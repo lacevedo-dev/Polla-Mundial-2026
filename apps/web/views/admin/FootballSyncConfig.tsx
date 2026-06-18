@@ -26,6 +26,7 @@ const FootballSyncConfig: React.FC = () => {
         eventWaRedCardEnabled: config.eventWaRedCardEnabled,
         eventWaYellowCardEnabled: config.eventWaYellowCardEnabled,
         eventWaSubstitutionEnabled: config.eventWaSubstitutionEnabled,
+        eventWaVarGoalEnabled: config.eventWaVarGoalEnabled,
         peakHoursSyncEnabled: config.peakHoursSyncEnabled,
         emergencyModeThreshold: config.emergencyModeThreshold,
         notifyOnError: config.notifyOnError,
@@ -273,6 +274,23 @@ const FootballSyncConfig: React.FC = () => {
           </label>
           <p className="mt-1.5 text-xs text-slate-500">
             Aviso en vivo cuando entra/sale un jugador. Se puede desactivar por liga en Automatización → live_substitution.
+          </p>
+          <label className="mt-4 flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.eventWaVarGoalEnabled ?? true}
+              onChange={(e) =>
+                setFormData({ ...formData, eventWaVarGoalEnabled: e.target.checked })
+              }
+              disabled={!formData.eventSyncEnabled}
+              className="w-5 h-5 rounded border-slate-300 text-lime-600 focus:ring-lime-500 disabled:opacity-50"
+            />
+            <span className="text-sm font-medium text-slate-700">
+              Notificar goles anulados (VAR) al grupo WA
+            </span>
+          </label>
+          <p className="mt-1.5 text-xs text-slate-500">
+            Aviso cuando el VAR anula un gol. Se puede desactivar por liga en Automatización → live_goal_annulled.
           </p>
         </div>
 

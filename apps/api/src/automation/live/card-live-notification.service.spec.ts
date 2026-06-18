@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { CardLiveNotificationService } from './card-live-notification.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
@@ -15,6 +16,10 @@ describe('CardLiveNotificationService', () => {
     enqueueSubstitutionNotification: jest.fn(),
   };
 
+  const mockStepConfig = {
+    isSchedulerOperational: jest.fn().mockResolvedValue(true),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
@@ -22,6 +27,7 @@ describe('CardLiveNotificationService', () => {
         CardLiveNotificationService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: WhatsappGroupService, useValue: mockWaGroup },
+        { provide: AutomationStepConfigService, useValue: mockStepConfig },
       ],
     }).compile();
 

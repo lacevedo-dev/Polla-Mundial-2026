@@ -250,6 +250,16 @@ export class AdminAutomationController {
         channels: ['waGroup'],
       },
       {
+        id: 'live_goal_annulled',
+        name: 'Gol anulado (VAR)',
+        cron: 'Football Sync',
+        description: 'Al detectar gol anulado por VAR (requiere event sync + eventWaVarGoalEnabled)',
+        notifType: null,
+        icon: '🚫',
+        audience: 'Grupos WA de ligas con predicciones en el partido',
+        channels: ['waGroup'],
+      },
+      {
         id: 'prediction_report',
         name: 'Reporte de pronósticos',
         cron: '* * * * *',

@@ -249,7 +249,7 @@ export class PreMatchOrchestratorService {
         if (!checkpoint) continue;
 
         const escalationStep = escalationCheckpointToAutomationStep(checkpoint);
-        if (!(await this.stepConfig.isStepEnabled(escalationStep))) {
+        if (!(await this.stepConfig.isStepOperational(escalationStep))) {
           continue;
         }
 

@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
+import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import type {
   NewRedCardEvent,
   NewSubstitutionEvent,
+  NewVarGoalAnnulmentEvent,
   NewYellowCardEvent,
 } from '../../matches/match-events.util';
 
@@ -31,6 +33,23 @@ export type SubstitutionDispatchParams = {
   substitution: NewSubstitutionEvent;
 };
 
+export type VarGoalAnnulmentDispatchParams = {
+  matchId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number;
+  awayScore: number;
+  elapsed: number | null;
+  annulment: NewVarGoalAnnulmentEvent;
+};
+
+const SCHEDULER_BY_LABEL = {
+  RED_CARD: 'live_red_card',
+  YELLOW_CARD: 'live_yellow_card',
+  SUBSTITUTION: 'live_substitution',
+  GOAL_ANNULLED: 'live_goal_annulled',
+} as const;
+
 @Injectable()
 export class CardLiveNotificationService {
   private readonly logger = new Logger(CardLiveNotificationService.name);
@@ -38,6 +57,7 @@ export class CardLiveNotificationService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
+    @Optional() private readonly stepConfig?: AutomationStepConfigService,
   ) {}
 
   /** Encola RED_CARD en grupos WA de ligas con predicciones en el partido. */
@@ -104,13 +124,48 @@ export class CardLiveNotificationService {
     );
   }
 
+  /** Encola GOAL_ANNULLED (VAR) en grupos WA de ligas con predicciones en el partido. */
+  async dispatchVarGoalAnnulment(params: VarGoalAnnulmentDispatchParams): Promise<void> {
+    await this.dispatchForLeagues(
+      params.matchId,
+      'GOAL_ANNULLED',
+      async (leagueId, leagueName) => {
+        if (!this.waGroup) return false;
+        return this.waGroup.enqueueVarGoalAnnulledNotification(params.matchId, leagueId, {
+          homeTeam: params.homeTeamName,
+          awayTeam: params.awayTeamName,
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          elapsed: params.elapsed,
+          leagueName,
+          playerName: params.annulment.playerName,
+          teamName: params.annulment.teamName,
+          reason: params.annulment.reason,
+          minute: params.annulment.minute,
+          extraMin: params.annulment.extraMin,
+        });
+      },
+      `player=${params.annulment.playerName ?? '?'} min=${params.annulment.minute}`,
+    );
+  }
+
   private async dispatchForLeagues(
     matchId: string,
-    label: 'RED_CARD' | 'YELLOW_CARD' | 'SUBSTITUTION',
+    label: keyof typeof SCHEDULER_BY_LABEL,
     enqueue: (leagueId: string, leagueName: string) => Promise<boolean>,
     detail: string,
   ): Promise<void> {
     try {
+      const schedulerId = SCHEDULER_BY_LABEL[label];
+      if (this.stepConfig) {
+        const operational = await this.stepConfig.isSchedulerOperational(schedulerId);
+        if (!operational) {
+          this.logger.debug(
+            `${label} skipped for match ${matchId}: scheduler ${schedulerId} not operational`,
+          );
+          return;
+        }
+      }
       const predictions = await this.prisma.prediction.findMany({
         where: { matchId },
         select: { leagueId: true },

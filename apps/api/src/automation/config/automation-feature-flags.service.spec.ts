@@ -26,13 +26,15 @@ describe('AutomationFeatureFlagsService', () => {
     process.env = originalEnv;
   });
 
-  it('devuelve false por defecto cuando no hay env ni BD', async () => {
+  it('devuelve defaults: pre/live v2 ON, post v2 OFF sin env ni BD', async () => {
     prismaMock.systemConfig.findUnique.mockResolvedValue(null);
 
-    await expect(service.isPreMatchV2Enabled()).resolves.toBe(false);
+    await expect(service.isPreMatchV2Enabled()).resolves.toBe(true);
+    await expect(service.isLivePhaseV2Enabled()).resolves.toBe(true);
+    await expect(service.isPostMatchV2Enabled()).resolves.toBe(false);
     expect(await service.getAllFlagStates()).toEqual({
-      preMatchV2: { enabled: false, source: 'default', locked: false },
-      livePhaseV2: { enabled: false, source: 'default', locked: false },
+      preMatchV2: { enabled: true, source: 'default', locked: false },
+      livePhaseV2: { enabled: true, source: 'default', locked: false },
       postMatchV2: { enabled: false, source: 'default', locked: false },
     });
   });

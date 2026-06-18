@@ -11,6 +11,7 @@ import {
 } from './automation-step-catalog';
 
 const STEP_OVERRIDES_KEY = 'automation:step_overrides';
+const CHANNEL_OVERRIDES_KEY = 'automation:channel_overrides';
 
 export type ResolvedStepCatalogEntry = AutomationStepCatalogEntry & {
   enabled: boolean;
@@ -54,6 +55,51 @@ export class AutomationStepConfigService {
     const entry = AUTOMATION_STEP_CATALOG.find((item) => item.key === step);
     if (!entry) return true;
     return overrides[step] ?? entry.defaultEnabled;
+  }
+
+  /** Paso habilitado y flag v2 activo (si aplica). Usar para runtime de automatización. */
+  async isStepOperational(step: AutomationStep): Promise<boolean> {
+    if (!(await this.isStepEnabled(step))) {
+      return false;
+    }
+    const entry = AUTOMATION_STEP_CATALOG.find((item) => item.key === step);
+    if (!entry?.requiresFlag) {
+      return true;
+    }
+    const flags = await this.featureFlags.getAllFlagStates();
+    return flags[entry.requiresFlag].enabled;
+  }
+
+  /** Canal WA Grupo activo para un scheduler (override por liga/global). */
+  async isSchedulerWaGroupEnabled(schedulerId: string): Promise<boolean> {
+    const row = await this.prisma.systemConfig.findUnique({
+      where: { key: CHANNEL_OVERRIDES_KEY },
+      select: { value: true },
+    });
+    if (!row) return true;
+    try {
+      const overrides = JSON.parse(row.value) as Record<
+        string,
+        Record<string, boolean>
+      >;
+      return overrides[schedulerId]?.['waGroup'] !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Scheduler operativo: step+flag si está en catálogo; si no, solo canal WA.
+   * (p. ej. live_goal, live_red_card).
+   */
+  async isSchedulerOperational(schedulerId: string): Promise<boolean> {
+    const entry = AUTOMATION_STEP_CATALOG.find(
+      (item) => item.schedulerId === schedulerId,
+    );
+    if (entry) {
+      return this.isStepOperational(entry.key);
+    }
+    return this.isSchedulerWaGroupEnabled(schedulerId);
   }
 
   async getResolvedCatalog(): Promise<ResolvedStepCatalogEntry[]> {

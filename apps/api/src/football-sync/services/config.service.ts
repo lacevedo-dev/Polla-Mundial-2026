@@ -182,6 +182,15 @@ export class ConfigService {
       );
     }
 
+    if (
+      data.eventWaVarGoalEnabled !== undefined &&
+      data.eventWaVarGoalEnabled !== config.eventWaVarGoalEnabled
+    ) {
+      criticalChanges.push(
+        `WA goles anulados (VAR) ${data.eventWaVarGoalEnabled ? 'habilitados' : 'deshabilitados'}`,
+      );
+    }
+
     const updated = await this.prisma.footballSyncConfig.update({
       where: { id: config.id },
       data: {
@@ -241,6 +250,7 @@ export class ConfigService {
         eventWaRedCardEnabled: true,
         eventWaYellowCardEnabled: true,
         eventWaSubstitutionEnabled: true,
+        eventWaVarGoalEnabled: true,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -342,6 +352,15 @@ export class ConfigService {
     );
   }
 
+  async isEventWaVarGoalEnabled(): Promise<boolean> {
+    const config = await this.getConfig();
+    return (
+      config.enabled &&
+      config.eventSyncEnabled &&
+      (config.eventWaVarGoalEnabled ?? true)
+    );
+  }
+
   /**
    * Verificar si la sincronización en horas pico está habilitada
    */
@@ -413,6 +432,7 @@ export class ConfigService {
         eventWaRedCardEnabled: true,
         eventWaYellowCardEnabled: true,
         eventWaSubstitutionEnabled: true,
+        eventWaVarGoalEnabled: true,
         peakHoursSyncEnabled: true,
         emergencyModeThreshold: 10,
         notifyOnError: true,
@@ -489,6 +509,7 @@ export class ConfigService {
       eventWaRedCardEnabled: config.eventWaRedCardEnabled ?? true,
       eventWaYellowCardEnabled: config.eventWaYellowCardEnabled ?? true,
       eventWaSubstitutionEnabled: config.eventWaSubstitutionEnabled ?? true,
+      eventWaVarGoalEnabled: config.eventWaVarGoalEnabled ?? true,
       peakHoursSyncEnabled: config.peakHoursSyncEnabled,
       emergencyModeThreshold: config.emergencyModeThreshold,
       notifyOnError: config.notifyOnError,

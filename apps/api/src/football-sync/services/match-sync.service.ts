@@ -23,6 +23,7 @@ import {
   resolveGoalAnnulments,
   type NewRedCardEvent,
   type NewSubstitutionEvent,
+  type NewVarGoalAnnulmentEvent,
   type NewYellowCardEvent,
 } from '../../matches/match-events.util';
 import { ConfigService as FootballConfigService } from './config.service';
@@ -499,6 +500,7 @@ export class MatchSyncService {
               newRedCards: eventSyncResult.newRedCards,
               newYellowCards: eventSyncResult.newYellowCards,
               newSubstitutions: eventSyncResult.newSubstitutions,
+              newVarGoalAnnulments: eventSyncResult.newVarGoalAnnulments,
             }),
           );
 
@@ -1016,6 +1018,7 @@ export class MatchSyncService {
               newRedCards: eventSyncResult.newRedCards,
               newYellowCards: eventSyncResult.newYellowCards,
               newSubstitutions: eventSyncResult.newSubstitutions,
+              newVarGoalAnnulments: eventSyncResult.newVarGoalAnnulments,
             });
             if (eventSyncResult.relevantEvents === 0) {
               await this.prisma.match.update({
@@ -1051,6 +1054,7 @@ export class MatchSyncService {
                 newRedCards: eventSyncResult.newRedCards,
                 newYellowCards: eventSyncResult.newYellowCards,
                 newSubstitutions: eventSyncResult.newSubstitutions,
+                newVarGoalAnnulments: eventSyncResult.newVarGoalAnnulments,
               });
               if (eventSyncResult.relevantEvents === 0) {
                 await this.prisma.match.update({
@@ -1244,6 +1248,7 @@ export class MatchSyncService {
     newRedCards: NewRedCardEvent[];
     newYellowCards: NewYellowCardEvent[];
     newSubstitutions: NewSubstitutionEvent[];
+    newVarGoalAnnulments: NewVarGoalAnnulmentEvent[];
   }> {
     const events: any[] =
       preloadedEvents ??
@@ -1256,6 +1261,7 @@ export class MatchSyncService {
         newRedCards: [],
         newYellowCards: [],
         newSubstitutions: [],
+        newVarGoalAnnulments: [],
       };
     }
 
@@ -1287,6 +1293,7 @@ export class MatchSyncService {
     const newRedCards: NewRedCardEvent[] = [];
     const newYellowCards: NewYellowCardEvent[] = [];
     const newSubstitutions: NewSubstitutionEvent[] = [];
+    const newVarGoalAnnulments: NewVarGoalAnnulmentEvent[] = [];
     for (const ev of events) {
       const type: string   = ev.type   ?? 'UNKNOWN';
       const detail: string = ev.detail ?? '';
@@ -1333,6 +1340,13 @@ export class MatchSyncService {
                 playerName: normalizedPlayerName || null,
                 teamId,
               },
+            });
+            newVarGoalAnnulments.push({
+              playerName: normalizedPlayerName || null,
+              teamName: resolveTeamName(teamId),
+              reason: varDetail,
+              minute,
+              extraMin,
             });
           }
         } catch {
@@ -1436,6 +1450,7 @@ export class MatchSyncService {
       newRedCards,
       newYellowCards,
       newSubstitutions,
+      newVarGoalAnnulments,
     };
   }
 
@@ -1449,6 +1464,7 @@ export class MatchSyncService {
     newRedCards: NewRedCardEvent[];
     newYellowCards: NewYellowCardEvent[];
     newSubstitutions: NewSubstitutionEvent[];
+    newVarGoalAnnulments: NewVarGoalAnnulmentEvent[];
   }): Promise<void> {
     if (!this.cardLiveNotifications) return;
 
@@ -1499,6 +1515,20 @@ export class MatchSyncService {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           this.logger.warn(`SUBSTITUTION dispatch failed for match ${params.matchId}: ${message}`);
+        }
+      }
+    }
+
+    if (
+      params.newVarGoalAnnulments.length > 0 &&
+      (await this.footballConfigService.isEventWaVarGoalEnabled())
+    ) {
+      for (const annulment of params.newVarGoalAnnulments) {
+        try {
+          await this.cardLiveNotifications.dispatchVarGoalAnnulment({ ...base, annulment });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`GOAL_ANNULLED dispatch failed for match ${params.matchId}: ${message}`);
         }
       }
     }
