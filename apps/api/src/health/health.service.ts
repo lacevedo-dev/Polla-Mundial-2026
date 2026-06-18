@@ -36,6 +36,9 @@ export class HealthService {
                 app: 'up',
                 database: databaseStatus,
             },
+            capabilities: {
+                paymentReminders: true,
+            },
             diagnostics: databaseFailureCategory ? {
                 databaseFailureCategory,
             } : undefined,

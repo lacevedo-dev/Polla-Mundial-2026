@@ -27,6 +27,7 @@ describe('HealthService', () => {
             app: 'up',
             database: 'unknown',
         });
+        expect(response.capabilities).toEqual({ paymentReminders: true });
         expect(new Date(response.timestamp).toString()).not.toBe('Invalid Date');
     });
 

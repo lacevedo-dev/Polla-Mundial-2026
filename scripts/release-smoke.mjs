@@ -39,6 +39,23 @@ const CHECKS = [
       password: 'invalid-password',
     }),
   },
+  {
+    label: 'payment-reminders-route',
+    method: 'POST',
+    path: '/leagues/smoke-test/payments/reminders',
+    expectedStatuses: [401],
+    body: JSON.stringify({ recipients: [], messages: {} }),
+  },
+  {
+    label: 'health-payment-reminders',
+    method: 'GET',
+    path: '/health/live',
+    expectedStatuses: [200],
+    assertBody: (body) => {
+      const parsed = JSON.parse(body);
+      return parsed.capabilities?.paymentReminders === true;
+    },
+  },
 ];
 
 async function main() {
@@ -57,14 +74,19 @@ async function main() {
   for (const check of CHECKS) {
     const result = await executeCheck(baseUrl, check);
     const expectedDescription = check.expectedStatuses.join(', ');
-    const statusLabel = result.ok ? 'PASS' : 'FAIL';
+    const bodyAssertionFailed = result.ok && check.assertBody && !check.assertBody(result.body ?? '');
+    const passed = result.ok && !bodyAssertionFailed;
+    const statusLabel = passed ? 'PASS' : 'FAIL';
 
     console.log(
       `[smoke] ${statusLabel} ${check.method} ${check.path} -> ${result.status ?? 'ERR'} (expected: ${expectedDescription})`,
     );
 
-    if (!result.ok) {
+    if (!passed) {
       failed = true;
+      if (bodyAssertionFailed) {
+        console.error('[smoke]   response body assertion failed');
+      }
       if (result.body) {
         console.error(`[smoke]   response: ${truncate(result.body)}`);
       }

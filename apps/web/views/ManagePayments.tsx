@@ -465,8 +465,23 @@ const ReminderModal: React.FC<{
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
+    const [apiSupportsReminders, setApiSupportsReminders] = useState<boolean | null>(null);
     /** all = todos los canales marcados en paso 1; single = solo el tab activo */
     const [sendMode, setSendMode] = useState<'all' | 'single'>('all');
+
+    useEffect(() => {
+        let cancelled = false;
+        request<{ capabilities?: { paymentReminders?: boolean } }>('/health/live')
+            .then((health) => {
+                if (!cancelled) {
+                    setApiSupportsReminders(health.capabilities?.paymentReminders === true);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setApiSupportsReminders(false);
+            });
+        return () => { cancelled = true; };
+    }, []);
 
     const fmtDebt = (userId: string) => fmtCurrency(userDebts[userId] ?? 0, currency);
 
@@ -561,7 +576,8 @@ const ReminderModal: React.FC<{
             setTimeout(() => { setSent(false); onClose(); }, 1500);
         } catch (err) {
             if (err instanceof ApiError && err.status === 404) {
-                setSendError('El servidor no tiene activo el envío de recordatorios (404). Falta desplegar la última versión del API.');
+                setSendError('El API en producción no tiene el endpoint de recordatorios. Redespliega la app polla-api en Dokploy desde main y vuelve a intentar.');
+                setApiSupportsReminders(false);
             } else if (err instanceof ApiError && err.message) {
                 setSendError(err.message);
             } else {
@@ -612,6 +628,11 @@ const ReminderModal: React.FC<{
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5 space-y-4" style={{ scrollbarWidth: 'thin' }}>
+                    {apiSupportsReminders === false && (
+                        <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            El API desplegado aún no soporta envío de recordatorios. Redespliega <strong>polla-api</strong> en Dokploy (rama main); las migraciones se aplican al arrancar el contenedor.
+                        </p>
+                    )}
                     {step === 1 ? (
                         <div className="space-y-3">
                             <div className="flex items-center justify-between gap-2">
@@ -808,7 +829,7 @@ const ReminderModal: React.FC<{
                                 variant="secondary"
                                 className="flex-1 h-11 font-black uppercase text-xs"
                                 onClick={handleSend}
-                                disabled={sending || sendChannelCount === 0}
+                                disabled={sending || sendChannelCount === 0 || apiSupportsReminders === false}
                             >
                                 {sending ? <><Loader2 size={14} className="animate-spin" /> Enviando…</> :
                                     sent ? <><CheckCircle2 size={14} /> ¡Enviado!</> :

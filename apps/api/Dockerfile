@@ -90,6 +90,9 @@ COPY --from=builder /app/apps/api/package.json ./apps/api/
 
 WORKDIR /app/apps/api
 
+COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
 # Directorio para la sesión persistente de WhatsApp Web (LocalAuth).
 # Monta un volumen Docker en esta ruta para que la sesión sobreviva redeployments.
 # En Dokploy (sin duplicar el mismo Container Path):
@@ -102,5 +105,5 @@ RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
 EXPOSE 3000
 
-# Arrancar el servidor (migraciones se aplican manualmente en prod, no en cada deploy)
-CMD ["node", "dist/apps/api/src/main.js"]
+# Migraciones + arranque (prisma migrate deploy en cada deploy)
+ENTRYPOINT ["./docker-entrypoint.sh"]

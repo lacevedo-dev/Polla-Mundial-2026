@@ -11,6 +11,9 @@ export type HealthResponse = {
         app: CheckStatus;
         database: CheckStatus;
     };
+    capabilities?: {
+        paymentReminders: boolean;
+    };
     diagnostics?: {
         databaseFailureCategory?: DatabaseFailureCategory;
     };
