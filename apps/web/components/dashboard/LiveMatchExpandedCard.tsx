@@ -4,51 +4,13 @@ import { LiveMatchTimer, MatchProgressBar } from '../live/LiveMatchTimer';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { calcLivePoints } from '../../utils/dashboard';
-import { formatAnnulledGoalLabel, splitGoalEvents, dedupeMatchEvents, buildMatchEventRowKey } from '../../utils/matchEvents';
-
-function partitionGoalsByTeam(
-    goals: MatchEventItem[],
-    homeTeamId: string,
-    awayTeamId: string,
-    finalHome: number,
-    finalAway: number,
-): { homeGoals: MatchEventItem[]; awayGoals: MatchEventItem[] } {
-    const sorted = [...goals].sort(
-        (a, b) => a.minute - b.minute || (a.extraMin ?? 0) - (b.extraMin ?? 0),
-    );
-    const homeGoals: MatchEventItem[] = [];
-    const awayGoals: MatchEventItem[] = [];
-    let runningHome = 0;
-    let runningAway = 0;
-
-    for (const goal of sorted) {
-        if (goal.teamId === homeTeamId) {
-            homeGoals.push(goal);
-            runningHome++;
-        } else if (goal.teamId === awayTeamId) {
-            awayGoals.push(goal);
-            runningAway++;
-        } else {
-            const canHome = runningHome < finalHome;
-            const canAway = runningAway < finalAway;
-            if (canHome && !canAway) {
-                homeGoals.push(goal);
-                runningHome++;
-            } else if (!canHome && canAway) {
-                awayGoals.push(goal);
-                runningAway++;
-            } else if (finalHome - runningHome >= finalAway - runningAway) {
-                homeGoals.push(goal);
-                runningHome++;
-            } else {
-                awayGoals.push(goal);
-                runningAway++;
-            }
-        }
-    }
-
-    return { homeGoals, awayGoals };
-}
+import {
+    formatAnnulledGoalLabel,
+    splitGoalEvents,
+    dedupeMatchEvents,
+    partitionGoalsByTeam,
+    buildMatchEventRowKey,
+} from '../../utils/matchEvents';
 
 function renderGoalLine(
     event: MatchEventItem,
@@ -151,7 +113,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
         expandedRealHome,
         expandedRealAway,
     );
-    const hasGoalSummary = activeGoals.length + annulledGoals.length > 0;
+    const hasGoalSummary = homeGoals.length + awayGoals.length + homeAnnulled.length + awayAnnulled.length > 0;
 
     return (
         <AnimatePresence>
@@ -164,7 +126,6 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                 className="overflow-hidden"
             >
                 <div className="rounded-2xl bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 shadow-xl shadow-rose-950/40 p-3 xl:rounded-2xl xl:border-rose-400/35 max-w-sm">
-                    {/* Timer + estado predicción + pts */}
                     <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1.5">
                             <LiveMatchTimer
@@ -195,7 +156,6 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </div>
                     </div>
 
-                    {/* Barra de progreso */}
                     <MatchProgressBar
                         matchDate={expandedMatch.date}
                         elapsed={expandedMatch.elapsed ?? null}
@@ -204,7 +164,6 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         finished={false}
                     />
 
-                    {/* Marcador */}
                     <div className="flex items-center justify-between mt-2">
                         <div className="flex min-w-0 flex-1 items-center gap-1.5">
                             {expandedMatch.homeFlag && <img src={expandedMatch.homeFlag} alt="" className="h-5 w-7 rounded object-cover border border-white/10" />}
@@ -228,7 +187,6 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </div>
                     </div>
 
-                    {/* Resumen de goles */}
                     {hasGoalSummary && (
                         <div className="mt-2 pt-2 border-t border-white/5">
                             <div className="flex items-start justify-between gap-2">
@@ -245,19 +203,17 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </div>
                     )}
 
-                    {/* Timeline completa — solo nivel 2 */}
                     {expandLevel === 2 && (
                         <>
                             {expandedEvents.length > 0 && (
                                 <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
                                     <p className="text-[8px] font-black uppercase tracking-widest text-white/25 mb-1.5">Eventos del partido</p>
-                                    {expandedEvents.map((e, i) => {
+                                    {expandedEvents.map((e) => {
                                         const isOG = e.detail?.toLowerCase().includes('own goal');
                                         const isPen = e.detail?.toLowerCase().includes('penalty');
                                         const isGoal = e.type === 'GOAL';
                                         const isVar = e.type === 'VAR';
                                         const isYellow = e.type === 'CARD' && e.detail?.toLowerCase().includes('yellow');
-                                        const isRed = e.type === 'CARD' && (e.detail?.toLowerCase().includes('red') || e.detail?.toLowerCase().includes('second yellow'));
                                         const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
                                         const isAnnulledGoal = isGoal && !!e.annulled;
                                         const icon = isVar

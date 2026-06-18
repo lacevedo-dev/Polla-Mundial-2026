@@ -191,4 +191,36 @@ describe('match-events.util', () => {
     expect(events[0].teamId).toBe('home');
     expect(events[0].assistName).toBe('Alvarez');
   });
+
+  it('deduplica goles del mismo jugador en minutos consecutivos', () => {
+    const events = dedupeMatchEvents([
+      {
+        id: '1',
+        type: 'GOAL',
+        minute: 40,
+        extraMin: null,
+        teamId: 'away',
+        playerName: 'Munoz',
+      },
+      {
+        id: '2',
+        type: 'GOAL',
+        minute: 41,
+        extraMin: null,
+        teamId: 'away',
+        playerName: 'Munoz',
+      },
+      {
+        id: '3',
+        type: 'GOAL',
+        minute: 65,
+        extraMin: null,
+        teamId: 'away',
+        playerName: 'Diaz',
+      },
+    ]);
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.minute)).toEqual([40, 65]);
+  });
 });

@@ -65,6 +65,28 @@ export function eventsAreSameMatchEvent(
   return true;
 }
 
+/** Mismo jugador/equipo en minutos consecutivos por re-sync de la API (ej. 60' y 61'). */
+export function goalsAreNearDuplicate(
+  a: MatchEventRecord,
+  b: MatchEventRecord,
+  maxMinuteDelta = 2,
+): boolean {
+  if (a.type.toUpperCase() !== 'GOAL' || b.type.toUpperCase() !== 'GOAL') {
+    return false;
+  }
+  if ((a.extraMin ?? 0) !== (b.extraMin ?? 0)) return false;
+
+  const playerA = normalizeEventPlayerKey(a.playerName);
+  const playerB = normalizeEventPlayerKey(b.playerName);
+  if (!playerA || !playerB || playerA !== playerB) return false;
+  if (a.teamId && b.teamId && a.teamId !== b.teamId) return false;
+  return Math.abs(a.minute - b.minute) <= maxMinuteDelta;
+}
+
+function eventsShouldMerge(a: MatchEventRecord, b: MatchEventRecord): boolean {
+  return eventsAreSameMatchEvent(a, b) || goalsAreNearDuplicate(a, b);
+}
+
 function pickRicherEvent<T extends MatchEventRecord>(existing: T, incoming: T): T {
   return eventInformativeness(incoming) > eventInformativeness(existing)
     ? incoming
@@ -86,7 +108,7 @@ function parseDedupeKey(key: string): {
 export function dedupeMatchEvents<T extends MatchEventRecord>(events: T[]): T[] {
   const merged: T[] = [];
   for (const event of events) {
-    const idx = merged.findIndex((existing) => eventsAreSameMatchEvent(existing, event));
+    const idx = merged.findIndex((existing) => eventsShouldMerge(existing, event));
     if (idx === -1) {
       merged.push(event);
       continue;

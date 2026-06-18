@@ -30,17 +30,38 @@ function eventsAreSameMatchEvent(a: MatchEventItem, b: MatchEventItem): boolean 
     return true;
 }
 
+function goalsAreNearDuplicate(
+    a: MatchEventItem,
+    b: MatchEventItem,
+    maxMinuteDelta = 2,
+): boolean {
+    if (a.type.toUpperCase() !== 'GOAL' || b.type.toUpperCase() !== 'GOAL') {
+        return false;
+    }
+    if ((a.extraMin ?? 0) !== (b.extraMin ?? 0)) return false;
+
+    const playerA = normalizePlayerKey(a.playerName);
+    const playerB = normalizePlayerKey(b.playerName);
+    if (!playerA || !playerB || playerA !== playerB) return false;
+    if (a.teamId && b.teamId && a.teamId !== b.teamId) return false;
+    return Math.abs(a.minute - b.minute) <= maxMinuteDelta;
+}
+
+function eventsShouldMerge(a: MatchEventItem, b: MatchEventItem): boolean {
+    return eventsAreSameMatchEvent(a, b) || goalsAreNearDuplicate(a, b);
+}
+
 function pickRicherEvent(existing: MatchEventItem, incoming: MatchEventItem): MatchEventItem {
     return eventInformativeness(incoming) > eventInformativeness(existing)
         ? incoming
         : existing;
 }
 
-/** Deduplica eventos del partido (goles con teamId o nombre variantes). */
+/** Deduplica eventos del partido (goles con teamId, nombre o minuto vecino). */
 export function dedupeMatchEvents(events: MatchEventItem[]): MatchEventItem[] {
     const merged: MatchEventItem[] = [];
     for (const event of events) {
-        const idx = merged.findIndex((existing) => eventsAreSameMatchEvent(existing, event));
+        const idx = merged.findIndex((existing) => eventsShouldMerge(existing, event));
         if (idx === -1) {
             merged.push(event);
             continue;
@@ -65,6 +86,57 @@ export function splitGoalEvents(events: MatchEventItem[]): {
         active: deduped.filter((event) => !event.annulled),
         annulled: deduped.filter((event) => event.annulled),
     };
+}
+
+export function partitionGoalsByTeam(
+    goals: MatchEventItem[],
+    homeTeamId: string,
+    awayTeamId: string,
+    finalHome: number,
+    finalAway: number,
+): { homeGoals: MatchEventItem[]; awayGoals: MatchEventItem[] } {
+    const sorted = [...goals].sort(
+        (a, b) => a.minute - b.minute || (a.extraMin ?? 0) - (b.extraMin ?? 0),
+    );
+    const homeGoals: MatchEventItem[] = [];
+    const awayGoals: MatchEventItem[] = [];
+    let runningHome = 0;
+    let runningAway = 0;
+
+    for (const goal of sorted) {
+        if (goal.teamId === homeTeamId) {
+            if (runningHome >= finalHome) continue;
+            homeGoals.push(goal);
+            runningHome++;
+            continue;
+        }
+        if (goal.teamId === awayTeamId) {
+            if (runningAway >= finalAway) continue;
+            awayGoals.push(goal);
+            runningAway++;
+            continue;
+        }
+
+        const canHome = runningHome < finalHome;
+        const canAway = runningAway < finalAway;
+        if (canHome && !canAway) {
+            homeGoals.push(goal);
+            runningHome++;
+        } else if (!canHome && canAway) {
+            awayGoals.push(goal);
+            runningAway++;
+        } else if (finalHome - runningHome >= finalAway - runningAway) {
+            if (runningHome >= finalHome) continue;
+            homeGoals.push(goal);
+            runningHome++;
+        } else {
+            if (runningAway >= finalAway) continue;
+            awayGoals.push(goal);
+            runningAway++;
+        }
+    }
+
+    return { homeGoals, awayGoals };
 }
 
 export function formatAnnulledGoalLabel(reason?: string | null): string {

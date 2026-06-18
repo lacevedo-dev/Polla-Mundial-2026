@@ -14,6 +14,7 @@ import { SyncEventsService } from './sync-events.service';
 import {
   buildMatchEventDedupeKey,
   eventsAreSameMatchEvent,
+  goalsAreNearDuplicate,
   filterActiveGoalEventsFromTimeline,
   formatAnnulledReason,
   isRedCardDetail,
@@ -1239,6 +1240,7 @@ export class MatchSyncService {
               assistName,
               extraMin,
               teamId,
+              minute,
               playerName: normalizedPlayerName || null,
               updatedAt: new Date(),
             },
@@ -1393,9 +1395,23 @@ export class MatchSyncService {
       where: {
         matchId: params.matchId,
         type: params.eventType,
-        minute: params.minute,
+        minute:
+          params.eventType === 'GOAL'
+            ? {
+                gte: Math.max(0, params.minute - 2),
+                lte: params.minute + 2,
+              }
+            : params.minute,
       },
     });
+
+    const incoming = {
+      type: params.eventType,
+      minute: params.minute,
+      extraMin: params.extraMin,
+      teamId: params.teamId,
+      playerName: params.playerName,
+    };
 
     return candidates.find((candidate: {
       type: string;
@@ -1404,22 +1420,21 @@ export class MatchSyncService {
       teamId: string | null;
       playerName: string | null;
     }) =>
-      eventsAreSameMatchEvent(
-        {
-          type: params.eventType,
-          minute: params.minute,
-          extraMin: params.extraMin,
-          teamId: params.teamId,
-          playerName: params.playerName,
-        },
-        {
+      eventsAreSameMatchEvent(incoming, {
+        type: candidate.type,
+        minute: candidate.minute,
+        extraMin: candidate.extraMin,
+        teamId: candidate.teamId,
+        playerName: candidate.playerName,
+      }) ||
+      (params.eventType === 'GOAL' &&
+        goalsAreNearDuplicate(incoming, {
           type: candidate.type,
           minute: candidate.minute,
           extraMin: candidate.extraMin,
           teamId: candidate.teamId,
           playerName: candidate.playerName,
-        },
-      ),
+        })),
     ) ?? null;
   }
 
