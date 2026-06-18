@@ -4,7 +4,8 @@ import { motion } from 'motion/react';
 import { Button, Input, Card } from '../../../components/UI';
 import { PaymentMethodGrid } from '../components/PaymentMethodGrid';
 import { ModalOverlay } from '../components/ModalOverlay';
-import { avatarUrl, fmtCurrency } from '../utils';
+import { fmtCurrency } from '../utils';
+import { UserAvatar } from '../../../components/ui/UserAvatar';
 
 const QuickPayModal: React.FC<{
     userName: string;
@@ -23,7 +24,7 @@ const QuickPayModal: React.FC<{
             <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.94, opacity: 0 }} transition={{ duration: 0.22, ease: 'easeOut' as const }}>
                 <Card className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl p-0 overflow-hidden">
                     <div className="p-6 text-center space-y-4">
-                        <img src={avatarUrl(userName, userAvatar)} className="w-14 h-14 rounded-2xl object-cover mx-auto" alt={userName} />
+                        <UserAvatar name={userName} src={userAvatar} className="w-14 h-14 rounded-2xl mx-auto" textClassName="text-base" />
                         <div>
                             <h3 className="text-xl font-black font-brand uppercase">Pago Rápido</h3>
                             <p className="text-sm text-slate-500">{userName}</p>

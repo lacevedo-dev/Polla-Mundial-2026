@@ -6,6 +6,7 @@ import { useConfigStore } from '../stores/config.store';
 import { resolveDevelopmentSurfaceFlags } from '../runtime-flags';
 import { PWAInstallBanner, NotificationToggle } from '../components/PWAPrompt';
 import NotificationBell from '../components/NotificationBell';
+import { UserAvatar } from '../components/ui/UserAvatar';
 
 const primaryNavItems = [
     { to: '/dashboard', label: 'Inicio', icon: Home },
@@ -109,7 +110,12 @@ const AppLayout: React.FC = () => {
                     <NotificationToggle className="mb-4" />
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} className="w-10 h-10 rounded-full ring-2 ring-lime-400 object-cover" alt="Avatar" />
+                            <UserAvatar
+                                name={user?.name || 'Usuario'}
+                                src={user?.avatar}
+                                className="w-10 h-10 rounded-full ring-2 ring-lime-400"
+                                textClassName="text-xs"
+                            />
                             <div>
                                 <p className="text-sm font-bold truncate max-w-[120px]">{user?.name || 'Cargando...'}</p>
                                 <div className="flex items-center gap-1.5 mt-0.5">
@@ -182,10 +188,11 @@ const AppLayout: React.FC = () => {
                     {/* User profile card */}
                     <div className="px-5 py-4 border-b border-slate-800 shrink-0">
                         <div className="flex items-center gap-3">
-                            <img
-                                src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}
-                                className="w-12 h-12 rounded-full ring-2 ring-lime-400 object-cover shrink-0"
-                                alt={user?.name || 'Avatar de usuario'}
+                            <UserAvatar
+                                name={user?.name || 'Usuario'}
+                                src={user?.avatar}
+                                className="w-12 h-12 rounded-full ring-2 ring-lime-400"
+                                textClassName="text-sm"
                             />
                             <div className="flex-1 min-w-0">
                                 <p className="text-white font-bold truncate">{user?.name || 'Cargando...'}</p>

@@ -3,7 +3,8 @@ import { Check, Hash, Loader2, X } from 'lucide-react';
 import { Button, Input, Badge, Card } from '../../../components/UI';
 import { PaymentMethodGrid } from '../components/PaymentMethodGrid';
 import { ModalOverlay } from '../components/ModalOverlay';
-import { avatarUrl, categoryLabel, fmtCurrency } from '../utils';
+import { categoryLabel, fmtCurrency } from '../utils';
+import { UserAvatar } from '../../../components/ui/UserAvatar';
 import type { ObligationRecord } from '../types';
 
 const PaymentModal: React.FC<{
@@ -39,7 +40,7 @@ const PaymentModal: React.FC<{
             <Card className="w-full max-w-lg bg-white rounded-[2rem] shadow-2xl border-0 overflow-hidden max-h-[90vh] flex flex-col p-0">
                 <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-3">
-                        <img src={avatarUrl(userName, userAvatar)} className="w-10 h-10 rounded-xl object-cover" alt={userName} />
+                        <UserAvatar name={userName} src={userAvatar} className="w-10 h-10 rounded-xl" textClassName="text-xs" />
                         <div>
                             <h3 className="text-lg font-black uppercase">Confirmar Pago</h3>
                             <p className="text-xs text-slate-400">{userName}</p>

@@ -18,7 +18,8 @@ import {
     LazyQuickPayModal,
     LazyReminderModal,
 } from './modals/lazy';
-import { avatarUrl, categoryLabel, fmtCurrency } from './utils';
+import { categoryLabel, fmtCurrency } from './utils';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import type { PaymentFilter } from './types';
 
 const ManagePaymentsView: React.FC = () => {
@@ -358,7 +359,7 @@ const ManagePaymentsView: React.FC = () => {
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex items-center gap-3">
                                             <Checkbox id={`m-${u.id}`} label="" checked={isSelected} onChange={() => setSelectedUserIds((p) => p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id])} />
-                                            <img src={avatarUrl(u.name, u.avatar)} className="w-10 h-10 rounded-xl object-cover" alt={u.name} />
+                                            <UserAvatar name={u.name} src={u.avatar} className="w-10 h-10 rounded-xl" textClassName="text-xs" />
                                             <p className="text-sm font-black text-slate-900">{u.name}</p>
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
@@ -427,7 +428,7 @@ const ManagePaymentsView: React.FC = () => {
                                                 </td>
                                                 <td className="p-5">
                                                     <div className="flex items-center gap-3">
-                                                        <img src={avatarUrl(u.name, u.avatar)} className="w-10 h-10 rounded-xl object-cover" alt={u.name} />
+                                                        <UserAvatar name={u.name} src={u.avatar} className="w-10 h-10 rounded-xl" textClassName="text-xs" />
                                                         <p className="text-sm font-black text-slate-900">{u.name}</p>
                                                     </div>
                                                 </td>

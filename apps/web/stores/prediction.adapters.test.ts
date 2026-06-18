@@ -120,7 +120,7 @@ describe('prediction.adapters', () => {
                 rank: 2,
                 username: 'maria',
                 name: 'María',
-                avatar: expect.stringContaining('ui-avatars.com'),
+                avatar: '',
                 points: 8,
                 trend: 'same',
             },

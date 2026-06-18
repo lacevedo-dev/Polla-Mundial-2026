@@ -4,7 +4,8 @@ import { Button, Card } from '../../../components/UI';
 import { ApiError, request } from '../../../api';
 import { ALL_REMINDER_CHANNELS, CHANNEL_CONFIG, REMINDER_TEMPLATES } from '../constants';
 import { ModalOverlay } from '../components/ModalOverlay';
-import { avatarUrl, fmtCurrency } from '../utils';
+import { fmtCurrency } from '../utils';
+import { UserAvatar } from '../../../components/ui/UserAvatar';
 import type { ReminderChannel, TemplateKey, UserSummary } from '../types';
 
 const ReminderModal: React.FC<{
@@ -248,7 +249,7 @@ const ReminderModal: React.FC<{
                                 <div key={u.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <img src={avatarUrl(u.name, u.avatar)} className="w-8 h-8 rounded-lg shrink-0" alt={u.name} />
+                                            <UserAvatar name={u.name} src={u.avatar} className="w-8 h-8 rounded-lg shrink-0" textClassName="text-[10px]" />
                                             <div className="min-w-0">
                                                 <p className="text-sm font-black text-slate-900 truncate">{u.name}</p>
                                                 <p className="text-[10px] font-bold text-rose-600">{fmtDebt(u.id)} pendiente</p>

@@ -307,10 +307,6 @@ function resolveFlagUrl(flagUrl?: string | null, code?: string | null): string {
     return DEFAULT_FLAG_URL;
 }
 
-function toAvatar(name: string): string {
-    const encoded = encodeURIComponent(name || 'Jugador');
-    return `https://ui-avatars.com/api/?name=${encoded}&background=E2E8F0&color=0F172A`;
-}
 
 export function toMatchViewModel(
     match: MatchResponse,
@@ -383,7 +379,7 @@ export function toLeaderboardRows(entries: LeaderboardApiEntry[]): LeaderboardRo
             rank: index + 1,
             username: entry.username,
             name: entry.name,
-            avatar: resolveApiAssetUrl(entry.avatar) ?? toAvatar(entry.name),
+            avatar: resolveApiAssetUrl(entry.avatar) ?? '',
             points: entry.points,
             phaseBonusPoints: entry.phaseBonusPoints,
             hasChampion: entry.hasChampion,
@@ -401,7 +397,7 @@ export function toLeaderboardBreakdown(
     return {
         user: {
             ...input.user,
-            avatar: resolveApiAssetUrl(input.user.avatar) ?? toAvatar(input.user.name),
+            avatar: resolveApiAssetUrl(input.user.avatar) ?? '',
         },
         summary: input.summary,
         matches: input.matches.map((item) => ({

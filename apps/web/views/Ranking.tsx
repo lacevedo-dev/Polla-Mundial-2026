@@ -15,12 +15,9 @@ import {
     leaderboardToTiebreakEntry,
     type TiebreakSummaryEntry,
 } from '../components/ranking/RankingTiebreakSummary';
+import { UserAvatar } from '../components/ui/UserAvatar';
 
 const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
-
-function avatarUrl(row: LeaderboardRow): string {
-    return row.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=e2e8f0&color=64748b&size=128`;
-}
 
 function TrendIcon({ trend }: { trend: LeaderboardRow['trend'] }) {
     if (trend === 'same') return <Minus className="h-3 w-3 text-slate-300" aria-hidden="true" />;
@@ -30,8 +27,48 @@ function TrendIcon({ trend }: { trend: LeaderboardRow['trend'] }) {
 
 // ─── compact podium stage ───────────────────────────────────────────────────
 
-const PodiumFirst: React.FC<{ player: LeaderboardRow; onSelect?: (id: string) => void }> = ({ player, onSelect }) => (
-    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="order-1 md:order-2">
+type PodiumCardProps = {
+    player: LeaderboardRow;
+    previous: TiebreakSummaryEntry | null;
+    next: TiebreakSummaryEntry | null;
+    highlighted: boolean;
+    onSelect?: (id: string) => void;
+    setAnchorRef: (id: string, el: HTMLElement | null) => void;
+};
+
+function PodiumTiebreakBlock({
+    player,
+    previous,
+    next,
+    variant,
+}: {
+    player: LeaderboardRow;
+    previous: TiebreakSummaryEntry | null;
+    next: TiebreakSummaryEntry | null;
+    variant: 'light' | 'dark';
+}) {
+    return (
+        <div className={`mt-2 border-t pt-2 md:mt-3 md:pt-3 ${variant === 'dark' ? 'border-white/10' : 'border-slate-100'}`}>
+            <RankingTiebreakSummary
+                entry={leaderboardToTiebreakEntry(player)}
+                previous={previous}
+                next={next}
+                compact
+                variant={variant}
+                phaseBonusPoints={player.phaseBonusPoints ?? 0}
+                showTieNotes={false}
+            />
+        </div>
+    );
+}
+
+const PodiumFirst: React.FC<PodiumCardProps> = ({ player, previous, next, highlighted, onSelect, setAnchorRef }) => (
+    <motion.div
+        ref={(el) => setAnchorRef(player.id, el)}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={`order-1 md:order-2 ${highlighted ? 'rounded-2xl ring-2 ring-lime-400 ring-offset-2' : ''}`}
+    >
         <button
             type="button"
             onClick={() => onSelect?.(player.id)}
@@ -42,53 +79,79 @@ const PodiumFirst: React.FC<{ player: LeaderboardRow; onSelect?: (id: string) =>
                 <div className="absolute -top-5 md:-top-7 left-1/2 -translate-x-1/2">
                     <Crown className="h-5 w-5 md:h-7 md:w-7 fill-lime-400 text-lime-400" aria-hidden="true" />
                 </div>
-                <img
-                    src={avatarUrl(player)}
-                    alt=""
-                    className="mx-auto h-14 w-14 md:h-24 md:w-24 rounded-full object-cover shadow-xl ring-2 md:ring-4 ring-lime-400/30"
+                <UserAvatar
+                    name={player.name}
+                    src={player.avatar}
+                    className="mx-auto h-14 w-14 md:h-24 md:w-24 rounded-full shadow-xl ring-2 md:ring-4 ring-lime-400/30 bg-slate-700 text-lime-200"
+                    textClassName="text-sm md:text-xl"
                 />
                 <div className="absolute -bottom-1 -right-1 flex h-7 w-7 md:h-9 md:w-9 items-center justify-center rounded-xl border-2 md:border-4 border-slate-900 bg-lime-400">
                     <Trophy className="h-3.5 w-3.5 md:h-4 md:w-4 text-slate-900" aria-hidden="true" />
                 </div>
             </div>
             <h3 className="truncate text-xs md:text-lg font-black text-white">{player.name}</h3>
-            <p className="mb-1 md:mb-3 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-lime-400/60">@{player.username}</p>
+            <p className="mb-1 text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-lime-400/60">@{player.username}</p>
             <div className="flex items-center justify-center gap-1.5 md:gap-2">
                 <span className="text-2xl md:text-4xl font-black text-white">{player.points}</span>
                 <span className="text-[8px] md:text-[10px] font-black uppercase text-lime-400">pts</span>
             </div>
+            <PodiumTiebreakBlock player={player} previous={previous} next={next} variant="dark" />
         </button>
     </motion.div>
 );
 
-const PodiumSecond: React.FC<{ player: LeaderboardRow; onSelect?: (id: string) => void }> = ({ player, onSelect }) => (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="order-2 md:order-1">
+const PodiumSecond: React.FC<PodiumCardProps> = ({ player, previous, next, highlighted, onSelect, setAnchorRef }) => (
+    <motion.div
+        ref={(el) => setAnchorRef(player.id, el)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className={`order-2 md:order-1 ${highlighted ? 'rounded-2xl ring-2 ring-lime-400 ring-offset-2' : ''}`}
+    >
         <button
             type="button"
             onClick={() => onSelect?.(player.id)}
             className="relative block w-full overflow-hidden rounded-2xl md:rounded-[2rem] border border-slate-100 bg-white p-3 md:p-5 text-center shadow-sm"
         >
             <div className="absolute left-0 top-0 h-0.5 md:h-1 w-full bg-slate-300" />
-            <img src={avatarUrl(player)} alt="" className="mx-auto mb-2 h-11 w-11 md:h-16 md:w-16 rounded-full object-cover ring-2 ring-slate-50" />
+            <UserAvatar
+                name={player.name}
+                src={player.avatar}
+                className="mx-auto mb-2 h-11 w-11 md:h-16 md:w-16 rounded-full ring-2 ring-slate-50"
+                textClassName="text-[10px] md:text-sm"
+            />
             <h3 className="truncate text-[11px] md:text-base font-black text-slate-900">{player.name}</h3>
             <p className="text-[8px] md:text-[10px] font-bold uppercase text-slate-400">#{player.rank}</p>
             <p className="mt-1 text-lg md:text-2xl font-black text-slate-900">{player.points}</p>
+            <PodiumTiebreakBlock player={player} previous={previous} next={next} variant="light" />
         </button>
     </motion.div>
 );
 
-const PodiumThird: React.FC<{ player: LeaderboardRow; onSelect?: (id: string) => void }> = ({ player, onSelect }) => (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="order-3">
+const PodiumThird: React.FC<PodiumCardProps> = ({ player, previous, next, highlighted, onSelect, setAnchorRef }) => (
+    <motion.div
+        ref={(el) => setAnchorRef(player.id, el)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.14 }}
+        className={`order-3 ${highlighted ? 'rounded-2xl ring-2 ring-lime-400 ring-offset-2' : ''}`}
+    >
         <button
             type="button"
             onClick={() => onSelect?.(player.id)}
             className="relative block w-full overflow-hidden rounded-2xl md:rounded-[2rem] border border-slate-100 bg-white p-3 md:p-5 text-center shadow-sm"
         >
             <div className="absolute left-0 top-0 h-0.5 md:h-1 w-full bg-orange-200" />
-            <img src={avatarUrl(player)} alt="" className="mx-auto mb-2 h-11 w-11 md:h-16 md:w-16 rounded-full object-cover ring-2 ring-slate-50" />
+            <UserAvatar
+                name={player.name}
+                src={player.avatar}
+                className="mx-auto mb-2 h-11 w-11 md:h-16 md:w-16 rounded-full ring-2 ring-slate-50"
+                textClassName="text-[10px] md:text-sm"
+            />
             <h3 className="truncate text-[11px] md:text-base font-black text-slate-900">{player.name}</h3>
             <p className="text-[8px] md:text-[10px] font-bold uppercase text-slate-400">#{player.rank}</p>
             <p className="mt-1 text-lg md:text-2xl font-black text-slate-900">{player.points}</p>
+            <PodiumTiebreakBlock player={player} previous={previous} next={next} variant="light" />
         </button>
     </motion.div>
 );
@@ -112,7 +175,12 @@ const ParticipantsGrid: React.FC<{ players: LeaderboardRow[] }> = ({ players }) 
                     transition={{ delay: index * 0.03 }}
                     className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-white p-2.5 text-center shadow-sm"
                 >
-                    <img src={avatarUrl(player)} alt="" className="h-10 w-10 rounded-full object-cover ring-2 ring-slate-50" />
+                    <UserAvatar
+                        name={player.name}
+                        src={player.avatar}
+                        className="h-10 w-10 rounded-full ring-2 ring-slate-50"
+                        textClassName="text-[10px]"
+                    />
                     <div className="min-w-0 w-full">
                         <p className="truncate text-[11px] font-black text-slate-900">{player.name}</p>
                         <p className="truncate text-[9px] font-bold uppercase text-slate-400">@{player.username}</p>
@@ -203,21 +271,28 @@ function RankingRow({
     player,
     isMe,
     expanded,
+    highlighted,
     previous,
     next,
     onToggle,
     breakdownSlot,
+    setAnchorRef,
 }: {
     player: LeaderboardRow;
     isMe: boolean;
     expanded: boolean;
+    highlighted: boolean;
     previous: TiebreakSummaryEntry | null;
     next: TiebreakSummaryEntry | null;
     onToggle: () => void;
     breakdownSlot?: React.ReactNode;
+    setAnchorRef: (id: string, el: HTMLElement | null) => void;
 }) {
     return (
-        <div className={isMe ? 'bg-lime-50/60' : undefined}>
+        <div
+            ref={(el) => setAnchorRef(player.id, el)}
+            className={`${isMe ? 'bg-lime-50/60' : ''} ${highlighted ? 'ring-2 ring-inset ring-lime-400 bg-lime-50/80' : ''}`}
+        >
             <button
                 type="button"
                 onClick={onToggle}
@@ -229,10 +304,11 @@ function RankingRow({
                     {MEDAL[player.rank] ?? player.rank}
                 </div>
                 <div className="flex items-start gap-2 min-w-0">
-                    <img
-                        src={avatarUrl(player)}
-                        alt=""
-                        className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm"
+                    <UserAvatar
+                        name={player.name}
+                        src={player.avatar}
+                        className="h-8 w-8 rounded-full ring-2 ring-white shadow-sm"
+                        textClassName="text-[10px]"
                     />
                     <div className="min-w-0">
                         <p className={`font-bold text-sm truncate ${isMe ? 'text-lime-700' : 'text-slate-900'}`}>
@@ -248,6 +324,7 @@ function RankingRow({
                             previous={previous}
                             next={next}
                             compact
+                            phaseBonusPoints={player.phaseBonusPoints ?? 0}
                         />
                     </div>
                 </div>
@@ -298,6 +375,18 @@ const Ranking: React.FC = () => {
     const [activeCategory, setActiveCategory] = React.useState<LeaderboardCategory>('GENERAL');
     const [expandedPlayerId, setExpandedPlayerId] = React.useState<string | null>(null);
     const [loadingBreakdownId, setLoadingBreakdownId] = React.useState<string | null>(null);
+    const [highlightPlayerId, setHighlightPlayerId] = React.useState<string | null>(null);
+    const playerAnchorRefs = React.useRef(new Map<string, HTMLElement>());
+    const pendingScrollPlayerId = React.useRef<string | null>(null);
+
+    const setPlayerAnchorRef = React.useCallback((id: string, el: HTMLElement | null) => {
+        if (el) playerAnchorRefs.current.set(id, el);
+        else playerAnchorRefs.current.delete(id);
+    }, []);
+
+    const scrollToPlayer = React.useCallback((playerId: string) => {
+        playerAnchorRefs.current.get(playerId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, []);
 
     React.useEffect(() => {
         if (myLeagues.length > 0) return;
@@ -382,6 +471,52 @@ const Ranking: React.FC = () => {
             setLoadingBreakdownId((current) => (current === playerId ? null : current));
         }
     }, [activeCategory, activeLeague?.id, expandedPlayerId, fetchLeaderboardBreakdown, leaderboardBreakdowns]);
+
+    const ensurePlayerBreakdown = React.useCallback(async (playerId: string) => {
+        if (!activeLeague?.id) return;
+        if (expandedPlayerId !== playerId) {
+            setExpandedPlayerId(playerId);
+        }
+        const cacheKey = `${activeLeague.id}:${activeCategory}:${playerId}`;
+        if (leaderboardBreakdowns[cacheKey]) return;
+        setLoadingBreakdownId(playerId);
+        try {
+            await fetchLeaderboardBreakdown(activeLeague.id, playerId, activeCategory);
+        } finally {
+            setLoadingBreakdownId((current) => (current === playerId ? null : current));
+        }
+    }, [activeCategory, activeLeague?.id, expandedPlayerId, fetchLeaderboardBreakdown, leaderboardBreakdowns]);
+
+    React.useEffect(() => {
+        if (!highlightPlayerId) return;
+        const timer = window.setTimeout(() => setHighlightPlayerId(null), 2500);
+        return () => window.clearTimeout(timer);
+    }, [highlightPlayerId]);
+
+    React.useEffect(() => {
+        const playerId = pendingScrollPlayerId.current;
+        if (!playerId) return;
+        if (!filteredRanking.some((entry) => entry.id === playerId)) return;
+
+        pendingScrollPlayerId.current = null;
+        setHighlightPlayerId(playerId);
+        void ensurePlayerBreakdown(playerId);
+        requestAnimationFrame(() => scrollToPlayer(playerId));
+    }, [filteredRanking, ensurePlayerBreakdown, scrollToPlayer]);
+
+    const focusMyPosition = React.useCallback(() => {
+        if (!myEntry) return;
+
+        if (searchTerm.trim() && !filteredRanking.some((entry) => entry.id === myEntry.id)) {
+            pendingScrollPlayerId.current = myEntry.id;
+            setSearchTerm('');
+            return;
+        }
+
+        setHighlightPlayerId(myEntry.id);
+        void ensurePlayerBreakdown(myEntry.id);
+        requestAnimationFrame(() => scrollToPlayer(myEntry.id));
+    }, [ensurePlayerBreakdown, filteredRanking, myEntry, scrollToPlayer, searchTerm]);
 
     const participantMeta = activeLeague
         ? `${leaderboard.length} participante${leaderboard.length !== 1 ? 's' : ''}${
@@ -500,9 +635,36 @@ const Ranking: React.FC = () => {
                         {podium.length > 0 && (
                             <section aria-label="Podio del ranking">
                                 <div className="grid grid-cols-3 items-end gap-2 md:gap-4 md:pt-2">
-                                    {podium[1] && <PodiumSecond player={podium[1]} onSelect={(id) => void openPlayerBreakdown(id)} />}
-                                    {podium[0] && <PodiumFirst player={podium[0]} onSelect={(id) => void openPlayerBreakdown(id)} />}
-                                    {podium[2] && <PodiumThird player={podium[2]} onSelect={(id) => void openPlayerBreakdown(id)} />}
+                                    {podium[1] && (
+                                        <PodiumSecond
+                                            player={podium[1]}
+                                            previous={entryNeighbors.get(podium[1].id)?.previous ?? null}
+                                            next={entryNeighbors.get(podium[1].id)?.next ?? null}
+                                            highlighted={highlightPlayerId === podium[1].id}
+                                            onSelect={(id) => void openPlayerBreakdown(id)}
+                                            setAnchorRef={setPlayerAnchorRef}
+                                        />
+                                    )}
+                                    {podium[0] && (
+                                        <PodiumFirst
+                                            player={podium[0]}
+                                            previous={entryNeighbors.get(podium[0].id)?.previous ?? null}
+                                            next={entryNeighbors.get(podium[0].id)?.next ?? null}
+                                            highlighted={highlightPlayerId === podium[0].id}
+                                            onSelect={(id) => void openPlayerBreakdown(id)}
+                                            setAnchorRef={setPlayerAnchorRef}
+                                        />
+                                    )}
+                                    {podium[2] && (
+                                        <PodiumThird
+                                            player={podium[2]}
+                                            previous={entryNeighbors.get(podium[2].id)?.previous ?? null}
+                                            next={entryNeighbors.get(podium[2].id)?.next ?? null}
+                                            highlighted={highlightPlayerId === podium[2].id}
+                                            onSelect={(id) => void openPlayerBreakdown(id)}
+                                            setAnchorRef={setPlayerAnchorRef}
+                                        />
+                                    )}
                                 </div>
                                 {expandedPlayerId && podium.some((p) => p.id === expandedPlayerId) && (
                                     <div className="mt-2 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -551,10 +713,12 @@ const Ranking: React.FC = () => {
                                                 player={player}
                                                 isMe={player.id === user?.id}
                                                 expanded={expanded}
+                                                highlighted={highlightPlayerId === player.id}
                                                 previous={neighbors?.previous ?? null}
                                                 next={neighbors?.next ?? null}
                                                 onToggle={() => void openPlayerBreakdown(player.id)}
                                                 breakdownSlot={expanded ? renderBreakdown(player.id) : undefined}
+                                                setAnchorRef={setPlayerAnchorRef}
                                             />
                                         );
                                     })}
@@ -572,17 +736,19 @@ const Ranking: React.FC = () => {
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 22 }}
                     className="fixed bottom-20 left-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 md:bottom-6"
-                    role="status"
-                    aria-live="polite"
-                    aria-label={`Tu posición: número ${myEntry.rank}, ${myEntry.points} puntos`}
                 >
-                    <div className="flex items-center justify-between rounded-[2rem] border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:px-5 sm:py-4">
+                    <button
+                        type="button"
+                        onClick={() => focusMyPosition()}
+                        className="flex w-full items-center justify-between rounded-[2rem] border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-xl transition hover:border-lime-400/40 hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 sm:px-5 sm:py-4"
+                        aria-label={`Ir a tu posición: número ${myEntry.rank}, ${myEntry.points} puntos. Toca para ver el detalle.`}
+                    >
                         <div className="flex min-w-0 items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-lime-400 sm:h-11 sm:w-11">
                                 <span className="text-sm font-black text-slate-900">#{myEntry.rank}</span>
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Tu posición</p>
+                            <div className="min-w-0 text-left">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Tu posición · Toca para ir</p>
                                 <p className="truncate font-black text-white">
                                     {myEntry.name} <span className="text-lime-400">(Tú)</span>
                                 </p>
@@ -592,7 +758,7 @@ const Ranking: React.FC = () => {
                             <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Puntos</p>
                             <p className="text-2xl font-black text-lime-400">{myEntry.points}</p>
                         </div>
-                    </div>
+                    </button>
                 </motion.div>
             )}
         </div>
