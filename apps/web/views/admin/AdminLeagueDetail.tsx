@@ -193,8 +193,22 @@ const AdminLeagueDetail: React.FC = () => {
                             <span className="text-[10px] text-slate-400 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg">Sin torneo</span>
                         )}
                     </div>
-                </div>
             </div>
+        </div>
+
+            {selectedLeague.status !== 'ACTIVE' && !['FINISHED', 'CANCELLED'].includes(selectedLeague.status) && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
+                    <AlertCircle size={18} className="shrink-0 text-amber-600 mt-0.5" />
+                    <div className="text-sm text-amber-950">
+                        <p className="font-bold">Automatización desactivada en este estado</p>
+                        <p className="mt-1 text-amber-900">
+                            Las pollas se crean en <strong>SETUP</strong>. Para que funcionen recordatorios T-60/T-30,
+                            mensajes a WA grupo, reportes y el resto de automatizaciones, cambia el estado a{' '}
+                            <strong>ACTIVE</strong> cuando la polla esté lista para jugar.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <TabsPrimitive.Root defaultValue="info">
                 <TabsPrimitive.List className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-full sm:w-fit overflow-x-auto">
@@ -234,6 +248,10 @@ const AdminLeagueDetail: React.FC = () => {
 
                         <div className="border-t border-slate-100 pt-4">
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">Cambiar Estado</p>
+                            <p className="mb-3 text-xs text-slate-500">
+                                Solo las pollas <strong className="text-slate-700">ACTIVE</strong> reciben automatizaciones
+                                (T-60, escaladas, WA grupo, reportes). En SETUP los usuarios pueden jugar, pero el scheduler las ignora.
+                            </p>
                             <div className="flex gap-2 flex-wrap">
                                 {STATUSES.map((s) => (
                                     <button

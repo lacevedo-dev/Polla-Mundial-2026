@@ -166,6 +166,7 @@ interface OperationsMatch {
   matchDate: string;
   status: string;
   tournament: string | null;
+  automationExcludedLeagues?: Array<{ id: string; code: string; name: string; status: string }>;
   overallStatus: StepState;
   sync: OperationsSync;
   steps: OperationsStep[];
@@ -875,6 +876,11 @@ function MatrixRow({
               {matchSubtitle}
             </p>
           )}
+          {(match.automationExcludedLeagues?.length ?? 0) > 0 && (
+            <p className="truncate text-[10px] font-semibold text-amber-700" title={match.automationExcludedLeagues!.map((l) => `${l.code} (${l.status})`).join(', ')}>
+              Polla en {match.automationExcludedLeagues!.map((l) => l.status).join('/')} — sin automatización
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col items-center gap-1 px-3">
@@ -922,6 +928,22 @@ function MatrixRow({
       {expanded && (
         <div className="border-t border-slate-200 bg-slate-50 px-4 pb-4">
           <div className="space-y-4 pt-3">
+            {(match.automationExcludedLeagues?.length ?? 0) > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="font-bold">Automatización desactivada para esta polla</p>
+                <p className="mt-1">
+                  Los recordatorios (T-60, T-30, WA grupo, etc.) solo corren en pollas con estado{' '}
+                  <strong>ACTIVE</strong>. Cambia el estado en Admin → Pollas:
+                </p>
+                <ul className="mt-2 list-disc pl-4 space-y-0.5">
+                  {match.automationExcludedLeagues!.map((league) => (
+                    <li key={league.id}>
+                      <span className="font-mono font-semibold">{league.code}</span> — {league.name} ({league.status})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {/* Bloque Sync */}
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sync partido</p>
@@ -1671,6 +1693,14 @@ function IncidentModal({
             {(incident.channelReason || breakdown?.waGroupReason) && (
               <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-red-700 font-semibold">
                 {incident.channelReason || breakdown?.waGroupReason}
+              </p>
+            )}
+            {(incident.match.automationExcludedLeagues?.length ?? 0) > 0 && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-900 font-semibold">
+                La automatización no corre mientras la polla esté en{' '}
+                {incident.match.automationExcludedLeagues!.map((l) => l.status).join(' / ')}.
+                Pásala a <strong>ACTIVE</strong> en Admin → Pollas (
+                {incident.match.automationExcludedLeagues!.map((l) => l.code).join(', ')}).
               </p>
             )}
           </div>

@@ -17,6 +17,7 @@ import {
   parsePredictionReportMinutesBeforeConfig,
   PREDICTION_REPORT_MINUTES_BEFORE_KEY,
 } from '../automation/config/automation-timing.util';
+import { findLeaguesExcludedFromAutomation } from '../automation/audience/automation-league-eligibility.util';
 
 type StepState =
   | 'NOT_APPLICABLE'
@@ -322,7 +323,8 @@ export class AutomationObservabilityService {
       syncLogsByMatch.get(log.matchId)?.push(log);
     }
 
-    const operations = matches.map((match) => {
+    const operations = await Promise.all(
+      matches.map(async (match) => {
       const relevantLeagues = activeLeagues
         .filter((league) => {
           if (league.leagueTournaments.length === 0) {
@@ -407,6 +409,16 @@ export class AutomationObservabilityService {
       const isCarryOver = match.matchDate < dayStart;
       const displayName = this.buildMatchDisplayName(match.homeTeam, match.awayTeam);
       const matchDateLabel = this.formatMatchDateLabel(match.matchDate);
+      const automationExcludedLeagues = await findLeaguesExcludedFromAutomation(
+        this.prisma,
+        {
+          matchId: match.id,
+          tournamentId: match.tournamentId,
+          predictionLeagueIds: [
+            ...new Set(match.predictions.map((prediction) => prediction.leagueId)),
+          ],
+        },
+      );
 
       return {
         id: match.id,
@@ -423,6 +435,7 @@ export class AutomationObservabilityService {
         matchDate: match.matchDate.toISOString(),
         status: match.status,
         tournament: match.tournament?.name ?? null,
+        automationExcludedLeagues,
         overallStatus: this.combineStatuses([
           sync.status,
           ...steps.map((step) => step.status),
@@ -430,7 +443,8 @@ export class AutomationObservabilityService {
         sync,
         steps,
       };
-    });
+    }),
+    );
 
     return {
       date: normalizedDateKey,

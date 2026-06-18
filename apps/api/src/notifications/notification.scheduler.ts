@@ -21,6 +21,10 @@ import {
   REMINDER_WINDOW_END_MINUTES,
   REMINDER_WINDOW_START_MINUTES,
 } from './match-automation-sweep-context';
+import {
+  findLeaguesExcludedFromAutomation,
+  type AutomationExcludedLeague,
+} from '../automation/audience/automation-league-eligibility.util';
 import { NotificationsService } from './notifications.service';
 import { WhatsappPersonalService } from './whatsapp-personal.service';
 import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
@@ -1270,6 +1274,15 @@ export class NotificationScheduler {
     });
     if (!match) return summary;
 
+    summary.excludedLeagues = await findLeaguesExcludedFromAutomation(this.prisma, {
+      matchId: match.id,
+      tournamentId: match.tournamentId,
+      predictionLeagueIds: [
+        ...new Set(match.predictions.map((prediction) => prediction.leagueId)),
+      ],
+      restrictToLeagueId: leagueId,
+    });
+
     const leagues = leagueId
       ? await this.prisma.league.findMany({
           where: { id: leagueId, status: 'ACTIVE' },
@@ -1655,4 +1668,5 @@ export type MatchReminderRetrySummary = {
   waGroupFailed: number;
   emailQueued: number;
   audienceCount: number;
+  excludedLeagues?: AutomationExcludedLeague[];
 };

@@ -2,6 +2,9 @@ import { BadRequestException, Body, Controller, Get, NotFoundException, Post, Pu
 import { ConfigService } from '@nestjs/config';
 import { AutomationRunTrigger, AutomationStep, NotificationType, Prisma } from '@prisma/client';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
+import {
+  formatAutomationExcludedLeaguesMessage,
+} from '../automation/audience/automation-league-eligibility.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -843,6 +846,12 @@ export class AdminAutomationController {
     delivery: MatchReminderRetrySummary,
   ): string {
     if (delivery.audienceCount === 0) {
+      const excludedMessage = formatAutomationExcludedLeaguesMessage(
+        delivery.excludedLeagues ?? [],
+      );
+      if (excludedMessage) {
+        return excludedMessage;
+      }
       return `No hay miembros activos en las ligas de ${label}.`;
     }
 
