@@ -1,6 +1,9 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationStep, EmailJobType, MatchStatus, MemberStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
+import type { AutomationStepChannelId } from '../automation/config/automation-step-catalog';
+import { getSchedulerIdForStep } from '../automation/config/automation-step-scheduler.util';
 import { AutomationTimingConfigService } from '../automation/config/automation-timing-config.service';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
 import {
@@ -43,8 +46,24 @@ export class PredictionReportService {
     private readonly emailService: PredictionReportEmailService,
     private readonly pdfReport: PdfReportService,
     private readonly timingConfig: AutomationTimingConfigService,
+    @Optional() private readonly stepConfig?: AutomationStepConfigService,
     @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
+
+  private async isReportStepOperational(step: AutomationStep): Promise<boolean> {
+    if (!this.stepConfig) return true;
+    return this.stepConfig.isStepOperational(step);
+  }
+
+  private async isReportChannelEnabled(
+    step: AutomationStep,
+    channel: AutomationStepChannelId,
+  ): Promise<boolean> {
+    if (!this.stepConfig) return true;
+    const schedulerId = getSchedulerIdForStep(step);
+    if (!schedulerId) return false;
+    return this.stepConfig.isSchedulerChannelEnabled(schedulerId, channel, step);
+  }
 
   private readonly hasCompletePredictionScores = <
     T extends { homeScore: number | null; awayScore: number | null },
@@ -60,6 +79,22 @@ export class PredictionReportService {
 async sendPendingReports(
     context?: MatchAutomationSweepContext,
   ): Promise<void> {
+    if (!(await this.isReportStepOperational(AutomationStep.PREDICTION_REPORT))) {
+      return;
+    }
+
+    const emailEnabled = await this.isReportChannelEnabled(
+      AutomationStep.PREDICTION_REPORT,
+      'email',
+    );
+    const waGroupEnabled = await this.isReportChannelEnabled(
+      AutomationStep.PREDICTION_REPORT,
+      'waGroup',
+    );
+    if (!emailEnabled && !waGroupEnabled) {
+      return;
+    }
+
     const now = context?.now ?? new Date();
     const reportMinutesBeforeKickoff =
       await this.timingConfig.getPredictionReportMinutesBefore();
@@ -202,28 +237,32 @@ async sendPendingReports(
       );
 
       try {
-        await this.emailService.sendMultiLeaguePredictionsReport({
-          matchId,
-          match: {
-            homeTeam: data.match.homeTeam,
-            awayTeam: data.match.awayTeam,
-            matchDate: data.match.matchDate,
-            venue: data.match.venue,
-            round: data.match.round,
-          },
-          leaguesData: data.leaguesData,
-          sentAt: now,
-        });
+        if (emailEnabled) {
+          await this.emailService.sendMultiLeaguePredictionsReport({
+            matchId,
+            match: {
+              homeTeam: data.match.homeTeam,
+              awayTeam: data.match.awayTeam,
+              matchDate: data.match.matchDate,
+              venue: data.match.venue,
+              round: data.match.round,
+            },
+            leaguesData: data.leaguesData,
+            sentAt: now,
+          });
+        }
 
         await this.prisma.match.update({
           where: { id: matchId },
           data: { predictionReportSentAt: now },
         });
 
-        this.logger.log(`Reporte agrupado enviado para match ${matchId}`);
+        this.logger.log(
+          `Reporte agrupado enviado para match ${matchId}` +
+            (emailEnabled ? '' : ' (sin email — solo WA grupo)'),
+        );
 
-        // Emit WhatsApp events for each league (best-effort)
-        if (this.eventEmitter) {
+        if (waGroupEnabled && this.eventEmitter) {
           for (const { leagueId } of data.leaguesData) {
             try {
               this.eventEmitter.emit(WA_PREDICTION_REPORT_EVENT, { matchId, leagueId } satisfies WhatsappReportEvent);
@@ -237,6 +276,22 @@ async sendPendingReports(
   }
 
   async sendPendingResultReports(limit: number = 3): Promise<void> {
+    if (!(await this.isReportStepOperational(AutomationStep.RESULT_REPORT))) {
+      return;
+    }
+
+    const emailEnabled = await this.isReportChannelEnabled(
+      AutomationStep.RESULT_REPORT,
+      'email',
+    );
+    const waGroupEnabled = await this.isReportChannelEnabled(
+      AutomationStep.RESULT_REPORT,
+      'waGroup',
+    );
+    if (!emailEnabled && !waGroupEnabled) {
+      return;
+    }
+
     const candidates = await this.prisma.match.findMany({
       where: {
         status: MatchStatus.FINISHED,
@@ -263,7 +318,7 @@ async sendPendingReports(
         continue;
       }
 
-      await this.sendMatchResultsReport(match.id);
+      await this.sendMatchResultsReport(match.id, { emailEnabled, waGroupEnabled });
     }
   }
 
@@ -381,7 +436,24 @@ async sendPendingReports(
    * EnvÃƒÂ­a el correo de resultados automÃƒÂ¡ticamente cuando un partido termina.
    * Llamado desde MatchSyncService despuÃƒÂ©s de calcular los puntos.
    */
-  async sendMatchResultsReport(matchId: string): Promise<void> {
+  async sendMatchResultsReport(
+    matchId: string,
+    channelOptions?: { emailEnabled?: boolean; waGroupEnabled?: boolean },
+  ): Promise<void> {
+    if (!(await this.isReportStepOperational(AutomationStep.RESULT_REPORT))) {
+      return;
+    }
+
+    const emailEnabled =
+      channelOptions?.emailEnabled ??
+      (await this.isReportChannelEnabled(AutomationStep.RESULT_REPORT, 'email'));
+    const waGroupEnabled =
+      channelOptions?.waGroupEnabled ??
+      (await this.isReportChannelEnabled(AutomationStep.RESULT_REPORT, 'waGroup'));
+    if (!emailEnabled && !waGroupEnabled) {
+      return;
+    }
+
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
       include: { homeTeam: true, awayTeam: true },
@@ -476,31 +548,34 @@ async sendPendingReports(
     });
 
     try {
-      await this.emailService.sendMultiLeagueResultsReport({
-        matchId,
-        match: {
-          homeTeam:  match.homeTeam.name,
-          awayTeam:  match.awayTeam.name,
-          matchDate: match.matchDate,
-          homeScore: realHome,
-          awayScore: realAway,
-          venue:     match.venue ?? undefined,
-          round:     match.round ?? undefined,
-        },
-        leaguesData,
-        sentAt: new Date(),
-      });
+      if (emailEnabled) {
+        await this.emailService.sendMultiLeagueResultsReport({
+          matchId,
+          match: {
+            homeTeam:  match.homeTeam.name,
+            awayTeam:  match.awayTeam.name,
+            matchDate: match.matchDate,
+            homeScore: realHome,
+            awayScore: realAway,
+            venue:     match.venue ?? undefined,
+            round:     match.round ?? undefined,
+          },
+          leaguesData,
+          sentAt: new Date(),
+        });
+      }
 
       const totalRecipients = leaguesData.reduce((s, l) => s + l.results.length, 0);
       await this.observability.finishRun(runId, {
         status: 'SUCCESS',
-        summary: `Reporte de resultados enviado (${leaguesData.length} polla(s), ~${totalRecipients} participantes)`,
-        deliveredCount: totalRecipients,
-        details: { matchId, leagues: leaguesData.map(l => l.leagueCode) },
+        summary: emailEnabled
+          ? `Reporte de resultados enviado (${leaguesData.length} polla(s), ~${totalRecipients} participantes)`
+          : `Reporte WA grupo encolado (${leaguesData.length} polla(s))`,
+        deliveredCount: emailEnabled ? totalRecipients : 0,
+        details: { matchId, leagues: leaguesData.map(l => l.leagueCode), emailEnabled, waGroupEnabled },
       });
 
-      // Emit WhatsApp events for each league (best-effort, ignored if no listener)
-      if (this.eventEmitter) {
+      if (waGroupEnabled && this.eventEmitter) {
         for (const { leagueId } of leaguesData) {
           try {
             this.eventEmitter.emit(WA_RESULT_REPORT_EVENT, { matchId, leagueId } satisfies WhatsappReportEvent);

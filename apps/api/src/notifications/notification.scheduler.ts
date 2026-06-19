@@ -483,6 +483,14 @@ export class NotificationScheduler {
 
   private async runSendMatchResultNotifications(): Promise<void> {
     try {
+      if (
+        this.stepConfig &&
+        !(await this.stepConfig.isStepOperational(AutomationStep.RESULT_NOTIFICATION))
+      ) {
+        this.logger.debug('RESULT_NOTIFICATION deshabilitado en Admin — omitiendo');
+        return;
+      }
+
       const matches = await this.prisma.match.findMany({
         where: {
           status: MatchStatus.FINISHED,

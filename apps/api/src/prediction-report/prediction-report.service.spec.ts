@@ -23,6 +23,11 @@ describe('PredictionReportService', () => {
     getPredictionReportMinutesBefore: jest.fn().mockResolvedValue(15),
   } as any;
 
+  const stepConfig = {
+    isStepOperational: jest.fn().mockResolvedValue(true),
+    isSchedulerChannelEnabled: jest.fn().mockResolvedValue(true),
+  } as any;
+
   const emailService = {
     sendPredictionsReport: jest.fn(),
     sendMultiLeaguePredictionsReport: jest.fn(),
@@ -38,7 +43,7 @@ describe('PredictionReportService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PredictionReportService(prisma, observability, emailService, pdfReport, timingConfig);
+    service = new PredictionReportService(prisma, observability, emailService, pdfReport, timingConfig, stepConfig);
     prisma.prediction.findMany.mockResolvedValue([
       { userId: 'user-1', points: 7 },
       { userId: 'user-2', points: 3 },
@@ -137,6 +142,18 @@ describe('PredictionReportService', () => {
       take: 5,
     });
     expect(sendMatchResultsReportSpy).toHaveBeenCalledTimes(1);
-    expect(sendMatchResultsReportSpy).toHaveBeenCalledWith('match-1');
+    expect(sendMatchResultsReportSpy).toHaveBeenCalledWith('match-1', {
+      emailEnabled: true,
+      waGroupEnabled: true,
+    });
+  });
+
+  it('no envía reporte de predicciones si el paso está deshabilitado en Admin', async () => {
+    stepConfig.isStepOperational.mockResolvedValueOnce(false);
+
+    await service.sendPendingReports();
+
+    expect(emailService.sendMultiLeaguePredictionsReport).not.toHaveBeenCalled();
+    expect(prisma.match.update).not.toHaveBeenCalled();
   });
 });

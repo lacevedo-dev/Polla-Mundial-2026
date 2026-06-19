@@ -16,6 +16,7 @@ import { AutomationDeliveryService } from '../delivery/automation-delivery.servi
 import { NotificationScheduler } from '../../notifications/notification.scheduler';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AutomationFeatureFlagsService } from '../config/automation-feature-flags.service';
+import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { buildMatchResultNotificationKey } from './post-match-dedupe.util';
 import {
   buildResultUserMessage,
@@ -33,6 +34,7 @@ export class PostMatchOrchestratorService {
     private readonly featureFlags: AutomationFeatureFlagsService,
     private readonly observability: AutomationObservabilityService,
     private readonly delivery: AutomationDeliveryService,
+    private readonly stepConfig: AutomationStepConfigService,
     private readonly notificationScheduler: NotificationScheduler,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
@@ -72,6 +74,11 @@ export class PostMatchOrchestratorService {
   }
 
   private async processFinishedMatches(): Promise<void> {
+    if (!(await this.stepConfig.isStepOperational(AutomationStep.RESULT_NOTIFICATION))) {
+      this.logger.debug('RESULT_NOTIFICATION deshabilitado en Admin — omitiendo');
+      return;
+    }
+
     try {
       const matches = await this.prisma.match.findMany({
         where: {
