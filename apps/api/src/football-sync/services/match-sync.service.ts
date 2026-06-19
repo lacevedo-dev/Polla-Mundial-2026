@@ -34,6 +34,7 @@ import { GoalLiveNotificationService } from '../../automation/live/goal-live-not
 import { CardLiveNotificationService } from '../../automation/live/card-live-notification.service';
 import { logGoalAutomation } from '../../automation/live/goal-automation-observability.util';
 import { LiveOrchestratorService } from '../../automation/live/live-orchestrator.service';
+import { AutomationStepConfigService } from '../../automation/config/automation-step-config.service';
 import type { LiveMatchContext, LivePhaseEventId } from '../../automation/types/automation.types';
 import {
   MatchStatus,
@@ -78,6 +79,7 @@ export class MatchSyncService {
     @Optional() private readonly liveOrchestrator?: LiveOrchestratorService,
     @Optional() private readonly goalLiveNotifications?: GoalLiveNotificationService,
     @Optional() private readonly cardLiveNotifications?: CardLiveNotificationService,
+    @Optional() private readonly stepConfig?: AutomationStepConfigService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -271,8 +273,7 @@ export class MatchSyncService {
         today,
         shouldQueryYesterday ? yesterday : null,
       );
-      const eventSyncEnabled =
-        await this.footballConfigService.isEventSyncEnabled();
+      const eventSyncEnabled = await this.resolveEventSyncEnabled();
 
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
@@ -385,7 +386,8 @@ export class MatchSyncService {
   }
 
   /**
-   * Poll /fixtures/events for all LIVE matches on the configured interval.
+   * @deprecated El polling independiente fue reemplazado por sync en cadena:
+   * /fixtures detecta goles; /fixtures/events complementa en el mismo ciclo del plan.
    */
   async pollLiveMatchEvents(): Promise<{
     success: boolean;
@@ -393,184 +395,21 @@ export class MatchSyncService {
     requestsUsed: number;
     error?: string;
   }> {
-    const execution = await tryRunExclusiveBackgroundJob(
-      MatchSyncService.BACKGROUND_DB_JOB_KEY,
-      'pollLiveMatchEvents',
-      () => this.pollLiveMatchEventsInternal(),
+    this.logger.warn(
+      'pollLiveMatchEvents está deprecado — los eventos live se sincronizan dentro de syncLiveMatches',
     );
-
-    if (!execution.ran) {
-      logExclusiveBackgroundJobSkip(this.logger, 'Live events poll', execution);
-      return {
-        success: false,
-        matchesPolled: 0,
-        requestsUsed: 0,
-        error: 'Another DB-heavy background job is running',
-      };
-    }
-
-    return execution.result;
+    return { success: true, matchesPolled: 0, requestsUsed: 0 };
   }
 
-  private async pollLiveMatchEventsInternal(): Promise<{
-    success: boolean;
-    matchesPolled: number;
-    requestsUsed: number;
-    error?: string;
-  }> {
-    const startedAt = Date.now();
-    try {
-      if (!(await this.footballConfigService.isEventSyncEnabled())) {
-        return { success: true, matchesPolled: 0, requestsUsed: 0 };
-      }
-
-      const liveMatches = await this.prisma.match.findMany({
-        where: {
-          status: MatchStatus.LIVE,
-          externalId: { not: null },
-          eventsNoDataAt: null,
-        },
-        select: {
-          id: true,
-          externalId: true,
-          homeScore: true,
-          awayScore: true,
-          elapsed: true,
-          homeTeamId: true,
-          awayTeamId: true,
-          homeTeam: { select: { apiFootballTeamId: true, name: true } },
-          awayTeam: { select: { apiFootballTeamId: true, name: true } },
-        },
-      });
-
-      if (liveMatches.length === 0) {
-        return { success: true, matchesPolled: 0, requestsUsed: 0 };
-      }
-
-      let requestsUsed = 0;
-      let matchesPolled = 0;
-
-      for (const match of liveMatches) {
-        if (!(await this.rateLimiter.canMakeRequest())) {
-          this.logger.warn('Live events poll stopped: request budget exhausted');
-          break;
-        }
-
-        const fixtureId = Number.parseInt(match.externalId!, 10);
-        if (!Number.isFinite(fixtureId)) continue;
-
-        const homeTeamApiId = match.homeTeam.apiFootballTeamId;
-        const awayTeamApiId = match.awayTeam.apiFootballTeamId;
-        if (homeTeamApiId == null || awayTeamApiId == null) continue;
-
-        try {
-          const eventsResponse = await this.apiClient.getFixtureEvents(fixtureId);
-          await this.rateLimiter.logRequest(
-            '/fixtures/events',
-            { fixture: fixtureId, source: 'live-poll' },
-            200,
-            eventsResponse?.response?.length ?? 0,
-          );
-          await this.syncPlan.incrementRequestsUsed(1);
-          requestsUsed += 1;
-
-          const eventSyncEnabled =
-            await this.footballConfigService.isEventSyncEnabled();
-
-          await this.syncMatchEvents(
-            fixtureId,
-            match.id,
-            eventsResponse?.response ?? [],
-            {
-              homeScore: match.homeScore ?? 0,
-              awayScore: match.awayScore ?? 0,
-              homeTeamId: match.homeTeamId,
-              awayTeamId: match.awayTeamId,
-              homeTeamApiId,
-              awayTeamApiId,
-            },
-          ).then((eventSyncResult) =>
-            this.dispatchNewLiveEventNotifications({
-              matchId: match.id,
-              homeTeamName: match.homeTeam.name,
-              awayTeamName: match.awayTeam.name,
-              homeScore: match.homeScore ?? 0,
-              awayScore: match.awayScore ?? 0,
-              elapsed: match.elapsed,
-              newRedCards: eventSyncResult.newRedCards,
-              newYellowCards: eventSyncResult.newYellowCards,
-              newSubstitutions: eventSyncResult.newSubstitutions,
-              newVarGoalAnnulments: eventSyncResult.newVarGoalAnnulments,
-            }),
-          );
-
-          if (await this.rateLimiter.canMakeRequest()) {
-            const fixtureResponse = await this.apiClient.getFixtureById(fixtureId);
-            await this.rateLimiter.logRequest(
-              '/fixtures',
-              { id: match.externalId, source: 'live-poll-status' },
-              200,
-              fixtureResponse.results,
-            );
-            await this.syncPlan.incrementRequestsUsed(1);
-            requestsUsed += 1;
-
-            if (fixtureResponse.results > 0) {
-              await this.updateMatchFromFixture(fixtureResponse.response[0], {
-                eventSyncEnabled,
-              });
-            }
-          } else {
-            this.logger.warn(
-              `Live poll skipped fixture refresh for match ${match.id}: no request budget`,
-            );
-          }
-
-          matchesPolled += 1;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          this.logger.warn(`Live events poll failed for match ${match.id}: ${message}`);
-        }
-      }
-
-      if (requestsUsed > 0) {
-        await this.syncPlan.updateLastEventPollTime();
-      }
-
-      await this.monitoring.createLog({
-        type: SyncLogType.AUTO_SYNC,
-        status: SyncLogStatus.SUCCESS,
-        message: `Live events poll: ${matchesPolled} match(es), ${requestsUsed} request(s)`,
-        requestsUsed,
-        matchesUpdated: matchesPolled,
-        duration: Date.now() - startedAt,
-        details: JSON.stringify({ livePoll: true, matchesPolled, requestsUsed }),
-      });
-
-      return {
-        success: true,
-        matchesPolled,
-        requestsUsed,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Live events poll failed: ${message}`);
-      await this.monitoring.createLog({
-        type: SyncLogType.AUTO_SYNC,
-        status: SyncLogStatus.FAILED,
-        message: 'Live events poll failed',
-        requestsUsed: 0,
-        matchesUpdated: 0,
-        duration: Date.now() - startedAt,
-        error: message,
-      });
-      return {
-        success: false,
-        matchesPolled: 0,
-        requestsUsed: 0,
-        error: message,
-      };
+  private async resolveEventSyncEnabled(): Promise<boolean> {
+    const configEnabled = await this.footballConfigService.isEventSyncEnabled();
+    if (configEnabled) {
+      return true;
     }
+    if (this.stepConfig) {
+      return this.stepConfig.needsFixtureEventsApi();
+    }
+    return false;
   }
 
   private async syncLiveMatchesInternal(): Promise<{
@@ -613,8 +452,7 @@ export class MatchSyncService {
       // Update sync plan
       await this.syncPlan.updateLastSyncTime();
       await this.syncPlan.incrementRequestsUsed();
-      const eventSyncEnabled =
-        await this.footballConfigService.isEventSyncEnabled();
+      const eventSyncEnabled = await this.resolveEventSyncEnabled();
 
       // Process fixtures in parallel batches (4 concurrent)
       let updatedCount = 0;
@@ -811,7 +649,8 @@ export class MatchSyncService {
       if (
         scoreChanged &&
         totalGoalsDelta > 0 &&
-        (status === MatchStatus.LIVE || transitionedToFinished)
+        (status === MatchStatus.LIVE || transitionedToFinished) &&
+        (await this.isLiveEventSchedulerEnabled('live_goal'))
       ) {
         const elapsed = fixture.fixture.status.elapsed ?? null;
 
@@ -982,13 +821,19 @@ export class MatchSyncService {
         currentStatusShort === 'HT' && previousStatusShort !== 'HT';
       const isFinalStatus = ['FT', 'AET', 'PEN'].includes(currentStatusShort ?? '');
       const wasFinalStatus = ['FT', 'AET', 'PEN'].includes(previousStatusShort ?? '');
+      const supplementalLiveEventsNeeded =
+        status === MatchStatus.LIVE &&
+        !scoreChanged &&
+        cachedFixtureEvents === undefined &&
+        (await this.shouldSyncSupplementalLiveEvents());
       const shouldSyncEvents =
         options.eventSyncEnabled &&
         !match.eventsNoDataAt &&
         (shouldSyncHalftimeEvents ||
           (isFinalStatus && !wasFinalStatus) ||
           scoreDecreased ||
-          cachedFixtureEvents !== undefined);
+          cachedFixtureEvents !== undefined ||
+          supplementalLiveEventsNeeded);
 
       if (shouldSyncEvents && fixture.fixture.id) {
         const eventSyncContext = {
@@ -1479,7 +1324,7 @@ export class MatchSyncService {
 
     if (
       params.newRedCards.length > 0 &&
-      (await this.footballConfigService.isEventWaRedCardEnabled())
+      (await this.isLiveEventSchedulerEnabled('live_red_card'))
     ) {
       for (const card of params.newRedCards) {
         try {
@@ -1493,7 +1338,7 @@ export class MatchSyncService {
 
     if (
       params.newYellowCards.length > 0 &&
-      (await this.footballConfigService.isEventWaYellowCardEnabled())
+      (await this.isLiveEventSchedulerEnabled('live_yellow_card'))
     ) {
       for (const card of params.newYellowCards) {
         try {
@@ -1507,7 +1352,7 @@ export class MatchSyncService {
 
     if (
       params.newSubstitutions.length > 0 &&
-      (await this.footballConfigService.isEventWaSubstitutionEnabled())
+      (await this.isLiveEventSchedulerEnabled('live_substitution'))
     ) {
       for (const substitution of params.newSubstitutions) {
         try {
@@ -1521,7 +1366,7 @@ export class MatchSyncService {
 
     if (
       params.newVarGoalAnnulments.length > 0 &&
-      (await this.footballConfigService.isEventWaVarGoalEnabled())
+      (await this.isLiveEventSchedulerEnabled('live_goal_annulled'))
     ) {
       for (const annulment of params.newVarGoalAnnulments) {
         try {
@@ -1644,9 +1489,54 @@ export class MatchSyncService {
     ) ?? null;
   }
 
+  private async isLiveEventSchedulerEnabled(schedulerId: string): Promise<boolean> {
+    if (this.stepConfig) {
+      return this.stepConfig.isSchedulerOperational(schedulerId);
+    }
+
+    switch (schedulerId) {
+      case 'live_goal':
+        return true;
+      case 'live_red_card':
+        return this.footballConfigService.isEventWaRedCardEnabled();
+      case 'live_yellow_card':
+        return this.footballConfigService.isEventWaYellowCardEnabled();
+      case 'live_substitution':
+        return this.footballConfigService.isEventWaSubstitutionEnabled();
+      case 'live_goal_annulled':
+        return this.footballConfigService.isEventWaVarGoalEnabled();
+      default:
+        return true;
+    }
+  }
+
+  private async shouldSyncSupplementalLiveEvents(): Promise<boolean> {
+    if (this.stepConfig) {
+      return this.stepConfig.needsSupplementalLiveEventSync();
+    }
+
+    const [red, yellow, sub, varGoal] = await Promise.all([
+      this.footballConfigService.isEventWaRedCardEnabled(),
+      this.footballConfigService.isEventWaYellowCardEnabled(),
+      this.footballConfigService.isEventWaSubstitutionEnabled(),
+      this.footballConfigService.isEventWaVarGoalEnabled(),
+    ]);
+    return red || yellow || sub || varGoal;
+  }
+
   private async dispatchDetectedGoal(
     params: Parameters<GoalLiveNotificationService['dispatchGoalScored']>[0],
   ): Promise<void> {
+    if (!(await this.isLiveEventSchedulerEnabled('live_goal'))) {
+      logGoalAutomation(this.logger, 'goal_dispatch_skipped', {
+        matchId: params.matchId,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        reason: 'live_goal_step_disabled',
+      }, 'debug');
+      return;
+    }
+
     if (!this.goalLiveNotifications) {
       logGoalAutomation(this.logger, 'goal_dispatch_service_missing', {
         matchId: params.matchId,
@@ -2168,8 +2058,7 @@ export class MatchSyncService {
       // Update match
       if (response.results > 0) {
         const fixture = response.response[0];
-        const eventSyncEnabled =
-          await this.footballConfigService.isEventSyncEnabled();
+        const eventSyncEnabled = await this.resolveEventSyncEnabled();
         const updated = await this.updateMatchFromFixture(fixture, {
           eventSyncEnabled,
         });

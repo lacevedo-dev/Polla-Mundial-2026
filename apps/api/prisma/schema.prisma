@@ -1103,7 +1103,11 @@ enum AutomationStep {
   HALFTIME
   SECOND_HALF_START
   MATCH_LIVE_END
+  GOAL_SCORED
   GOAL_IMPACT
+  YELLOW_CARD
+  RED_CARD
+  SUBSTITUTION
 }
 
 enum AutomationRunStatus {

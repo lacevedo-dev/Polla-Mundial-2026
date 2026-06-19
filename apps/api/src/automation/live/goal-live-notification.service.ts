@@ -4,6 +4,7 @@ import { PushNotificationsService } from '../../push-notifications/push-notifica
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { LiveOrchestratorService } from './live-orchestrator.service';
+import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import type { LeagueGoalImpactSummary } from './goal-impact-analyzer.service';
 import type { GoalImpactContext } from '../types/automation.types';
 import { logGoalAutomation } from './goal-automation-observability.util';
@@ -35,6 +36,7 @@ export class GoalLiveNotificationService {
     private readonly notifications: NotificationsService,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
     @Optional() private readonly liveOrchestrator?: LiveOrchestratorService,
+    @Optional() private readonly stepConfig?: AutomationStepConfigService,
   ) {}
 
   /**
@@ -304,43 +306,58 @@ export class GoalLiveNotificationService {
     minuteLabel: string | null,
     scoringTeam: string | null,
   ): Promise<void> {
+    const pushEnabled = this.stepConfig
+      ? await this.stepConfig.isSchedulerChannelEnabled('live_goal', 'push')
+      : true;
+    const inAppEnabled = this.stepConfig
+      ? await this.stepConfig.isSchedulerChannelEnabled('live_goal', 'inApp')
+      : true;
+
+    if (!pushEnabled && !inAppEnabled) {
+      return;
+    }
+
     const notifiedUsers = new Set<string>();
     for (const prediction of predictions) {
       if (notifiedUsers.has(prediction.userId)) continue;
       notifiedUsers.add(prediction.userId);
 
-      await this.push.sendToUser(prediction.userId, {
-        title,
-        body,
-        tag: `goal-${params.matchId}-${Date.now()}`,
-        requireInteraction: false,
-        data: {
-          matchId: params.matchId,
-          type: 'goal',
-          homeScore: params.homeScore,
-          awayScore: params.awayScore,
-          scorerName: params.scorerInfo?.scorerName ?? null,
-          elapsed: params.elapsed,
-        },
-      });
+      if (pushEnabled) {
+        await this.push.sendToUser(prediction.userId, {
+          title,
+          body,
+          tag: `goal-${params.matchId}-${Date.now()}`,
+          requireInteraction: false,
+          data: {
+            matchId: params.matchId,
+            type: 'goal',
+            homeScore: params.homeScore,
+            awayScore: params.awayScore,
+            scorerName: params.scorerInfo?.scorerName ?? null,
+            elapsed: params.elapsed,
+          },
+        });
+      }
 
-      await this.notifications.createInAppNotification({
-        userId: prediction.userId,
-        type: 'GOAL_SCORED',
-        title,
-        body,
-        data: {
-          matchId: params.matchId,
-          homeScore: params.homeScore,
-          awayScore: params.awayScore,
-          elapsed: params.elapsed,
-          scorerName: params.scorerInfo?.scorerName ?? null,
-          assistName: params.scorerInfo?.assistName ?? null,
-          goalDetail: params.scorerInfo?.goalDetail ?? null,
-          scoringTeam,
-          minute: minuteLabel,
-        },
-      });
+      if (inAppEnabled) {
+        await this.notifications.createInAppNotification({
+          userId: prediction.userId,
+          type: 'GOAL_SCORED',
+          title,
+          body,
+          data: {
+            matchId: params.matchId,
+            homeScore: params.homeScore,
+            awayScore: params.awayScore,
+            elapsed: params.elapsed,
+            scorerName: params.scorerInfo?.scorerName ?? null,
+            assistName: params.scorerInfo?.assistName ?? null,
+            goalDetail: params.scorerInfo?.goalDetail ?? null,
+            scoringTeam,
+            minute: minuteLabel,
+          },
+        });
+      }
     }
 
     logGoalAutomation(this.logger, 'goal_participants_notified', {

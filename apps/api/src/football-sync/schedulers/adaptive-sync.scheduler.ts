@@ -57,21 +57,7 @@ export class AdaptiveSyncScheduler {
           statusExecution = await this.executeSyncWithLock(statusDecision.trigger);
         }
 
-        let eventsExecution:
-          | {
-              success: boolean;
-              matchesPolled?: number;
-              requestsUsed?: number;
-              error?: string;
-            }
-          | null = null;
-
-        if (await this.syncPlan.shouldPollLiveEventsNow()) {
-          this.logger.log('Live events poll triggered');
-          eventsExecution = await this.matchSync.pollLiveMatchEvents();
-        }
-
-        if (!statusExecution && !eventsExecution) {
+        if (!statusExecution) {
           return {
             status: 'skipped',
             summary: statusDecision.shouldSync
@@ -82,22 +68,14 @@ export class AdaptiveSyncScheduler {
 
         return {
           status: 'completed',
-          level:
-            (statusExecution?.success ?? true) && (eventsExecution?.success ?? true)
-              ? 'log'
-              : 'warn',
+          level: statusExecution.success ? 'log' : 'warn',
           summary: {
             reason: 'adaptive_tick',
-            statusSyncRan: Boolean(statusExecution),
-            statusSuccess: statusExecution?.success ?? null,
-            statusMatchesUpdated: statusExecution?.matchesUpdated ?? 0,
-            statusRequestsUsed: statusExecution?.requestsUsed ?? 0,
-            eventsPollRan: Boolean(eventsExecution),
-            eventsSuccess: eventsExecution?.success ?? null,
-            eventsMatchesPolled: eventsExecution?.matchesPolled ?? 0,
-            eventsRequestsUsed: eventsExecution?.requestsUsed ?? 0,
-            ...(statusExecution?.error ? { statusError: statusExecution.error } : {}),
-            ...(eventsExecution?.error ? { eventsError: eventsExecution.error } : {}),
+            statusSyncRan: true,
+            statusSuccess: statusExecution.success,
+            statusMatchesUpdated: statusExecution.matchesUpdated ?? 0,
+            statusRequestsUsed: statusExecution.requestsUsed ?? 0,
+            ...(statusExecution.error ? { statusError: statusExecution.error } : {}),
           },
         };
       } catch (error) {
@@ -422,9 +400,31 @@ export class AdaptiveSyncScheduler {
     }
 
     const plan = await this.syncPlan.calculateDailyPlan();
-    const potentiallyLive = plan.hasLiveMatches
-      ? 0
-      : await this.syncPlan.countPotentiallyLiveMatches();
+
+    if (plan.nextSyncIn > 0) {
+      return {
+        shouldSync: false,
+        summary: {
+          reason: 'plan_interval_not_elapsed',
+          trigger: 'peak_hours',
+          nextSyncIn: plan.nextSyncIn,
+        },
+      };
+    }
+
+    // Con partidos LIVE el plan adaptativo ya sincroniza al intervalo configurado.
+    if (plan.hasLiveMatches) {
+      return {
+        shouldSync: false,
+        summary: {
+          reason: 'peak_hours_deferred_to_plan',
+          trigger: 'peak_hours',
+          hasLiveMatches: true,
+        },
+      };
+    }
+
+    const potentiallyLive = await this.syncPlan.countPotentiallyLiveMatches();
 
     if (plan.requestBudget <= 0) {
       return {
@@ -443,12 +443,10 @@ export class AdaptiveSyncScheduler {
     return {
       shouldSync: true,
       trigger: 'peak_hours',
-      logMessage: plan.hasLiveMatches
-        ? 'Peak hours sync triggered (live matches detected)'
-        : `Peak hours sync triggered (${potentiallyLive} potentially live matches)`,
+      logMessage: `Peak hours sync triggered (${potentiallyLive} potentially live matches)`,
       summary: {
-        reason: 'peak_hours_override',
-        hasLiveMatches: plan.hasLiveMatches,
+        reason: 'peak_hours_kickoff_safety_net',
+        hasLiveMatches: false,
         potentiallyLive,
       },
     };

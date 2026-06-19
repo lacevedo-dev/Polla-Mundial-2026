@@ -10,7 +10,6 @@ describe('AdaptiveSyncScheduler', () => {
 
   const mockSyncPlanService = {
     shouldSyncNow: jest.fn(),
-    shouldPollLiveEventsNow: jest.fn(),
     calculateDailyPlan: jest.fn(),
     countPotentiallyLiveMatches: jest.fn(),
   };
@@ -19,7 +18,6 @@ describe('AdaptiveSyncScheduler', () => {
     syncTodayMatches: jest.fn(),
     syncTodayMatchesForTrigger: jest.fn(),
     syncLiveMatches: jest.fn(),
-    pollLiveMatchEvents: jest.fn(),
   };
 
   const mockFootballConfigService = {
@@ -53,7 +51,6 @@ describe('AdaptiveSyncScheduler', () => {
     mockFootballConfigService.isAutoSyncEnabled.mockResolvedValue(true);
     mockFootballConfigService.isPeakHoursSyncEnabled.mockResolvedValue(true);
     mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
-    mockSyncPlanService.shouldPollLiveEventsNow.mockResolvedValue(false);
     mockSyncPlanService.countPotentiallyLiveMatches.mockResolvedValue(0);
     mockSyncPlanService.calculateDailyPlan.mockResolvedValue({
       date: '2026-03-28',
@@ -74,11 +71,6 @@ describe('AdaptiveSyncScheduler', () => {
       success: true,
       matchesUpdated: 1,
     });
-    mockMatchSyncService.pollLiveMatchEvents.mockResolvedValue({
-      success: true,
-      matchesPolled: 0,
-      requestsUsed: 0,
-    });
   });
 
   it('skips adaptive sync when auto sync is disabled', async () => {
@@ -91,16 +83,70 @@ describe('AdaptiveSyncScheduler', () => {
     expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
   });
 
-  it('runs peak-hours override from adaptive tick on five-minute boundary', async () => {
+  it('runs peak-hours kickoff safety net when no LIVE matches yet', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-03-28T10:00:00'));
     mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
     mockFootballConfigService.isPeakHoursSyncEnabled.mockResolvedValue(true);
+    mockSyncPlanService.countPotentiallyLiveMatches.mockResolvedValue(2);
+    mockSyncPlanService.calculateDailyPlan.mockResolvedValue({
+      date: '2026-03-28',
+      totalMatches: 1,
+      requestBudget: 10,
+      intervalMinutes: 5,
+      estimatedRequestsUsed: 2,
+      strategy: 'BALANCED',
+      hasLiveMatches: false,
+      nextSyncIn: 0,
+      lastSync: null,
+    });
 
     await scheduler.adaptiveSyncTick();
 
     expect(mockFootballConfigService.isPeakHoursSyncEnabled).toHaveBeenCalled();
-    expect(mockSyncPlanService.calculateDailyPlan).toHaveBeenCalled();
+    expect(mockSyncPlanService.countPotentiallyLiveMatches).toHaveBeenCalled();
     expect(mockMatchSyncService.syncLiveMatches).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips peak-hours when partidos already LIVE (plan adaptativo basta)', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-28T10:00:00'));
+    mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
+    mockFootballConfigService.isPeakHoursSyncEnabled.mockResolvedValue(true);
+    mockSyncPlanService.calculateDailyPlan.mockResolvedValue({
+      date: '2026-03-28',
+      totalMatches: 1,
+      requestBudget: 10,
+      intervalMinutes: 5,
+      estimatedRequestsUsed: 2,
+      strategy: 'BALANCED',
+      hasLiveMatches: true,
+      nextSyncIn: 0,
+      lastSync: null,
+    });
+
+    await scheduler.adaptiveSyncTick();
+
+    expect(mockMatchSyncService.syncLiveMatches).not.toHaveBeenCalled();
+  });
+
+  it('skips peak-hours override when plan interval has not elapsed', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-28T10:00:00'));
+    mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
+    mockFootballConfigService.isPeakHoursSyncEnabled.mockResolvedValue(true);
+    mockSyncPlanService.calculateDailyPlan.mockResolvedValue({
+      date: '2026-03-28',
+      totalMatches: 1,
+      requestBudget: 10,
+      intervalMinutes: 5,
+      estimatedRequestsUsed: 2,
+      strategy: 'BALANCED',
+      hasLiveMatches: true,
+      nextSyncIn: 120,
+      lastSync: '2026-03-28T09:58:00.000Z',
+    });
+
+    await scheduler.adaptiveSyncTick();
+
+    expect(mockMatchSyncService.syncLiveMatches).not.toHaveBeenCalled();
   });
 
   it('skips peak-hours override when boundary is not reached', async () => {
@@ -121,21 +167,6 @@ describe('AdaptiveSyncScheduler', () => {
     await scheduler.adaptiveSyncTick();
 
     expect(mockSyncPlanService.calculateDailyPlan).not.toHaveBeenCalled();
-    expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
-  });
-
-  it('polls live events when status sync is not due', async () => {
-    mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);
-    mockSyncPlanService.shouldPollLiveEventsNow.mockResolvedValue(true);
-    mockMatchSyncService.pollLiveMatchEvents.mockResolvedValue({
-      success: true,
-      matchesPolled: 2,
-      requestsUsed: 2,
-    });
-
-    await scheduler.adaptiveSyncTick();
-
-    expect(mockMatchSyncService.pollLiveMatchEvents).toHaveBeenCalledTimes(1);
     expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
   });
 

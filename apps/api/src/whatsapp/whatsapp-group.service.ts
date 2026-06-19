@@ -27,6 +27,7 @@ import {
   formatRedCardReason,
   normalizeEventPlayerKey,
 } from '../matches/match-events.util';
+import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
@@ -134,6 +135,16 @@ export class WhatsappGroupService {
   private async isChannelEnabledForType(type: WhatsappGroupJobType): Promise<boolean> {
     const schedulerId = JOB_TYPE_TO_SCHEDULER[type];
     if (!schedulerId) return true;
+
+    try {
+      const stepConfig = this.moduleRef.get(AutomationStepConfigService, { strict: false });
+      if (stepConfig) {
+        return stepConfig.isSchedulerChannelEnabled(schedulerId, 'waGroup');
+      }
+    } catch {
+      // AutomationStepConfigService no disponible en arranque temprano.
+    }
+
     const row = await this.prisma.systemConfig.findUnique({
       where: { key: 'automation:channel_overrides' },
     });

@@ -70,28 +70,72 @@ export class AutomationStepConfigService {
     return flags[entry.requiresFlag].enabled;
   }
 
-  /** Canal WA Grupo activo para un scheduler (override por liga/global). */
   async isSchedulerWaGroupEnabled(schedulerId: string): Promise<boolean> {
+    return this.readSchedulerChannelOverride(schedulerId, 'waGroup');
+  }
+
+  private async readSchedulerChannelOverride(
+    schedulerId: string,
+    channel: string,
+  ): Promise<boolean> {
     const row = await this.prisma.systemConfig.findUnique({
       where: { key: CHANNEL_OVERRIDES_KEY },
       select: { value: true },
     });
     if (!row) return true;
     try {
-      const overrides = JSON.parse(row.value) as Record<
-        string,
-        Record<string, boolean>
-      >;
-      return overrides[schedulerId]?.['waGroup'] !== false;
+      const overrides = JSON.parse(row.value) as Record<string, Record<string, boolean>>;
+      return overrides[schedulerId]?.[channel] !== false;
     } catch {
       return true;
     }
   }
 
-  /**
-   * Scheduler operativo: step+flag si está en catálogo; si no, solo canal WA.
-   * (p. ej. live_goal, live_red_card).
-   */
+  /** Canal habilitado: paso operativo + override de canal (si aplica). */
+  async isSchedulerChannelEnabled(
+    schedulerId: string,
+    channel: AutomationStepChannelId,
+  ): Promise<boolean> {
+    if (!(await this.isSchedulerOperational(schedulerId))) {
+      return false;
+    }
+
+    const entry = AUTOMATION_STEP_CATALOG.find((item) => item.schedulerId === schedulerId);
+    if (entry && !entry.channels.includes(channel)) {
+      return false;
+    }
+
+    return this.readSchedulerChannelOverride(schedulerId, channel);
+  }
+
+  /** ¿Algún paso de automatización requiere consultar /fixtures/events? */
+  async needsFixtureEventsApi(): Promise<boolean> {
+    if (await this.needsSupplementalLiveEventSync()) {
+      return true;
+    }
+    if (await this.isSchedulerOperational('live_goal')) {
+      return true;
+    }
+    return false;
+  }
+
+  /** ¿Algún evento live (tarjeta/cambio/VAR) requiere consultar /fixtures/events en el sync? */
+  async needsSupplementalLiveEventSync(): Promise<boolean> {
+    const schedulerIds = [
+      'live_yellow_card',
+      'live_red_card',
+      'live_substitution',
+      'live_goal_annulled',
+    ];
+    for (const schedulerId of schedulerIds) {
+      if (await this.isSchedulerOperational(schedulerId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Scheduler operativo: step+flag si está en catálogo; si no, solo canal WA. */
   async isSchedulerOperational(schedulerId: string): Promise<boolean> {
     const entry = AUTOMATION_STEP_CATALOG.find(
       (item) => item.schedulerId === schedulerId,
@@ -99,7 +143,7 @@ export class AutomationStepConfigService {
     if (entry) {
       return this.isStepOperational(entry.key);
     }
-    return this.isSchedulerWaGroupEnabled(schedulerId);
+    return this.readSchedulerChannelOverride(schedulerId, 'waGroup');
   }
 
   async getResolvedCatalog(): Promise<ResolvedStepCatalogEntry[]> {

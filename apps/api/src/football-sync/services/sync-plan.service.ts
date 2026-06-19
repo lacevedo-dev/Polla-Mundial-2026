@@ -345,34 +345,8 @@ export class SyncPlanService {
   }
 
   async shouldPollLiveEventsNow(): Promise<boolean> {
-    if (!(await this.footballConfigService.isEventSyncEnabled())) {
-      return false;
-    }
-
-    const liveCount = await this.countLiveMatchesWithExternalId();
-    if (liveCount === 0) {
-      return false;
-    }
-
-    const available = await this.rateLimiter.getAvailableRequests();
-    if (available <= 0) {
-      return false;
-    }
-
-    const intervalMinutes =
-      await this.footballConfigService.getEventSyncIntervalMinutes();
-    const today = this.getToday();
-    const plan = await this.prisma.dailySyncPlan.findUnique({
-      where: { date: today },
-      select: { lastEventPollAt: true },
-    });
-
-    if (!plan?.lastEventPollAt) {
-      return true;
-    }
-
-    const elapsedMs = Date.now() - plan.lastEventPollAt.getTime();
-    return elapsedMs >= intervalMinutes * 60 * 1000;
+    // Deprecado: el polling independiente fue reemplazado por sync en cadena en syncLiveMatches.
+    return false;
   }
 
   /**
