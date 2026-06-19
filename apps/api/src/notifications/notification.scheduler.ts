@@ -1,6 +1,9 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { AutomationStep, EmailJobPriority, EmailJobType, MatchStatus, NotificationType, WhatsappGroupJobType } from '@prisma/client';
 import { AutomationObservabilityService } from '../automation-observability/automation-observability.service';
+import { AutomationFeatureFlagsService } from '../automation/config/automation-feature-flags.service';
+import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
+import { AutomationDeliveryService } from '../automation/delivery/automation-delivery.service';
 import { SchedulerObservationOutcome } from '../common/scheduler-observability.util';
 import { EmailQueueService } from '../email/email-queue.service';
 import { MatchEmailTemplateService } from '../email/match-email-template.service';
@@ -9,25 +12,14 @@ import {
   tryRunExclusiveBackgroundJob,
 } from '../prisma/background-job-lock.util';
 import { PrismaService } from '../prisma/prisma.service';
-import { PushNotificationsService } from '../push-notifications/push-notifications.service';
-import { USER_STATUS } from '../users/user-status.constants';
 import {
   getClosingAlertMatches,
   getNotificationLeagueMembers,
-  getRelevantLeaguesForMatchReminder,
-  getRelevantLeaguesForScheduledMatch,
-  getReminderMatches,
   MatchAutomationSweepContext,
-  REMINDER_WINDOW_END_MINUTES,
-  REMINDER_WINDOW_START_MINUTES,
 } from './match-automation-sweep-context';
-import {
-  findLeaguesExcludedFromAutomation,
-  type AutomationExcludedLeague,
-} from '../automation/audience/automation-league-eligibility.util';
-import { NotificationsService } from './notifications.service';
-import { WhatsappPersonalService } from './whatsapp-personal.service';
 import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
+
+export type { MatchReminderRetrySummary } from '../automation/delivery/automation-delivery.types';
 
 @Injectable()
 export class NotificationScheduler {
@@ -40,87 +32,11 @@ export class NotificationScheduler {
     private readonly observability: AutomationObservabilityService,
     private readonly emailQueue: EmailQueueService,
     private readonly matchEmailTemplates: MatchEmailTemplateService,
-    private readonly push: PushNotificationsService,
-    private readonly notificationsService: NotificationsService,
-    private readonly waPersonal: WhatsappPersonalService,
+    private readonly delivery: AutomationDeliveryService,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
+    @Optional() private readonly featureFlags?: AutomationFeatureFlagsService,
+    @Optional() private readonly stepConfig?: AutomationStepConfigService,
   ) {}
-
-  /**
-   * Batch-load phone/countryCode for a set of userIds in a single query.
-   * Returns only ACTIVE users — inactive users are absent from the map (treated as skipped).
-   */
-  private async fetchActiveUserContacts(
-    userIds: string[],
-  ): Promise<Map<string, { phone: string | null; countryCode: string | null }>> {
-    if (userIds.length === 0) return new Map();
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: userIds }, status: USER_STATUS.ACTIVE },
-      select: { id: true, phone: true, countryCode: true },
-    });
-    return new Map(users.map((u) => [u.id, { phone: u.phone, countryCode: u.countryCode }]));
-  }
-
-  /**
-   * Send push + WhatsApp + in-app notification to a single user.
-   *
-   * @param userContact Pre-loaded contact info from `fetchActiveUserContacts`.
-   *   - Pass the Map entry if the user exists and is active.
-   *   - Pass `null` if the user was absent from the map (inactive / not found) → skipped.
-   *   - Omit entirely (undefined) only when calling outside a batch loop — triggers a DB fetch.
-   */
-  private async notifyUser(
-    userId: string,
-    type: NotificationType,
-    title: string,
-    body: string,
-    data: Record<string, unknown>,
-    trigger?: string,
-    userContact?: { phone: string | null; countryCode: string | null } | null,
-  ): Promise<NotificationDeliveryResult> {
-    // Resolve contact: use pre-loaded value when provided, otherwise fetch individually.
-    // contact puede ser null si el usuario es inactivo o no tiene teléfono registrado —
-    // en ese caso se omite WA personal pero push e in-app se envían igualmente.
-    const contact =
-      userContact !== undefined
-        ? userContact
-        : await this.prisma.user.findFirst({
-            where: { id: userId, status: USER_STATUS.ACTIVE },
-            select: { phone: true, countryCode: true },
-          });
-
-    const pushResult = await this.push.sendToUser(userId, { title, body, data });
-
-    let whatsappSent = false;
-    if (contact?.phone) {
-      const waMessage = `${title}\n${body}`;
-      const wa = await this.waPersonal.send(contact.countryCode, contact.phone, waMessage);
-      whatsappSent = wa.sent;
-    }
-
-    const enrichedData: Record<string, unknown> = {
-      ...data,
-      _trigger: trigger ?? null,
-      _pushSent: pushResult.sent,
-      _pushFailed: pushResult.failed,
-      _pushDevices: pushResult.devices,
-      _whatsapp: whatsappSent,
-    };
-
-    await this.notificationsService.createInAppNotification({ userId, type, title, body, data: enrichedData });
-
-    this.logger.log(
-      `[${type}] ${title} -> user:${userId} | push:${pushResult.sent}/${pushResult.devices} wa:${whatsappSent}${trigger ? ` | trigger:"${trigger}"` : ''}`,
-    );
-
-    return {
-      pushSent: pushResult.sent,
-      pushFailed: pushResult.failed,
-      pushDevices: pushResult.devices,
-      whatsappSent,
-      skipped: false,
-    };
-  }
 
   private async queueUserEmail(
     userId: string,
@@ -191,427 +107,29 @@ export class NotificationScheduler {
     }));
   }
 
-  private async getLeaguesForMatch(
-    tournamentId: string | null,
-    context?: MatchAutomationSweepContext,
-  ): Promise<Array<{ id: string; members: Array<{ userId: string }> }>> {
-    if (context) {
-      return getRelevantLeaguesForScheduledMatch(context, tournamentId).map(
-        (league) => ({
-          id: league.id,
-          members: getNotificationLeagueMembers(league),
-        }),
-      );
-    }
-
-    const leagueSelect = {
-      id: true,
-      members: { where: { status: 'ACTIVE' }, select: { userId: true } },
-    } as const;
-
-    const [leaguesWithTournament, leaguesWithoutTournament] = await Promise.all([
-      tournamentId
-        ? this.prisma.league.findMany({
-            where: { status: 'ACTIVE', leagueTournaments: { some: { tournamentId } } },
-            select: leagueSelect,
-          })
-        : [],
-      // Ligas sin restricción de torneo: reciben todos los partidos independientemente del torneo.
-      // Si el partido no tiene tournamentId, también se incluyen ligas con torneos configurados
-      // ya que no hay forma de filtrarlas por torneo específico.
-      this.prisma.league.findMany({
-        where: {
-          status: 'ACTIVE',
-          ...(tournamentId
-            ? { leagueTournaments: { none: {} } }
-            : {}),
-        },
-        select: leagueSelect,
-      }),
-    ]);
-
-    const seen = new Set<string>();
-    const result: Array<{ id: string; members: Array<{ userId: string }> }> = [];
-    for (const league of [...leaguesWithTournament, ...leaguesWithoutTournament]) {
-      if (!seen.has(league.id)) {
-        seen.add(league.id);
-        result.push(league);
-      }
-    }
-    return result;
-  }
-
-  /** Ligas destinatarias: por torneo del partido + cualquier liga con pronósticos en él. */
-  private async resolveLeaguesForMatchReminder(
-    match: {
-      tournamentId: string | null;
-      predictions: Array<{ userId: string; leagueId: string }>;
-    },
-    context?: MatchAutomationSweepContext,
-  ): Promise<Array<{ id: string; members: Array<{ userId: string }> }>> {
-    if (context) {
-      return getRelevantLeaguesForMatchReminder(context, match).map((league) => ({
-        id: league.id,
-        members: getNotificationLeagueMembers(league),
-      }));
-    }
-
-    const predictionLeagueIds = [
-      ...new Set(match.predictions.map((prediction) => prediction.leagueId)),
-    ];
-    const [tournamentLeagues, predictionLeagues] = await Promise.all([
-      this.getLeaguesForMatch(match.tournamentId ?? null),
-      predictionLeagueIds.length > 0
-        ? this.prisma.league.findMany({
-            where: { id: { in: predictionLeagueIds }, status: 'ACTIVE' },
-            select: {
-              id: true,
-              members: { where: { status: 'ACTIVE' }, select: { userId: true } },
-            },
-          })
-        : [],
-    ]);
-
-    const seen = new Set<string>();
-    const merged: Array<{ id: string; members: Array<{ userId: string }> }> = [];
-    for (const league of [...tournamentLeagues, ...predictionLeagues]) {
-      if (!seen.has(league.id)) {
-        seen.add(league.id);
-        merged.push(league);
-      }
-    }
-    return merged;
-  }
-
-  private async findStandaloneReminderMatches() {
-    const now = Date.now();
-    const matchSelect = {
-      id: true,
-      matchDate: true,
-      tournamentId: true,
-      venue: true,
-      homeTeam: { select: { name: true } },
-      awayTeam: { select: { name: true } },
-      predictions: { select: { userId: true, leagueId: true } },
-    } as const;
-
-    const [primary, catchUp] = await Promise.all([
-      this.prisma.match.findMany({
-        where: {
-          status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
-          matchDate: {
-            gte: new Date(now + REMINDER_WINDOW_START_MINUTES * 60_000),
-            lte: new Date(now + REMINDER_WINDOW_END_MINUTES * 60_000),
-          },
-        },
-        select: matchSelect,
-      }),
-      this.prisma.match.findMany({
-        where: {
-          status: { in: [MatchStatus.SCHEDULED, MatchStatus.LIVE] },
-          matchDate: {
-            gt: new Date(now),
-            lte: new Date(now + REMINDER_WINDOW_START_MINUTES * 60_000),
-          },
-        },
-        select: matchSelect,
-      }),
-    ]);
-
-    const reminderDueBefore = (matchDate: Date) =>
-      now >= matchDate.getTime() - 60 * 60_000;
-
-    const seen = new Set<string>();
-    const merged: typeof primary = [];
-    for (const match of [...primary, ...catchUp.filter((m) => reminderDueBefore(m.matchDate))]) {
-      if (seen.has(match.id)) continue;
-      seen.add(match.id);
-      merged.push(match);
-    }
-    return merged;
-  }
-
-  async sendMatchReminders(
-    context?: MatchAutomationSweepContext,
-  ): Promise<SchedulerObservationOutcome> {
-    // Sin lock compartido con sync: el sweep ya serializa tareas y el lock
-    // background-db-job provocaba omisiones silenciosas cuando syncTodayMatches
-    // estaba en curso durante la ventana de 55–65 min.
-    await this.runSendMatchReminders(context);
-
-    return {
-      status: 'completed',
-      summary: {
-        result: 'match_reminders_completed',
-      },
-    };
-  }
-
-  private async runSendMatchReminders(
-    context?: MatchAutomationSweepContext,
-  ): Promise<void> {
-    try {
-      const matches = context
-        ? getReminderMatches(context)
-        : await this.findStandaloneReminderMatches();
-
-      const notified = new Set<string>();
-
-      for (const match of matches) {
-        const leagues = await this.resolveLeaguesForMatchReminder(match, context);
-        if (leagues.length === 0) {
-          this.logger.warn(
-            `Recordatorio ${match.id}: sin ligas destinatarias (torneo=${match.tournamentId ?? 'null'}, predictions=${match.predictions.length})`,
-          );
-          continue;
-        }
-        const home = match.homeTeam.name;
-        const away = match.awayTeam.name;
-        
-        // Agrupar usuarios por partido para evitar notificaciones duplicadas
-        const userLeaguesMap = new Map<string, Array<{ leagueId: string; leagueName?: string; hasPrediction: boolean }>>();
-        const predictedUserIds = new Set(match.predictions.map((p) => p.userId));
-
-        // Construir mapa de usuarios con sus pollas para este partido
-        for (const league of leagues) {
-          for (const member of league.members) {
-            const userId = member.userId;
-            if (!userLeaguesMap.has(userId)) {
-              userLeaguesMap.set(userId, []);
-            }
-            const userPrediction = match.predictions.find(
-              (p) => p.userId === userId && p.leagueId === league.id
-            );
-            userLeaguesMap.get(userId)!.push({
-              leagueId: league.id,
-              hasPrediction: !!userPrediction,
-            });
-          }
-        }
-
-        // Obtener usuarios únicos y sus contactos
-        const allUserIds = [...userLeaguesMap.keys()];
-        const [alreadySentReminders, userContacts] = await Promise.all([
-          this.prisma.notification.findMany({
-            where: {
-              userId: { in: allUserIds },
-              type: NotificationType.MATCH_REMINDER,
-              data: { contains: `"matchId":"${match.id}"` },
-            },
-            select: { userId: true },
-          }),
-          this.fetchActiveUserContacts(allUserIds),
-        ]);
-        const alreadySentUserIds = new Set(alreadySentReminders.map((n) => n.userId));
-
-        // Enviar una notificación por usuario (agrupada)
-        let totalDelivered = 0;
-        let totalInAppSent = 0;
-        let totalPushSent = 0;
-        let totalPushFailed = 0;
-        let totalPushDevices = 0;
-        let totalWhatsappSent = 0;
-        let totalEmailQueued = 0;
-        let totalAlreadySent = 0;
-
-        for (const [userId, userLeagues] of userLeaguesMap) {
-          const key = `${match.id}:${userId}`;
-          if (notified.has(key) || alreadySentUserIds.has(userId)) {
-            if (alreadySentUserIds.has(userId)) totalAlreadySent++;
-            notified.add(key);
-            continue;
-          }
-
-          const pollasWithPrediction = userLeagues.filter((ul) => ul.hasPrediction).length;
-          const pollasPending = userLeagues.filter((ul) => !ul.hasPrediction).length;
-          const totalPollas = userLeagues.length;
-
-          // Construir mensaje optimizado
-          const title = '⏰ Recordatorio de partido';
-          let body: string;
-          if (totalPollas === 1) {
-            body = pollasWithPrediction > 0
-              ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
-              : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
-          } else {
-            if (pollasPending === 0) {
-              body = `Falta 1 hora para ${home} vs ${away}. Tienes pronósticos guardados en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
-            } else if (pollasWithPrediction === 0) {
-              body = `Falta 1 hora para ${home} vs ${away}. Tienes ${totalPollas} polla${totalPollas > 1 ? 's' : ''} pendiente${totalPollas > 1 ? 's' : ''} de pronóstico.`;
-            } else {
-              body = `Falta 1 hora para ${home} vs ${away}. Tienes ${pollasPending} polla${pollasPending > 1 ? 's' : ''} pendiente${pollasPending > 1 ? 's' : ''} de ${totalPollas}.`;
-            }
-          }
-
-          const delivery = await this.notifyUser(
-            userId,
-            NotificationType.MATCH_REMINDER,
-            title,
-            body,
-            {
-              matchId: match.id,
-              leagueId: userLeagues[0].leagueId,
-              leagueIds: userLeagues.map(ul => ul.leagueId),
-              totalPollas,
-              pollasPending,
-              pollasWithPrediction,
-            },
-            `Partido en ~60 min: ${home} vs ${away}`,
-            userContacts.get(userId) ?? null,
-          );
-          totalInAppSent++;
-          if (delivery.pushSent > 0 || delivery.whatsappSent) {
-            totalDelivered++;
-          }
-          totalPushSent += delivery.pushSent;
-          totalPushFailed += delivery.pushFailed;
-          totalPushDevices += delivery.pushDevices;
-          totalWhatsappSent += delivery.whatsappSent ? 1 : 0;
-
-          // Obtener datos completos de las pollas con participantes
-          const leagueData = await this.getLeagueDataForUser(
-            userLeagues.map(ul => ul.leagueId),
-            match.id,
-          );
-
-          // Actualizar hasPrediction para cada polla según el usuario actual
-          const leaguesWithUserStatus = leagueData.map((league) => {
-            const userLeague = userLeagues.find(ul => ul.leagueId === league.id);
-            return {
-              ...league,
-              hasPrediction: userLeague?.hasPrediction ?? false,
-            };
-          });
-
-          const emailContent = totalPollas > 1
-            ? this.matchEmailTemplates.buildMultiLeagueReminderEmail({
-                homeTeam: home,
-                awayTeam: away,
-                matchDate: match.matchDate,
-                venue: match.venue ?? undefined,
-                leagues: leaguesWithUserStatus.map(league => ({
-                  leagueName: league.name,
-                  leagueId: league.id,
-                  hasPrediction: league.hasPrediction,
-                  participants: league.participants,
-                })),
-              })
-            : this.matchEmailTemplates.buildReminderEmail({
-                homeTeam: home,
-                awayTeam: away,
-                matchDate: match.matchDate,
-                venue: match.venue ?? undefined,
-                hasPrediction: pollasWithPrediction > 0,
-              });
-
-          await this.queueUserEmail(
-            userId,
-            EmailJobType.MATCH_REMINDER,
-            EmailJobPriority.HIGH,
-            true,
-            `match-reminder:${match.id}:${userId}`,
-            emailContent,
-            match.id,
-            userLeagues[0].leagueId,
-          );
-          totalEmailQueued++;
-
-          notified.add(key);
-        }
-
-        // Registrar observabilidad por liga
-        for (const league of leagues) {
-          const scheduledAt = this.observability.getScheduledAt(
-            AutomationStep.MATCH_REMINDER,
-            {
-              matchDate: match.matchDate,
-              closeMinutes: null,
-              matchStatus: MatchStatus.SCHEDULED,
-            },
-          );
-          const runId = await this.observability.startRun({
-            step: AutomationStep.MATCH_REMINDER,
-            matchId: match.id,
-            leagueId: league.id,
-            scheduledAt,
-            audienceCount: league.members.length,
-            summary: `Evaluando recordatorio para ${home} vs ${away}`,
-          });
-
-          try {
-            const waGroupEnqueued = await this.enqueueWaGroupNotif(
-              WhatsappGroupJobType.MATCH_REMINDER,
-              match.id,
-              league.id,
-              '',
-            );
-
-            const hasExternalDelivery = totalDelivered > 0 || waGroupEnqueued > 0;
-            const runStatus =
-              totalDelivered === 0 && totalAlreadySent > 0
-                ? 'SKIPPED'
-                : totalPushFailed > 0
-                  ? 'WARNING'
-                  : hasExternalDelivery
-                    ? 'SUCCESS'
-                    : totalInAppSent > 0
-                      ? 'WARNING'
-                      : 'SKIPPED';
-
-            await this.observability.finishRun(runId, {
-              status: runStatus,
-              summary: hasExternalDelivery
-                ? `Recordatorio: push ${totalPushSent}/${totalPushDevices}, WA ${waGroupEnqueued ? 'encolado' : 'no'}`
-                : totalInAppSent > 0
-                  ? `Recordatorio: solo in-app (${totalInAppSent}) — revisa push/WA`
-                  : 'No hubo envíos nuevos para este recordatorio.',
-              deliveredCount: totalDelivered,
-              failedCount: totalPushFailed,
-              warningCount:
-                totalPushFailed > 0 || (totalInAppSent > 0 && !hasExternalDelivery)
-                  ? Math.max(totalPushFailed, 1)
-                  : 0,
-              details: {
-                matchId: match.id,
-                leagueId: league.id,
-                channelBreakdown: {
-                  pushSent: totalPushSent,
-                  pushFailed: totalPushFailed,
-                  pushDevices: totalPushDevices,
-                  whatsappSentCount: totalWhatsappSent,
-                  emailQueued: totalEmailQueued,
-                  inAppSent: totalInAppSent,
-                  waGroupEnqueued: waGroupEnqueued,
-                },
-                alreadySentCount: totalAlreadySent,
-                predictedUsers: predictedUserIds.size,
-                groupedNotifications: true,
-              },
-            });
-          } catch (error) {
-            await this.observability.failRun(
-              runId,
-              error,
-              {
-                matchId: match.id,
-                leagueId: league.id,
-                alreadySentCount: totalAlreadySent,
-              },
-              'Falló el procesamiento del recordatorio automático.',
-            );
-            throw error;
-          }
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`sendMatchReminders failed: ${message}`);
-    }
-  }
-
   async sendPredictionClosingAlerts(
     context?: MatchAutomationSweepContext,
   ): Promise<SchedulerObservationOutcome> {
+    if (this.featureFlags && (await this.featureFlags.isPreMatchV2Enabled())) {
+      return {
+        status: 'skipped',
+        summary: {
+          reason: 'pre_match_v2_active',
+          result: 'prediction_closing_delegated_to_escalations',
+        },
+      };
+    }
+
+    if (
+      this.stepConfig &&
+      !(await this.stepConfig.isStepOperational(AutomationStep.PREDICTION_CLOSING))
+    ) {
+      return {
+        status: 'skipped',
+        summary: { reason: 'prediction_closing_step_disabled' },
+      };
+    }
+
     await this.runSendPredictionClosingAlerts(context);
 
     return {
@@ -741,7 +259,7 @@ export class NotificationScheduler {
               },
               select: { userId: true },
             }),
-            this.fetchActiveUserContacts(allUserIds),
+            this.delivery.fetchActiveUserContacts(allUserIds),
           ]);
           const alreadySentUserIds = new Set(alreadySentAlerts.map((n) => n.userId));
 
@@ -781,21 +299,22 @@ export class NotificationScheduler {
               }
             }
 
-            const delivery = await this.notifyUser(
+            const delivery = await this.delivery.deliverToUser({
               userId,
-              NotificationType.PREDICTION_CLOSED,
+              type: NotificationType.PREDICTION_CLOSED,
               title,
               body,
-              { 
-                matchId: match.id, 
-                leagueIds: userLeagues.map(ul => ul.leagueId),
+              data: {
+                matchId: match.id,
+                leagueIds: userLeagues.map((ul) => ul.leagueId),
                 totalPollas,
                 pollasPending,
                 pollasWithPrediction,
               },
-              `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
-              userContacts.get(userId) ?? null,
-            );
+              step: AutomationStep.PREDICTION_CLOSING,
+              trigger: `Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+              userContact: userContacts.get(userId) ?? null,
+            });
             totalDelivered++;
             totalPushSent += delivery.pushSent;
             totalPushFailed += delivery.pushFailed;
@@ -1058,7 +577,7 @@ export class NotificationScheduler {
               },
               select: { userId: true },
             }),
-            this.fetchActiveUserContacts(resultUserIds),
+            this.delivery.fetchActiveUserContacts(resultUserIds),
           ]);
           const alreadySentUserIds = new Set(alreadySentNotifications.map((n) => n.userId));
 
@@ -1090,22 +609,23 @@ export class NotificationScheduler {
               }
             }
 
-            const delivery = await this.notifyUser(
+            const delivery = await this.delivery.deliverToUser({
               userId,
-              NotificationType.RESULT_PUBLISHED,
+              type: NotificationType.RESULT_PUBLISHED,
               title,
               body,
-              { 
-                matchId: match.id, 
-                leagueIds: pollas.map(p => p.leagueId),
+              data: {
+                matchId: match.id,
+                leagueIds: pollas.map((p) => p.leagueId),
                 totalPoints,
                 totalPollas,
                 hasExactScore,
                 matchNotificationKey: notificationKey,
               },
-              `Partido finalizado: ${home} ${score} ${away} | ${totalPoints} pts`,
-              userContacts.get(userId) ?? null,
-            );
+              step: AutomationStep.RESULT_NOTIFICATION,
+              trigger: `Partido finalizado: ${home} ${score} ${away} | ${totalPoints} pts`,
+              userContact: userContacts.get(userId) ?? null,
+            });
             deliveredCount++;
             pushSent += delivery.pushSent;
             pushFailed += delivery.pushFailed;
@@ -1242,219 +762,6 @@ export class NotificationScheduler {
 
   // ─── Métodos de reintento manual ─────────────────────────────────────────────
 
-  /** Fuerza el envío del recordatorio de partido para un matchId y leagueId opcionales */
-  async retryReminderForMatch(
-    matchId: string,
-    leagueId?: string,
-  ): Promise<MatchReminderRetrySummary> {
-    const summary: MatchReminderRetrySummary = {
-      usersNotified: 0,
-      inAppSent: 0,
-      pushSent: 0,
-      pushFailed: 0,
-      pushDevices: 0,
-      whatsappSent: 0,
-      waGroupSent: 0,
-      waGroupFailed: 0,
-      emailQueued: 0,
-      audienceCount: 0,
-    };
-
-    const match = await this.prisma.match.findUnique({
-      where: { id: matchId },
-      select: {
-        id: true,
-        matchDate: true,
-        tournamentId: true,
-        venue: true,
-        homeTeam: { select: { name: true } },
-        awayTeam: { select: { name: true } },
-        predictions: { select: { userId: true, leagueId: true } },
-      },
-    });
-    if (!match) return summary;
-
-    summary.excludedLeagues = await findLeaguesExcludedFromAutomation(this.prisma, {
-      matchId: match.id,
-      tournamentId: match.tournamentId,
-      predictionLeagueIds: [
-        ...new Set(match.predictions.map((prediction) => prediction.leagueId)),
-      ],
-      restrictToLeagueId: leagueId,
-    });
-
-    const leagues = leagueId
-      ? await this.prisma.league.findMany({
-          where: { id: leagueId, status: 'ACTIVE' },
-          select: { id: true, members: { where: { status: 'ACTIVE' }, select: { userId: true } } },
-        })
-      : await this.resolveLeaguesForMatchReminder(match);
-
-    if (leagues.length === 0) {
-      this.logger.warn(
-        `[MANUAL] Recordatorio ${matchId}: sin ligas destinatarias (torneo=${match.tournamentId ?? 'null'}, predictions=${match.predictions.length})`,
-      );
-    }
-
-    const home = match.homeTeam.name;
-    const away = match.awayTeam.name;
-
-    // Agrupar usuarios por partido para evitar notificaciones duplicadas
-    const userLeaguesMap = new Map<string, Array<{ leagueId: string; hasPrediction: boolean }>>();
-
-    // Construir mapa de usuarios con sus pollas para este partido
-    for (const league of leagues) {
-      for (const member of league.members) {
-        const userId = member.userId;
-        if (!userLeaguesMap.has(userId)) {
-          userLeaguesMap.set(userId, []);
-        }
-        const userPrediction = match.predictions.find(
-          (p) => p.userId === userId && p.leagueId === league.id
-        );
-        userLeaguesMap.get(userId)!.push({
-          leagueId: league.id,
-          hasPrediction: !!userPrediction,
-        });
-      }
-    }
-
-    // Obtener contactos de usuarios
-    const allUserIds = [...userLeaguesMap.keys()];
-    summary.audienceCount = allUserIds.length;
-    const userContacts = await this.fetchActiveUserContacts(allUserIds);
-
-    // Enviar una notificación por usuario (agrupada)
-    for (const [userId, userLeagues] of userLeaguesMap) {
-      const pollasWithPrediction = userLeagues.filter((ul) => ul.hasPrediction).length;
-      const pollasPending = userLeagues.filter((ul) => !ul.hasPrediction).length;
-      const totalPollas = userLeagues.length;
-
-      // Construir mensaje optimizado
-      const title = '⏰ Recordatorio de partido';
-      let body: string;
-      if (totalPollas === 1) {
-        body = pollasWithPrediction > 0
-          ? `Falta 1 hora para ${home} vs ${away}. Tu pronóstico ya está guardado.`
-          : `Falta 1 hora para ${home} vs ${away}. Aún puedes enviar tu pronóstico.`;
-      } else {
-        if (pollasPending === 0) {
-          body = `Falta 1 hora para ${home} vs ${away}. Tienes pronósticos guardados en ${totalPollas} polla${totalPollas > 1 ? 's' : ''}.`;
-        } else if (pollasWithPrediction === 0) {
-          body = `Falta 1 hora para ${home} vs ${away}. Tienes ${totalPollas} polla${totalPollas > 1 ? 's' : ''} pendiente${totalPollas > 1 ? 's' : ''} de pronóstico.`;
-        } else {
-          body = `Falta 1 hora para ${home} vs ${away}. Tienes ${pollasPending} polla${pollasPending > 1 ? 's' : ''} pendiente${pollasPending > 1 ? 's' : ''} de ${totalPollas}.`;
-        }
-      }
-
-      const delivery = await this.notifyUser(
-        userId,
-        NotificationType.MATCH_REMINDER,
-        title,
-        body,
-        {
-          matchId: match.id,
-          leagueId: userLeagues[0].leagueId,
-          leagueIds: userLeagues.map(ul => ul.leagueId),
-          totalPollas,
-          pollasPending,
-          pollasWithPrediction,
-        },
-        `[MANUAL] Partido en ~60 min: ${home} vs ${away}`,
-        userContacts.get(userId) ?? null,
-      );
-      summary.inAppSent++;
-      if (delivery.pushSent > 0 || delivery.whatsappSent) {
-        summary.usersNotified++;
-      }
-      summary.pushSent += delivery.pushSent;
-      summary.pushFailed += delivery.pushFailed;
-      summary.pushDevices += delivery.pushDevices;
-      if (delivery.whatsappSent) summary.whatsappSent++;
-
-      // Obtener datos completos de las pollas con participantes
-      const leagueData = await this.getLeagueDataForUser(
-        userLeagues.map(ul => ul.leagueId),
-        match.id,
-      );
-
-      // Actualizar hasPrediction para cada polla según el usuario actual
-      const leaguesWithUserStatus = leagueData.map((league) => {
-        const userLeague = userLeagues.find(ul => ul.leagueId === league.id);
-        return {
-          ...league,
-          hasPrediction: userLeague?.hasPrediction ?? false,
-        };
-      });
-
-      // Enviar email agrupado
-      const emailContent = totalPollas > 1
-        ? this.matchEmailTemplates.buildMultiLeagueReminderEmail({
-            homeTeam: home,
-            awayTeam: away,
-            matchDate: match.matchDate,
-            venue: match.venue ?? undefined,
-            leagues: leaguesWithUserStatus.map(league => ({
-              leagueName: league.name,
-              leagueId: league.id,
-              hasPrediction: league.hasPrediction,
-              participants: league.participants,
-            })),
-          })
-        : this.matchEmailTemplates.buildReminderEmail({
-            homeTeam: home,
-            awayTeam: away,
-            matchDate: match.matchDate,
-            venue: match.venue ?? undefined,
-            hasPrediction: pollasWithPrediction > 0,
-          });
-
-      await this.queueUserEmail(
-        userId,
-        EmailJobType.MATCH_REMINDER,
-        EmailJobPriority.HIGH,
-        true,
-        `match-reminder:${match.id}:${userId}`,
-        emailContent,
-        match.id,
-        userLeagues[0].leagueId,
-      );
-      summary.emailQueued++;
-    }
-
-    // Reenvío inmediato a WA Grupo por liga (procesa el job en el acto si hay sesión)
-    for (const league of leagues) {
-      if (!this.waGroup) {
-        summary.waGroupFailed++;
-        continue;
-      }
-      try {
-        const result = await this.waGroup.retryStepDelivery(
-          match.id,
-          league.id,
-          WhatsappGroupJobType.MATCH_REMINDER,
-          {
-            automationStep: AutomationStep.MATCH_REMINDER,
-            forceResend: true,
-          },
-        );
-        if (result.ok) {
-          summary.waGroupSent++;
-        } else {
-          summary.waGroupFailed++;
-          this.logger.warn(
-            `[MANUAL] WA grupo T-60 ${match.id}/${league.id}: ${result.message}`,
-          );
-        }
-      } catch {
-        summary.waGroupFailed++;
-      }
-    }
-
-    return summary;
-  }
-
-  /** Fuerza el envío del cierre de predicciones para un matchId y leagueId opcionales */
   async retryClosingForMatch(matchId: string, leagueId?: string): Promise<void> {
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
@@ -1508,7 +815,7 @@ export class NotificationScheduler {
 
     // Obtener contactos de usuarios
     const allUserIds = [...userLeaguesMap.keys()];
-    const userContacts = await this.fetchActiveUserContacts(allUserIds);
+    const userContacts = await this.delivery.fetchActiveUserContacts(allUserIds);
 
     // Enviar una notificación por usuario (agrupada)
     for (const [userId, userLeagues] of userLeaguesMap) {
@@ -1533,21 +840,22 @@ export class NotificationScheduler {
         }
       }
 
-      await this.notifyUser(
+      await this.delivery.deliverToUser({
         userId,
-        NotificationType.PREDICTION_CLOSED,
+        type: NotificationType.PREDICTION_CLOSED,
         title,
         body,
-        {
+        data: {
           matchId: match.id,
-          leagueIds: userLeagues.map(ul => ul.leagueId),
+          leagueIds: userLeagues.map((ul) => ul.leagueId),
           totalPollas,
           pollasPending,
           pollasWithPrediction,
         },
-        `[MANUAL] Cierre en ${closeMinutes} min: ${home} vs ${away}`,
-        userContacts.get(userId) ?? null,
-      );
+        step: AutomationStep.PREDICTION_CLOSING,
+        trigger: `[MANUAL] Cierre en ${closeMinutes} min: ${home} vs ${away}`,
+        userContact: userContacts.get(userId) ?? null,
+      });
 
       // Obtener datos completos de las pollas con participantes
       const leagueData = await this.getLeagueDataForUser(
@@ -1628,45 +936,15 @@ export class NotificationScheduler {
       const body = points >= 5
         ? `${home} ${score} ${away}. Acertaste el marcador y ganaste ${points} puntos.`
         : `${home} ${score} ${away}. Ganaste ${points} puntos.`;
-      await this.notifyUser(userId, NotificationType.RESULT_PUBLISHED, title, body, { matchId: match.id, leagueId, points }, `[MANUAL] Resultado: ${home} ${score} ${away} | ${points} pts`);
+      await this.delivery.deliverToUser({
+        userId,
+        type: NotificationType.RESULT_PUBLISHED,
+        title,
+        body,
+        data: { matchId: match.id, leagueId, points },
+        step: AutomationStep.RESULT_NOTIFICATION,
+        trigger: `[MANUAL] Resultado: ${home} ${score} ${away} | ${points} pts`,
+      });
     }
   }
-
-  /** API pública para orquestadores de automatización (pre-partido v2, etc.). */
-  async deliverUserNotification(
-    userId: string,
-    type: NotificationType,
-    title: string,
-    body: string,
-    data: Record<string, unknown>,
-    trigger?: string,
-    userContact?: { phone: string | null; countryCode: string | null } | null,
-  ): Promise<NotificationDeliveryResult> {
-    return this.notifyUser(userId, type, title, body, data, trigger, userContact);
-  }
 }
-
-
-type NotificationDeliveryResult = {
-  pushSent: number;
-  pushFailed: number;
-  pushDevices: number;
-  whatsappSent: boolean;
-  skipped: boolean;
-};
-
-export type MatchReminderRetrySummary = {
-  /** Usuarios con entrega externa (push o WA personal). */
-  usersNotified: number;
-  /** Notificaciones in-app creadas (no implica push/WA). */
-  inAppSent: number;
-  pushSent: number;
-  pushFailed: number;
-  pushDevices: number;
-  whatsappSent: number;
-  waGroupSent: number;
-  waGroupFailed: number;
-  emailQueued: number;
-  audienceCount: number;
-  excludedLeagues?: AutomationExcludedLeague[];
-};

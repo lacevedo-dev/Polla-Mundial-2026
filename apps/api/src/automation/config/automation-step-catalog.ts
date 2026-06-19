@@ -60,9 +60,9 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
   {
     key: AutomationStep.ESCALATION_FINAL,
     phase: 'PRE_MATCH',
-    label: 'Escalada final',
-    shortLabel: 'T-f',
-    description: 'Última alerta = cierre + 5 min antes del kickoff',
+    label: 'Escalada T-20',
+    shortLabel: 'T-20',
+    description: 'Última alerta a pendientes (cierre + 5 min, ej. T-20 si cierre a 15)',
     schedulerId: 'pre_match_escalation',
     channels: ['push', 'inApp', 'waGroup'],
     requiresFlag: 'preMatchV2',
@@ -73,9 +73,10 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
     phase: 'PRE_MATCH',
     label: 'Cierre predicciones',
     shortLabel: 'Cierre',
-    description: 'Cierre duro de pronósticos por polla',
+    description:
+      'Legacy — solo si preMatchV2 está OFF. Push/in-app/email + WA Grupo (sin WA personal)',
     schedulerId: 'prediction_closing',
-    channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
+    channels: ['push', 'inApp', 'waGroup', 'email'],
     defaultEnabled: true,
   },
   {
@@ -178,9 +179,10 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
     phase: 'POST_MATCH',
     label: 'Resultado personal',
     shortLabel: 'Result.',
-    description: 'Push/in-app/WA con marcador y puntos',
+    description:
+      'Push/in-app/WA Grupo. WA personal solo si lo activas explícitamente en Admin',
     schedulerId: 'match_result',
-    channels: ['push', 'whatsapp', 'waGroup'],
+    channels: ['push', 'inApp', 'whatsapp', 'waGroup'],
     defaultEnabled: true,
   },
   {
@@ -190,7 +192,7 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
     shortLabel: 'P.Rep',
     description: 'Imagen/PDF al grupo WA T-N min antes del kickoff (ajustable en Admin)',
     schedulerId: 'prediction_report',
-    channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
+    channels: ['push', 'inApp', 'waGroup', 'email'],
     defaultEnabled: true,
   },
   {
@@ -200,7 +202,7 @@ export const AUTOMATION_STEP_CATALOG: AutomationStepCatalogEntry[] = [
     shortLabel: 'Rep.F',
     description: 'Imagen/PDF al grupo WA tras finalizar',
     schedulerId: 'result_report',
-    channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'],
+    channels: ['push', 'inApp', 'waGroup', 'email'],
     defaultEnabled: true,
   },
 ];

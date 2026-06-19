@@ -17,6 +17,7 @@ import { PostMatchOrchestratorService } from './post-match/post-match-orchestrat
 import { PreMatchOrchestratorService } from './pre-match/pre-match-orchestrator.service';
 import { AutomationRetryService } from './retry/automation-retry.service';
 import { AutomationMessagePreviewService } from './preview/automation-message-preview.service';
+import { AutomationDeliveryService } from './delivery/automation-delivery.service';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
     PreMatchOrchestratorService,
     AutomationRetryService,
     AutomationMessagePreviewService,
+    AutomationDeliveryService,
   ],
   exports: [
     AutomationFeatureFlagsService,
@@ -53,6 +55,7 @@ import { AutomationMessagePreviewService } from './preview/automation-message-pr
     PreMatchOrchestratorService,
     AutomationRetryService,
     AutomationMessagePreviewService,
+    AutomationDeliveryService,
   ],
 })
 export class AutomationModule {}

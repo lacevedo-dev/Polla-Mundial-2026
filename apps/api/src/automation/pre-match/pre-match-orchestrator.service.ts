@@ -27,12 +27,17 @@ import {
 import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { normalizeClosePredictionMinutes } from '../../notifications/match-automation-sweep-context';
 import {
+  buildMatchAutomationSweepContext,
   getReminderMatches,
   MatchAutomationSweepContext,
   MatchAutomationSweepLeague,
   MatchAutomationSweepMatch,
 } from '../../notifications/match-automation-sweep-context';
-import { NotificationScheduler } from '../../notifications/notification.scheduler';
+import { AutomationDeliveryService } from '../delivery/automation-delivery.service';
+import type { MatchReminderRetrySummary } from '../delivery/automation-delivery.types';
+import {
+  findLeaguesExcludedFromAutomation,
+} from '../audience/automation-league-eligibility.util';
 import type { EscalationCheckpointId } from '../types/automation.types';
 import {
   buildEscalationUserMessage,
@@ -51,7 +56,7 @@ export class PreMatchOrchestratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly observability: AutomationObservabilityService,
-    private readonly notificationScheduler: NotificationScheduler,
+    private readonly delivery: AutomationDeliveryService,
     private readonly stepConfig: AutomationStepConfigService,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
@@ -73,15 +78,54 @@ export class PreMatchOrchestratorService {
 
   private async processT60Reminders(
     context: MatchAutomationSweepContext,
-  ): Promise<void> {
+    options?: {
+      forceResend?: boolean;
+      filterLeagueId?: string;
+      matchIdFilter?: string;
+    },
+  ): Promise<MatchReminderRetrySummary | void> {
     if (!(await this.stepConfig.isStepEnabled(AutomationStep.MATCH_REMINDER))) {
-      return;
+      return options?.forceResend
+        ? {
+            usersNotified: 0,
+            inAppSent: 0,
+            pushSent: 0,
+            pushFailed: 0,
+            pushDevices: 0,
+            whatsappSent: 0,
+            waGroupSent: 0,
+            waGroupFailed: 0,
+            emailQueued: 0,
+            audienceCount: 0,
+          }
+        : undefined;
     }
+
+    const retrySummary = options?.forceResend
+      ? {
+          usersNotified: 0,
+          inAppSent: 0,
+          pushSent: 0,
+          pushFailed: 0,
+          pushDevices: 0,
+          whatsappSent: 0,
+          waGroupSent: 0,
+          waGroupFailed: 0,
+          emailQueued: 0,
+          audienceCount: 0,
+        }
+      : null;
 
     const matches = getReminderMatches(context);
 
     for (const match of matches) {
-      const leagues = getRelevantLeaguesForMatch(context, match);
+      if (options?.matchIdFilter && match.id !== options.matchIdFilter) {
+        continue;
+      }
+      let leagues = getRelevantLeaguesForMatch(context, match);
+      if (options?.filterLeagueId) {
+        leagues = leagues.filter((l) => l.id === options.filterLeagueId);
+      }
       if (leagues.length === 0) continue;
 
       const closeMinutes = Math.min(
@@ -94,15 +138,20 @@ export class PreMatchOrchestratorService {
       const away = match.awayTeam.name;
 
       const userIds = audiences.map((a) => a.userId);
-      const alreadySent = await this.prisma.notification.findMany({
-        where: {
-          userId: { in: userIds },
-          type: NotificationType.MATCH_REMINDER,
-          data: { contains: `"matchId":"${match.id}"` },
-        },
-        select: { userId: true },
-      });
-      const alreadySentIds = new Set(alreadySent.map((n) => n.userId));
+      const alreadySentIds = new Set<string>();
+      if (!options?.forceResend) {
+        const alreadySent = await this.prisma.notification.findMany({
+          where: {
+            userId: { in: userIds },
+            type: NotificationType.MATCH_REMINDER,
+            data: { contains: `"matchId":"${match.id}"` },
+          },
+          select: { userId: true },
+        });
+        for (const row of alreadySent) {
+          alreadySentIds.add(row.userId);
+        }
+      }
 
       let delivered = 0;
       let pushSent = 0;
@@ -127,26 +176,39 @@ export class PreMatchOrchestratorService {
           pollasWithPrediction,
         });
 
-        const delivery = await this.notificationScheduler.deliverUserNotification(
-          audience.userId,
-          NotificationType.MATCH_REMINDER,
+        const delivery = await this.delivery.deliverToUser({
+          userId: audience.userId,
+          type: NotificationType.MATCH_REMINDER,
           title,
           body,
-          {
+          data: {
             matchId: match.id,
             leagueIds: audience.leagues.map((l) => l.leagueId),
             allComplete: audience.allComplete,
             closeMinutes,
             preMatchV2: true,
           },
-          `Recordatorio T-60: ${home} vs ${away}`,
-        );
+          step: AutomationStep.MATCH_REMINDER,
+          trigger: `Recordatorio T-60: ${home} vs ${away}`,
+        });
 
         inAppSent++;
-        if (delivery.pushSent > 0) delivered++;
+        if (delivery.pushSent > 0 || delivery.whatsappSent) delivered++;
         pushSent += delivery.pushSent;
         pushFailed += delivery.pushFailed;
         pushDevices += delivery.pushDevices;
+
+        if (retrySummary) {
+          retrySummary.audienceCount++;
+          retrySummary.inAppSent += delivery.inAppSent;
+          retrySummary.pushSent += delivery.pushSent;
+          retrySummary.pushFailed += delivery.pushFailed;
+          retrySummary.pushDevices += delivery.pushDevices;
+          if (delivery.whatsappSent) retrySummary.whatsappSent++;
+          if (delivery.pushSent > 0 || delivery.whatsappSent) {
+            retrySummary.usersNotified++;
+          }
+        }
       }
 
       for (const league of leagues) {
@@ -168,15 +230,26 @@ export class PreMatchOrchestratorService {
               predictedCount,
               totalMembers: activeMembers,
             });
-            const ok = await this.waGroup.enqueueNotification(
-              WhatsappGroupJobType.MATCH_REMINDER,
-              match.id,
-              league.id,
-              waCaption,
-            );
+            const ok = options?.forceResend
+              ? await this.waGroup
+                  .retryStepDelivery(match.id, league.id, WhatsappGroupJobType.MATCH_REMINDER, {
+                    automationStep: AutomationStep.MATCH_REMINDER,
+                    forceResend: true,
+                  })
+                  .then((r) => r.ok)
+              : await this.waGroup.enqueueNotification(
+                  WhatsappGroupJobType.MATCH_REMINDER,
+                  match.id,
+                  league.id,
+                  waCaption,
+                );
             if (ok) waGroupEnqueued = 1;
+            if (retrySummary) {
+              if (ok) retrySummary.waGroupSent++;
+              else retrySummary.waGroupFailed++;
+            }
           } catch {
-            // best-effort
+            if (retrySummary) retrySummary.waGroupFailed++;
           }
         }
 
@@ -231,6 +304,8 @@ export class PreMatchOrchestratorService {
         });
       }
     }
+
+    return retrySummary ?? undefined;
   }
 
   private async processEscalations(
@@ -356,12 +431,12 @@ export class PreMatchOrchestratorService {
         checkpoint,
       });
 
-      const delivery = await this.notificationScheduler.deliverUserNotification(
-        audience.userId,
-        NotificationType.PREDICTION_CLOSED,
+      const delivery = await this.delivery.deliverToUser({
+        userId: audience.userId,
+        type: NotificationType.PREDICTION_CLOSED,
         title,
         body,
-        {
+        data: {
           matchId: match.id,
           leagueIds: audience.pendingLeagueIds,
           escalationStep: checkpoint,
@@ -369,8 +444,9 @@ export class PreMatchOrchestratorService {
           closeMinutes,
           preMatchV2: true,
         },
-        `Escalada ${checkpoint}: ${home} vs ${away}`,
-      );
+        step: automationStep,
+        trigger: `Escalada ${checkpoint}: ${home} vs ${away}`,
+      });
 
       delivered++;
       pushSent += delivery.pushSent;
@@ -604,5 +680,53 @@ export class PreMatchOrchestratorService {
         forceResend: true,
       });
     }
+  }
+
+  /** Reintento manual de recordatorio T-60 (Admin → Automatización). */
+  async retryT60Reminder(
+    matchId: string,
+    leagueId?: string,
+  ): Promise<MatchReminderRetrySummary> {
+    const emptySummary: MatchReminderRetrySummary = {
+      usersNotified: 0,
+      inAppSent: 0,
+      pushSent: 0,
+      pushFailed: 0,
+      pushDevices: 0,
+      whatsappSent: 0,
+      waGroupSent: 0,
+      waGroupFailed: 0,
+      emailQueued: 0,
+      audienceCount: 0,
+    };
+
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        tournamentId: true,
+        predictions: { select: { leagueId: true } },
+      },
+    });
+    if (!match) return emptySummary;
+
+    const excludedLeagues = await findLeaguesExcludedFromAutomation(this.prisma, {
+      matchId: match.id,
+      tournamentId: match.tournamentId,
+      predictionLeagueIds: [
+        ...new Set(match.predictions.map((prediction) => prediction.leagueId)),
+      ],
+      restrictToLeagueId: leagueId,
+    });
+
+    const context = await buildMatchAutomationSweepContext(this.prisma);
+    const summary =
+      (await this.processT60Reminders(context, {
+        forceResend: true,
+        filterLeagueId: leagueId,
+        matchIdFilter: matchId,
+      })) ?? emptySummary;
+
+    return { ...summary, excludedLeagues };
   }
 }

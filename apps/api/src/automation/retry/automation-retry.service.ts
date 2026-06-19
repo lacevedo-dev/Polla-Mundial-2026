@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AutomationStep } from '@prisma/client';
-import { NotificationScheduler, type MatchReminderRetrySummary } from '../../notifications/notification.scheduler';
+import type { MatchReminderRetrySummary } from '../delivery/automation-delivery.types';
+import { NotificationScheduler } from '../../notifications/notification.scheduler';
 import { PredictionReportScheduler } from '../../prediction-report/prediction-report.scheduler';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AUTOMATION_STEP_TO_WA_JOB } from '../../whatsapp/whatsapp-channel-status.util';
@@ -31,7 +32,7 @@ export class AutomationRetryService {
     matchId: string,
     leagueId?: string,
   ): Promise<MatchReminderRetrySummary> {
-    return this.notificationScheduler.retryReminderForMatch(matchId, leagueId);
+    return this.preMatchOrchestrator.retryT60Reminder(matchId, leagueId);
   }
 
   async retryStep(params: {
@@ -43,7 +44,7 @@ export class AutomationRetryService {
 
     switch (step) {
       case AutomationStep.MATCH_REMINDER:
-        await this.notificationScheduler.retryReminderForMatch(matchId, leagueId);
+        await this.preMatchOrchestrator.retryT60Reminder(matchId, leagueId);
         return;
       case AutomationStep.PREDICTION_CLOSING:
         await this.notificationScheduler.retryClosingForMatch(matchId, leagueId);

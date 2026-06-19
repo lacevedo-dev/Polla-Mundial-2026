@@ -6,11 +6,13 @@ import {
   WhatsappGroupJobType,
 } from '@prisma/client';
 import { AutomationObservabilityService } from '../../automation-observability/automation-observability.service';
-import { NotificationScheduler } from '../../notifications/notification.scheduler';
+import { AutomationDeliveryService } from '../delivery/automation-delivery.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AutomationStepConfigService } from '../config/automation-step-config.service';
-import { automationStepToLiveEvent } from '../config/automation-step-scheduler.util';
+import {
+  automationStepToLiveEvent,
+} from '../config/automation-step-scheduler.util';
 import type {
   GoalImpactContext,
   LiveMatchContext,
@@ -36,7 +38,7 @@ export class LiveOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly stepConfig: AutomationStepConfigService,
     private readonly observability: AutomationObservabilityService,
-    private readonly notificationScheduler: NotificationScheduler,
+    private readonly delivery: AutomationDeliveryService,
     private readonly goalImpactAnalyzer: GoalImpactAnalyzerService,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
@@ -264,12 +266,12 @@ export class LiveOrchestratorService {
       for (const userId of userIds) {
         if (alreadySentIds.has(userId)) continue;
 
-        const delivery = await this.notificationScheduler.deliverUserNotification(
+        const delivery = await this.delivery.deliverToUser({
           userId,
-          NotificationType.LEAGUE_UPDATE,
+          type: NotificationType.LEAGUE_UPDATE,
           title,
           body,
-          {
+          data: {
             matchId: ctx.matchId,
             liveEvent: event,
             livePhaseV2: true,
@@ -277,8 +279,9 @@ export class LiveOrchestratorService {
             awayScore: ctx.awayScore,
             elapsed: ctx.elapsed,
           },
-          `Live ${event}: ${ctx.homeTeam} vs ${ctx.awayTeam}`,
-        );
+          step: automationStep,
+          trigger: `Live ${event}: ${ctx.homeTeam} vs ${ctx.awayTeam}`,
+        });
 
         delivered++;
         pushSent += delivery.pushSent;

@@ -12,6 +12,7 @@ import {
   tryRunExclusiveBackgroundJob,
 } from '../../prisma/background-job-lock.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AutomationDeliveryService } from '../delivery/automation-delivery.service';
 import { NotificationScheduler } from '../../notifications/notification.scheduler';
 import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AutomationFeatureFlagsService } from '../config/automation-feature-flags.service';
@@ -31,6 +32,7 @@ export class PostMatchOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly featureFlags: AutomationFeatureFlagsService,
     private readonly observability: AutomationObservabilityService,
+    private readonly delivery: AutomationDeliveryService,
     private readonly notificationScheduler: NotificationScheduler,
     @Optional() @Inject(WhatsappGroupService) private readonly waGroup?: WhatsappGroupService,
   ) {}
@@ -242,23 +244,23 @@ export class PostMatchOrchestratorService {
               maxPoints,
             });
 
-            const delivery =
-              await this.notificationScheduler.deliverUserNotification(
-                userId,
-                NotificationType.RESULT_PUBLISHED,
-                title,
-                body,
-                {
-                  matchId: match.id,
-                  leagueIds: pollas.map((p) => p.leagueId),
-                  totalPoints,
-                  totalPollas: pollas.length,
-                  hasExactScore: maxPoints >= 5,
-                  matchNotificationKey: notificationKey,
-                  postMatchV2: true,
-                },
-                `Resultado v2: ${home} ${homeScore}-${awayScore} ${away}`,
-              );
+            const delivery = await this.delivery.deliverToUser({
+              userId,
+              type: NotificationType.RESULT_PUBLISHED,
+              title,
+              body,
+              data: {
+                matchId: match.id,
+                leagueIds: pollas.map((p) => p.leagueId),
+                totalPoints,
+                totalPollas: pollas.length,
+                hasExactScore: maxPoints >= 5,
+                matchNotificationKey: notificationKey,
+                postMatchV2: true,
+              },
+              step: AutomationStep.RESULT_NOTIFICATION,
+              trigger: `Resultado v2: ${home} ${homeScore}-${awayScore} ${away}`,
+            });
 
             deliveredCount++;
             pushSent += delivery.pushSent;
@@ -485,12 +487,12 @@ export class PostMatchOrchestratorService {
         maxPoints,
       });
 
-      await this.notificationScheduler.deliverUserNotification(
+      await this.delivery.deliverToUser({
         userId,
-        NotificationType.RESULT_PUBLISHED,
+        type: NotificationType.RESULT_PUBLISHED,
         title,
         body,
-        {
+        data: {
           matchId: match.id,
           leagueIds: pollas.map((p) => p.leagueId),
           totalPoints,
@@ -499,8 +501,9 @@ export class PostMatchOrchestratorService {
           postMatchV2: true,
           manualRetry: true,
         },
-        `[MANUAL] Resultado v2: ${home} ${homeScore}-${awayScore} ${away}`,
-      );
+        step: AutomationStep.RESULT_NOTIFICATION,
+        trigger: `[MANUAL] Resultado v2: ${home} ${homeScore}-${awayScore} ${away}`,
+      });
     }
 
     if (this.waGroup) {

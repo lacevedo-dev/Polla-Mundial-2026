@@ -257,6 +257,20 @@ const CHANNEL_META: Record<string, { label: string; icon: React.ReactNode }> = {
 
 const CONFIG_CHANNEL_KEYS = ['push', 'inApp', 'waGroup', 'email', 'whatsapp'] as const;
 
+/** WA personal = opt-in (OFF hasta activación explícita en Admin). Resto = opt-out. */
+function isChannelEffectivelyActive(
+  channel: string,
+  sysEnabled: boolean,
+  stepEnabled: boolean,
+  overrideVal: boolean | undefined,
+): boolean {
+  if (!stepEnabled || !sysEnabled) return false;
+  if (channel === 'whatsapp') {
+    return overrideVal === true;
+  }
+  return overrideVal !== false;
+}
+
 const PHASE_META = [
   { id: 'pre', phase: 'PRE_MATCH' as const, label: 'Pre-partido', className: 'bg-sky-50 text-sky-800 border-sky-200' },
   { id: 'live', phase: 'LIVE' as const, label: 'En vivo', className: 'bg-rose-50 text-rose-800 border-rose-200' },
@@ -270,8 +284,8 @@ const FALLBACK_STEP_CATALOG: StepCatalogEntry[] = [
   { key: 'MATCH_REMINDER', phase: 'PRE_MATCH', label: 'Recordatorio T-60', shortLabel: 'T-60', description: '', schedulerId: 'match_reminder', channels: ['push', 'inApp', 'email', 'waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
   { key: 'ESCALATION_T45', phase: 'PRE_MATCH', label: 'Escalada T-45', shortLabel: 'T-45', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
   { key: 'ESCALATION_T30', phase: 'PRE_MATCH', label: 'Escalada T-30', shortLabel: 'T-30', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
-  { key: 'ESCALATION_FINAL', phase: 'PRE_MATCH', label: 'Escalada final', shortLabel: 'T-f', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
-  { key: 'PREDICTION_CLOSING', phase: 'PRE_MATCH', label: 'Cierre predicciones', shortLabel: 'Cierre', description: '', schedulerId: 'prediction_closing', channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'ESCALATION_FINAL', phase: 'PRE_MATCH', label: 'Escalada T-20', shortLabel: 'T-20', description: '', schedulerId: 'pre_match_escalation', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'preMatchV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
+  { key: 'PREDICTION_CLOSING', phase: 'PRE_MATCH', label: 'Cierre predicciones', shortLabel: 'Cierre', description: '', schedulerId: 'prediction_closing', channels: ['push', 'inApp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
   { key: 'MATCH_START', phase: 'LIVE', label: 'Inicio partido', shortLabel: 'Inicio', description: '', schedulerId: 'live_match_start', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
   { key: 'HALFTIME', phase: 'LIVE', label: 'Medio tiempo', shortLabel: 'HT', description: '', schedulerId: 'live_halftime', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
   { key: 'SECOND_HALF_START', phase: 'LIVE', label: '2.ª parte', shortLabel: '2H', description: '', schedulerId: 'live_second_half', channels: ['push', 'inApp', 'waGroup'], requiresFlag: 'livePhaseV2', defaultEnabled: true, enabled: true, flagActive: false, operational: false },
@@ -281,9 +295,9 @@ const FALLBACK_STEP_CATALOG: StepCatalogEntry[] = [
   { key: 'YELLOW_CARD', phase: 'LIVE', label: 'Tarjeta amarilla', shortLabel: 'TA', description: '', schedulerId: 'live_yellow_card', channels: ['waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
   { key: 'RED_CARD', phase: 'LIVE', label: 'Tarjeta roja', shortLabel: 'TR', description: '', schedulerId: 'live_red_card', channels: ['waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
   { key: 'SUBSTITUTION', phase: 'LIVE', label: 'Cambio', shortLabel: 'Camb.', description: '', schedulerId: 'live_substitution', channels: ['waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
-  { key: 'RESULT_NOTIFICATION', phase: 'POST_MATCH', label: 'Resultado personal', shortLabel: 'Result.', description: '', schedulerId: 'match_result', channels: ['push', 'whatsapp', 'waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
-  { key: 'PREDICTION_REPORT', phase: 'POST_MATCH', label: 'Reporte predicciones', shortLabel: 'P.Rep', description: '', schedulerId: 'prediction_report', channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
-  { key: 'RESULT_REPORT', phase: 'POST_MATCH', label: 'Reporte resultados', shortLabel: 'Rep.F', description: '', schedulerId: 'result_report', channels: ['push', 'inApp', 'whatsapp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'RESULT_NOTIFICATION', phase: 'POST_MATCH', label: 'Resultado personal', shortLabel: 'Result.', description: 'WA personal opt-in', schedulerId: 'match_result', channels: ['push', 'inApp', 'whatsapp', 'waGroup'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'PREDICTION_REPORT', phase: 'POST_MATCH', label: 'Reporte predicciones', shortLabel: 'P.Rep', description: '', schedulerId: 'prediction_report', channels: ['push', 'inApp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
+  { key: 'RESULT_REPORT', phase: 'POST_MATCH', label: 'Reporte resultados', shortLabel: 'Rep.F', description: '', schedulerId: 'result_report', channels: ['push', 'inApp', 'waGroup', 'email'], defaultEnabled: true, enabled: true, flagActive: true, operational: true },
 ];
 
 function resolveStepCatalog(status: AutomationStatus | null): StepCatalogEntry[] {
@@ -1321,7 +1335,7 @@ function StepConfigMatrix({
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
         <p className="text-sm font-semibold text-slate-900">Pasos y canales de automatización</p>
         <p className="mt-1 text-xs text-slate-500">
-          Activa o desactiva cada paso de forma independiente. Los canales comparten override con la pestaña Schedulers cuando el paso usa el mismo scheduler.
+          Activa o desactiva cada paso de forma independiente. WA Personal está <strong>OFF por defecto</strong> — debes encenderlo explícitamente por paso para evitar mensajes masivos a teléfonos.
         </p>
       </div>
       <table className="min-w-full text-xs">
@@ -1376,8 +1390,12 @@ function StepConfigMatrix({
                   }
                   const sysEnabled = channelStatus[ch]?.enabled ?? false;
                   const overrideVal = step.schedulerId ? channelOverrides[step.schedulerId]?.[ch] : undefined;
-                  const manuallyDisabled = overrideVal === false;
-                  const effectivelyActive = step.enabled && sysEnabled && !manuallyDisabled;
+                  const effectivelyActive = isChannelEffectivelyActive(
+                    ch,
+                    sysEnabled,
+                    step.enabled,
+                    overrideVal,
+                  );
                   const isTogglable = ch !== 'inApp' && !!step.schedulerId && sysEnabled && step.enabled;
                   const toggleKey = `${step.key}:${ch}`;
                   return (
@@ -1461,13 +1479,15 @@ function SchedulerCard({
           {scheduler.channels.map((channel) => {
             const sysEnabled = channelStatus[channel]?.enabled ?? false;
             const overrideVal = channelOverrides[scheduler.id]?.[channel];
-            // Si hay override explícito usa ese; si no, hereda el estado del sistema
-            const manuallyDisabled = overrideVal === false;
-            const effectivelyActive = sysEnabled && !manuallyDisabled;
+            const effectivelyActive = isChannelEffectivelyActive(
+              channel,
+              sysEnabled,
+              true,
+              overrideVal,
+            );
             const meta = CHANNEL_META[channel];
             const isLoading = toggling === channel;
 
-            // Solo los canales togglables (no inApp que siempre está activo)
             const isTogglable = channel !== 'inApp';
             const sysReason = !sysEnabled ? (channelStatus[channel]?.description ?? 'No configurado') : null;
 
@@ -1476,9 +1496,13 @@ function SchedulerCard({
             if (!sysEnabled) {
               badgeClass = 'border-slate-200 bg-slate-100 text-slate-400 line-through cursor-not-allowed';
               titleText = `Sistema deshabilitado: ${sysReason}`;
-            } else if (manuallyDisabled) {
-              badgeClass = 'border-amber-200 bg-amber-50 text-amber-600 line-through cursor-pointer hover:bg-amber-100';
-              titleText = 'Deshabilitado manualmente — click para activar';
+            } else if (!effectivelyActive) {
+              badgeClass = channel === 'whatsapp'
+                ? 'border-slate-200 bg-slate-100 text-slate-500 cursor-pointer hover:bg-slate-200'
+                : 'border-amber-200 bg-amber-50 text-amber-600 line-through cursor-pointer hover:bg-amber-100';
+              titleText = channel === 'whatsapp'
+                ? 'OFF por defecto — click para activar WA personal'
+                : 'Deshabilitado manualmente — click para activar';
             } else {
               badgeClass = `border-lime-200 bg-lime-50 text-lime-700 ${isTogglable ? 'cursor-pointer hover:bg-lime-100' : 'cursor-default'}`;
               titleText = isTogglable ? 'Activo — click para deshabilitar' : 'Siempre activo';

@@ -9,6 +9,10 @@ import {
   AutomationStepCatalogEntry,
   type AutomationStepChannelId,
 } from './automation-step-catalog';
+import {
+  getDefaultChannelEnabled,
+  resolveChannelOverride,
+} from './automation-channel-defaults.util';
 
 const STEP_OVERRIDES_KEY = 'automation:step_overrides';
 const CHANNEL_OVERRIDES_KEY = 'automation:channel_overrides';
@@ -76,33 +80,53 @@ export class AutomationStepConfigService {
 
   private async readSchedulerChannelOverride(
     schedulerId: string,
-    channel: string,
+    channel: AutomationStepChannelId,
   ): Promise<boolean> {
     const row = await this.prisma.systemConfig.findUnique({
       where: { key: CHANNEL_OVERRIDES_KEY },
       select: { value: true },
     });
-    if (!row) return true;
+    if (!row) {
+      return getDefaultChannelEnabled(channel);
+    }
     try {
-      const overrides = JSON.parse(row.value) as Record<string, Record<string, boolean>>;
-      return overrides[schedulerId]?.[channel] !== false;
+      const overrides = JSON.parse(row.value) as Record<
+        string,
+        Record<string, boolean>
+      >;
+      return resolveChannelOverride(
+        channel,
+        overrides[schedulerId]?.[channel],
+      );
     } catch {
-      return true;
+      return getDefaultChannelEnabled(channel);
     }
   }
 
-  /** Canal habilitado: paso operativo + override de canal (si aplica). */
+  /** Canal habilitado: paso operativo + catálogo + override de admin. */
   async isSchedulerChannelEnabled(
     schedulerId: string,
     channel: AutomationStepChannelId,
+    step?: AutomationStep,
   ): Promise<boolean> {
-    if (!(await this.isSchedulerOperational(schedulerId))) {
-      return false;
-    }
-
-    const entry = AUTOMATION_STEP_CATALOG.find((item) => item.schedulerId === schedulerId);
-    if (entry && !entry.channels.includes(channel)) {
-      return false;
+    if (step) {
+      if (!(await this.isStepOperational(step))) {
+        return false;
+      }
+      const entry = AUTOMATION_STEP_CATALOG.find((item) => item.key === step);
+      if (entry && !entry.channels.includes(channel)) {
+        return false;
+      }
+    } else {
+      if (!(await this.isSchedulerOperational(schedulerId))) {
+        return false;
+      }
+      const entry = AUTOMATION_STEP_CATALOG.find(
+        (item) => item.schedulerId === schedulerId,
+      );
+      if (entry && !entry.channels.includes(channel)) {
+        return false;
+      }
     }
 
     return this.readSchedulerChannelOverride(schedulerId, channel);
@@ -135,13 +159,18 @@ export class AutomationStepConfigService {
     return false;
   }
 
-  /** Scheduler operativo: step+flag si está en catálogo; si no, solo canal WA. */
+  /** Scheduler operativo si algún paso del catálogo con ese schedulerId está activo. */
   async isSchedulerOperational(schedulerId: string): Promise<boolean> {
-    const entry = AUTOMATION_STEP_CATALOG.find(
+    const entries = AUTOMATION_STEP_CATALOG.filter(
       (item) => item.schedulerId === schedulerId,
     );
-    if (entry) {
-      return this.isStepOperational(entry.key);
+    if (entries.length > 0) {
+      for (const entry of entries) {
+        if (await this.isStepOperational(entry.key)) {
+          return true;
+        }
+      }
+      return false;
     }
     return this.readSchedulerChannelOverride(schedulerId, 'waGroup');
   }
