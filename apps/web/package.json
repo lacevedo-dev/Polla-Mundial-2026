@@ -5,8 +5,9 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build",
+        "build": "npm run generate:pwa-icons && vite build",
         "preview": "vite preview",
+        "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
         "test": "vitest run",
         "test:watch": "vitest"
     },
@@ -43,6 +44,7 @@
         "autoprefixer": "^10.4.27",
         "jsdom": "^26.1.0",
         "postcss": "^8.5.8",
+        "sharp": "^0.34.3",
         "tailwindcss": "^4.2.1",
         "typescript": "~5.8.2",
         "vite": "^6.2.0",
