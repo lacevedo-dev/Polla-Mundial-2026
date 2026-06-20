@@ -1,4 +1,7 @@
 import {
+  AUTOMATION_BATCH_LOCK_KEY,
+  BACKGROUND_DB_JOB_LOCK_KEY,
+  LIVE_MATCH_SYNC_LOCK_KEY,
   logExclusiveBackgroundJobSkip,
   resetExclusiveBackgroundJobStateForTests,
   tryRunExclusiveBackgroundJob,
@@ -20,7 +23,7 @@ describe('background-job-lock.util', () => {
     let releaseJob!: () => void;
 
     const runningJob = tryRunExclusiveBackgroundJob(
-      'background-db-job',
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'syncTodayMatches',
       () =>
         new Promise<void>((resolve) => {
@@ -29,7 +32,7 @@ describe('background-job-lock.util', () => {
     );
 
     const skipped = await tryRunExclusiveBackgroundJob(
-      'background-db-job',
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'sendMatchReminders',
       async () => undefined,
     );
@@ -41,7 +44,7 @@ describe('background-job-lock.util', () => {
 
     expect(skipped.skip).toEqual(
       expect.objectContaining({
-        key: 'background-db-job',
+        key: BACKGROUND_DB_JOB_LOCK_KEY,
         holder: 'syncTodayMatches',
         requestedBy: 'sendMatchReminders',
         heldMs: 0,
@@ -70,7 +73,7 @@ describe('background-job-lock.util', () => {
     let releaseJob!: () => void;
 
     const runningJob = tryRunExclusiveBackgroundJob(
-      'background-db-job',
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'syncTodayMatches',
       () =>
         new Promise<void>((resolve) => {
@@ -81,7 +84,7 @@ describe('background-job-lock.util', () => {
     jest.advanceTimersByTime(5 * 60 * 1000);
 
     const firstWarn = await tryRunExclusiveBackgroundJob(
-      'background-db-job',
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'sendPredictionClosingAlerts',
       async () => undefined,
     );
@@ -94,7 +97,7 @@ describe('background-job-lock.util', () => {
     expect(firstWarn.skip.skipCount).toBe(1);
 
     const throttledSkip = await tryRunExclusiveBackgroundJob(
-      'background-db-job',
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'sendMatchResultNotifications',
       async () => undefined,
     );
@@ -109,7 +112,7 @@ describe('background-job-lock.util', () => {
     jest.advanceTimersByTime(5 * 60 * 1000);
 
     const secondWarn = await tryRunExclusiveBackgroundJob(
-      'background-db-job',
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'checkAndSendReports',
       async () => undefined,
     );
@@ -124,5 +127,33 @@ describe('background-job-lock.util', () => {
 
     releaseJob();
     await runningJob;
+  });
+
+  it('permite sync en vivo mientras automatización batch tiene el lock', async () => {
+    let releaseAutomation!: () => void;
+
+    const automationJob = tryRunExclusiveBackgroundJob(
+      AUTOMATION_BATCH_LOCK_KEY,
+      'checkAndSendReports',
+      () =>
+        new Promise<void>((resolve) => {
+          releaseAutomation = resolve;
+        }),
+    );
+
+    const liveSync = await tryRunExclusiveBackgroundJob(
+      LIVE_MATCH_SYNC_LOCK_KEY,
+      'syncLiveMatches',
+      async () => ({ updated: 2 }),
+    );
+
+    expect(liveSync.ran).toBe(true);
+    if (!liveSync.ran) {
+      throw new Error('Expected live sync to run independently');
+    }
+    expect(liveSync.result).toEqual({ updated: 2 });
+
+    releaseAutomation();
+    await automationJob;
   });
 });

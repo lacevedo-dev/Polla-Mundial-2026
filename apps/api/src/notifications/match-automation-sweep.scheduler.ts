@@ -31,7 +31,7 @@ export class MatchAutomationSweepScheduler {
     private readonly postMatchOrchestrator: PostMatchOrchestratorService,
   ) {}
 
-  @Cron('* * * * *')
+  @Cron('25 * * * * *')
   async runMatchAutomationSweep(): Promise<void> {
     await observeSchedulerJob(this.logger, 'runMatchAutomationSweep', async () => {
       const execution = await tryRunExclusiveBackgroundJob(

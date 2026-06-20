@@ -1,6 +1,8 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   logExclusiveBackgroundJobSkip,
+  BACKGROUND_DB_JOB_LOCK_KEY,
+  LIVE_MATCH_SYNC_LOCK_KEY,
   tryRunExclusiveBackgroundJob,
 } from '../../prisma/background-job-lock.util';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -59,7 +61,6 @@ import {
 
 @Injectable()
 export class MatchSyncService {
-  private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
   private readonly logger = new Logger(MatchSyncService.name);
   private readonly syncConcurrency = 1;
 
@@ -183,7 +184,7 @@ export class MatchSyncService {
     error?: string;
   }> {
     const execution = await tryRunExclusiveBackgroundJob(
-      MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      BACKGROUND_DB_JOB_LOCK_KEY,
       'syncTodayMatches',
       () => this.runTodaySyncInternal(options),
     );
@@ -368,7 +369,7 @@ export class MatchSyncService {
     error?: string;
   }> {
     const execution = await tryRunExclusiveBackgroundJob(
-      MatchSyncService.BACKGROUND_DB_JOB_KEY,
+      LIVE_MATCH_SYNC_LOCK_KEY,
       'syncLiveMatches',
       () => this.syncLiveMatchesInternal(),
     );

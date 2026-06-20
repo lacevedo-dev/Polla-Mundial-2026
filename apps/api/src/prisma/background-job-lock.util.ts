@@ -33,6 +33,15 @@ export type ExclusiveBackgroundJobExecution<T> =
   | BackgroundJobExecutionSuccess<T>
   | BackgroundJobExecutionSkipped;
 
+/** Sync pesado de fixtures del día (consulta agrupada). */
+export const BACKGROUND_DB_JOB_LOCK_KEY = 'background-db-job';
+
+/** Sync en vivo — no debe bloquearse por jobs de automatización por email/reportes. */
+export const LIVE_MATCH_SYNC_LOCK_KEY = 'live-match-sync-job';
+
+/** Notificaciones, reportes PDF/email y post-partido. */
+export const AUTOMATION_BATCH_LOCK_KEY = 'automation-batch-job';
+
 const activeJobs = new Map<string, ActiveBackgroundJob>();
 const LOCK_WARN_THRESHOLD_MS = 5 * 60 * 1000;
 const LOCK_WARN_REPEAT_MS = 5 * 60 * 1000;

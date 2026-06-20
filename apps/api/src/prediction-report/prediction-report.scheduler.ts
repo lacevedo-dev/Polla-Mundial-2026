@@ -4,6 +4,7 @@ import {
   observeSchedulerJob,
 } from '../common/scheduler-observability.util';
 import {
+  AUTOMATION_BATCH_LOCK_KEY,
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
 } from '../prisma/background-job-lock.util';
@@ -12,7 +13,6 @@ import { PredictionReportService } from './prediction-report.service';
 
 @Injectable()
 export class PredictionReportScheduler {
-  private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
   private readonly logger = new Logger(PredictionReportScheduler.name);
 
   constructor(private readonly reportService: PredictionReportService) {}
@@ -23,7 +23,7 @@ export class PredictionReportScheduler {
   ): Promise<SchedulerObservationOutcome> {
     return await observeSchedulerJob(this.logger, 'checkAndSendReports', async () => {
       const execution = await tryRunExclusiveBackgroundJob(
-        PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
+        AUTOMATION_BATCH_LOCK_KEY,
         'checkAndSendReports',
         () => this.runCheckAndSendReports(context),
       );
@@ -61,7 +61,7 @@ export class PredictionReportScheduler {
       'sendPendingResultReports',
       async () => {
         const execution = await tryRunExclusiveBackgroundJob(
-          PredictionReportScheduler.BACKGROUND_DB_JOB_KEY,
+          AUTOMATION_BATCH_LOCK_KEY,
           'sendPendingResultReports',
           () => this.runSendPendingResultReports(),
         );

@@ -8,6 +8,7 @@ import {
 import { AutomationObservabilityService } from '../../automation-observability/automation-observability.service';
 import { SchedulerObservationOutcome } from '../../common/scheduler-observability.util';
 import {
+  AUTOMATION_BATCH_LOCK_KEY,
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
 } from '../../prisma/background-job-lock.util';
@@ -26,7 +27,7 @@ import {
 
 @Injectable()
 export class PostMatchOrchestratorService {
-  private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
+  private static readonly BACKGROUND_DB_JOB_KEY = AUTOMATION_BATCH_LOCK_KEY;
   private readonly logger = new Logger(PostMatchOrchestratorService.name);
 
   constructor(

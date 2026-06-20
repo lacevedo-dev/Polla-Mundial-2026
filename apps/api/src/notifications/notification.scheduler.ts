@@ -8,6 +8,7 @@ import { SchedulerObservationOutcome } from '../common/scheduler-observability.u
 import { EmailQueueService } from '../email/email-queue.service';
 import { MatchEmailTemplateService } from '../email/match-email-template.service';
 import {
+  AUTOMATION_BATCH_LOCK_KEY,
   logExclusiveBackgroundJobSkip,
   tryRunExclusiveBackgroundJob,
 } from '../prisma/background-job-lock.util';
@@ -24,7 +25,7 @@ export type { MatchReminderRetrySummary } from '../automation/delivery/automatio
 @Injectable()
 export class NotificationScheduler {
   private readonly logger = new Logger(NotificationScheduler.name);
-  private static readonly BACKGROUND_DB_JOB_KEY = 'background-db-job';
+  private static readonly BACKGROUND_DB_JOB_KEY = AUTOMATION_BATCH_LOCK_KEY;
   private static readonly RESULT_NOTIFICATION_KEY_PREFIX = 'result-published';
 
   constructor(
