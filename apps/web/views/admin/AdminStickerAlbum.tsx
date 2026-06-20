@@ -14,6 +14,9 @@ import {
   GoalScorerStickerCard,
   type GoalScorerStickerProps,
 } from '../../components/live/GoalScorerStickerCard';
+import type { GoalStickerVariant } from '../../utils/goalStickerConfig';
+import { DEFAULT_GOAL_STICKER_SETTINGS } from '../../utils/goalStickerConfig';
+import { useGoalStickerSettings } from '../../hooks/useGoalStickerSettings';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 
 type StickerAlbumPlayer = {
@@ -111,12 +114,17 @@ function buildStickerProps(
   };
 }
 
-async function fetchWaStickerBlob(playerApiId: number, teamCode: string): Promise<string> {
+async function fetchWaStickerBlob(
+  playerApiId: number,
+  teamCode: string,
+  variant: GoalStickerVariant,
+): Promise<string> {
   const token = localStorage.getItem('token');
   const params = new URLSearchParams();
   if (teamCode && teamCode !== '—') params.set('teamCode', teamCode);
+  params.set('variant', variant);
   const query = params.toString();
-  const url = `${BASE_URL}/admin/football/sticker-preview/${playerApiId}${query ? `?${query}` : ''}`;
+  const url = `${BASE_URL}/admin/football/sticker-preview/${playerApiId}?${query}`;
 
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -134,7 +142,8 @@ const WaStickerPreview: React.FC<{
   playerApiId: number;
   teamCode: string;
   playerName: string;
-}> = ({ playerApiId, teamCode, playerName }) => {
+  variant: GoalStickerVariant;
+}> = ({ playerApiId, teamCode, playerName, variant }) => {
   const [src, setSrc] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -147,7 +156,7 @@ const WaStickerPreview: React.FC<{
     setError(null);
     setSrc(null);
 
-    void fetchWaStickerBlob(playerApiId, teamCode)
+    void fetchWaStickerBlob(playerApiId, teamCode, variant)
       .then((url) => {
         if (cancelled) {
           URL.revokeObjectURL(url);
@@ -169,7 +178,7 @@ const WaStickerPreview: React.FC<{
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [playerApiId, teamCode]);
+  }, [playerApiId, teamCode, variant]);
 
   if (loading) {
     return (
@@ -200,7 +209,8 @@ const StickerAlbumCard: React.FC<{
   player: StickerAlbumPlayer;
   team: StickerAlbumTeam;
   ctx: StickerAlbumResponse['previewContext'];
-}> = ({ player, team, ctx }) => {
+  variant: GoalStickerVariant;
+}> = ({ player, team, ctx, variant }) => {
   const [mode, setMode] = React.useState<'dashboard' | 'whatsapp'>('dashboard');
   const stickerProps = buildStickerProps(player, team, ctx);
 
@@ -222,12 +232,13 @@ const StickerAlbumCard: React.FC<{
 
       <div className="mb-3 min-h-[220px] flex items-center justify-center">
         {mode === 'dashboard' ? (
-          <GoalScorerStickerCard {...stickerProps} />
+          <GoalScorerStickerCard {...stickerProps} variant={variant} />
         ) : (
           <WaStickerPreview
             playerApiId={player.apiFootballPlayerId}
             teamCode={team.code}
             playerName={player.name}
+            variant={variant}
           />
         )}
       </div>
@@ -257,6 +268,8 @@ const StickerAlbumCard: React.FC<{
 };
 
 export default function AdminStickerAlbum() {
+  const goalSticker = useGoalStickerSettings();
+  const previewVariant = goalSticker.variant ?? DEFAULT_GOAL_STICKER_SETTINGS.variant;
   const [album, setAlbum] = React.useState<StickerAlbumResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -374,6 +387,13 @@ export default function AdminStickerAlbum() {
       )}
 
       {album && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Variante activa en config: <strong>{previewVariant === 'premium' ? 'Premium álbum' : 'Clásico'}</strong>.
+          Cambia el estilo en Automatización → Sticker de goleador.
+        </div>
+      )}
+
+      {album && (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Jugadores</p>
@@ -473,6 +493,7 @@ export default function AdminStickerAlbum() {
                     player={player}
                     team={team}
                     ctx={album!.previewContext}
+                    variant={previewVariant}
                   />
                 ))}
               </div>

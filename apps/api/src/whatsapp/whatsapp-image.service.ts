@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ResultEntry } from '../prediction-report/prediction-report-email.service';
+import { buildPremiumGoalStickerHtml } from './premium-goal-sticker-html.util';
+import type { GoalStickerVariant } from '../automation/config/goal-sticker-config.util';
 
 export interface MatchInfo {
   homeTeam: string;
@@ -59,6 +61,7 @@ export interface GoalStickerParams {
   themeAccent?: string;
   themePillFrom?: string;
   themePillTo?: string;
+  variant?: GoalStickerVariant;
 }
 
 const OUTCOME_ICON: Record<string, string> = {
@@ -260,6 +263,13 @@ export class WhatsappImageService {
 
   /** Sticker estilo álbum coleccionable (referencia Panini WC). */
   async buildGoalSticker(params: GoalStickerParams): Promise<Buffer> {
+    if (params.variant === 'premium') {
+      return this.buildPremiumGoalSticker(params);
+    }
+    return this.buildClassicGoalSticker(params);
+  }
+
+  private async buildClassicGoalSticker(params: GoalStickerParams): Promise<Buffer> {
     const statsLine = formatStickerStats(params);
     const countryLabel = resolveCountryVerticalLabel(params);
     const jerseyDigits = resolveJerseyGraphic(params);
@@ -516,6 +526,11 @@ export class WhatsappImageService {
 </body></html>`;
 
     return this.renderHtmlToImage(html, 300, '.sticker');
+  }
+
+  private async buildPremiumGoalSticker(params: GoalStickerParams): Promise<Buffer> {
+    const html = buildPremiumGoalStickerHtml(params);
+    return this.renderHtmlToImage(html, 340, '.sticker-premium');
   }
 
   private async renderHtmlToImage(

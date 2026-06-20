@@ -21,6 +21,7 @@ describe('GoalStickerConfigService', () => {
       enabled: false,
       dashboard: false,
       whatsappGroup: false,
+      variant: 'classic',
     });
   });
 
@@ -32,6 +33,7 @@ describe('GoalStickerConfigService', () => {
       enabled: false,
       dashboard: false,
       whatsappGroup: false,
+      variant: 'classic',
     });
   });
 
@@ -48,6 +50,7 @@ describe('GoalStickerConfigService', () => {
       enabled: true,
       dashboard: true,
       whatsappGroup: false,
+      variant: 'classic',
     });
     expect(prisma.systemConfig.upsert).toHaveBeenCalled();
   });

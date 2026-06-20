@@ -258,6 +258,8 @@ model PlayerProfile {
   jerseyNumber        Int?
   teamApiFootballId   Int?
   profileFetchedAt    DateTime?
+  premiumStickerUrl   String?   @db.VarChar(512)
+  premiumStickerGeneratedAt DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

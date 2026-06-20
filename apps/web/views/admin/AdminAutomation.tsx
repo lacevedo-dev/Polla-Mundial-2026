@@ -94,6 +94,7 @@ type GoalStickerSettings = {
   enabled: boolean;
   dashboard: boolean;
   whatsappGroup: boolean;
+  variant: 'classic' | 'premium';
 };
 
 interface MessagePreview {
@@ -1515,6 +1516,7 @@ function GoalStickerPanel({
     enabled: false,
     dashboard: false,
     whatsappGroup: false,
+    variant: 'classic',
   };
   const [form, setForm] = React.useState<GoalStickerSettings>(settings ?? defaults);
   const [saving, setSaving] = React.useState(false);
@@ -1528,6 +1530,7 @@ function GoalStickerPanel({
     setForm((prev) => {
       const enabled = !prev.enabled;
       return {
+        ...prev,
         enabled,
         dashboard: enabled ? prev.dashboard : false,
         whatsappGroup: enabled ? prev.whatsappGroup : false,
@@ -1632,6 +1635,37 @@ function GoalStickerPanel({
             </span>
           </label>
         ))}
+      </div>
+
+      <div className={`mt-3 ${!form.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        <p className="mb-2 text-xs font-bold text-slate-800">Estilo de carta</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setForm((prev) => ({ ...prev, variant: 'classic' }))}
+            className={`flex-1 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${
+              form.variant === 'classic'
+                ? 'border-amber-400 bg-amber-50 text-amber-900'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Clásico
+          </button>
+          <button
+            type="button"
+            onClick={() => setForm((prev) => ({ ...prev, variant: 'premium' }))}
+            className={`flex-1 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${
+              form.variant === 'premium'
+                ? 'border-amber-400 bg-amber-50 text-amber-900'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Premium álbum
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+          Clásico mantiene el diseño compacto actual. Premium usa el estilo álbum Panini en capas (dashboard y WhatsApp).
+        </p>
       </div>
 
       <p className="mt-3 text-[10px] leading-relaxed text-slate-500">

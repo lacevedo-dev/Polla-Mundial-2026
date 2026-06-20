@@ -37,6 +37,8 @@ import { TournamentImportService } from './services/tournament-import.service';
 import { PlayerProfileCacheService } from './services/player-profile-cache.service';
 import { StickerAlbumService } from './services/sticker-album.service';
 import { WhatsappImageService } from '../whatsapp/whatsapp-image.service';
+import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
+import type { GoalStickerVariant } from '../automation/config/goal-sticker-config.util';
 
 class LinkMatchDto {
   @IsString()
@@ -81,6 +83,7 @@ export class FootballSyncController {
     private readonly playerProfileCache: PlayerProfileCacheService,
     private readonly stickerAlbum: StickerAlbumService,
     private readonly waImage: WhatsappImageService,
+    private readonly goalStickerConfig: GoalStickerConfigService,
   ) {}
 
   /**
@@ -281,6 +284,7 @@ export class FootballSyncController {
   async getStickerPreview(
     @Param('playerApiId') playerApiId: string,
     @Query('teamCode') teamCode: string | undefined,
+    @Query('variant') variantQuery: string | undefined,
     @Res() res: Response,
   ) {
     const apiId = Number(playerApiId);
@@ -289,7 +293,15 @@ export class FootballSyncController {
     }
 
     try {
-      const payload = await this.stickerAlbum.resolvePreviewPayload(apiId, teamCode);
+      const settings = await this.goalStickerConfig.getSettings();
+      const variant: GoalStickerVariant =
+        variantQuery === 'premium' || variantQuery === 'classic'
+          ? variantQuery
+          : settings.variant;
+      const payload = {
+        ...(await this.stickerAlbum.resolvePreviewPayload(apiId, teamCode)),
+        variant,
+      };
       const buffer = await this.waImage.buildGoalSticker(payload);
       res.set('Content-Type', 'image/png');
       res.send(buffer);

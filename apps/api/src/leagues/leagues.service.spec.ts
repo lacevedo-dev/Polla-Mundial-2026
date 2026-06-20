@@ -21,6 +21,7 @@ describe('LeaguesService', () => {
     it('creates league with default scoring rules', async () => {
         const prismaMock = {
             user: {
+                findFirst: jest.fn().mockResolvedValue({ plan: 'FREE' }),
                 findUnique: jest.fn().mockResolvedValue({ plan: 'FREE' }),
             },
             league: {
@@ -150,6 +151,9 @@ describe('LeaguesService', () => {
 
     it('rejects creating a league with a duplicated name', async () => {
         const prismaMock = {
+            user: {
+                findFirst: jest.fn().mockResolvedValue({ plan: 'FREE' }),
+            },
             league: {
                 findFirst: jest.fn().mockResolvedValue({ id: 'league-existing', name: 'Liga Test' }),
             },
@@ -164,6 +168,9 @@ describe('LeaguesService', () => {
 
     it('rejects updating a league with a duplicated name', async () => {
         const prismaMock = {
+            user: {
+                findFirst: jest.fn().mockResolvedValue({ systemRole: 'USER' }),
+            },
             leagueMember: {
                 findUnique: jest.fn().mockResolvedValue({ role: MemberRole.ADMIN }),
             },

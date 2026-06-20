@@ -31,6 +31,7 @@ import { CorporateTenantModule } from './corporate-tenant/corporate-tenant.modul
 import { InternalModule } from './internal/internal.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { AutomationModule } from './automation/automation.module';
+import { StickersModule } from './stickers/stickers.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { AutomationModule } from './automation/automation.module';
     InternalModule,
     WhatsappModule,
     AutomationModule,
+    StickersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

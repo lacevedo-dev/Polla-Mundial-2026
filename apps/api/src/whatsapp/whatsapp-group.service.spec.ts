@@ -7,12 +7,20 @@ import { WhatsappImageService } from './whatsapp-image.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportService } from '../prediction-report/prediction-report.service';
 import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
+import { StickersService } from '../stickers/stickers.service';
+
+const mockStickersService = {
+  isOpenAiConfigured: jest.fn().mockReturnValue(false),
+  getOrGenerateSticker: jest.fn(),
+  readCachedStickerBuffer: jest.fn(),
+};
 
 const mockGoalStickerConfig = {
   getSettings: jest.fn().mockResolvedValue({
     enabled: false,
     dashboard: false,
     whatsappGroup: false,
+    variant: 'classic',
   }),
   isActiveFor: jest.fn().mockResolvedValue(false),
   updateSettings: jest.fn(),
@@ -68,6 +76,7 @@ describe('WhatsappGroupService', () => {
         { provide: PredictionReportService, useValue: mockReportService },
         { provide: ModuleRef, useValue: { get: jest.fn() } },
         { provide: GoalStickerConfigService, useValue: mockGoalStickerConfig },
+        { provide: StickersService, useValue: mockStickersService },
       ],
     }).compile();
 

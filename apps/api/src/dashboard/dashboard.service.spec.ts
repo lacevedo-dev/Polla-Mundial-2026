@@ -7,6 +7,7 @@ describe('DashboardService', () => {
     },
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
     },
   };
 
@@ -37,7 +38,7 @@ describe('DashboardService', () => {
         match: { homeScore: null, awayScore: null },
       },
     ]);
-    prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1' });
+    prismaMock.user.findFirst.mockResolvedValue({ id: 'user-1' });
 
     await expect(service.getStats('user-1')).resolves.toEqual({
       aciertos: 1,

@@ -6,7 +6,7 @@ describe('resolveDatabaseUrlForMariaDb', () => {
         const result = resolveDatabaseUrlForMariaDb('mariadb://user:pass@db:3306/app');
 
         expect(result).toEqual({
-            connectionUrl: 'mariadb://user:pass@db:3306/app',
+            connectionUrl: 'mariadb://user:pass@db:3306/app?timezone=Z',
             normalizedFromMysqlScheme: false,
             hostname: 'db',
             usesLoopbackHost: false,
@@ -17,7 +17,7 @@ describe('resolveDatabaseUrlForMariaDb', () => {
         const result = resolveDatabaseUrlForMariaDb('mysql://user:pass@db:3306/app');
 
         expect(result).toEqual({
-            connectionUrl: 'mariadb://user:pass@db:3306/app',
+            connectionUrl: 'mariadb://user:pass@db:3306/app?timezone=Z',
             normalizedFromMysqlScheme: true,
             hostname: 'db',
             usesLoopbackHost: false,

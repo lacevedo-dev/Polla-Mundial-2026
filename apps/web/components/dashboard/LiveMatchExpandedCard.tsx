@@ -244,6 +244,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
 
                     {latestGoalForSticker && (
                         <GoalScorerStickerCard
+                            variant={goalSticker.variant}
                             event={latestGoalForSticker}
                             teamName={resolveGoalTeamName(
                                 latestGoalForSticker,

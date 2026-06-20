@@ -347,7 +347,7 @@ describe('PredictionsService', () => {
         it('devuelve el detalle por partido y bonos de un participante en la categoria activa', async () => {
             const prismaMock = {
                 leagueMember: {
-                    findUnique: jest.fn().mockResolvedValue({
+                    findFirst: jest.fn().mockResolvedValue({
                         userId: 'u1',
                         leagueId: 'league-1',
                         status: MemberStatus.ACTIVE,

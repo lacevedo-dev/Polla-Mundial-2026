@@ -30,6 +30,7 @@ describe('JwtStrategy', () => {
             email: 'ignored@mail.com',
             systemRole: 'SUPERADMIN',
         })).resolves.toEqual({
+            id: 'user-1',
             userId: 'user-1',
             username: 'ana',
             email: 'ana@mail.com',

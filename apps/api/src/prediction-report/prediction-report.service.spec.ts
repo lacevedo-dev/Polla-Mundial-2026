@@ -21,6 +21,7 @@ describe('PredictionReportService', () => {
 
   const timingConfig = {
     getPredictionReportMinutesBefore: jest.fn().mockResolvedValue(15),
+    getPredictionReportMinutesAfterClose: jest.fn().mockResolvedValue(1),
   } as any;
 
   const stepConfig = {

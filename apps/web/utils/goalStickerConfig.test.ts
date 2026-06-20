@@ -8,7 +8,7 @@ describe('goalStickerConfig', () => {
     it('requires master enabled for any destination', () => {
         expect(
             isGoalStickerActiveFor(
-                { enabled: false, dashboard: true, whatsappGroup: true },
+                { enabled: false, dashboard: true, whatsappGroup: true, variant: 'classic' },
                 'dashboard',
             ),
         ).toBe(false);
@@ -19,6 +19,7 @@ describe('goalStickerConfig', () => {
             enabled: true,
             dashboard: true,
             whatsappGroup: false,
+            variant: 'classic' as const,
         };
         expect(isGoalStickerActiveFor(settings, 'dashboard')).toBe(true);
         expect(isGoalStickerActiveFor(settings, 'whatsappGroup')).toBe(false);
@@ -29,6 +30,7 @@ describe('goalStickerConfig', () => {
             enabled: false,
             dashboard: false,
             whatsappGroup: false,
+            variant: 'classic',
         });
     });
 });

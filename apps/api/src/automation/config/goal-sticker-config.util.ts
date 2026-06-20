@@ -1,5 +1,7 @@
 export const GOAL_STICKER_CONFIG_KEY = 'automation:goal_sticker';
 
+export type GoalStickerVariant = 'classic' | 'premium';
+
 /** Dónde se muestra / envía el sticker estilo Panini al marcar un gol. */
 export type GoalStickerSettings = {
   /** Interruptor maestro: desactiva sticker en todos los destinos. */
@@ -8,12 +10,15 @@ export type GoalStickerSettings = {
   dashboard: boolean;
   /** Imagen PNG adjunta al mensaje GOAL_SCORED en el grupo de WhatsApp de la polla. */
   whatsappGroup: boolean;
+  /** classic = diseño compacto actual; premium = estilo álbum Panini en capas. */
+  variant: GoalStickerVariant;
 };
 
 export const DEFAULT_GOAL_STICKER_SETTINGS: GoalStickerSettings = {
   enabled: false,
   dashboard: false,
   whatsappGroup: false,
+  variant: 'classic',
 };
 
 export function normalizeGoalStickerSettings(
@@ -27,6 +32,7 @@ export function normalizeGoalStickerSettings(
     enabled,
     dashboard: enabled ? (input.dashboard ?? base.dashboard) : false,
     whatsappGroup: enabled ? (input.whatsappGroup ?? base.whatsappGroup) : false,
+    variant: input.variant === 'premium' ? 'premium' : 'classic',
   };
 }
 

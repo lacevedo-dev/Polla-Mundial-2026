@@ -57,6 +57,7 @@ describe('AdminAutomation', () => {
             enabled: false,
             dashboard: false,
             whatsappGroup: false,
+            variant: 'classic',
           },
         });
       }

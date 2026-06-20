@@ -177,6 +177,8 @@ describe('ParticipationService', () => {
           includeStageFees: true,
           closePredictionMinutes: 15,
           currency: 'COP',
+          primaryTournamentId: null,
+          leagueTournaments: [],
           stageFees: [{ type: 'MATCH', amount: 5000, label: 'Partido' }],
           distributions: [],
         }),

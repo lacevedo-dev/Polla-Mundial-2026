@@ -1,5 +1,13 @@
 import React from 'react';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
+import type { GoalStickerVariant } from '../../utils/goalStickerConfig';
+import { PremiumPaniniStickerCard } from './PremiumPaniniStickerCard';
+import {
+    formatClassicStatsLine,
+    resolveJerseyDigits,
+    resolveStickerCountryCode,
+    resolveStickerTheme,
+} from './goal-sticker-view.util';
 
 export interface GoalScorerStickerProps {
     event: MatchEventItem;
@@ -10,64 +18,14 @@ export interface GoalScorerStickerProps {
     awayScore: number;
     leagueName?: string;
     teamFlagUrl?: string | null;
+    variant?: GoalStickerVariant;
 }
 
-const DEFAULT_THEME = {
-    primary: '#3ebdb4',
-    secondary: '#f5c518',
-    accent: '#ef4444',
-    pillFrom: '#ea580c',
-    pillTo: '#dc2626',
-};
-
-function resolveTheme(event: MatchEventItem) {
-    const t = event.teamStickerTheme;
-    if (t?.primary && t.secondary && t.accent && t.pillFrom && t.pillTo) {
-        return {
-            primary: t.primary,
-            secondary: t.secondary,
-            accent: t.accent,
-            pillFrom: t.pillFrom,
-            pillTo: t.pillTo,
-        };
-    }
-    return DEFAULT_THEME;
-}
-
-function resolveCountryCode(event: MatchEventItem, teamName: string): string {
-    const fromTheme = event.teamStickerTheme?.countryCode;
-    if (fromTheme?.trim()) return fromTheme.trim().toUpperCase().slice(0, 3);
-    const words = teamName.trim().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return 'GOL';
-    if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
-    return words.map((w) => w[0]).join('').slice(0, 3).toUpperCase();
-}
-
-function resolveJerseyDigits(jerseyNumber?: number | null): [string, string] {
-    const raw = jerseyNumber != null ? String(jerseyNumber) : '10';
-    return [raw[0] ?? '1', raw[1] ?? '0'];
-}
-
-function formatStatsLine(
-    event: MatchEventItem,
-    props: GoalScorerStickerProps,
-    minuteLabel: string,
-    detailLabel: string,
-): string {
-    const profile = event.playerProfile;
-    const parts: string[] = [];
-    if (profile?.birthDate) parts.push(profile.birthDate);
-    if (profile?.height?.trim()) parts.push(profile.height.trim());
-    if (profile?.weight?.trim()) parts.push(profile.weight.trim());
-    if (parts.length > 0) return parts.join(' | ');
-    return `${detailLabel} · ${minuteLabel} · ${props.homeScore}–${props.awayScore}`;
-}
-
-export const GoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) => {
+const ClassicGoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) => {
     const { event, teamName, leagueName, teamFlagUrl } = props;
     if (!event.playerName?.trim()) return null;
 
-    const theme = resolveTheme(event);
+    const theme = resolveStickerTheme(event);
     const profile = event.playerProfile;
     const photoUrl = profile?.photoUrl ?? null;
     const flagUrl = teamFlagUrl ?? event.teamStickerTheme?.flagUrl ?? null;
@@ -79,9 +37,9 @@ export const GoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) =
             : event.detail?.toLowerCase().includes('penalty')
                 ? 'Penalti'
                 : 'Gol';
-    const countryCode = resolveCountryCode(event, teamName);
+    const countryCode = resolveStickerCountryCode(event, teamName);
     const [digit1, digit2] = resolveJerseyDigits(profile?.jerseyNumber ?? null);
-    const statsLine = formatStatsLine(event, props, minuteLabel, detailLabel);
+    const statsLine = formatClassicStatsLine(event, props, minuteLabel, detailLabel);
 
     return (
         <div
@@ -170,6 +128,13 @@ export const GoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) =
             </div>
         </div>
     );
+};
+
+export const GoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) => {
+    if (props.variant === 'premium') {
+        return <PremiumPaniniStickerCard {...props} />;
+    }
+    return <ClassicGoalScorerStickerCard {...props} />;
 };
 
 export function pickLatestActiveGoal(events: MatchEventItem[]): MatchEventItem | null {

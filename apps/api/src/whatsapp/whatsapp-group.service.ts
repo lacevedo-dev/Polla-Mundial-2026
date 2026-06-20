@@ -32,6 +32,8 @@ import {
 } from '../matches/match-events.util';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
 import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
+import { StickersService } from '../stickers/stickers.service';
+import { buildGenerateStickerDto } from '../stickers/stickers-mapper.util';
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
@@ -87,6 +89,7 @@ export class WhatsappGroupService {
     private readonly reportService: PredictionReportService,
     private readonly moduleRef: ModuleRef,
     private readonly goalStickerConfig: GoalStickerConfigService,
+    private readonly stickersService: StickersService,
   ) {}
 
   private scheduleTextJobDispatch(jobId: string, type: WhatsappGroupJobType): void {
@@ -304,9 +307,8 @@ export class WhatsappGroupService {
         (await this.goalStickerConfig.isActiveFor('whatsappGroup'))
       ) {
         caption = job.caption || (await this.buildTextCaption(job));
-        const stickerPayload = await this.resolveGoalStickerPayload(job.matchId, job.league.name);
-        if (stickerPayload) {
-          const imageBuffer = await this.waImage.buildGoalSticker(stickerPayload);
+        const imageBuffer = await this.buildGoalStickerImageBuffer(job.matchId, job.league.name);
+        if (imageBuffer) {
           await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
         } else {
           await this.waWeb.sendTextToGroup(job.groupId, caption);
@@ -1093,10 +1095,10 @@ export class WhatsappGroupService {
     }
   }
 
-  private async resolveGoalStickerPayload(
+  private async resolveGoalStickerContext(
     matchId: string,
     leagueName: string,
-  ): Promise<GoalStickerParams | null> {
+  ) {
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
       include: { homeTeam: true, awayTeam: true },
@@ -1136,20 +1138,89 @@ export class WhatsappGroupService {
       }
     }
 
-    return buildGoalStickerParams({
-      playerName: latest.playerName.trim(),
-      teamName: scoringTeam.name,
-      minute: latest.minute,
-      homeTeam: match.homeTeam.name,
-      awayTeam: match.awayTeam.name,
-      homeScore: match.homeScore ?? 0,
-      awayScore: match.awayScore ?? 0,
+    return { match, latest, scoringTeam, profile };
+  }
+
+  private async buildGoalStickerImageBuffer(
+    matchId: string,
+    leagueName: string,
+  ): Promise<Buffer | null> {
+    const ctx = await this.resolveGoalStickerContext(matchId, leagueName);
+    if (!ctx) return null;
+
+    const settings = await this.goalStickerConfig.getSettings();
+    const playerExternalId = ctx.latest.playerExternalId;
+
+    if (
+      settings.variant === 'premium' &&
+      this.stickersService.isOpenAiConfigured() &&
+      playerExternalId &&
+      ctx.profile?.photoUrl
+    ) {
+      const dto = buildGenerateStickerDto({
+        profile: ctx.profile,
+        team: ctx.scoringTeam,
+        teamName: ctx.scoringTeam.name,
+        minute: ctx.latest.minute,
+      });
+
+      if (dto) {
+        try {
+          await this.stickersService.getOrGenerateSticker(dto);
+          const cached = await this.stickersService.readCachedStickerBuffer(playerExternalId);
+          if (cached) return cached;
+        } catch (error) {
+          this.logger.warn(
+            `OpenAI sticker falló para jugador ${playerExternalId}; usando render HTML`,
+            error instanceof Error ? error.message : error,
+          );
+        }
+      }
+    }
+
+    const payload = buildGoalStickerParams({
+      playerName: ctx.latest.playerName.trim(),
+      teamName: ctx.scoringTeam.name,
+      minute: ctx.latest.minute,
+      homeTeam: ctx.match.homeTeam.name,
+      awayTeam: ctx.match.awayTeam.name,
+      homeScore: ctx.match.homeScore ?? 0,
+      awayScore: ctx.match.awayScore ?? 0,
       leagueName,
-      assistName: latest.assistName,
-      goalDetail: latest.detail,
-      team: scoringTeam,
-      teamFlagUrl: scoringTeam.flagUrl,
-      profile,
+      assistName: ctx.latest.assistName,
+      goalDetail: ctx.latest.detail,
+      team: ctx.scoringTeam,
+      teamFlagUrl: ctx.scoringTeam.flagUrl,
+      profile: ctx.profile,
+    });
+
+    return this.waImage.buildGoalSticker({
+      ...payload,
+      variant: settings.variant,
+    });
+  }
+
+  private async resolveGoalStickerPayload(
+    matchId: string,
+    leagueName: string,
+  ): Promise<GoalStickerParams | null> {
+    const ctx = await this.resolveGoalStickerContext(matchId, leagueName);
+    if (!ctx) return null;
+
+    return buildGoalStickerParams({
+      playerName: ctx.latest.playerName.trim(),
+      teamName: ctx.scoringTeam.name,
+      minute: ctx.latest.minute,
+      homeTeam: ctx.match.homeTeam.name,
+      awayTeam: ctx.match.awayTeam.name,
+      homeScore: ctx.match.homeScore ?? 0,
+      awayScore: ctx.match.awayScore ?? 0,
+      leagueName,
+      assistName: ctx.latest.assistName,
+      goalDetail: ctx.latest.detail,
+      team: ctx.scoringTeam,
+      teamFlagUrl: ctx.scoringTeam.flagUrl,
+      profile: ctx.profile,
     });
   }
 

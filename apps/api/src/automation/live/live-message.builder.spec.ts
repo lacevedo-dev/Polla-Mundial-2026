@@ -54,6 +54,7 @@ describe('live-message.builder', () => {
         scoringCount: 8,
         topScorers: [{ displayName: 'Ana', points: 7.5 }],
         popularPredictions: [{ score: '2-1', count: 4 }],
+        provisionalRanking: [],
       },
     });
 

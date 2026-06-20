@@ -40,6 +40,7 @@ describe('SyncPlanService', () => {
     getSyncIntervals: jest.fn().mockResolvedValue({ min: 5, max: 30 }),
     isAutoSyncEnabled: jest.fn().mockResolvedValue(true),
     isEventSyncEnabled: jest.fn().mockResolvedValue(false),
+    getEventSyncIntervalMinutes: jest.fn().mockResolvedValue(15),
   };
 
   beforeEach(async () => {
@@ -74,6 +75,7 @@ describe('SyncPlanService', () => {
     mockFootballConfigService.getSyncIntervals.mockResolvedValue({ min: 5, max: 30 });
     mockFootballConfigService.isAutoSyncEnabled.mockResolvedValue(true);
     mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+    mockFootballConfigService.getEventSyncIntervalMinutes.mockResolvedValue(15);
   });
 
   it('should be defined', () => {
@@ -310,7 +312,7 @@ describe('SyncPlanService', () => {
       jest.restoreAllMocks();
     });
 
-    it('excludes a SCHEDULED match with externalId that started more than 370 min ago (hard cutoff)', async () => {
+    it('excludes a SCHEDULED match with externalId that started more than 200 min ago (hard cutoff)', async () => {
       // Freeze time so cutoffs are deterministic
       const now = new Date('2026-03-29T12:00:00.000Z');
       jest.spyOn(Date, 'now').mockReturnValue(now.getTime());
@@ -318,28 +320,28 @@ describe('SyncPlanService', () => {
       const where = await captureWhere();
 
       // The carry-over branch is the second element of the top-level OR
-      const carryOverBranch = where.OR[1];
+      const carryOverBranch = where.OR[0].AND[0].OR[1];
       const scheduledLiveBranch = carryOverBranch.OR[0];
       const withExternalIdBranch = scheduledLiveBranch.OR[0];
 
-      // A match 8h ago (480 min) is before the 370-min hard cutoff
+      // A match 8h ago (480 min) is before the 200-min hard cutoff
       const eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000);
       const cutoff: Date = withExternalIdBranch.matchDate.gte;
 
       expect(eightHoursAgo < cutoff).toBe(true); // match is EXCLUDED (before cutoff)
     });
 
-    it('includes a SCHEDULED match with externalId that started less than 370 min ago', async () => {
+    it('includes a SCHEDULED match with externalId that started less than 200 min ago', async () => {
       const now = new Date('2026-03-29T12:00:00.000Z');
       jest.spyOn(Date, 'now').mockReturnValue(now.getTime());
 
       const where = await captureWhere();
 
-      const carryOverBranch = where.OR[1];
+      const carryOverBranch = where.OR[0].AND[0].OR[1];
       const scheduledLiveBranch = carryOverBranch.OR[0];
       const withExternalIdBranch = scheduledLiveBranch.OR[0];
 
-      // A match 2h ago (120 min) is AFTER the 370-min hard cutoff
+      // A match 2h ago (120 min) is AFTER the 200-min hard cutoff
       const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
       const cutoff: Date = withExternalIdBranch.matchDate.gte;
 
@@ -352,7 +354,7 @@ describe('SyncPlanService', () => {
 
       const where = await captureWhere();
 
-      const carryOverBranch = where.OR[1];
+      const carryOverBranch = where.OR[0].AND[0].OR[1];
       const scheduledLiveBranch = carryOverBranch.OR[0];
       const withoutExternalIdBranch = scheduledLiveBranch.OR[1];
 
@@ -369,7 +371,7 @@ describe('SyncPlanService', () => {
 
       const where = await captureWhere();
 
-      const carryOverBranch = where.OR[1];
+      const carryOverBranch = where.OR[0].AND[0].OR[1];
       const scheduledLiveBranch = carryOverBranch.OR[0];
       const withoutExternalIdBranch = scheduledLiveBranch.OR[1];
 
@@ -386,7 +388,7 @@ describe('SyncPlanService', () => {
 
       const where = await captureWhere();
 
-      const carryOverBranch = where.OR[1];
+      const carryOverBranch = where.OR[0].AND[0].OR[1];
       const finishedBranch = carryOverBranch.OR[1];
 
       expect(finishedBranch).toEqual({
@@ -395,26 +397,26 @@ describe('SyncPlanService', () => {
       });
     });
 
-    it('hard cutoff (370 min) is strictly greater than soft cutoff (130 min)', async () => {
+    it('hard cutoff (200 min) is strictly greater than soft cutoff (130 min)', async () => {
       const now = new Date('2026-03-29T12:00:00.000Z');
       jest.spyOn(Date, 'now').mockReturnValue(now.getTime());
 
       const where = await captureWhere();
 
-      const carryOverBranch = where.OR[1];
+      const carryOverBranch = where.OR[0].AND[0].OR[1];
       const scheduledLiveBranch = carryOverBranch.OR[0];
       const hardCutoff: Date = scheduledLiveBranch.OR[0].matchDate.gte;
       const softCutoff: Date = scheduledLiveBranch.OR[1].matchDate.gte;
 
       // Hard cutoff is FURTHER in the past (smaller timestamp) than soft cutoff:
-      // 370 min ago < 130 min ago in absolute time
+      // 200 min ago < 130 min ago in absolute time
       expect(hardCutoff.getTime()).toBeLessThan(softCutoff.getTime());
 
       // Verify approximate durations (allow ±5s for test execution jitter)
       const hardMinutes = (now.getTime() - hardCutoff.getTime()) / 60000;
       const softMinutes = (now.getTime() - softCutoff.getTime()) / 60000;
 
-      expect(hardMinutes).toBeCloseTo(370, 0);
+      expect(hardMinutes).toBeCloseTo(200, 0);
       expect(softMinutes).toBeCloseTo(130, 0);
     });
   });

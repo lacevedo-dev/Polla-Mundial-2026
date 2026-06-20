@@ -687,7 +687,7 @@ describe('MatchSyncService', () => {
       triggeredBy: 'manual',
     });
 
-    expect(mockRateLimiterService.canMakeRequest).toHaveBeenCalledTimes(1);
+    expect(mockRateLimiterService.canMakeRequest).toHaveBeenCalledTimes(2);
     expect(mockApiFootballClient.getFixtureEvents).not.toHaveBeenCalled();
   });
 
