@@ -12,6 +12,7 @@ export interface MatchResponse {
     advancingTeamId?: string | null;
     elapsed?: number | null;
     statusShort?: string | null;
+    lastSyncAt?: string | null;
     homeTeam: {
         id?: string;
         name: string;
@@ -82,6 +83,7 @@ export interface MatchViewModel {
     };
     elapsed?: number | null;
     statusShort?: string | null;
+    lastSyncAt?: string | null;
     pointsEarned?: number;
     saved: boolean;
 }
@@ -355,6 +357,7 @@ export function toMatchViewModel(
                 : undefined,
         elapsed: match.elapsed ?? undefined,
         statusShort: match.statusShort ?? undefined,
+        lastSyncAt: match.lastSyncAt ?? undefined,
         pointsEarned: prediction?.points ?? undefined,
         saved: hasPrediction,
     };

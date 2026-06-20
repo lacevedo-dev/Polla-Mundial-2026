@@ -28,6 +28,10 @@ import {
   type NewVarGoalAnnulmentEvent,
   type NewYellowCardEvent,
 } from '../../matches/match-events.util';
+import {
+  buildMatchEventsRevision,
+  fetchLiveGoalEventSnapshots,
+} from '../../matches/match-live-snapshot.util';
 import { ConfigService as FootballConfigService } from './config.service';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -1003,7 +1007,13 @@ export class MatchSyncService {
         `Updated match ${match.id}: ${fixture.teams.home.name} ${fixture.goals.home ?? '-'} - ${fixture.goals.away ?? '-'} ${fixture.teams.away.name} (${status})`,
       );
 
-      // Emit match_updated event
+      // Emit match_updated event (incluye revisión de eventos /fixtures/events)
+      const eventsRevision = await buildMatchEventsRevision(this.prisma, match.id);
+      const goalEvents =
+        status === MatchStatus.LIVE || transitionedToFinished
+          ? await fetchLiveGoalEventSnapshots(this.prisma, match.id)
+          : [];
+
       this.syncEvents.emit({
         type: 'match_updated',
         data: {
@@ -1014,6 +1024,9 @@ export class MatchSyncService {
           externalId: fixture.fixture.id.toString(),
           elapsed: fixture.fixture.status.elapsed ?? null,
           statusShort: fixture.fixture.status.short,
+          lastSyncAt: updatedMatch.lastSyncAt?.toISOString() ?? new Date().toISOString(),
+          eventsRevision,
+          goalEvents,
         },
         timestamp: new Date().toISOString(),
       });

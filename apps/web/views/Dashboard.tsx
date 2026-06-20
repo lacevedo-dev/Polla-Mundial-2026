@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 import { useLiveMatchEvents } from '../hooks/useLiveMatchEvents';
+import { useLiveDisplaySettings } from '../hooks/useLiveDisplaySettings';
 import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
@@ -90,11 +91,9 @@ const Dashboard: React.FC = () => {
     const liveMatches = useMemo(() => matches.filter((m) => m.status === 'live'), [matches]);
     const liveMatchIds = useMemo(() => liveMatches.map((m) => m.id), [liveMatches]);
     const liveSync = useLiveSyncEvents();
-    const matchEvents = useLiveMatchEvents(liveMatchIds, {
-        matchesUpdatedCount: liveSync.matchesUpdatedCount,
-        syncCompletedCount: liveSync.syncCompletedCount,
-        syncIntervalMinutes: liveSync.syncIntervalMinutes,
-    });
+    const { eventsByMatchId: matchEvents, loadingMatchIds: eventsLoadingMatchIds } =
+        useLiveMatchEvents(liveMatchIds);
+    const liveDisplay = useLiveDisplaySettings();
     const upcomingMatches = useMemo(() => matches.filter((m) => m.status === 'open').slice(0, 3), [matches]);
     const nextUnsaved = useMemo(() => matches.find((m) => m.status === 'open' && !m.saved), [matches]);
 
@@ -241,34 +240,6 @@ const Dashboard: React.FC = () => {
             setError(e instanceof Error ? e.message : 'No fue posible cargar la liga activa.');
         });
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
-
-    // Refresco periódico de partidos en vivo (eventos los maneja useLiveMatchEvents)
-    useEffect(() => {
-        if (!activeLeague?.id || liveMatches.length === 0) return;
-
-        const intervalMs = Math.max(60_000, liveSync.syncIntervalMinutes * 60_000);
-        let cancelled = false;
-
-        const refreshLiveData = async () => {
-            if (cancelled || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
-                return;
-            }
-            try {
-                await fetchLeagueMatches(activeLeague.id, { background: true });
-            } catch {
-                // silent background refresh
-            }
-        };
-
-        const intervalId = window.setInterval(() => {
-            void refreshLiveData();
-        }, intervalMs);
-
-        return () => {
-            cancelled = true;
-            window.clearInterval(intervalId);
-        };
-    }, [activeLeague?.id, liveMatches.length, liveSync.syncIntervalMinutes, fetchLeagueMatches]);
 
     useEffect(() => {
         if (liveMatches.length === 0 || !activeLeague?.id) { setLiveStandings(null); return; }
@@ -489,6 +460,8 @@ const Dashboard: React.FC = () => {
                 <LiveMatchesPanel
                     liveMatches={liveMatches}
                     matchEvents={matchEvents}
+                    eventsLoadingMatchIds={eventsLoadingMatchIds}
+                    liveDisplay={liveDisplay}
                     liveSync={liveSync}
                     liveStandings={liveStandings}
                     expandedMatchId={expandedMatchId}

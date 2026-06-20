@@ -12,27 +12,49 @@ import {
     buildMatchEventRowKey,
     formatGoalScorersByPlayer,
 } from '../../utils/matchEvents';
+import { effectiveStatusShort } from '../../utils/liveFixture.util';
+import {
+    filterEventsForLiveDisplay,
+    isRedCardEvent,
+    isSubstitutionEvent,
+    isYellowCardEvent,
+    type LiveDisplaySettings,
+    DEFAULT_LIVE_DISPLAY_SETTINGS,
+} from '../../utils/liveDisplayConfig';
 
 interface LiveStandingsData {
     myProvisionalPosition?: number | null;
     myPositionChange: number;
 }
 
+function resolveMatchSyncAt(match: MatchViewModel): number | null {
+    if (!match.lastSyncAt) return null;
+    const parsed = Date.parse(match.lastSyncAt);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
 interface LiveMatchExpandedCardProps {
     expandedMatch: MatchViewModel;
-    liveSync: { lastSyncAt: number | null };
     liveStandings: LiveStandingsData | null;
     matchEvents: Map<string, MatchEventItem[]>;
     expandLevel: number;
+    eventsLoading?: boolean;
+    liveDisplay?: LiveDisplaySettings;
 }
 
 const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
     expandedMatch,
-    liveSync,
     liveStandings,
     matchEvents,
     expandLevel,
+    eventsLoading = false,
+    liveDisplay = DEFAULT_LIVE_DISPLAY_SETTINGS,
 }) => {
+    const clockStatusShort = effectiveStatusShort(
+        expandedMatch.statusShort,
+        expandedMatch.elapsed,
+    );
+    const matchSyncAt = resolveMatchSyncAt(expandedMatch);
     const expandedPredHome = parseInt(expandedMatch.prediction.home, 10);
     const expandedPredAway = parseInt(expandedMatch.prediction.away, 10);
     const expandedRealHome = expandedMatch.result?.home ?? 0;
@@ -56,10 +78,10 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
         : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
 
     const expandedEvents = dedupeMatchEvents(
-        (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD', 'VAR'].includes(e.type)),
+        filterEventsForLiveDisplay(matchEvents.get(expandedMatch.id) ?? [], liveDisplay),
     );
     const { active: activeGoals, annulled: annulledGoals } = splitGoalEvents(
-        expandedEvents.filter((e) => e.type === 'GOAL'),
+        liveDisplay.goals ? expandedEvents.filter((e) => e.type === 'GOAL') : [],
     );
     const { homeGoals, awayGoals } = partitionGoalsByTeam(
         activeGoals,
@@ -93,8 +115,8 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                             <LiveMatchTimer
                                 matchDate={expandedMatch.date}
                                 elapsed={expandedMatch.elapsed ?? null}
-                                lastSyncAt={liveSync.lastSyncAt}
-                                statusShort={expandedMatch.statusShort}
+                                lastSyncAt={matchSyncAt}
+                                statusShort={clockStatusShort}
                             />
                             {liveStandings?.myProvisionalPosition != null && (
                                 <span className={`text-[9px] font-black ${liveStandings.myPositionChange > 0 ? 'text-lime-400' : liveStandings.myPositionChange < 0 ? 'text-rose-400' : 'text-white/40'}`}>
@@ -121,8 +143,8 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                     <MatchProgressBar
                         matchDate={expandedMatch.date}
                         elapsed={expandedMatch.elapsed ?? null}
-                        lastSyncAt={liveSync.lastSyncAt}
-                        statusShort={expandedMatch.statusShort}
+                        lastSyncAt={matchSyncAt}
+                        statusShort={clockStatusShort}
                         finished={false}
                     />
 
@@ -149,7 +171,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </div>
                     </div>
 
-                    {hasGoalSummary && (
+                    {liveDisplay.goals && hasGoalSummary && (
                         <div className="mt-2.5 pt-2.5 border-t border-white/10">
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="min-w-0 space-y-1">
@@ -184,7 +206,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </div>
                     )}
 
-                    {expandLevel === 1 && !hasGoalSummary && (
+                    {liveDisplay.goals && expandLevel === 1 && !hasGoalSummary && eventsLoading && (
                         <p className="mt-2 text-center text-[9px] font-medium text-white/30">
                             Goleadores en actualización…
                         </p>
@@ -200,16 +222,20 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                         const isPen = e.detail?.toLowerCase().includes('penalty');
                                         const isGoal = e.type === 'GOAL';
                                         const isVar = e.type === 'VAR';
-                                        const isYellow = e.type === 'CARD' && e.detail?.toLowerCase().includes('yellow');
+                                        const isYellow = isYellowCardEvent(e);
+                                        const isRed = isRedCardEvent(e);
+                                        const isSub = isSubstitutionEvent(e);
                                         const min = `${e.minute}'${e.extraMin ? `+${e.extraMin}` : ''}`;
                                         const isAnnulledGoal = isGoal && !!e.annulled;
                                         const icon = isVar
                                             ? '📺 VAR'
                                             : isAnnulledGoal
                                                 ? '🚫'
+                                            : isSub
+                                                ? '↔️'
                                             : isGoal
                                                 ? (isOG ? '⚽ OG' : isPen ? '⚽ P' : '⚽')
-                                                : isYellow ? '🟨' : '🟥';
+                                                : isYellow ? '🟨' : isRed ? '🟥' : '•';
                                         const iconBg = isVar || isAnnulledGoal
                                             ? 'bg-rose-500/15 text-rose-200'
                                             : isGoal
@@ -219,6 +245,8 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                             ? `Gol anulado${e.detail ? ` · ${e.detail}` : ''}`
                                             : isAnnulledGoal
                                                 ? `${e.playerName ?? '—'} · ${formatAnnulledGoalLabel(e.annulledReason)}`
+                                                : isSub
+                                                    ? `${e.playerName ?? '—'} ↔ ${e.assistName ?? '—'}`
                                                 : (e.playerName ?? '—');
                                         return (
                                             <div key={buildMatchEventRowKey(e)} className="flex items-center gap-2">
@@ -235,8 +263,12 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                             )}
 
                             {(() => {
-                                const yellows = expandedEvents.filter((e) => e.type === 'CARD' && e.detail?.toLowerCase().includes('yellow')).length;
-                                const reds = expandedEvents.filter((e) => e.type === 'CARD' && (e.detail?.toLowerCase().includes('red') || e.detail?.toLowerCase().includes('second yellow'))).length;
+                                const yellows = liveDisplay.yellowCards
+                                    ? expandedEvents.filter((e) => isYellowCardEvent(e)).length
+                                    : 0;
+                                const reds = liveDisplay.redCards
+                                    ? expandedEvents.filter((e) => isRedCardEvent(e)).length
+                                    : 0;
                                 if (yellows + reds === 0) return null;
                                 return (
                                     <div className="mt-2 flex items-center gap-2 border-t border-white/5 pt-2">

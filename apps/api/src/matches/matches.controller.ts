@@ -10,6 +10,7 @@ import { SyncEventsService } from '../football-sync/services/sync-events.service
 import { SyncPlanService } from '../football-sync/services/sync-plan.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { dedupeMatchEvents } from './match-events.util';
+import { LiveDisplayConfigService } from '../automation/config/live-display-config.service';
 
 @Controller('matches')
 export class MatchesController {
@@ -18,6 +19,7 @@ export class MatchesController {
         private readonly syncEvents: SyncEventsService,
         private readonly syncPlan: SyncPlanService,
         private readonly prisma: PrismaService,
+        private readonly liveDisplayConfig: LiveDisplayConfigService,
     ) { }
 
     @UseGuards(JwtAuthGuard)
@@ -58,7 +60,10 @@ export class MatchesController {
                 annulled: true, annulledReason: true,
             },
         });
-        return dedupeMatchEvents(events);
+        return dedupeMatchEvents(events.map((event) => ({
+            ...event,
+            type: String(event.type).trim().toUpperCase(),
+        })));
     }
 
     @UseGuards(JwtAuthGuard)
@@ -91,13 +96,23 @@ export class MatchesController {
     @Get('live/sync-info')
     @UseGuards(JwtAuthGuard)
     async getLiveSyncInfo() {
-        const plan = await this.syncPlan.calculateDailyPlan();
+        const [plan, liveDisplay] = await Promise.all([
+            this.syncPlan.calculateDailyPlan(),
+            this.liveDisplayConfig.getSettings(),
+        ]);
         return {
             intervalMinutes: plan.intervalMinutes,
             lastSync: plan.lastSync,
             nextSyncIn: plan.nextSyncIn,
             hasLiveMatches: plan.hasLiveMatches,
             strategy: plan.strategy,
+            liveDisplay,
         };
+    }
+
+    @Get('live/display-settings')
+    @UseGuards(JwtAuthGuard)
+    async getLiveDisplaySettings() {
+        return this.liveDisplayConfig.getSettings();
     }
 }

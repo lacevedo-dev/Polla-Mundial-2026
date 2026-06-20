@@ -21,6 +21,7 @@ export const matchWithTeamsSelect = Prisma.validator<Prisma.MatchSelect>()({
   advancingTeamId: true,
   elapsed: true,
   statusShort: true,
+  lastSyncAt: true,
   homeTeam: {
     select: matchTeamSelect,
   },
@@ -47,6 +48,7 @@ export function toMatchResponse(match: MatchWithTeams) {
     advancingTeamId: match.advancingTeamId,
     elapsed: match.elapsed,
     statusShort: match.statusShort,
+    lastSyncAt: match.lastSyncAt?.toISOString() ?? null,
     homeTeam: {
       id: match.homeTeam.id,
       name: match.homeTeam.name,

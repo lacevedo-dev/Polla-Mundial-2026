@@ -20,6 +20,13 @@ describe('liveMatchClock.util', () => {
         expect(next).toEqual({ minute: 2, syncedAt: 1_000_000 + 45_000 });
     });
 
+    it('ignora sync stale que retrocede el minuto', () => {
+        const prev = { minute: 48, syncedAt: 1_000_000 };
+        const now = 1_000_000 + 30_000;
+        const next = resolveClockAnchor(40, 1_000_000 + 20_000, prev, now);
+        expect(next).toBe(prev);
+    });
+
     it('no reinicia segundos si el sync repite el mismo minuto', () => {
         const prev = { minute: 10, syncedAt: 1_000_000 };
         const now = 1_000_000 + 30_000;
@@ -28,46 +35,48 @@ describe('liveMatchClock.util', () => {
     });
 
     it('formatea primer tiempo y reposición', () => {
+        const baseNow = 1_700_000_000_000;
         const playing = computeLiveClockState({
-            matchDate: new Date().toISOString(),
+            matchDate: new Date(baseNow).toISOString(),
             elapsed: 44,
-            lastSyncAt: Date.now() - 30_000,
+            lastSyncAt: baseNow - 30_000,
             statusShort: '1H',
-            now: Date.now(),
-            anchor: { minute: 44, syncedAt: Date.now() - 30_000 },
+            now: baseNow,
+            anchor: { minute: 44, syncedAt: baseNow - 30_000 },
         });
         expect(formatLiveClockMinute(playing)).toMatch(/44'/);
 
         const stoppage = computeLiveClockState({
-            matchDate: new Date().toISOString(),
+            matchDate: new Date(baseNow).toISOString(),
             elapsed: 45,
-            lastSyncAt: Date.now() - 360_000,
+            lastSyncAt: baseNow - 360_000,
             statusShort: '1H',
-            now: Date.now(),
-            anchor: { minute: 45, syncedAt: Date.now() - 360_000 },
+            now: baseNow,
+            anchor: { minute: 45, syncedAt: baseNow - 360_000 },
         });
         expect(formatLiveClockMinute(stoppage)).toBe("45+6'");
     });
 
     it('formatea segundo tiempo y reposición', () => {
+        const baseNow = 1_700_000_000_000;
         const secondHalf = computeLiveClockState({
-            matchDate: new Date().toISOString(),
+            matchDate: new Date(baseNow).toISOString(),
             elapsed: 46,
-            lastSyncAt: Date.now() - 15_000,
+            lastSyncAt: baseNow - 15_000,
             statusShort: '2H',
-            now: Date.now(),
-            anchor: { minute: 46, syncedAt: Date.now() - 15_000 },
+            now: baseNow,
+            anchor: { minute: 46, syncedAt: baseNow - 15_000 },
         });
         expect(formatLiveClockMinute(secondHalf)).toMatch(/46'/);
         expect(formatLiveClockSeconds(secondHalf)).toMatch(/^46:\d{2}$/);
 
         const stoppage = computeLiveClockState({
-            matchDate: new Date().toISOString(),
+            matchDate: new Date(baseNow).toISOString(),
             elapsed: 90,
-            lastSyncAt: Date.now() - 300_000,
+            lastSyncAt: baseNow - 300_000,
             statusShort: '2H',
-            now: Date.now(),
-            anchor: { minute: 90, syncedAt: Date.now() - 300_000 },
+            now: baseNow,
+            anchor: { minute: 90, syncedAt: baseNow - 300_000 },
         });
         expect(formatLiveClockMinute(stoppage)).toBe("90+5'");
     });

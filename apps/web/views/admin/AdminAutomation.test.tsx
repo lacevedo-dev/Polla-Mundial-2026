@@ -47,6 +47,12 @@ describe('AdminAutomation', () => {
             predictionReportMinutesBefore: 14,
             timezone: 'America/Bogota',
           },
+          liveDisplay: {
+            goals: true,
+            yellowCards: true,
+            redCards: true,
+            substitutions: true,
+          },
         });
       }
 

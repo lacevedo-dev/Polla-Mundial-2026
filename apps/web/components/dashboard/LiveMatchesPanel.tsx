@@ -7,6 +7,15 @@ import LiveMatchExpandedCard from './LiveMatchExpandedCard';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { dedupeMatchEvents, formatGoalScorersByPlayer, partitionGoalsByTeam, splitGoalEvents } from '../../utils/matchEvents';
+import { effectiveStatusShort } from '../../utils/liveFixture.util';
+import {
+    filterEventsForLiveDisplay,
+    isRedCardEvent,
+    isSubstitutionEvent,
+    isYellowCardEvent,
+    type LiveDisplaySettings,
+    DEFAULT_LIVE_DISPLAY_SETTINGS,
+} from '../../utils/liveDisplayConfig';
 import { calcLivePoints } from '../../utils/dashboard';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
@@ -33,6 +42,8 @@ interface LiveMatchesPanelProps {
     liveSync: LiveSyncState;
     liveStandings: LiveStandingsData | null;
     matchEvents: Map<string, MatchEventItem[]>;
+    eventsLoadingMatchIds?: Set<string>;
+    liveDisplay?: LiveDisplaySettings;
     expandedMatchId: string | null;
     expandLevel: number;
     isFloating: boolean;
@@ -45,10 +56,18 @@ interface LiveMatchesPanelProps {
 
 /* ─── Chip helper ────────────────────────────────────────────────── */
 
+function resolveMatchSyncAt(match: MatchViewModel): number | null {
+    if (!match.lastSyncAt) return null;
+    const parsed = Date.parse(match.lastSyncAt);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
 function getLatestGoalHint(
     match: MatchViewModel,
     matchEvents: Map<string, MatchEventItem[]>,
+    showGoals: boolean,
 ): string | null {
+    if (!showGoals) return null;
     const events = dedupeMatchEvents(
         (matchEvents.get(match.id) ?? []).filter((e) => e.type === 'GOAL' && !e.annulled),
     );
@@ -78,9 +97,11 @@ function getChipStatus(match: MatchViewModel) {
 
 const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
     liveMatches,
-    liveSync,
+    liveSync: _liveSync,
     liveStandings,
     matchEvents,
+    eventsLoadingMatchIds,
+    liveDisplay = DEFAULT_LIVE_DISPLAY_SETTINGS,
     expandedMatchId,
     expandLevel,
     isFloating,
@@ -106,7 +127,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                     const rH = match.result?.home ?? 0;
                     const rA = match.result?.away ?? 0;
                     const chipStatus = getChipStatus(match);
-                    const goalHint = getLatestGoalHint(match, matchEvents);
+                    const goalHint = getLatestGoalHint(match, matchEvents, liveDisplay.goals);
+                    const clockStatusShort = effectiveStatusShort(match.statusShort, match.elapsed);
                     const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
                         ? 'border-lime-500/50'
                         : chipStatus === 'losing' ? 'border-rose-500/50' : 'border-white/10';
@@ -129,8 +151,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                 <LiveMatchTimerInline
                                     matchDate={match.date}
                                     elapsed={match.elapsed ?? null}
-                                    lastSyncAt={liveSync.lastSyncAt}
-                                    statusShort={match.statusShort}
+                                    lastSyncAt={resolveMatchSyncAt(match)}
+                                    statusShort={clockStatusShort}
                                 />
                             </div>
                             <div className="xl:hidden flex items-center justify-between w-full mt-1 gap-1">
@@ -161,8 +183,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                 <LiveMatchTimerInline
                                     matchDate={match.date}
                                     elapsed={match.elapsed ?? null}
-                                    lastSyncAt={liveSync.lastSyncAt}
-                                    statusShort={match.statusShort}
+                                    lastSyncAt={resolveMatchSyncAt(match)}
+                                    statusShort={clockStatusShort}
                                     className="text-[7px]"
                                 />
                             </div>
@@ -194,10 +216,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                 {expandedMatch && (
                     <LiveMatchExpandedCard
                         expandedMatch={expandedMatch}
-                        liveSync={liveSync}
                         liveStandings={liveStandings}
                         matchEvents={matchEvents}
                         expandLevel={expandLevel}
+                        eventsLoading={eventsLoadingMatchIds?.has(expandedMatch.id) ?? false}
+                        liveDisplay={liveDisplay}
                     />
                 )}
             </AnimatePresence>
@@ -257,7 +280,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                             const rH = match.result?.home ?? 0;
                             const rA = match.result?.away ?? 0;
                             const chipStatus = getChipStatus(match);
-                            const goalHint = getLatestGoalHint(match, matchEvents);
+                            const goalHint = getLatestGoalHint(match, matchEvents, liveDisplay.goals);
+                            const clockStatusShort = effectiveStatusShort(match.statusShort, match.elapsed);
                             const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
                                 ? 'border-lime-500/50'
                                 : chipStatus === 'losing' ? 'border-rose-500/50' : 'border-slate-200';
@@ -277,8 +301,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                         <LiveMatchTimerInline
                                             matchDate={match.date}
                                             elapsed={match.elapsed ?? null}
-                                            lastSyncAt={liveSync.lastSyncAt}
-                                            statusShort={match.statusShort}
+                                            lastSyncAt={resolveMatchSyncAt(match)}
+                                            statusShort={clockStatusShort}
                                         />
                                     </div>
                                     <div className="flex items-center justify-between gap-1">
@@ -320,9 +344,9 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                             >
                                 <FloatingExpandedCard
                                     expandedMatch={expandedMatch}
-                                    liveSync={liveSync}
                                     matchEvents={matchEvents}
                                     expandLevel={expandLevel}
+                                    liveDisplay={liveDisplay}
                                     expandedPts={(() => {
                                         const pH = parseInt(expandedMatch.prediction.home, 10);
                                         const pA = parseInt(expandedMatch.prediction.away, 10);
@@ -368,15 +392,20 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
 
 interface FloatingExpandedCardProps {
     expandedMatch: MatchViewModel;
-    liveSync: { lastSyncAt: number | null };
     matchEvents: Map<string, MatchEventItem[]>;
     expandLevel: number;
     expandedPts: number;
+    liveDisplay?: LiveDisplaySettings;
 }
 
 const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
-    expandedMatch, liveSync, matchEvents, expandLevel, expandedPts,
+    expandedMatch, matchEvents, expandLevel, expandedPts, liveDisplay = DEFAULT_LIVE_DISPLAY_SETTINGS,
 }) => {
+    const clockStatusShort = effectiveStatusShort(
+        expandedMatch.statusShort,
+        expandedMatch.elapsed,
+    );
+    const matchSyncAt = resolveMatchSyncAt(expandedMatch);
     const expandedPredHome = parseInt(expandedMatch.prediction.home, 10);
     const expandedPredAway = parseInt(expandedMatch.prediction.away, 10);
     const expandedRealHome = expandedMatch.result?.home ?? 0;
@@ -390,10 +419,10 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
     }
     const expandedStatusColor = expandedStatus === 'exact' ? 'text-lime-300' : expandedStatus === 'winning' ? 'text-lime-400' : 'text-rose-400';
     const expandedEvents = dedupeMatchEvents(
-        (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD'].includes(e.type)),
+        filterEventsForLiveDisplay(matchEvents.get(expandedMatch.id) ?? [], liveDisplay),
     );
     const { active: activeGoals } = splitGoalEvents(
-        expandedEvents.filter((e) => e.type === 'GOAL'),
+        liveDisplay.goals ? expandedEvents.filter((e) => e.type === 'GOAL') : [],
     );
     const { homeGoals, awayGoals } = partitionGoalsByTeam(
         activeGoals,
@@ -411,8 +440,8 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
                 <LiveMatchTimer
                     matchDate={expandedMatch.date}
                     elapsed={expandedMatch.elapsed ?? null}
-                    lastSyncAt={liveSync.lastSyncAt}
-                    statusShort={expandedMatch.statusShort}
+                    lastSyncAt={matchSyncAt}
+                    statusShort={clockStatusShort}
                 />
                 {expandedPts > 0 && (
                     <span className="rounded-full bg-lime-400/20 px-1.5 py-0.5 font-mono text-[9px] font-black text-lime-300">
@@ -424,8 +453,8 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
             <MatchProgressBar
                 matchDate={expandedMatch.date}
                 elapsed={expandedMatch.elapsed ?? null}
-                lastSyncAt={liveSync.lastSyncAt}
-                statusShort={expandedMatch.statusShort}
+                lastSyncAt={matchSyncAt}
+                statusShort={clockStatusShort}
                 finished={false}
             />
 
@@ -452,7 +481,7 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
                 </div>
             </div>
 
-            {(homeScorers.length > 0 || awayScorers.length > 0) && (
+            {(liveDisplay.goals && (homeScorers.length > 0 || awayScorers.length > 0)) && (
                 <div className="mt-2 pt-2 border-t border-white/10 grid grid-cols-2 gap-2 text-[8px] font-semibold text-white/70">
                     <div className="min-w-0 truncate">{homeScorers.join(' · ')}</div>
                     <div className="min-w-0 truncate text-right">{awayScorers.join(' · ')}</div>
@@ -463,7 +492,15 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
                 <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-x-2 gap-y-0.5">
                     {expandedEvents.slice(0, 4).map((e, i) => {
                         const isOG = e.detail?.toLowerCase().includes('own goal');
-                        const icon = e.type === 'GOAL' ? (isOG ? '⚽OG' : '⚽') : e.type === 'YELLOW_CARD' ? '🟨' : '🟥';
+                        const icon = e.type === 'GOAL'
+                            ? (isOG ? '⚽OG' : '⚽')
+                            : isSubstitutionEvent(e)
+                                ? '↔️'
+                                : isYellowCardEvent(e)
+                                    ? '🟨'
+                                    : isRedCardEvent(e)
+                                        ? '🟥'
+                                        : '•';
                         const min = `${e.minute}'`;
                         return (
                             <span key={i} className="text-[8px] text-white/40">

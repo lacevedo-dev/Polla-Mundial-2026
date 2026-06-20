@@ -23,6 +23,8 @@ import { AdminAutomationFeatureFlagsDto } from './dto/admin-automation-feature-f
 import { AdminAutomationStepOverrideDto } from './dto/admin-automation-step-override.dto';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
 import { AutomationTimingConfigService } from '../automation/config/automation-timing-config.service';
+import { LiveDisplayConfigService } from '../automation/config/live-display-config.service';
+import type { LiveDisplaySettings } from '../automation/config/live-display-config.util';
 import { getFinalEscalationMinutesBeforeKickoff } from '../automation/config/automation-timing.util';
 import { AutomationRetryService } from '../automation/retry/automation-retry.service';
 import { AutomationMessagePreviewService } from '../automation/preview/automation-message-preview.service';
@@ -54,6 +56,7 @@ export class AdminAutomationController {
     private readonly featureFlags: AutomationFeatureFlagsService,
     private readonly stepConfig: AutomationStepConfigService,
     private readonly timingConfig: AutomationTimingConfigService,
+    private readonly liveDisplayConfig: LiveDisplayConfigService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -306,6 +309,7 @@ export class AdminAutomationController {
     const stepCatalog = await this.stepConfig.getResolvedCatalog();
     const defaultCloseMinutes = 15;
     const timingSettings = await this.timingConfig.getSettings();
+    const liveDisplay = await this.liveDisplayConfig.getSettings();
 
     return {
       channels,
@@ -324,6 +328,7 @@ export class AdminAutomationController {
           timingSettings.predictionReportMinutesBefore,
         timezone: 'America/Bogota',
       },
+      liveDisplay,
       automation: {
         emailBacklogAudit: {
           cron: '*/15 * * * *',
@@ -790,6 +795,18 @@ export class AdminAutomationController {
       predictionReportMinutesAfterClose: dto.predictionReportMinutesAfterClose,
       predictionReportMinutesBefore: dto.predictionReportMinutesBefore,
     });
+  }
+
+  /** Lee qué eventos se muestran en la pantalla EN VIVO del dashboard */
+  @Get('live-display-settings')
+  async getLiveDisplaySettings() {
+    return this.liveDisplayConfig.getSettings();
+  }
+
+  /** Actualiza visibilidad de goles, tarjetas y cambios en pantalla EN VIVO */
+  @Put('live-display-settings')
+  async updateLiveDisplaySettings(@Body() dto: Partial<LiveDisplaySettings>) {
+    return this.liveDisplayConfig.updateSettings(dto);
   }
 
   /** Lee los overrides de canal por scheduler */

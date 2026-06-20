@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Monitor,
   MessageSquare,
   Phone,
   RefreshCw,
@@ -77,7 +78,15 @@ interface AutomationStatus {
     predictionReportMinutesBefore: number;
     timezone: string;
   };
+  liveDisplay?: LiveDisplaySettings;
 }
+
+type LiveDisplaySettings = {
+  goals: boolean;
+  yellowCards: boolean;
+  redCards: boolean;
+  substitutions: boolean;
+};
 
 interface MessagePreview {
   step: string;
@@ -856,6 +865,153 @@ function StepCell({
   );
 }
 
+function MatrixMatchDetails({
+  match,
+  visibleSteps,
+  stepCatalog,
+  onIncident,
+}: {
+  match: OperationsMatch;
+  visibleSteps: StepCatalogEntry[];
+  stepCatalog: StepCatalogEntry[];
+  onIncident?: (info: IncidentInfo) => void;
+}) {
+  return (
+    <div className="space-y-4 pt-3">
+      {(match.automationExcludedLeagues?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <p className="font-bold">Automatización desactivada para esta polla</p>
+          <p className="mt-1">
+            Los recordatorios (T-60, T-30, WA grupo, etc.) solo corren en pollas con estado{' '}
+            <strong>ACTIVE</strong>. Cambia el estado en Admin → Pollas:
+          </p>
+          <ul className="mt-2 list-disc pl-4 space-y-0.5">
+            {match.automationExcludedLeagues!.map((league) => (
+              <li key={league.id}>
+                <span className="font-mono font-semibold">{league.code}</span> — {league.name} ({league.status})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sync partido</p>
+        <div className="flex items-center gap-2 mb-2">
+          <StatusDot state={match.sync.status} />
+          <span className="text-xs font-semibold text-slate-700">{match.sync.status}</span>
+          {match.sync.durationMs && (
+            <span className="text-[10px] text-slate-500">{(match.sync.durationMs / 1000).toFixed(1)}s</span>
+          )}
+        </div>
+        {match.sync.recentLogs.length > 0 && (
+          <div className="space-y-1">
+            {match.sync.recentLogs.map((log) => (
+              <div key={log.id} className="text-[10px] text-slate-500 flex items-center gap-1">
+                <span className="font-mono">[{log.type}]</span>
+                <span>{log.message}</span>
+                {log.error && <span className="text-red-600">— {log.error}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {EXPANDED_PHASE_GROUPS.map((phase) => {
+        const phaseCatalogSteps = visibleSteps.filter((entry) => entry.phase === phase.phase);
+        if (phaseCatalogSteps.length === 0) return null;
+        const phaseSteps = phaseCatalogSteps.map((entry) =>
+          findStepForMatch(match, entry.key, entry),
+        );
+        return (
+          <div key={phase.id}>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{phase.label}</p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {phaseSteps.map((step) => {
+                const channels = getStepChannels(stepCatalog, step.key);
+                const retryable = stepCanRetry(step, channels);
+                return (
+                  <div key={step.key} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <StatusDot state={step.status} />
+                      <p className="text-xs font-black text-slate-800">{step.label}</p>
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-600">
+                      {step.scheduledAt && <p><span className="text-slate-400">Programado: </span>{fmtFull(step.scheduledAt)}</p>}
+                      {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
+                      {step.lastFinishedAt && <p><span className="text-slate-400">Fin: </span>{fmtFull(step.lastFinishedAt)}</p>}
+                      {step.errorMessage && step.leagues.length === 0 && (
+                        <p className="text-red-600 font-semibold">{step.errorMessage}</p>
+                      )}
+                    </div>
+                    {step.leagues.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                        {step.leagues.map((league) => (
+                          <div key={league.leagueId} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <StatusDot state={league.status} size={8} />
+                              <span className="text-[10px] font-semibold text-slate-700 truncate">{league.leagueName}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                              {league.deliveredCount !== null && <span>✓ {league.deliveredCount}</span>}
+                              {league.failedCount !== null && league.failedCount > 0 && <span className="text-red-600">✗ {league.failedCount}</span>}
+                              {league.audienceCount !== null && <span>👥 {league.audienceCount}</span>}
+                            </div>
+                            {league.errorMessage && (
+                              <p className="text-[10px] text-red-600 mt-0.5">{league.errorMessage}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {onIncident && (
+                      <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onIncident({
+                              match,
+                              step,
+                              label: step.label,
+                              leagueId: step.leagues[0]?.leagueId ?? null,
+                            });
+                          }}
+                          className="inline-flex min-h-[40px] w-full items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white hover:text-slate-900 sm:w-auto sm:py-1"
+                        >
+                          <MessageSquare size={10} />
+                          Probar / ver mensaje
+                        </button>
+                        {retryable && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onIncident({
+                                match,
+                                step,
+                                label: `${step.label} · reenvío`,
+                                leagueId: step.leagues[0]?.leagueId ?? null,
+                              });
+                            }}
+                            className="inline-flex min-h-[40px] w-full items-center justify-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-[10px] font-black uppercase tracking-widest text-amber-800 transition hover:bg-amber-100 sm:w-auto sm:py-1"
+                          >
+                            <RotateCcw size={10} />
+                            Reenviar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function MatrixRow({
   match,
   expanded,
@@ -864,6 +1020,7 @@ function MatrixRow({
   visibleSteps,
   gridColumns,
   stepCatalog,
+  layout = 'grid',
 }: {
   match: OperationsMatch;
   expanded: boolean;
@@ -872,12 +1029,68 @@ function MatrixRow({
   visibleSteps: StepCatalogEntry[];
   gridColumns: string;
   stepCatalog: StepCatalogEntry[];
+  layout?: 'grid' | 'card';
 }) {
   const orderedSteps = visibleSteps.map((catalogStep) =>
     findStepForMatch(match, catalogStep.key, catalogStep),
   );
   const matchTitle = formatMatchTitle(match);
   const matchSubtitle = formatMatchSubtitle(match);
+  const problemStepCount = orderedSteps.filter(
+    (step) => ['FAILED', 'OVERDUE', 'WARNING', 'MANUAL'].includes(step.status),
+  ).length;
+
+  if (layout === 'card') {
+    return (
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <button
+          type="button"
+          className="w-full px-3 py-3 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
+          onClick={() => onExpand(match.id)}
+        >
+          <div className="flex items-start gap-2">
+            <StatusDot state={match.overallStatus} size={12} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900 leading-snug">{matchTitle}</p>
+              {matchSubtitle && (
+                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{matchSubtitle}</p>
+              )}
+              {(match.automationExcludedLeagues?.length ?? 0) > 0 && (
+                <p className="mt-1 text-[10px] font-semibold text-amber-700">
+                  Polla sin automatización ({match.automationExcludedLeagues!.map((l) => l.status).join('/')})
+                </p>
+              )}
+            </div>
+            <span className="shrink-0 text-slate-400">{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold tabular-nums text-slate-700">{fmtTime(match.matchDate)}</span>
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${STATUS_BADGES[match.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>
+              {STATUS_LABELS[match.status] ?? match.status}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+              Sync <StatusDot state={match.sync.status} size={8} />
+            </span>
+            {problemStepCount > 0 && (
+              <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[9px] font-black uppercase text-rose-700">
+                {problemStepCount} alerta{problemStepCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        </button>
+        {expanded && (
+          <div className="border-t border-slate-200 bg-slate-50 px-3 pb-4">
+            <MatrixMatchDetails
+              match={match}
+              visibleSteps={visibleSteps}
+              stepCatalog={stepCatalog}
+              onIncident={onIncident}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -946,139 +1159,12 @@ function MatrixRow({
 
       {expanded && (
         <div className="border-t border-slate-200 bg-slate-50 px-4 pb-4">
-          <div className="space-y-4 pt-3">
-            {(match.automationExcludedLeagues?.length ?? 0) > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                <p className="font-bold">Automatización desactivada para esta polla</p>
-                <p className="mt-1">
-                  Los recordatorios (T-60, T-30, WA grupo, etc.) solo corren en pollas con estado{' '}
-                  <strong>ACTIVE</strong>. Cambia el estado en Admin → Pollas:
-                </p>
-                <ul className="mt-2 list-disc pl-4 space-y-0.5">
-                  {match.automationExcludedLeagues!.map((league) => (
-                    <li key={league.id}>
-                      <span className="font-mono font-semibold">{league.code}</span> — {league.name} ({league.status})
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {/* Bloque Sync */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sync partido</p>
-              <div className="flex items-center gap-2 mb-2">
-                <StatusDot state={match.sync.status} />
-                <span className="text-xs font-semibold text-slate-700">{match.sync.status}</span>
-                {match.sync.durationMs && (
-                  <span className="text-[10px] text-slate-500">{(match.sync.durationMs / 1000).toFixed(1)}s</span>
-                )}
-              </div>
-              {match.sync.recentLogs.length > 0 && (
-                <div className="space-y-1">
-                  {match.sync.recentLogs.map((log) => (
-                    <div key={log.id} className="text-[10px] text-slate-500 flex items-center gap-1">
-                      <span className="font-mono">[{log.type}]</span>
-                      <span>{log.message}</span>
-                      {log.error && <span className="text-red-600">— {log.error}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Pasos por fase */}
-            {EXPANDED_PHASE_GROUPS.map((phase) => {
-              const phaseCatalogSteps = visibleSteps.filter((entry) => entry.phase === phase.phase);
-              if (phaseCatalogSteps.length === 0) return null;
-              const phaseSteps = phaseCatalogSteps.map((entry) =>
-                findStepForMatch(match, entry.key, entry),
-              );
-              return (
-                <div key={phase.id}>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{phase.label}</p>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {phaseSteps.map((step) => {
-                      const channels = getStepChannels(stepCatalog, step.key);
-                      const retryable = stepCanRetry(step, channels);
-                      return (
-                      <div key={step.key} className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <StatusDot state={step.status} />
-                          <p className="text-xs font-black text-slate-800">{step.label}</p>
-                        </div>
-                        <div className="space-y-1 text-xs text-slate-600">
-                          {step.scheduledAt && <p><span className="text-slate-400">Programado: </span>{fmtFull(step.scheduledAt)}</p>}
-                          {step.lastStartedAt && <p><span className="text-slate-400">Inicio: </span>{fmtFull(step.lastStartedAt)}</p>}
-                          {step.lastFinishedAt && <p><span className="text-slate-400">Fin: </span>{fmtFull(step.lastFinishedAt)}</p>}
-                          {step.errorMessage && step.leagues.length === 0 && (
-                            <p className="text-red-600 font-semibold">{step.errorMessage}</p>
-                          )}
-                        </div>
-                        {step.leagues.length > 0 && (
-                          <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
-                            {step.leagues.map((league) => (
-                              <div key={league.leagueId} className="rounded-lg bg-slate-50 px-2 py-1.5">
-                                <div className="flex items-center gap-1.5 mb-0.5">
-                                  <StatusDot state={league.status} size={8} />
-                                  <span className="text-[10px] font-semibold text-slate-700 truncate">{league.leagueName}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
-                                  {league.deliveredCount !== null && <span>✓ {league.deliveredCount}</span>}
-                                  {league.failedCount !== null && league.failedCount > 0 && <span className="text-red-600">✗ {league.failedCount}</span>}
-                                  {league.audienceCount !== null && <span>👥 {league.audienceCount}</span>}
-                                </div>
-                                {league.errorMessage && (
-                                  <p className="text-[10px] text-red-600 mt-0.5">{league.errorMessage}</p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {onIncident && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onIncident({
-                                  match,
-                                  step,
-                                  label: step.label,
-                                  leagueId: step.leagues[0]?.leagueId ?? null,
-                                });
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-white hover:text-slate-900"
-                            >
-                              <MessageSquare size={10} />
-                              Probar / ver mensaje
-                            </button>
-                            {retryable && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onIncident({
-                                    match,
-                                    step,
-                                    label: `${step.label} · reenvío`,
-                                    leagueId: step.leagues[0]?.leagueId ?? null,
-                                  });
-                                }}
-                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-800 transition hover:bg-amber-100"
-                              >
-                                <RotateCcw size={10} />
-                                Reenviar
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );})}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <MatrixMatchDetails
+            match={match}
+            visibleSteps={visibleSteps}
+            stepCatalog={stepCatalog}
+            onIncident={onIncident}
+          />
         </div>
       )}
     </>
@@ -1125,7 +1211,7 @@ function PushTestPanel({ pushSubscribers, pushEnabled }: { pushSubscribers: numb
         <button
           onClick={handleTest}
           disabled={loading}
-          className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60"
+          className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white transition hover:bg-slate-700 disabled:opacity-60 lg:w-auto"
         >
           <Send size={13} />
           {loading ? 'Enviando...' : 'Probar push'}
@@ -1151,8 +1237,20 @@ function HistoryRow({ notification: n }: { notification: NotifRecord }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="cursor-pointer border-b border-slate-200 last:border-0 hover:bg-slate-50" onClick={() => setExpanded((v) => !v)}>
-      <div className="grid items-start gap-x-3 px-4 py-3" style={{ gridTemplateColumns: 'auto minmax(0,1fr) auto auto' }}>
+    <div className="cursor-pointer border-b border-slate-200 last:border-0 hover:bg-slate-50 active:bg-slate-100" onClick={() => setExpanded((v) => !v)}>
+      <div className="space-y-2 px-3 py-3 sm:hidden">
+        <div className="flex items-start justify-between gap-2">
+          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${TYPE_BADGES[n.type] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>
+            {TYPE_LABELS[n.type] ?? text(n.type)}
+          </span>
+          <span className="shrink-0 text-[10px] text-slate-500">{fmtFull(n.sentAt)}</span>
+        </div>
+        <p className="text-sm font-medium leading-snug text-slate-800">{text(n.body)}</p>
+        <p className="text-xs text-slate-500">{text(n.user.name)} — {text(n.user.email)}</p>
+        <PushBadge sent={n.pushSent} failed={n.pushFailed} devices={n.pushDevices} />
+      </div>
+
+      <div className="hidden items-start gap-x-3 px-4 py-3 sm:grid" style={{ gridTemplateColumns: 'auto minmax(0,1fr) auto auto' }}>
         <span className={`mt-0.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${TYPE_BADGES[n.type] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>
           {TYPE_LABELS[n.type] ?? text(n.type)}
         </span>
@@ -1268,7 +1366,7 @@ function AutomationTimingPanel({
         (un minuto después del cierre). El cron revisa cada minuto; si hubo retraso, hay catch-up hasta el kickoff.
       </p>
       <div className="flex flex-wrap items-end gap-3">
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">
             Minutos después del cierre
           </label>
@@ -1278,14 +1376,14 @@ function AutomationTimingPanel({
             max={30}
             value={minutes}
             onChange={(e) => setMinutes(Math.max(0, Math.min(30, parseInt(e.target.value, 10) || 1)))}
-            className="w-28 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+            className="w-full min-h-[44px] rounded-xl border border-slate-300 px-3 py-2 text-base font-semibold text-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 sm:w-28 sm:text-sm"
           />
         </div>
         <button
           type="button"
           onClick={() => void handleSave()}
           disabled={saving}
-          className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-60"
+          className="w-full min-h-[44px] rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-60 sm:w-auto"
         >
           {saving ? 'Guardando…' : 'Guardar timing'}
         </button>
@@ -1295,6 +1393,105 @@ function AutomationTimingPanel({
           {msg.text}
         </p>
       )}
+    </div>
+  );
+}
+
+function LiveDisplayPanel({
+  settings,
+  onSaved,
+}: {
+  settings?: LiveDisplaySettings;
+  onSaved: (next: LiveDisplaySettings) => void;
+}) {
+  const defaults: LiveDisplaySettings = {
+    goals: true,
+    yellowCards: true,
+    redCards: true,
+    substitutions: true,
+  };
+  const [form, setForm] = React.useState<LiveDisplaySettings>(settings ?? defaults);
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+
+  React.useEffect(() => {
+    if (settings) setForm(settings);
+  }, [settings]);
+
+  const toggle = (key: keyof LiveDisplaySettings) => {
+    setForm((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const result = await request<LiveDisplaySettings>(
+        '/admin/automation/live-display-settings',
+        { method: 'PUT', body: JSON.stringify(form) },
+      );
+      onSaved(result);
+      setMsg({ ok: true, text: 'Pantalla en vivo actualizada' });
+    } catch (e: unknown) {
+      const text = e instanceof ApiError ? e.message : 'Error al guardar la configuración';
+      setMsg({ ok: false, text });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const items: Array<{ key: keyof LiveDisplaySettings; label: string; hint: string }> = [
+    { key: 'goals', label: 'Goles', hint: 'Marcador de goleadores y eventos de gol / VAR' },
+    { key: 'yellowCards', label: 'Tarjetas amarillas', hint: 'Resumen y timeline de amarillas' },
+    { key: 'redCards', label: 'Tarjetas rojas', hint: 'Resumen y timeline de rojas' },
+    { key: 'substitutions', label: 'Cambios', hint: 'Entradas y salidas en el timeline expandido' },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <Monitor size={14} className="text-violet-500" />
+        <p className="text-sm font-semibold text-slate-900">Pantalla EN VIVO (dashboard)</p>
+      </div>
+      <p className="mb-4 text-xs leading-relaxed text-slate-600">
+        Controla qué información de <strong>/fixture</strong> y <strong>fixture/events</strong> se muestra
+        a los participantes en el panel de partidos en vivo. Los datos siguen sincronizándose en segundo plano;
+        aquí solo defines visibilidad.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {items.map(({ key, label, hint }) => (
+          <label
+            key={key}
+            className="flex min-h-[52px] cursor-pointer items-start gap-3 rounded-xl border border-slate-200 px-3 py-3 active:bg-slate-50"
+          >
+            <input
+              type="checkbox"
+              checked={form[key]}
+              onChange={() => toggle(key)}
+              className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span>
+              <span className="block text-xs font-bold text-slate-800">{label}</span>
+              <span className="block text-[10px] leading-snug text-slate-500">{hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving}
+          className="w-full min-h-[44px] rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60 sm:w-auto"
+        >
+          {saving ? 'Guardando…' : 'Guardar pantalla en vivo'}
+        </button>
+        {msg && (
+          <p className={`text-xs font-medium ${msg.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {msg.text}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1337,7 +1534,78 @@ function StepConfigMatrix({
   };
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <>
+      <div className="md:hidden space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="border-b border-slate-100 pb-3">
+          <p className="text-sm font-semibold text-slate-900">Pasos y canales</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            Activa cada paso y sus canales. WA Personal está OFF por defecto.
+          </p>
+        </div>
+        {stepCatalog.map((step) => {
+          const rowMuted = !step.enabled;
+          return (
+            <div
+              key={step.key}
+              className={`rounded-xl border p-3 ${rowMuted ? 'border-slate-200 bg-slate-50/80 opacity-90' : 'border-slate-200 bg-white'}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-black text-slate-900">
+                    {step.key === 'ESCALATION_FINAL'
+                      ? `Escalada ${resolveEscalationFinalShortLabel(timingHints)}`
+                      : step.label}
+                  </p>
+                  {step.description && (
+                    <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{step.description}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={toggling === `step:${step.key}`}
+                  onClick={() => handleToggleStep(step)}
+                  className={`inline-flex h-9 min-w-[3.5rem] shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-black uppercase ${
+                    step.enabled
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {toggling === `step:${step.key}` ? '…' : step.enabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {CONFIG_CHANNEL_KEYS.map((ch) => {
+                  const applies = step.channels.includes(ch);
+                  if (!applies) return null;
+                  const sysEnabled = channelStatus[ch]?.enabled ?? false;
+                  const overrideVal = step.schedulerId ? channelOverrides[step.schedulerId]?.[ch] : undefined;
+                  const effectivelyActive = isChannelEffectivelyActive(ch, sysEnabled, step.enabled, overrideVal);
+                  const isTogglable = ch !== 'inApp' && !!step.schedulerId && sysEnabled && step.enabled;
+                  const toggleKey = `${step.key}:${ch}`;
+                  return (
+                    <button
+                      key={ch}
+                      type="button"
+                      disabled={!isTogglable || toggling === toggleKey}
+                      onClick={() => isTogglable && handleToggleChannel(step, ch, effectivelyActive)}
+                      className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-[10px] font-black uppercase ${
+                        effectivelyActive
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-slate-100 text-slate-500'
+                      } ${isTogglable ? 'active:scale-95' : 'opacity-70'}`}
+                    >
+                      {CHANNEL_META[ch]?.label ?? ch}
+                      <span>{toggling === toggleKey ? '…' : effectivelyActive ? 'ON' : 'OFF'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
         <p className="text-sm font-semibold text-slate-900">Pasos y canales de automatización</p>
         <p className="mt-1 text-xs text-slate-500">
@@ -1427,7 +1695,8 @@ function StepConfigMatrix({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -1689,9 +1958,9 @@ function IncidentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 backdrop-blur-sm sm:items-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="max-h-[92dvh] w-full max-w-lg overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <AlertTriangle size={16} className="shrink-0 text-amber-500" />
@@ -1709,7 +1978,7 @@ function IncidentModal({
           <button onClick={onClose} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X size={16} /></button>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-4">
+        <div className="max-h-[calc(92dvh-8rem)] overflow-y-auto px-4 py-4 space-y-4 sm:max-h-[60vh] sm:px-5">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Detalle del paso</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
@@ -1963,7 +2232,7 @@ function FeatureFlagsPanel({
                   type="button"
                   disabled={state.locked || toggling === item.key}
                   onClick={() => handleToggle(item.key, !isOn)}
-                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition disabled:cursor-not-allowed disabled:opacity-60 sm:px-2.5 sm:py-1 ${
                     isOn
                       ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
                       : 'border-slate-300 bg-white text-slate-600'
@@ -2057,6 +2326,10 @@ export default function AdminAutomation() {
     );
   };
 
+  const handleSaveLiveDisplay = (liveDisplay: LiveDisplaySettings) => {
+    setStatus((prev) => (prev ? { ...prev, liveDisplay } : prev));
+  };
+
   const loadBase = async () => {
     setLoading(true);
     try {
@@ -2091,12 +2364,12 @@ export default function AdminAutomation() {
     if (tab === 'history') void loadHistory(historyType, historyPage);
   }, [tab, historyType, historyPage]);
 
-  const tabs: Array<{ id: TabId; label: string }> = [
-    { id: 'matrix', label: 'Matriz del día' },
-    { id: 'history', label: 'Historial 24h' },
-    { id: 'schedulers', label: 'Tipos / schedulers' },
-    { id: 'config', label: 'Config pasos' },
-    { id: 'channels', label: 'Canales' },
+  const tabs: Array<{ id: TabId; label: string; shortLabel: string }> = [
+    { id: 'matrix', label: 'Matriz del día', shortLabel: 'Matriz' },
+    { id: 'history', label: 'Historial 24h', shortLabel: 'Historial' },
+    { id: 'schedulers', label: 'Tipos / schedulers', shortLabel: 'Schedulers' },
+    { id: 'config', label: 'Config pasos', shortLabel: 'Config' },
+    { id: 'channels', label: 'Canales', shortLabel: 'Canales' },
   ];
 
   const timeFrames = [
@@ -2161,7 +2434,7 @@ export default function AdminAutomation() {
   const totalPages = history ? Math.ceil(history.total / history.limit) : 1;
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-8">
+    <div className="min-h-screen bg-slate-50 px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 md:p-8">
       {incident && (
         <IncidentModal
           incident={incident}
@@ -2171,18 +2444,17 @@ export default function AdminAutomation() {
         />
       )}
       <div className="mx-auto max-w-7xl">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Procesos automáticos</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Revisa canales, tipos de notificación, matriz diaria e historial sin duplicar el panel de sincronización independiente.
-            La operación de partidos sigue America/Bogota y la cuota de requests corta a las 00:00 UTC.
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">Procesos automáticos</h1>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500 sm:text-sm">
+            Canales, notificaciones, matriz diaria e historial. Operación en America/Bogota; cuota API en 00:00 UTC.
           </p>
         </div>
         <button
           onClick={loadBase}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
+          className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50 sm:w-auto"
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Actualizar
@@ -2230,16 +2502,19 @@ export default function AdminAutomation() {
         </div>
       )}
 
-      <div className="mb-5 flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+      <div className="sticky top-0 z-20 -mx-3 mb-4 border-b border-slate-200 bg-slate-50/95 px-3 pb-2 pt-1 backdrop-blur supports-[backdrop-filter]:bg-slate-50/90 sm:-mx-0 sm:px-0">
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((item) => (
           <button
             key={item.id}
             onClick={() => setTab(item.id)}
-            className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${tab === item.id ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 shadow-sm hover:bg-slate-100 hover:text-slate-700'}`}
+            className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-2.5 text-[10px] font-black uppercase tracking-widest transition sm:px-4 sm:text-xs ${tab === item.id ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-500 shadow-sm hover:bg-slate-100 hover:text-slate-700'}`}
           >
-            {item.label}
+            <span className="sm:hidden">{item.shortLabel}</span>
+            <span className="hidden sm:inline">{item.label}</span>
           </button>
         ))}
+        </div>
       </div>
 
       {tab === 'matrix' && (
@@ -2274,15 +2549,33 @@ export default function AdminAutomation() {
           {filteredMatches.length > 0 ? (
             <div className="space-y-2">
               <p className="text-xs text-slate-500">
-                Cada columna es un paso de automatización. Click en la celda → <strong>probar mensaje</strong> o <strong>reenviar</strong> si hubo error.
-                Desplaza horizontalmente si no ves todas las fases.
+                <span className="hidden md:inline">Cada columna es un paso de automatización. Click en la celda → </span>
+                <strong>probar mensaje</strong> o <strong>reenviar</strong> si hubo error.
+                <span className="hidden md:inline"> Desplaza horizontalmente si no ves todas las fases.</span>
               </p>
               {usingFallbackCatalog && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   Mostrando catálogo de pasos por defecto — redeploy del API para sincronizar toggles de Config pasos.
                 </p>
               )}
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+              <div className="space-y-2 md:hidden">
+                {filteredMatches.map((match) => (
+                  <MatrixRow
+                    key={match.id}
+                    layout="card"
+                    match={match}
+                    expanded={expandedMatch === match.id}
+                    onExpand={(id) => setExpandedMatch((current) => current === id ? null : id)}
+                    onIncident={setIncident}
+                    visibleSteps={visibleSteps}
+                    gridColumns={matrixGridColumns}
+                    stepCatalog={resolvedStepCatalog}
+                  />
+                ))}
+              </div>
+
+            <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm [-webkit-overflow-scrolling:touch]">
               <div
                 className="grid border-b border-slate-100 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest"
                 style={{ gridTemplateColumns: matrixGridColumns }}
@@ -2338,7 +2631,7 @@ export default function AdminAutomation() {
       {tab === 'history' && (
         <div className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {[
                 { value: '', label: 'Todos' },
                 { value: 'MATCH_REMINDER', label: 'Recordatorios' },
@@ -2348,7 +2641,7 @@ export default function AdminAutomation() {
                 <button
                   key={item.value || 'all'}
                   onClick={() => { setHistoryType(item.value); setHistoryPage(1); }}
-                  className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest ${historyType === item.value ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 shadow-sm hover:bg-slate-100'}`}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-black uppercase tracking-widest ${historyType === item.value ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 shadow-sm hover:bg-slate-100'}`}
                 >
                   {item.label}
                 </button>
@@ -2383,11 +2676,11 @@ export default function AdminAutomation() {
                 ))}
               </div>
               {history && totalPages > 1 && (
-                <div className="flex items-center justify-between text-sm text-slate-500">
-                  <span>{history.total} registros · página {historyPage} de {totalPages}</span>
-                  <div className="flex gap-2">
-                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-100 disabled:opacity-50" disabled={historyPage <= 1} onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}>Anterior</button>
-                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-100 disabled:opacity-50" disabled={historyPage >= totalPages} onClick={() => setHistoryPage((page) => Math.min(totalPages, page + 1))}>Siguiente</button>
+                <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-center sm:text-left">{history.total} registros · página {historyPage} de {totalPages}</span>
+                  <div className="grid grid-cols-2 gap-2 sm:flex">
+                    <button className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-100 disabled:opacity-50" disabled={historyPage <= 1} onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}>Anterior</button>
+                    <button className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-100 disabled:opacity-50" disabled={historyPage >= totalPages} onClick={() => setHistoryPage((page) => Math.min(totalPages, page + 1))}>Siguiente</button>
                   </div>
                 </div>
               )}
@@ -2419,6 +2712,10 @@ export default function AdminAutomation() {
           <AutomationTimingPanel
             timingHints={status.timingHints}
             onSaved={handleSaveTimingSettings}
+          />
+          <LiveDisplayPanel
+            settings={status.liveDisplay}
+            onSaved={handleSaveLiveDisplay}
           />
           <StepConfigMatrix
             stepCatalog={resolvedStepCatalog}

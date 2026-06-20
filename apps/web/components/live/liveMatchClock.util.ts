@@ -1,3 +1,5 @@
+import { effectiveStatusShort } from '../../utils/liveFixture.util';
+
 export type LiveClockAnchor = {
     /** Minuto reportado por la API en el último sync (fixture/events). */
     minute: number;
@@ -28,28 +30,22 @@ export type LiveClockState = {
 
 const MAX_STOPPAGE_MINUTES = 15;
 
-export function resolvePeriodBase(
-    statusShort?: string | null,
-    displayMinute?: number,
-): number {
-    if (statusShort === 'HT') return 45;
-    if (statusShort === '2H' || statusShort === 'ET') return 90;
-    if (statusShort === '1H') return 45;
-    if (displayMinute != null && displayMinute > 45) return 90;
+export function resolvePeriodBase(statusShort?: string | null): number {
+    const normalized = statusShort ?? null;
+    if (normalized === 'HT') return 45;
+    if (normalized === '2H' || normalized === 'ET') return 90;
+    if (normalized === '1H') return 45;
     return 45;
 }
 
-export function resolveHalfLabel(
-    statusShort?: string | null,
-    displayMinute?: number,
-): string | null {
-    if (statusShort === '1H') return '1T';
-    if (statusShort === 'HT') return 'ET';
-    if (statusShort === '2H') return '2T';
-    if (statusShort === 'ET') return 'Prórroga';
-    if (statusShort === 'PEN') return 'Penales';
-    if (displayMinute != null && displayMinute > 45) return '2T';
-    return '1T';
+export function resolveHalfLabel(statusShort?: string | null): string | null {
+    const normalized = statusShort ?? null;
+    if (normalized === '1H') return '1T';
+    if (normalized === 'HT') return 'ET';
+    if (normalized === '2H') return '2T';
+    if (normalized === 'ET') return 'Prórroga';
+    if (normalized === 'PEN') return 'Penales';
+    return null;
 }
 
 /** Segundos transcurridos desde el ancla (extrapolación local entre syncs). */
@@ -85,11 +81,7 @@ export function resolveClockAnchor(
 
     const localMinute = extrapolateDisplayMinute(previous, now);
 
-    if (elapsed > localMinute) {
-        return { minute: elapsed, syncedAt: syncAt };
-    }
-
-    if (elapsed !== previous.minute) {
+    if (elapsed > localMinute || elapsed > previous.minute) {
         return { minute: elapsed, syncedAt: syncAt };
     }
 
@@ -105,7 +97,7 @@ function kickoffFallbackSeconds(matchDate: string, now: number, periodBase: numb
 
 export function computeLiveClockState(input: LiveClockInput): LiveClockState {
     const now = input.now ?? Date.now();
-    const statusShort = input.statusShort ?? null;
+    const statusShort = effectiveStatusShort(input.statusShort, input.elapsed);
 
     if (statusShort === 'HT') {
         return {
@@ -164,7 +156,7 @@ export function computeLiveClockState(input: LiveClockInput): LiveClockState {
 
     const rawMinute = Math.floor(totalSeconds / 60);
     const displaySecond = totalSeconds % 60;
-    const periodBase = resolvePeriodBase(statusShort, rawMinute);
+    const periodBase = resolvePeriodBase(statusShort);
     const maxSeconds = (periodBase + MAX_STOPPAGE_MINUTES) * 60;
     totalSeconds = Math.min(totalSeconds, maxSeconds);
 
@@ -183,7 +175,7 @@ export function computeLiveClockState(input: LiveClockInput): LiveClockState {
         periodBase,
         stoppageMinutes,
         isStoppage,
-        halfLabel: resolveHalfLabel(statusShort, displayMinute),
+        halfLabel: resolveHalfLabel(statusShort),
         phase,
     };
 }

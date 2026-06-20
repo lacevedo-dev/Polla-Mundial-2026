@@ -59,8 +59,12 @@ function pickRicherEvent(existing: MatchEventItem, incoming: MatchEventItem): Ma
 
 /** Deduplica eventos del partido (goles con teamId, nombre o minuto vecino). */
 export function dedupeMatchEvents(events: MatchEventItem[]): MatchEventItem[] {
+    const normalized = events.map((event) => ({
+        ...event,
+        type: event.type.trim().toUpperCase(),
+    }));
     const merged: MatchEventItem[] = [];
-    for (const event of events) {
+    for (const event of normalized) {
         const idx = merged.findIndex((existing) => eventsShouldMerge(existing, event));
         if (idx === -1) {
             merged.push(event);
