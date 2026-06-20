@@ -121,35 +121,48 @@ export const GoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) =
                 </span>
             </div>
 
-            <div className="absolute left-1/2 top-[46%] z-[5] flex h-[58%] w-[72%] -translate-x-1/2 -translate-y-1/2 items-end justify-center">
+            <div className="absolute left-1/2 top-[44%] z-[5] flex h-[56%] w-[84%] -translate-x-1/2 -translate-y-1/2 items-end justify-center overflow-hidden">
                 {photoUrl ? (
                     <img
                         src={photoUrl}
                         alt=""
-                        className="max-h-full max-w-full object-contain object-bottom drop-shadow-lg"
+                        className="h-full w-full object-cover object-[center_8%] drop-shadow-lg scale-110"
                     />
                 ) : (
                     <div className="mb-3 h-14 w-14 rounded-full border-2 border-white/50 bg-white/20" />
                 )}
             </div>
-
             <div
-                className="absolute inset-x-2 bottom-7 z-10 rounded-lg px-2 py-1.5 shadow-md"
-                style={{ background: `linear-gradient(90deg, ${theme.pillFrom} 0%, ${theme.pillTo} 100%)` }}
-            >
-                <p className="truncate text-[10px] font-black uppercase tracking-wide text-white">
-                    {event.playerName}
-                </p>
-                <p className="truncate text-[7px] font-semibold text-white/95">{statsLine}</p>
-                {event.assistName ? (
-                    <p className="truncate text-[6px] font-bold uppercase tracking-wide text-white/80">
-                        Asist. {event.assistName}
+                className="pointer-events-none absolute inset-x-0 bottom-[4.5rem] z-[6] h-10"
+                style={{
+                    background: `linear-gradient(to bottom, transparent, ${theme.primary})`,
+                }}
+            />
+
+            <div className="absolute inset-x-2 bottom-7 z-10 space-y-0.5">
+                <div
+                    className="rounded-lg px-2 py-1.5 shadow-md"
+                    style={{ background: `linear-gradient(180deg, ${theme.pillFrom} 0%, ${theme.pillTo} 100%)` }}
+                >
+                    <p className="truncate text-[10px] font-black uppercase tracking-wide text-white">
+                        {event.playerName}
                     </p>
-                ) : (
-                    <p className="truncate text-[6px] font-bold uppercase tracking-wide text-white/80">
-                        {teamName}{leagueName ? ` · ${leagueName}` : ''}
-                    </p>
-                )}
+                    <p className="truncate text-[7px] font-semibold text-white/95">{statsLine}</p>
+                </div>
+                <div
+                    className="rounded-lg px-2 py-1 shadow-md"
+                    style={{ background: `linear-gradient(180deg, ${theme.pillFrom} 0%, ${theme.pillTo} 100%)` }}
+                >
+                    {event.assistName ? (
+                        <p className="truncate text-[6px] font-bold uppercase tracking-wide text-white/90">
+                            Asist. {event.assistName}
+                        </p>
+                    ) : (
+                        <p className="truncate text-[6px] font-bold uppercase tracking-wide text-white/90">
+                            {teamName}{leagueName ? ` · ${leagueName}` : ''}
+                        </p>
+                    )}
+                </div>
             </div>
 
             <div className="absolute bottom-1 right-1.5 z-10 rounded border border-yellow-600 bg-yellow-400 px-1.5 py-0.5 text-[6px] font-black tracking-widest text-red-700">

@@ -267,25 +267,36 @@ export class WhatsappImageService {
     const digit2 = jerseyDigits[1] ?? '0';
     const bgPrimary = params.themePrimary ?? '#3ebdb4';
     const bgSecondary = params.themeSecondary ?? '#f5c518';
-    const bgAccent = params.themeAccent ?? '#ef4444';
-    const pillFrom = params.themePillFrom ?? '#ea580c';
-    const pillTo = params.themePillTo ?? '#dc2626';
+    const bgAccent = params.themeAccent ?? '#009e60';
+    const pillFrom = params.themePillFrom ?? '#e31b23';
+    const pillTo = params.themePillTo ?? '#b91c1c';
     const clubLine = params.assistName
-      ? `<p class="club">Asist. ${esc(params.assistName)}</p>`
-      : `<p class="club">${esc(params.teamName)} · ${esc(params.leagueName)}</p>`;
+      ? `Asist. ${params.assistName}`
+      : `${params.teamName} · ${params.leagueName}`;
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; width: 300px; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: transparent; width: 300px; }
   .sticker {
+    --bg: ${esc(bgPrimary)};
+    --pill: ${esc(pillFrom)};
+    --pill-dark: ${esc(pillTo)};
     position: relative;
     width: 300px;
     height: 420px;
     overflow: hidden;
-    border-radius: 14px;
-    background: linear-gradient(165deg, ${esc(bgPrimary)} 0%, ${esc(bgPrimary)}dd 45%, ${esc(bgPrimary)}bb 100%);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    border-radius: 16px;
+    background: linear-gradient(168deg, var(--bg) 0%, var(--bg) 55%, color-mix(in srgb, var(--bg) 75%, #0f172a) 100%);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+  }
+  .sticker::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 55% at 50% 18%, rgba(255,255,255,0.14) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
   }
   .num-back {
     position: absolute;
@@ -293,126 +304,168 @@ export class WhatsappImageService {
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 18px;
-    font-size: 168px;
+    padding-top: 14px;
+    font-size: 172px;
     font-weight: 900;
-    line-height: 0.82;
-    letter-spacing: -8px;
+    line-height: 0.78;
+    letter-spacing: -10px;
     pointer-events: none;
     user-select: none;
+    z-index: 2;
   }
-  .num-back .d1 { color: ${esc(bgSecondary)}; text-shadow: 3px 3px 0 ${esc(pillFrom)}; }
-  .num-back .d2 { color: ${esc(bgAccent)}; text-shadow: 3px 3px 0 ${esc(pillTo)}; margin-left: -6px; }
+  .num-back .d1 {
+    color: ${esc(bgSecondary)};
+    text-shadow: 4px 4px 0 rgba(0,0,0,0.12), 2px 2px 0 ${esc(pillFrom)};
+  }
+  .num-back .d2 {
+    color: ${esc(bgAccent)};
+    text-shadow: 4px 4px 0 rgba(0,0,0,0.12), 2px 2px 0 ${esc(pillTo)};
+    margin-left: -8px;
+  }
   .wc-badge {
     position: absolute;
     top: 10px;
     right: 10px;
-    z-index: 4;
-    background: rgba(255,255,255,0.92);
+    z-index: 6;
+    background: rgba(255,255,255,0.94);
     border-radius: 8px;
-    padding: 4px 7px;
+    padding: 5px 8px;
     font-size: 8px;
     font-weight: 900;
-    letter-spacing: .08em;
+    letter-spacing: .06em;
     color: #1e3a8a;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.25;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
   }
   .country-side {
     position: absolute;
-    right: 8px;
+    right: 6px;
     top: 50%;
-    transform: translateY(-42%);
-    z-index: 4;
+    transform: translateY(-40%);
+    z-index: 6;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
-  .flag-img, .flag-dot {
-    width: 22px;
-    height: 22px;
+  .flag-img {
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     border: 2px solid #fff;
     object-fit: cover;
     background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
   }
-  .flag-dot { background: linear-gradient(180deg, #fde047, #2563eb 50%, #dc2626); }
+  .flag-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: linear-gradient(180deg, #f77f00 33%, #fff 33% 66%, #009e60 66%);
+  }
   .country-code {
     writing-mode: vertical-rl;
     text-orientation: mixed;
     transform: rotate(180deg);
-    font-size: 28px;
+    font-size: 30px;
     font-weight: 900;
-    letter-spacing: .06em;
+    letter-spacing: .08em;
     color: #fff;
-    text-shadow: 0 2px 0 rgba(0,0,0,0.25), 0 0 8px rgba(0,0,0,0.15);
+    font-family: 'Arial Black', 'Segoe UI', sans-serif;
+    text-shadow:
+      0 0 0 #1e40af,
+      1px 1px 0 rgba(0,0,0,0.35),
+      0 2px 8px rgba(0,0,0,0.2);
+    -webkit-text-stroke: 1px rgba(30,64,175,0.45);
   }
-  .photo-wrap {
+  .photo-stage {
     position: absolute;
     left: 50%;
-    top: 52%;
-    transform: translate(-50%, -50%);
-    z-index: 3;
-    width: 220px;
-    height: 250px;
+    top: 118px;
+    transform: translateX(-50%);
+    z-index: 4;
+    width: 252px;
+    height: 210px;
+    overflow: hidden;
     display: flex;
     align-items: flex-end;
     justify-content: center;
   }
   .photo {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    object-position: bottom center;
-    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 8%;
+    transform: scale(1.08);
+    filter: drop-shadow(0 10px 18px rgba(0,0,0,0.38));
   }
   .photo.placeholder {
-    width: 120px;
-    height: 120px;
+    width: 110px;
+    height: 110px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.25);
-    border: 3px solid rgba(255,255,255,0.5);
-    margin-bottom: 20px;
+    background: rgba(255,255,255,0.22);
+    border: 3px solid rgba(255,255,255,0.55);
+    margin-bottom: 28px;
+    object-fit: unset;
+    transform: none;
   }
-  .info-pill {
+  .photo-fade {
     position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: 36px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 56px;
+    background: linear-gradient(to bottom, transparent, var(--bg));
     z-index: 5;
-    background: linear-gradient(90deg, ${esc(pillFrom)} 0%, ${esc(pillTo)} 100%);
-    border-radius: 12px;
-    padding: 10px 12px 9px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    pointer-events: none;
+  }
+  .info-stack {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 28px;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .info-box {
+    background: linear-gradient(180deg, var(--pill) 0%, var(--pill-dark) 100%);
+    border-radius: 10px;
+    padding: 8px 11px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.28);
+  }
+  .info-box.secondary {
+    padding: 6px 11px;
   }
   .name {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 900;
-    letter-spacing: .04em;
+    letter-spacing: .05em;
     text-transform: uppercase;
     color: #fff;
-    line-height: 1.15;
+    line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .stats {
-    margin-top: 4px;
+    margin-top: 3px;
     font-size: 9px;
     font-weight: 600;
-    color: rgba(255,255,255,0.95);
+    color: rgba(255,255,255,0.96);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .club {
-    margin-top: 3px;
     font-size: 8px;
     font-weight: 700;
-    letter-spacing: .06em;
+    letter-spacing: .05em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.85);
+    color: rgba(255,255,255,0.92);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -420,16 +473,17 @@ export class WhatsappImageService {
   .brand {
     position: absolute;
     right: 10px;
-    bottom: 8px;
-    z-index: 6;
-    background: #facc15;
+    bottom: 7px;
+    z-index: 8;
+    background: linear-gradient(180deg, #fde047 0%, #facc15 100%);
     color: #b91c1c;
     font-size: 8px;
     font-weight: 900;
-    letter-spacing: .12em;
-    padding: 3px 8px;
-    border-radius: 4px;
+    letter-spacing: .14em;
+    padding: 4px 9px;
+    border-radius: 5px;
     border: 1px solid #ca8a04;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   }
 </style>
 </head><body>
@@ -442,24 +496,33 @@ export class WhatsappImageService {
       : `<span class="flag-dot"></span>`}
     <span class="country-code">${esc(countryLabel)}</span>
   </div>
-  <div class="photo-wrap">${
+  <div class="photo-stage">${
     params.photoUrl
       ? `<img class="photo" src="${esc(params.photoUrl)}" alt="" crossorigin="anonymous" />`
       : `<div class="photo placeholder"></div>`
   }</div>
-  <div class="info-pill">
-    <p class="name">${esc(params.playerName)}</p>
-    <p class="stats">${esc(statsLine)}</p>
-    ${clubLine}
+  <div class="photo-fade"></div>
+  <div class="info-stack">
+    <div class="info-box primary">
+      <p class="name">${esc(params.playerName)}</p>
+      <p class="stats">${esc(statsLine)}</p>
+    </div>
+    <div class="info-box secondary">
+      <p class="club">${esc(clubLine)}</p>
+    </div>
   </div>
   <div class="brand">POLLA</div>
 </div>
 </body></html>`;
 
-    return this.renderHtmlToImage(html, 300);
+    return this.renderHtmlToImage(html, 300, '.sticker');
   }
 
-  private async renderHtmlToImage(html: string, width: number): Promise<Buffer> {
+  private async renderHtmlToImage(
+    html: string,
+    width: number,
+    clipSelector?: string,
+  ): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const puppeteer = require('puppeteer-core');
 
@@ -479,7 +542,14 @@ export class WhatsappImageService {
       await page.setViewport({ width, height: 600, deviceScaleFactor: 2 });
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
-      // Shrink viewport to actual content height
+      if (clipSelector) {
+        const element = await page.$(clipSelector);
+        if (element) {
+          const buffer = await element.screenshot({ type: 'png' });
+          return Buffer.from(buffer);
+        }
+      }
+
       const bodyHeight: number = await page.evaluate(
         () => document.body.scrollHeight,
       );

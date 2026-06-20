@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { dedupeMatchEvents } from './match-events.util';
 import { LiveDisplayConfigService } from '../automation/config/live-display-config.service';
 import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
+import { resolveTeamStickerTheme, resolveStickerCountryCode } from '../football-sync/catalog/team-sticker-theme.util';
 
 @Controller('matches')
 export class MatchesController {
@@ -81,6 +82,7 @@ export class MatchesController {
                     where: { id: { in: teamIds } },
                     select: {
                         id: true,
+                        name: true,
                         code: true,
                         shortCode: true,
                         flagUrl: true,
@@ -107,6 +109,7 @@ export class MatchesController {
                 ? profileByApiId.get(event.playerExternalId)
                 : undefined;
             const team = event.teamId ? teamById.get(event.teamId) : undefined;
+            const theme = team ? resolveTeamStickerTheme(team) : null;
 
             return {
                 ...event,
@@ -121,15 +124,19 @@ export class MatchesController {
                         nationality: profile.nationality,
                     }
                     : null,
-                teamStickerTheme: team
+                teamStickerTheme: team && theme
                     ? {
-                        primary: team.stickerPrimaryColor,
-                        secondary: team.stickerSecondaryColor,
-                        accent: team.stickerAccentColor,
-                        pillFrom: team.stickerPillFromColor,
-                        pillTo: team.stickerPillToColor,
+                        primary: theme.primary,
+                        secondary: theme.secondary,
+                        accent: theme.accent,
+                        pillFrom: theme.pillFrom,
+                        pillTo: theme.pillTo,
                         flagUrl: team.flagUrl,
-                        countryCode: team.shortCode ?? team.code,
+                        countryCode: resolveStickerCountryCode({
+                            code: team.code,
+                            shortCode: team.shortCode,
+                            teamName: team.name,
+                        }),
                     }
                     : null,
             };

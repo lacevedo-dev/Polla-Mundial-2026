@@ -34,7 +34,68 @@ const CURATED_TEAM_STICKER_THEMES: Record<string, TeamStickerTheme> = {
   POR: { primary: '#006600', secondary: '#f5c518', accent: '#ff0000', pillFrom: '#006600', pillTo: '#ff0000' },
   URU: { primary: '#55acee', secondary: '#ffffff', accent: '#f5c518', pillFrom: '#55acee', pillTo: '#0038a8' },
   ITA: { primary: '#009246', secondary: '#ffffff', accent: '#ce2b37', pillFrom: '#009246', pillTo: '#ce2b37' },
+  CIV: { primary: '#3ebdb4', secondary: '#f77f00', accent: '#009e60', pillFrom: '#e31b23', pillTo: '#b91c1c' },
+  IVO: { primary: '#3ebdb4', secondary: '#f77f00', accent: '#009e60', pillFrom: '#e31b23', pillTo: '#b91c1c' },
 };
+
+/** Códigos alternativos (API-Football / legacy) → código FIFA para paleta y etiqueta vertical. */
+const STICKER_CODE_ALIASES: Record<string, string> = {
+  IVO: 'CIV',
+};
+
+/** Nombres de selección → código FIFA (3 letras). */
+const TEAM_NAME_FIFA_CODES: Record<string, string> = {
+  'ivory coast': 'CIV',
+  "cote d'ivoire": 'CIV',
+  'côte d\'ivoire': 'CIV',
+  'colombia': 'COL',
+  'spain': 'ESP',
+  'españa': 'ESP',
+  'england': 'ENG',
+  'brazil': 'BRA',
+  'brasil': 'BRA',
+  'france': 'FRA',
+  'francia': 'FRA',
+  'germany': 'GER',
+  'alemania': 'GER',
+  'argentina': 'ARG',
+  'mexico': 'MEX',
+  'méxico': 'MEX',
+};
+
+export function normalizeStickerTeamCode(code: string | null | undefined): string | null {
+  const raw = code?.trim().toUpperCase();
+  if (!raw) return null;
+  return STICKER_CODE_ALIASES[raw] ?? raw;
+}
+
+export function resolveStickerCountryCode(input: {
+  code?: string | null;
+  shortCode?: string | null;
+  teamName?: string | null;
+  nationality?: string | null;
+}): string {
+  const fromCode = normalizeStickerTeamCode(input.shortCode ?? input.code);
+  if (fromCode) return fromCode.slice(0, 3);
+
+  const teamKey = input.teamName?.trim().toLowerCase();
+  if (teamKey && TEAM_NAME_FIFA_CODES[teamKey]) {
+    return TEAM_NAME_FIFA_CODES[teamKey];
+  }
+
+  const natKey = input.nationality?.trim().toLowerCase();
+  if (natKey && TEAM_NAME_FIFA_CODES[natKey]) {
+    return TEAM_NAME_FIFA_CODES[natKey];
+  }
+
+  if (teamKey) {
+    const words = teamKey.split(/\s+/).filter(Boolean);
+    if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+    return words.map((w) => w[0]).join('').slice(0, 3).toUpperCase();
+  }
+
+  return 'GOL';
+}
 
 const DEFAULT_THEME: TeamStickerTheme = {
   primary: '#3ebdb4',
@@ -66,7 +127,8 @@ function generatedThemeFromCode(code: string): TeamStickerTheme {
 }
 
 export function resolveCuratedTeamStickerTheme(code: string | null | undefined): TeamStickerTheme {
-  const key = code?.trim().toUpperCase();
+  const normalized = normalizeStickerTeamCode(code);
+  const key = normalized ?? code?.trim().toUpperCase();
   if (key && CURATED_TEAM_STICKER_THEMES[key]) {
     return CURATED_TEAM_STICKER_THEMES[key];
   }
@@ -85,23 +147,35 @@ export type TeamStickerSource = {
 };
 
 export function resolveTeamStickerTheme(team: TeamStickerSource | null | undefined): TeamStickerTheme {
-  if (
+  const code = normalizeStickerTeamCode(team?.shortCode ?? team?.code) ?? team?.shortCode ?? team?.code ?? null;
+
+  const hasDbTheme = Boolean(
     team?.stickerPrimaryColor &&
     team?.stickerSecondaryColor &&
     team?.stickerAccentColor &&
     team?.stickerPillFromColor &&
-    team?.stickerPillToColor
-  ) {
-    return {
-      primary: team.stickerPrimaryColor,
-      secondary: team.stickerSecondaryColor,
-      accent: team.stickerAccentColor,
-      pillFrom: team.stickerPillFromColor,
-      pillTo: team.stickerPillToColor,
+    team?.stickerPillToColor,
+  );
+
+  if (hasDbTheme) {
+    const dbTheme: TeamStickerTheme = {
+      primary: team!.stickerPrimaryColor!,
+      secondary: team!.stickerSecondaryColor!,
+      accent: team!.stickerAccentColor!,
+      pillFrom: team!.stickerPillFromColor!,
+      pillTo: team!.stickerPillToColor!,
     };
+    const curatedKey = code?.toUpperCase();
+    if (
+      curatedKey &&
+      CURATED_TEAM_STICKER_THEMES[curatedKey] &&
+      dbTheme.primary.trim().toLowerCase().startsWith('hsl(')
+    ) {
+      return CURATED_TEAM_STICKER_THEMES[curatedKey];
+    }
+    return dbTheme;
   }
 
-  const code = team?.shortCode ?? team?.code;
   if (code) {
     const catalog = WORLD_CUP_TEAM_CATALOG_BY_CODE.get(code.toUpperCase());
     if (catalog) return resolveCuratedTeamStickerTheme(catalog.shortCode);

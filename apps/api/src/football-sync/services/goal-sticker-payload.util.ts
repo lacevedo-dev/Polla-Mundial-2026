@@ -1,5 +1,5 @@
 import type { GoalStickerParams } from '../../whatsapp/whatsapp-image.service';
-import { resolveTeamStickerTheme, type TeamStickerSource } from '../catalog/team-sticker-theme.util';
+import { resolveTeamStickerTheme, resolveStickerCountryCode, type TeamStickerSource } from '../catalog/team-sticker-theme.util';
 import type { PlayerProfile } from '@prisma/client';
 
 export type GoalStickerBuildInput = {
@@ -23,11 +23,12 @@ export function buildGoalStickerParams(input: GoalStickerBuildInput): GoalSticke
     code: input.teamName,
     shortCode: null,
   });
-  const countryCode =
-    input.team?.shortCode ??
-    input.team?.code ??
-    input.profile?.nationality?.slice(0, 3).toUpperCase() ??
-    null;
+  const countryCode = resolveStickerCountryCode({
+    code: input.team?.code,
+    shortCode: input.team?.shortCode,
+    teamName: input.teamName,
+    nationality: input.profile?.nationality,
+  });
 
   return {
     playerName: input.profile?.name ?? input.playerName,
