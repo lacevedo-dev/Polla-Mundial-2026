@@ -6,6 +6,17 @@ import { WhatsappWebService } from './whatsapp-web.service';
 import { WhatsappImageService } from './whatsapp-image.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PredictionReportService } from '../prediction-report/prediction-report.service';
+import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
+
+const mockGoalStickerConfig = {
+  getSettings: jest.fn().mockResolvedValue({
+    enabled: false,
+    dashboard: false,
+    whatsappGroup: false,
+  }),
+  isActiveFor: jest.fn().mockResolvedValue(false),
+  updateSettings: jest.fn(),
+};
 
 const mockPrisma = {
   league: {
@@ -34,6 +45,7 @@ const mockWaWeb = {
 const mockWaImage = {
   buildResultsCard: jest.fn().mockResolvedValue(Buffer.from('img')),
   buildPredictionsCard: jest.fn().mockResolvedValue(Buffer.from('img')),
+  buildGoalSticker: jest.fn().mockResolvedValue(Buffer.from('sticker')),
 };
 
 const mockReportService = {
@@ -55,6 +67,7 @@ describe('WhatsappGroupService', () => {
         { provide: WhatsappImageService, useValue: mockWaImage },
         { provide: PredictionReportService, useValue: mockReportService },
         { provide: ModuleRef, useValue: { get: jest.fn() } },
+        { provide: GoalStickerConfigService, useValue: mockGoalStickerConfig },
       ],
     }).compile();
 

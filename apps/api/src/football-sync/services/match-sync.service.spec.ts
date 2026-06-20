@@ -22,6 +22,12 @@ describe('MatchSyncService', () => {
       findMany: jest.fn(),
       update: jest.fn(),
     },
+    matchEvent: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
     team: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -47,6 +53,10 @@ describe('MatchSyncService', () => {
 
   const mockFootballConfigService = {
     isEventSyncEnabled: jest.fn(),
+    isEventWaRedCardEnabled: jest.fn().mockResolvedValue(false),
+    isEventWaYellowCardEnabled: jest.fn().mockResolvedValue(false),
+    isEventWaSubstitutionEnabled: jest.fn().mockResolvedValue(false),
+    isEventWaVarGoalEnabled: jest.fn().mockResolvedValue(false),
   };
 
   const mockSyncPlanService = {
@@ -106,6 +116,7 @@ describe('MatchSyncService', () => {
     mockSyncPlanService.getPotentiallyLiveMatchesWithExternalId.mockResolvedValue([]);
     mockPrismaService.team.findFirst.mockResolvedValue(null);
     mockPrismaService.team.updateMany.mockResolvedValue({ count: 0 });
+    mockPrismaService.matchEvent.findMany.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -365,8 +376,9 @@ describe('MatchSyncService', () => {
       externalId: '999',
       homeTeamId: 'team-eng',
       awayTeamId: 'team-fra',
-      homeScore: null,
-      awayScore: null,
+      homeScore: 1,
+      awayScore: 0,
+      status: MatchStatus.LIVE,
       statusShort: 'LIVE',
       eventsNoDataAt: null,
       homeTeam: {
@@ -389,6 +401,9 @@ describe('MatchSyncService', () => {
       },
     });
     mockPrismaService.team.findUnique.mockResolvedValue(null);
+    mockPrismaService.matchEvent.findMany.mockResolvedValue([
+      { type: 'GOAL', annulled: false },
+    ]);
     mockPrismaService.match.update.mockResolvedValue({
       id: 'match-1',
       status: MatchStatus.LIVE,
@@ -410,8 +425,9 @@ describe('MatchSyncService', () => {
     );
   });
 
-  it('skips fixture event queries when event sync is disabled in config', async () => {
+  it('fetches fixture events on goal delta even when event sync is disabled in config', async () => {
     mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
     mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
     mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
     mockPrismaService.match.findMany.mockResolvedValue([]);
@@ -421,7 +437,7 @@ describe('MatchSyncService', () => {
         {
           fixture: {
             id: 999,
-            status: { short: 'HT' },
+            status: { short: 'LIVE', elapsed: 55 },
           },
           teams: {
             home: {
@@ -444,6 +460,20 @@ describe('MatchSyncService', () => {
         },
       ],
     });
+    mockApiFootballClient.getFixtureEvents.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          type: 'Goal',
+          detail: 'Normal Goal',
+          time: { elapsed: 12, extra: null },
+          team: { id: 999 },
+          player: { id: 1, name: 'Kane' },
+          assist: { name: null },
+        },
+      ],
+    });
+    mockPrismaService.matchEvent.findMany.mockResolvedValue([]);
     mockPrismaService.match.findUnique.mockResolvedValue({
       id: 'match-1',
       externalId: '999',
@@ -451,7 +481,8 @@ describe('MatchSyncService', () => {
       awayTeamId: 'team-fra',
       homeScore: null,
       awayScore: null,
-      statusShort: 'LIVE',
+      status: MatchStatus.SCHEDULED,
+      statusShort: null,
       eventsNoDataAt: null,
       homeTeam: {
         id: 'team-eng',
@@ -484,8 +515,101 @@ describe('MatchSyncService', () => {
       triggeredBy: 'manual',
     });
 
-    expect(mockApiFootballClient.getFixtureEvents).not.toHaveBeenCalled();
-    expect(mockRateLimiterService.canMakeRequest).not.toHaveBeenCalled();
+    expect(mockApiFootballClient.getFixtureEvents).toHaveBeenCalledWith(999);
+    expect(mockRateLimiterService.canMakeRequest).toHaveBeenCalled();
+  });
+
+  it('backfills fixture events when score is unchanged but stored goals are missing', async () => {
+    mockRateLimiterService.canMakeRequests.mockResolvedValue(true);
+    mockRateLimiterService.canMakeRequest.mockResolvedValue(true);
+    mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+    mockSyncPlanService.getCarryOverMatches.mockResolvedValue([]);
+    mockPrismaService.match.findMany.mockResolvedValue([]);
+    mockApiFootballClient.getFixturesByDate.mockResolvedValue({
+      results: 1,
+      response: [
+        {
+          fixture: {
+            id: 999,
+            status: { short: 'LIVE', elapsed: 73 },
+          },
+          teams: {
+            home: {
+              id: 999,
+              name: 'Netherlands',
+              logo: 'https://media.api-sports.io/football/teams/999.png',
+              winner: null,
+            },
+            away: {
+              id: 888,
+              name: 'Sweden',
+              logo: 'https://media.api-sports.io/football/teams/888.png',
+              winner: null,
+            },
+          },
+          goals: {
+            home: 4,
+            away: 1,
+          },
+        },
+      ],
+    });
+    mockApiFootballClient.getFixtureEvents.mockResolvedValue({
+      results: 5,
+      response: [
+        {
+          type: 'Goal',
+          detail: 'Normal Goal',
+          time: { elapsed: 10, extra: null },
+          team: { id: 999 },
+          player: { id: 11, name: 'Depay' },
+          assist: { name: null },
+        },
+      ],
+    });
+    mockPrismaService.matchEvent.findMany.mockResolvedValue([]);
+    mockPrismaService.match.findUnique.mockResolvedValue({
+      id: 'match-live',
+      externalId: '999',
+      homeTeamId: 'team-ned',
+      awayTeamId: 'team-swe',
+      homeScore: 4,
+      awayScore: 1,
+      status: MatchStatus.LIVE,
+      statusShort: '2H',
+      eventsNoDataAt: null,
+      homeTeam: {
+        id: 'team-ned',
+        name: 'Netherlands',
+        code: 'NED',
+        shortCode: 'NED',
+        apiFootballTeamId: 999,
+        flagUrl: null,
+        group: 'A',
+      },
+      awayTeam: {
+        id: 'team-swe',
+        name: 'Sweden',
+        code: 'SWE',
+        shortCode: 'SWE',
+        apiFootballTeamId: 888,
+        flagUrl: null,
+        group: 'B',
+      },
+    });
+    mockPrismaService.team.findUnique.mockResolvedValue(null);
+    mockPrismaService.match.update.mockResolvedValue({
+      id: 'match-live',
+      status: MatchStatus.LIVE,
+    });
+
+    await service.syncTodayMatchesForTrigger({
+      logType: 'MANUAL_SYNC' as any,
+      summaryLabel: 'Manual sync',
+      triggeredBy: 'manual',
+    });
+
+    expect(mockApiFootballClient.getFixtureEvents).toHaveBeenCalledWith(999);
   });
 
   it('skips fixture event queries when the remaining request budget is exhausted', async () => {

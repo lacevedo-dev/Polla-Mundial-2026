@@ -6,6 +6,9 @@ import { logGoalAutomation } from '../automation/live/goal-automation-observabil
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWebService } from './whatsapp-web.service';
 import { WhatsappImageService } from './whatsapp-image.service';
+import type { GoalStickerParams } from './whatsapp-image.service';
+import { buildGoalStickerParams } from '../football-sync/services/goal-sticker-payload.util';
+import { PlayerProfileCacheService } from '../football-sync/services/player-profile-cache.service';
 import {
   PredictionReportService,
   WA_RESULT_REPORT_EVENT,
@@ -28,6 +31,7 @@ import {
   normalizeEventPlayerKey,
 } from '../matches/match-events.util';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
+import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
@@ -82,6 +86,7 @@ export class WhatsappGroupService {
     private readonly waImage: WhatsappImageService,
     private readonly reportService: PredictionReportService,
     private readonly moduleRef: ModuleRef,
+    private readonly goalStickerConfig: GoalStickerConfigService,
   ) {}
 
   private scheduleTextJobDispatch(jobId: string, type: WhatsappGroupJobType): void {
@@ -294,6 +299,18 @@ export class WhatsappGroupService {
           pdfBuffer,
           pdfFilename,
         });
+      } else if (
+        job.type === WhatsappGroupJobType.GOAL_SCORED &&
+        (await this.goalStickerConfig.isActiveFor('whatsappGroup'))
+      ) {
+        caption = job.caption || (await this.buildTextCaption(job));
+        const stickerPayload = await this.resolveGoalStickerPayload(job.matchId, job.league.name);
+        if (stickerPayload) {
+          const imageBuffer = await this.waImage.buildGoalSticker(stickerPayload);
+          await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
+        } else {
+          await this.waWeb.sendTextToGroup(job.groupId, caption);
+        }
       } else {
         // Text-only notification messages (no image/PDF)
         caption = job.caption || await this.buildTextCaption(job);
@@ -1074,6 +1091,66 @@ export class WhatsappGroupService {
     } catch {
       return `⏰ *Recordatorio T-60* | ${leagueName}\n⚽ ${home} vs ${away}`;
     }
+  }
+
+  private async resolveGoalStickerPayload(
+    matchId: string,
+    leagueName: string,
+  ): Promise<GoalStickerParams | null> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      include: { homeTeam: true, awayTeam: true },
+    });
+    if (!match) return null;
+
+    const goals = await this.prisma.matchEvent.findMany({
+      where: { matchId, type: 'GOAL' },
+      orderBy: [{ minute: 'desc' }, { extraMin: 'desc' }, { updatedAt: 'desc' }],
+    });
+    const latest = goals.find((goal) => !goal.annulled) ?? goals[0];
+    if (!latest?.playerName?.trim()) return null;
+
+    const scoringTeam =
+      latest.teamId === match.homeTeamId
+        ? match.homeTeam
+        : latest.teamId === match.awayTeamId
+          ? match.awayTeam
+          : match.homeTeam;
+
+    let profile = latest.playerExternalId
+      ? await this.prisma.playerProfile.findUnique({
+          where: { apiFootballPlayerId: latest.playerExternalId },
+        })
+      : null;
+
+    if (latest.playerExternalId && (!profile?.height || !profile?.photoUrl)) {
+      try {
+        const cache = this.moduleRef.get(PlayerProfileCacheService, { strict: false });
+        profile =
+          (await cache?.ensureProfile(latest.playerExternalId, {
+            teamApiFootballId: scoringTeam.apiFootballTeamId,
+            jerseyNumber: profile?.jerseyNumber ?? null,
+          })) ?? profile;
+      } catch {
+        // Sin cache service en arranque parcial
+      }
+    }
+
+    return buildGoalStickerParams({
+      playerName: latest.playerName.trim(),
+      teamName: scoringTeam.name,
+      minute: latest.minute,
+      homeTeam: match.homeTeam.name,
+      awayTeam: match.awayTeam.name,
+      homeScore: match.homeScore ?? 0,
+      awayScore: match.awayScore ?? 0,
+      leagueName,
+      assistName: latest.assistName,
+      goalDetail: latest.detail,
+      team: scoringTeam,
+      teamFlagUrl: scoringTeam.flagUrl,
+      profile,
+    });
   }
 
   private async buildTextCaption(job: {

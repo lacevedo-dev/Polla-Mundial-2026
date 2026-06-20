@@ -16,6 +16,10 @@ import {
     type LiveDisplaySettings,
     DEFAULT_LIVE_DISPLAY_SETTINGS,
 } from '../../utils/liveDisplayConfig';
+import {
+    DEFAULT_GOAL_STICKER_SETTINGS,
+    type GoalStickerSettings,
+} from '../../utils/goalStickerConfig';
 import { calcLivePoints } from '../../utils/dashboard';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
@@ -44,6 +48,7 @@ interface LiveMatchesPanelProps {
     matchEvents: Map<string, MatchEventItem[]>;
     eventsLoadingMatchIds?: Set<string>;
     liveDisplay?: LiveDisplaySettings;
+    goalSticker?: GoalStickerSettings;
     expandedMatchId: string | null;
     expandLevel: number;
     isFloating: boolean;
@@ -102,6 +107,7 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
     matchEvents,
     eventsLoadingMatchIds,
     liveDisplay = DEFAULT_LIVE_DISPLAY_SETTINGS,
+    goalSticker = DEFAULT_GOAL_STICKER_SETTINGS,
     expandedMatchId,
     expandLevel,
     isFloating,
@@ -221,6 +227,7 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                         expandLevel={expandLevel}
                         eventsLoading={eventsLoadingMatchIds?.has(expandedMatch.id) ?? false}
                         liveDisplay={liveDisplay}
+                        goalSticker={goalSticker}
                     />
                 )}
             </AnimatePresence>

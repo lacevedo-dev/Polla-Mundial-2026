@@ -231,12 +231,38 @@ model Team {
   flagUrl            String?
   shortCode          String?      @db.VarChar(8)
   apiFootballTeamId  Int?         @unique
+  stickerPrimaryColor   String?   @db.VarChar(7)
+  stickerSecondaryColor String?   @db.VarChar(7)
+  stickerAccentColor    String?   @db.VarChar(7)
+  stickerPillFromColor  String?   @db.VarChar(7)
+  stickerPillToColor    String?   @db.VarChar(7)
   advancingInMatches Match[]      @relation("AdvancingTeam")
   awayMatches        Match[]      @relation("AwayTeam")
   homeMatches        Match[]      @relation("HomeTeam")
   advancePredictions Prediction[] @relation("AdvancePredictions")
 
   @@index([shortCode])
+}
+
+model PlayerProfile {
+  id                  String    @id @default(cuid())
+  apiFootballPlayerId Int       @unique
+  name                String
+  firstname           String?
+  lastname            String?
+  photoUrl            String?   @db.VarChar(512)
+  nationality         String?
+  birthDate           String?   @db.VarChar(32)
+  height              String?   @db.VarChar(32)
+  weight              String?   @db.VarChar(32)
+  jerseyNumber        Int?
+  teamApiFootballId   Int?
+  profileFetchedAt    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([teamApiFootballId])
+  @@index([name])
 }
 
 model Match {
@@ -286,23 +312,26 @@ model Match {
 }
 
 model MatchEvent {
-  id         String   @id @default(cuid())
-  matchId    String
-  teamId     String?
-  playerName String?
-  assistName String?
-  type       String
-  detail     String?
-  minute     Int
-  extraMin   Int?
-  annulled   Boolean  @default(false)
-  annulledReason String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  match      Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  matchId          String
+  teamId           String?
+  playerName       String?
+  assistName       String?
+  playerExternalId Int?
+  assistExternalId Int?
+  type             String
+  detail           String?
+  minute           Int
+  extraMin         Int?
+  annulled         Boolean  @default(false)
+  annulledReason   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  match            Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, type, playerName, minute])
   @@index([matchId])
+  @@index([playerExternalId])
 }
 
 model Prediction {

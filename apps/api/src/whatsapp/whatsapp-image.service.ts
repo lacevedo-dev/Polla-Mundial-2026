@@ -33,6 +33,34 @@ export interface PredictionsCardParams {
   sentAt: Date;
 }
 
+export interface GoalStickerParams {
+  playerName: string;
+  teamName: string;
+  minute: number | null;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  leagueName: string;
+  assistName?: string | null;
+  goalDetail?: string | null;
+  photoUrl?: string | null;
+  nationality?: string | null;
+  /** Dorsal del jugador (gráfico de fondo). */
+  jerseyNumber?: number | string | null;
+  birthDate?: string | null;
+  height?: string | null;
+  weight?: string | null;
+  /** Código ISO3 o abreviatura del país/selección (vertical derecha). */
+  countryCode?: string | null;
+  teamFlagUrl?: string | null;
+  themePrimary?: string;
+  themeSecondary?: string;
+  themeAccent?: string;
+  themePillFrom?: string;
+  themePillTo?: string;
+}
+
 const OUTCOME_ICON: Record<string, string> = {
   EXACT_UNIQUE: '👑',
   EXACT: '🎯',
@@ -44,6 +72,49 @@ const OUTCOME_ICON: Record<string, string> = {
 
 function slug(text: string): string {
   return text.replace(/\s+/g, '_').replace(/[^\w_]/g, '');
+}
+
+function formatStickerBirthDate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getDate()}-${parsed.getMonth() + 1}-${parsed.getFullYear()}`;
+}
+
+function formatStickerStats(params: GoalStickerParams): string {
+  const parts: string[] = [];
+  if (params.birthDate?.trim()) {
+    parts.push(params.birthDate.trim());
+  } else {
+    const birth = formatStickerBirthDate(params.birthDate);
+    if (birth) parts.push(birth);
+  }
+  if (params.height?.trim()) parts.push(params.height.trim());
+  if (params.weight?.trim()) parts.push(params.weight.trim());
+  if (parts.length > 0) return parts.join(' | ');
+
+  const minute = params.minute != null ? `${params.minute}'` : 'En vivo';
+  const detail =
+    params.goalDetail === 'Own Goal'
+      ? 'Autogol'
+      : params.goalDetail === 'Penalty'
+        ? 'Penalti'
+        : 'Gol';
+  return `${detail} · ${minute} · ${params.homeScore}–${params.awayScore}`;
+}
+
+function resolveCountryVerticalLabel(params: GoalStickerParams): string {
+  if (params.countryCode?.trim()) return params.countryCode.trim().toUpperCase().slice(0, 3);
+  const words = params.teamName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'GOL';
+  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+  return words.map((w) => w[0]).join('').slice(0, 3).toUpperCase();
+}
+
+function resolveJerseyGraphic(params: GoalStickerParams): string {
+  const n = params.jerseyNumber;
+  if (n == null || n === '') return '10';
+  return String(n).slice(0, 2);
 }
 
 @Injectable()
@@ -185,6 +256,207 @@ export class WhatsappImageService {
 </body></html>`;
 
     return this.renderHtmlToImage(html, 520);
+  }
+
+  /** Sticker estilo álbum coleccionable (referencia Panini WC). */
+  async buildGoalSticker(params: GoalStickerParams): Promise<Buffer> {
+    const statsLine = formatStickerStats(params);
+    const countryLabel = resolveCountryVerticalLabel(params);
+    const jerseyDigits = resolveJerseyGraphic(params);
+    const digit1 = jerseyDigits[0] ?? '1';
+    const digit2 = jerseyDigits[1] ?? '0';
+    const bgPrimary = params.themePrimary ?? '#3ebdb4';
+    const bgSecondary = params.themeSecondary ?? '#f5c518';
+    const bgAccent = params.themeAccent ?? '#ef4444';
+    const pillFrom = params.themePillFrom ?? '#ea580c';
+    const pillTo = params.themePillTo ?? '#dc2626';
+    const clubLine = params.assistName
+      ? `<p class="club">Asist. ${esc(params.assistName)}</p>`
+      : `<p class="club">${esc(params.teamName)} · ${esc(params.leagueName)}</p>`;
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; width: 300px; }
+  .sticker {
+    position: relative;
+    width: 300px;
+    height: 420px;
+    overflow: hidden;
+    border-radius: 14px;
+    background: linear-gradient(165deg, ${esc(bgPrimary)} 0%, ${esc(bgPrimary)}dd 45%, ${esc(bgPrimary)}bb 100%);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .num-back {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 18px;
+    font-size: 168px;
+    font-weight: 900;
+    line-height: 0.82;
+    letter-spacing: -8px;
+    pointer-events: none;
+    user-select: none;
+  }
+  .num-back .d1 { color: ${esc(bgSecondary)}; text-shadow: 3px 3px 0 ${esc(pillFrom)}; }
+  .num-back .d2 { color: ${esc(bgAccent)}; text-shadow: 3px 3px 0 ${esc(pillTo)}; margin-left: -6px; }
+  .wc-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 4;
+    background: rgba(255,255,255,0.92);
+    border-radius: 8px;
+    padding: 4px 7px;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .08em;
+    color: #1e3a8a;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .country-side {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-42%);
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .flag-img, .flag-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    object-fit: cover;
+    background: #fff;
+  }
+  .flag-dot { background: linear-gradient(180deg, #fde047, #2563eb 50%, #dc2626); }
+  .country-code {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: .06em;
+    color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.25), 0 0 8px rgba(0,0,0,0.15);
+  }
+  .photo-wrap {
+    position: absolute;
+    left: 50%;
+    top: 52%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    width: 220px;
+    height: 250px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .photo {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    object-position: bottom center;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+  }
+  .photo.placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    border: 3px solid rgba(255,255,255,0.5);
+    margin-bottom: 20px;
+  }
+  .info-pill {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 36px;
+    z-index: 5;
+    background: linear-gradient(90deg, ${esc(pillFrom)} 0%, ${esc(pillTo)} 100%);
+    border-radius: 12px;
+    padding: 10px 12px 9px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+  .name {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #fff;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stats {
+    margin-top: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.95);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .club {
+    margin-top: 3px;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brand {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    z-index: 6;
+    background: #facc15;
+    color: #b91c1c;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .12em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #ca8a04;
+  }
+</style>
+</head><body>
+<div class="sticker">
+  <div class="num-back" aria-hidden="true"><span class="d1">${esc(digit1)}</span><span class="d2">${esc(digit2)}</span></div>
+  <div class="wc-badge">⚽<br/>MUNDIAL</div>
+  <div class="country-side">
+    ${params.teamFlagUrl
+      ? `<img class="flag-img" src="${esc(params.teamFlagUrl)}" alt="" crossorigin="anonymous" />`
+      : `<span class="flag-dot"></span>`}
+    <span class="country-code">${esc(countryLabel)}</span>
+  </div>
+  <div class="photo-wrap">${
+    params.photoUrl
+      ? `<img class="photo" src="${esc(params.photoUrl)}" alt="" crossorigin="anonymous" />`
+      : `<div class="photo placeholder"></div>`
+  }</div>
+  <div class="info-pill">
+    <p class="name">${esc(params.playerName)}</p>
+    <p class="stats">${esc(statsLine)}</p>
+    ${clubLine}
+  </div>
+  <div class="brand">POLLA</div>
+</div>
+</body></html>`;
+
+    return this.renderHtmlToImage(html, 300);
   }
 
   private async renderHtmlToImage(html: string, width: number): Promise<Buffer> {

@@ -11,6 +11,7 @@ import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
 import { useLiveMatchEvents } from '../hooks/useLiveMatchEvents';
 import { useLiveDisplaySettings } from '../hooks/useLiveDisplaySettings';
+import { useGoalStickerSettings } from '../hooks/useGoalStickerSettings';
 import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
@@ -94,6 +95,7 @@ const Dashboard: React.FC = () => {
     const { eventsByMatchId: matchEvents, loadingMatchIds: eventsLoadingMatchIds } =
         useLiveMatchEvents(liveMatchIds);
     const liveDisplay = useLiveDisplaySettings();
+    const goalSticker = useGoalStickerSettings();
     const upcomingMatches = useMemo(() => matches.filter((m) => m.status === 'open').slice(0, 3), [matches]);
     const nextUnsaved = useMemo(() => matches.find((m) => m.status === 'open' && !m.saved), [matches]);
 
@@ -462,6 +464,7 @@ const Dashboard: React.FC = () => {
                     matchEvents={matchEvents}
                     eventsLoadingMatchIds={eventsLoadingMatchIds}
                     liveDisplay={liveDisplay}
+                    goalSticker={goalSticker}
                     liveSync={liveSync}
                     liveStandings={liveStandings}
                     expandedMatchId={expandedMatchId}

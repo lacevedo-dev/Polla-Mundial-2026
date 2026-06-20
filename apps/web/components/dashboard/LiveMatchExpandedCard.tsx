@@ -21,6 +21,17 @@ import {
     type LiveDisplaySettings,
     DEFAULT_LIVE_DISPLAY_SETTINGS,
 } from '../../utils/liveDisplayConfig';
+import {
+    isGoalStickerActiveFor,
+    type GoalStickerSettings,
+    DEFAULT_GOAL_STICKER_SETTINGS,
+} from '../../utils/goalStickerConfig';
+import {
+    GoalScorerStickerCard,
+    pickLatestActiveGoal,
+    resolveGoalTeamFlag,
+    resolveGoalTeamName,
+} from '../live/GoalScorerStickerCard';
 
 interface LiveStandingsData {
     myProvisionalPosition?: number | null;
@@ -40,6 +51,7 @@ interface LiveMatchExpandedCardProps {
     expandLevel: number;
     eventsLoading?: boolean;
     liveDisplay?: LiveDisplaySettings;
+    goalSticker?: GoalStickerSettings;
 }
 
 const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
@@ -49,6 +61,7 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
     expandLevel,
     eventsLoading = false,
     liveDisplay = DEFAULT_LIVE_DISPLAY_SETTINGS,
+    goalSticker = DEFAULT_GOAL_STICKER_SETTINGS,
 }) => {
     const clockStatusShort = effectiveStatusShort(
         expandedMatch.statusShort,
@@ -98,6 +111,17 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
         expandedRealAway,
     );
     const hasGoalSummary = homeGoals.length + awayGoals.length + homeAnnulled.length + awayAnnulled.length > 0;
+    const totalLiveGoals = expandedRealHome + expandedRealAway;
+    const scoreHasGoalsButNoEvents =
+        liveDisplay.goals &&
+        totalLiveGoals > 0 &&
+        !hasGoalSummary &&
+        !eventsLoading;
+    const showDashboardSticker =
+        isGoalStickerActiveFor(goalSticker, 'dashboard') && liveDisplay.goals;
+    const latestGoalForSticker = showDashboardSticker
+        ? pickLatestActiveGoal(expandedEvents.filter((e) => e.type === 'GOAL'))
+        : null;
 
     return (
         <AnimatePresence>
@@ -210,6 +234,36 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         <p className="mt-2 text-center text-[9px] font-medium text-white/30">
                             Goleadores en actualización…
                         </p>
+                    )}
+
+                    {liveDisplay.goals && expandLevel === 1 && scoreHasGoalsButNoEvents && (
+                        <p className="mt-2 text-center text-[9px] font-medium text-white/35">
+                            Goleadores pendientes — se sincronizan con la API en el próximo ciclo en vivo
+                        </p>
+                    )}
+
+                    {latestGoalForSticker && (
+                        <GoalScorerStickerCard
+                            event={latestGoalForSticker}
+                            teamName={resolveGoalTeamName(
+                                latestGoalForSticker,
+                                expandedMatch.homeTeamId,
+                                expandedMatch.awayTeamId,
+                                expandedMatch.homeTeam,
+                                expandedMatch.awayTeam,
+                            )}
+                            teamFlagUrl={resolveGoalTeamFlag(
+                                latestGoalForSticker,
+                                expandedMatch.homeTeamId,
+                                expandedMatch.awayTeamId,
+                                expandedMatch.homeFlag,
+                                expandedMatch.awayFlag,
+                            )}
+                            homeTeam={expandedMatch.homeTeam}
+                            awayTeam={expandedMatch.awayTeam}
+                            homeScore={expandedRealHome}
+                            awayScore={expandedRealAway}
+                        />
                     )}
 
                     {expandLevel === 2 && (

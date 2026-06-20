@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   Monitor,
+  Sticker,
   MessageSquare,
   Phone,
   RefreshCw,
@@ -79,6 +80,7 @@ interface AutomationStatus {
     timezone: string;
   };
   liveDisplay?: LiveDisplaySettings;
+  goalSticker?: GoalStickerSettings;
 }
 
 type LiveDisplaySettings = {
@@ -86,6 +88,12 @@ type LiveDisplaySettings = {
   yellowCards: boolean;
   redCards: boolean;
   substitutions: boolean;
+};
+
+type GoalStickerSettings = {
+  enabled: boolean;
+  dashboard: boolean;
+  whatsappGroup: boolean;
 };
 
 interface MessagePreview {
@@ -1496,6 +1504,175 @@ function LiveDisplayPanel({
   );
 }
 
+function GoalStickerPanel({
+  settings,
+  onSaved,
+}: {
+  settings?: GoalStickerSettings;
+  onSaved: (next: GoalStickerSettings) => void;
+}) {
+  const defaults: GoalStickerSettings = {
+    enabled: false,
+    dashboard: false,
+    whatsappGroup: false,
+  };
+  const [form, setForm] = React.useState<GoalStickerSettings>(settings ?? defaults);
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+
+  React.useEffect(() => {
+    if (settings) setForm(settings);
+  }, [settings]);
+
+  const toggleMaster = () => {
+    setForm((prev) => {
+      const enabled = !prev.enabled;
+      return {
+        enabled,
+        dashboard: enabled ? prev.dashboard : false,
+        whatsappGroup: enabled ? prev.whatsappGroup : false,
+      };
+    });
+  };
+
+  const toggleDestination = (key: 'dashboard' | 'whatsappGroup') => {
+    setForm((prev) => {
+      if (!prev.enabled) return prev;
+      return { ...prev, [key]: !prev[key] };
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const result = await request<GoalStickerSettings>(
+        '/admin/automation/goal-sticker-settings',
+        { method: 'PUT', body: JSON.stringify(form) },
+      );
+      onSaved(result);
+      setMsg({ ok: true, text: 'Sticker de goleador actualizado' });
+    } catch (e: unknown) {
+      const text = e instanceof ApiError ? e.message : 'Error al guardar la configuración';
+      setMsg({ ok: false, text });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const destinations: Array<{
+    key: 'dashboard' | 'whatsappGroup';
+    label: string;
+    hint: string;
+    where: string;
+  }> = [
+    {
+      key: 'dashboard',
+      label: 'Dashboard EN VIVO',
+      hint: 'Tarjeta estilo álbum en el partido expandido del panel en vivo',
+      where: 'Participantes → Dashboard → panel EN VIVO (partido expandido)',
+    },
+    {
+      key: 'whatsappGroup',
+      label: 'WhatsApp Grupo',
+      hint: 'Imagen PNG adjunta al mensaje de gol en el grupo de la polla',
+      where: 'Grupo WA de cada liga · paso «Gol en vivo» con canal WA activo',
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <Sticker size={14} className="text-amber-500" />
+        <p className="text-sm font-semibold text-slate-900">Sticker de goleador (estilo Panini)</p>
+      </div>
+      <p className="mb-4 text-xs leading-relaxed text-slate-600">
+        Al detectar un gol, genera una carta con datos del goleador (nombre, equipo, minuto, marcador).
+        Elige en qué destinos se publica. Los datos del jugador se obtienen de{' '}
+        <strong>/fixtures/events</strong> y, cuando esté disponible,{' '}
+        <strong>/players/profiles</strong> de API-Football.
+      </p>
+
+      <label className="mb-3 flex min-h-[52px] cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-3">
+        <input
+          type="checkbox"
+          checked={form.enabled}
+          onChange={toggleMaster}
+          className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+        />
+        <span>
+          <span className="block text-xs font-bold text-slate-800">Activar sticker de goleador</span>
+          <span className="block text-[10px] leading-snug text-slate-500">
+            Interruptor maestro. Sin esto, no se muestra ni envía en ningún destino.
+          </span>
+        </span>
+      </label>
+
+      <div className={`grid gap-2 sm:grid-cols-2 ${!form.enabled ? 'opacity-50' : ''}`}>
+        {destinations.map(({ key, label, hint, where }) => (
+          <label
+            key={key}
+            className={`flex min-h-[72px] items-start gap-3 rounded-xl border px-3 py-3 ${
+              form.enabled ? 'cursor-pointer border-slate-200 active:bg-slate-50' : 'cursor-not-allowed border-slate-100'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={form[key]}
+              disabled={!form.enabled}
+              onChange={() => toggleDestination(key)}
+              className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-amber-600 focus:ring-amber-500 disabled:opacity-40"
+            />
+            <span>
+              <span className="block text-xs font-bold text-slate-800">{label}</span>
+              <span className="block text-[10px] leading-snug text-slate-500">{hint}</span>
+              <span className="mt-1 block text-[9px] font-semibold uppercase tracking-wide text-violet-600">
+                {where}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <p className="mt-3 text-[10px] leading-relaxed text-slate-500">
+        Para WhatsApp: además de activar aquí «WhatsApp Grupo», el paso{' '}
+        <strong>Gol en vivo</strong> debe tener el canal <strong>WA Grupo</strong> habilitado en la matriz de abajo.
+        En dashboard: requiere que «Goles» esté activo en Pantalla EN VIVO.
+        {' '}Para fichas completas (foto, altura, peso), ejecuta la precarga de plantillas en{' '}
+        <strong>Football Sync → Precargar plantillas</strong> o{' '}
+        <code className="rounded bg-slate-100 px-1">POST /admin/football/prewarm-player-profiles</code>.
+        {' '}También puedes revisar el diseño en el{' '}
+        <Link to="/admin/automation/sticker-album" className="font-semibold text-amber-700 underline-offset-2 hover:underline">
+          álbum de preview
+        </Link>.
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Link
+          to="/admin/automation/sticker-album"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-900 hover:bg-amber-100"
+        >
+          <Sticker size={14} />
+          Abrir álbum de preview
+        </Link>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving}
+          className="w-full min-h-[44px] rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto"
+        >
+          {saving ? 'Guardando…' : 'Guardar sticker de goleador'}
+        </button>
+        {msg && (
+          <p className={`text-xs font-medium ${msg.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {msg.text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StepConfigMatrix({
   stepCatalog,
   channelStatus,
@@ -2330,6 +2507,10 @@ export default function AdminAutomation() {
     setStatus((prev) => (prev ? { ...prev, liveDisplay } : prev));
   };
 
+  const handleSaveGoalSticker = (goalSticker: GoalStickerSettings) => {
+    setStatus((prev) => (prev ? { ...prev, goalSticker } : prev));
+  };
+
   const loadBase = async () => {
     setLoading(true);
     try {
@@ -2716,6 +2897,10 @@ export default function AdminAutomation() {
           <LiveDisplayPanel
             settings={status.liveDisplay}
             onSaved={handleSaveLiveDisplay}
+          />
+          <GoalStickerPanel
+            settings={status.goalSticker}
+            onSaved={handleSaveGoalSticker}
           />
           <StepConfigMatrix
             stepCatalog={resolvedStepCatalog}

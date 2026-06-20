@@ -5,10 +5,10 @@ import { PredictionReportModule } from '../prediction-report/prediction-report.m
 import { PredictionsModule } from '../predictions/predictions.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { AutomationLiveConfigModule } from './config/automation-live-config.module';
 import { AutomationFeatureFlagsService } from './config/automation-feature-flags.service';
 import { AutomationStepConfigService } from './config/automation-step-config.service';
 import { AutomationTimingConfigService } from './config/automation-timing-config.service';
-import { LiveDisplayConfigService } from './config/live-display-config.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { GoalImpactAnalyzerService } from './live/goal-impact-analyzer.service';
 import { GoalLiveNotificationService } from './live/goal-live-notification.service';
@@ -24,6 +24,7 @@ import { AutomationDeliveryService } from './delivery/automation-delivery.servic
   imports: [
     PrismaModule,
     AutomationObservabilityModule,
+    AutomationLiveConfigModule,
     PredictionsModule,
     PredictionReportModule,
     forwardRef(() => NotificationsModule),
@@ -34,7 +35,6 @@ import { AutomationDeliveryService } from './delivery/automation-delivery.servic
     AutomationFeatureFlagsService,
     AutomationStepConfigService,
     AutomationTimingConfigService,
-    LiveDisplayConfigService,
     GoalImpactAnalyzerService,
     GoalLiveNotificationService,
     CardLiveNotificationService,
@@ -46,10 +46,10 @@ import { AutomationDeliveryService } from './delivery/automation-delivery.servic
     AutomationDeliveryService,
   ],
   exports: [
+    AutomationLiveConfigModule,
     AutomationFeatureFlagsService,
     AutomationStepConfigService,
     AutomationTimingConfigService,
-    LiveDisplayConfigService,
     GoalImpactAnalyzerService,
     GoalLiveNotificationService,
     CardLiveNotificationService,

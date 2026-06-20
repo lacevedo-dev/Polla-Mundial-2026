@@ -416,6 +416,34 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async sendImageToGroup(
+    groupId: string,
+    caption: string,
+    imageBuffer: Buffer,
+    filename = 'sticker.png',
+  ): Promise<void> {
+    if (!this.isConnected() || !this.client) {
+      throw new Error('WhatsApp Web is not connected');
+    }
+
+    const MessageMedia = (this as any)._MessageMedia;
+    if (!MessageMedia) {
+      throw new Error('whatsapp-web.js MessageMedia not loaded');
+    }
+
+    try {
+      const imageMedia = new MessageMedia(
+        'image/png',
+        imageBuffer.toString('base64'),
+        filename,
+      );
+      await this.client.sendMessage(groupId, imageMedia, { caption });
+    } catch (e: any) {
+      this.logger.error(`sendImageToGroup error (${groupId}): ${e.message}`);
+      throw e;
+    }
+  }
+
   async sendToGroup(params: SendToGroupParams): Promise<void> {
     if (!this.isConnected() || !this.client) {
       throw new Error('WhatsApp Web is not connected');

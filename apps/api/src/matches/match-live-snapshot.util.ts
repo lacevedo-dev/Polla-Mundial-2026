@@ -12,6 +12,19 @@ export type LiveGoalEventSnapshot = {
   annulledReason?: string | null;
 };
 
+export async function countStoredActiveGoals(
+  prisma: PrismaService,
+  matchId: string,
+): Promise<number> {
+  const rows = await prisma.matchEvent.findMany({
+    where: { matchId },
+    select: { type: true, annulled: true },
+  });
+  return rows.filter(
+    (row) => String(row.type).toUpperCase() === 'GOAL' && !row.annulled,
+  ).length;
+}
+
 export async function buildMatchEventsRevision(
   prisma: PrismaService,
   matchId: string,

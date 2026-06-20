@@ -53,6 +53,11 @@ describe('AdminAutomation', () => {
             redCards: true,
             substitutions: true,
           },
+          goalSticker: {
+            enabled: false,
+            dashboard: false,
+            whatsappGroup: false,
+          },
         });
       }
 

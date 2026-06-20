@@ -68,6 +68,23 @@ export class ApiFootballClient {
     return this.makeRequest('/fixtures/events', { fixture: fixtureId }, `events-${fixtureId}`);
   }
 
+  /** Perfil completo del jugador (foto, nacimiento, altura, peso). */
+  async getPlayerProfile(playerId: number): Promise<ApiFootballResponse> {
+    return this.makeRequest('/players/profiles', { player: playerId }, `player-${playerId}`);
+  }
+
+  /** Plantilla de una selección — 1 request por equipo, ideal para precarga. */
+  async getPlayersSquads(
+    teamId: number,
+    season: number = 2026,
+  ): Promise<ApiFootballResponse> {
+    return this.makeRequest(
+      '/players/squads',
+      { team: teamId, season },
+      `squad-${teamId}-${season}`,
+    );
+  }
+
   /**
    * Make HTTP request to API-Football and log usage to DB
    */

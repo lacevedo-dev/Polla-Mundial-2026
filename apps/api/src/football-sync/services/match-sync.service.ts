@@ -30,6 +30,7 @@ import {
 } from '../../matches/match-events.util';
 import {
   buildMatchEventsRevision,
+  countStoredActiveGoals,
   fetchLiveGoalEventSnapshots,
 } from '../../matches/match-live-snapshot.util';
 import { ConfigService as FootballConfigService } from './config.service';
@@ -62,6 +63,8 @@ import {
   WORLD_CUP_TEAM_CATALOG,
   WORLD_CUP_TEAM_CATALOG_BY_API_ID,
 } from '../catalog/world-cup-team-catalog';
+import { themeColorsForCatalogBackfill } from '../catalog/team-sticker-theme.util';
+import { PlayerProfileCacheService } from './player-profile-cache.service';
 
 @Injectable()
 export class MatchSyncService {
@@ -85,6 +88,7 @@ export class MatchSyncService {
     @Optional() private readonly goalLiveNotifications?: GoalLiveNotificationService,
     @Optional() private readonly cardLiveNotifications?: CardLiveNotificationService,
     @Optional() private readonly stepConfig?: AutomationStepConfigService,
+    @Optional() private readonly playerProfileCache?: PlayerProfileCacheService,
   ) {}
 
   async backfillWorldCupTeams(): Promise<TeamCatalogBackfillResultDto> {
@@ -114,6 +118,7 @@ export class MatchSyncService {
             apiFootballTeamId: entry.apiFootballTeamId,
             flagUrl: entry.flagUrl,
             group: entry.group,
+            ...themeColorsForCatalogBackfill(entry.shortCode),
           },
         });
         updated++;
@@ -128,6 +133,7 @@ export class MatchSyncService {
           apiFootballTeamId: entry.apiFootballTeamId,
           flagUrl: entry.flagUrl,
           group: entry.group,
+          ...themeColorsForCatalogBackfill(entry.shortCode),
         },
       });
       created++;
@@ -687,6 +693,8 @@ export class MatchSyncService {
         return false;
       }
 
+      let eventsNoDataAt = match.eventsNoDataAt;
+
       // Map API-Football status to our status
       const status = this.mapFixtureStatus(fixture.fixture.status.short);
       const homeTeamId = await this.reconcileFixtureTeam(
@@ -715,7 +723,37 @@ export class MatchSyncService {
       const homeGoalsDelta = Math.max(0, newHome - prevHome);
       const awayGoalsDelta = Math.max(0, newAway - prevAway);
       const totalGoalsDelta = homeGoalsDelta + awayGoalsDelta;
+      const totalGoalsNow = newHome + newAway;
+      const storedGoalCount = await countStoredActiveGoals(this.prisma, match.id);
+      const missingStoredGoalEvents =
+        (status === MatchStatus.LIVE || status === MatchStatus.FINISHED) &&
+        totalGoalsNow > 0 &&
+        storedGoalCount < totalGoalsNow;
       let cachedFixtureEvents: any[] | undefined;
+
+      if ((totalGoalsDelta > 0 || missingStoredGoalEvents) && eventsNoDataAt) {
+        await this.prisma.match.update({
+          where: { id: match.id },
+          data: { eventsNoDataAt: null },
+        });
+        eventsNoDataAt = null;
+      }
+
+      const shouldFetchFixtureEvents =
+        fixture.fixture.id != null &&
+        (totalGoalsDelta >= 1 || missingStoredGoalEvents) &&
+        cachedFixtureEvents === undefined;
+
+      if (shouldFetchFixtureEvents) {
+        const fetched = await this.tryFetchFixtureEvents(
+          fixture.fixture.id,
+          match.id,
+          missingStoredGoalEvents && totalGoalsDelta === 0 ? 'live-backfill' : 'live-goal',
+        );
+        if (fetched !== undefined) {
+          cachedFixtureEvents = fetched;
+        }
+      }
 
       const transitionedToFinished =
         match.status !== MatchStatus.FINISHED && status === MatchStatus.FINISHED;
@@ -739,46 +777,19 @@ export class MatchSyncService {
           source: 'football_sync',
         });
 
-        // When goals are detected, fetch the event timeline (if enabled) to identify
-        // scorers and minutes — applies to single or multiple goals in one sync gap.
+        // Identify scorers/minutes from preloaded timeline when available.
         let goalEvents: ParsedGoalEvent[] = [];
-        if (
-          totalGoalsDelta >= 1 &&
-          fixture.fixture.id &&
-          options.eventSyncEnabled !== false
-        ) {
-          const canSpendExtra = await this.rateLimiter.canMakeRequest();
-          if (canSpendExtra) {
-            try {
-              const eventsResponse = await this.apiClient.getFixtureEvents(fixture.fixture.id);
-              await this.rateLimiter.logRequest(
-                '/fixtures/events',
-                { fixture: fixture.fixture.id, source: 'live-goal' },
-                200,
-                undefined,
-              );
-              await this.syncPlan.incrementRequestsUsed(1);
+        if (totalGoalsDelta >= 1 && cachedFixtureEvents !== undefined) {
+          goalEvents = this.parseGoalEventsFromResponse(
+            cachedFixtureEvents,
+            fixture.teams.home.id,
+            fixture.teams.away.id,
+            totalGoalsDelta,
+          );
 
-              cachedFixtureEvents = eventsResponse?.response ?? [];
-              goalEvents = this.parseGoalEventsFromResponse(
-                cachedFixtureEvents,
-                fixture.teams.home.id,
-                fixture.teams.away.id,
-                totalGoalsDelta,
-              );
-
-              this.logger.log(
-                `Goal event sync for match ${match.id}: ${goalEvents.length}/${totalGoalsDelta} goal(s) resolved from API events`,
-              );
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              this.logger.warn(`Goal event fetch failed for match ${match.id}: ${msg}`);
-            }
-          } else {
-            this.logger.warn(
-              `Goal delta (${totalGoalsDelta}) for match ${match.id}: skipping event fetch — no budget`,
-            );
-          }
+          this.logger.log(
+            `Goal event sync for match ${match.id}: ${goalEvents.length}/${totalGoalsDelta} goal(s) resolved from API events`,
+          );
         }
 
         // Reconstruct progressive scoreline for each goal event
@@ -901,14 +912,16 @@ export class MatchSyncService {
         !scoreChanged &&
         cachedFixtureEvents === undefined &&
         (await this.shouldSyncSupplementalLiveEvents());
+      const hasPreloadedEvents =
+        cachedFixtureEvents !== undefined && cachedFixtureEvents.length > 0;
       const shouldSyncEvents =
-        options.eventSyncEnabled &&
-        !match.eventsNoDataAt &&
-        (shouldSyncHalftimeEvents ||
-          (isFinalStatus && !wasFinalStatus) ||
-          scoreDecreased ||
-          cachedFixtureEvents !== undefined ||
-          supplementalLiveEventsNeeded);
+        hasPreloadedEvents ||
+        (options.eventSyncEnabled &&
+          !eventsNoDataAt &&
+          (shouldSyncHalftimeEvents ||
+            (isFinalStatus && !wasFinalStatus) ||
+            scoreDecreased ||
+            supplementalLiveEventsNeeded));
 
       if (shouldSyncEvents && fixture.fixture.id) {
         const eventSyncContext = {
@@ -940,7 +953,17 @@ export class MatchSyncService {
               newSubstitutions: eventSyncResult.newSubstitutions,
               newVarGoalAnnulments: eventSyncResult.newVarGoalAnnulments,
             });
-            if (eventSyncResult.relevantEvents === 0) {
+            if (eventSyncResult.relevantEvents > 0 && eventsNoDataAt) {
+              await this.prisma.match.update({
+                where: { id: match.id },
+                data: { eventsNoDataAt: null },
+              });
+              eventsNoDataAt = null;
+            } else if (
+              eventSyncResult.relevantEvents === 0 &&
+              options.eventSyncEnabled &&
+              !hasPreloadedEvents
+            ) {
               await this.prisma.match.update({
                 where: { id: match.id },
                 data: { eventsNoDataAt: new Date() },
@@ -976,7 +999,13 @@ export class MatchSyncService {
                 newSubstitutions: eventSyncResult.newSubstitutions,
                 newVarGoalAnnulments: eventSyncResult.newVarGoalAnnulments,
               });
-              if (eventSyncResult.relevantEvents === 0) {
+              if (eventSyncResult.relevantEvents > 0 && eventsNoDataAt) {
+                await this.prisma.match.update({
+                  where: { id: match.id },
+                  data: { eventsNoDataAt: null },
+                });
+                eventsNoDataAt = null;
+              } else if (eventSyncResult.relevantEvents === 0) {
                 await this.prisma.match.update({
                   where: { id: match.id },
                   data: {
@@ -1230,6 +1259,14 @@ export class MatchSyncService {
       const extraMin: number | null = ev.time?.extra ?? null;
       const playerName: string | null = ev.player?.name ?? null;
       const assistName: string | null = ev.assist?.name ?? null;
+      const playerExternalId =
+        ev.player?.id != null && Number.isFinite(Number(ev.player.id))
+          ? Number(ev.player.id)
+          : null;
+      const assistExternalId =
+        ev.assist?.id != null && Number.isFinite(Number(ev.assist.id))
+          ? Number(ev.assist.id)
+          : null;
       const teamId = resolveTeamId(ev.team?.id);
 
       if (type === 'Var') {
@@ -1311,9 +1348,14 @@ export class MatchSyncService {
               teamId,
               minute,
               playerName: normalizedPlayerName || null,
+              playerExternalId,
+              assistExternalId,
               updatedAt: new Date(),
             },
           });
+          if (eventType === 'GOAL' && playerExternalId) {
+            this.schedulePlayerProfileWarm(playerExternalId, ev.team?.id ?? null);
+          }
           continue;
         }
 
@@ -1326,7 +1368,15 @@ export class MatchSyncService {
               minute,
             },
           },
-          update: { detail, assistName, extraMin, teamId, updatedAt: new Date() },
+          update: {
+            detail,
+            assistName,
+            extraMin,
+            teamId,
+            playerExternalId,
+            assistExternalId,
+            updatedAt: new Date(),
+          },
           create: {
             matchId,
             type: eventType,
@@ -1336,8 +1386,14 @@ export class MatchSyncService {
             playerName: normalizedPlayerName || null,
             assistName,
             teamId,
+            playerExternalId,
+            assistExternalId,
           },
         });
+
+        if (eventType === 'GOAL' && playerExternalId) {
+          this.schedulePlayerProfileWarm(playerExternalId, ev.team?.id ?? null);
+        }
 
         if (eventType === 'CARD' && isRedCardDetail(detail)) {
           newRedCards.push({
@@ -1381,6 +1437,18 @@ export class MatchSyncService {
       newSubstitutions,
       newVarGoalAnnulments,
     };
+  }
+
+  private schedulePlayerProfileWarm(
+    playerExternalId: number,
+    teamApiFootballId: number | null | undefined,
+  ): void {
+    if (!this.playerProfileCache) return;
+    void this.playerProfileCache
+      .ensureProfile(playerExternalId, {
+        teamApiFootballId: teamApiFootballId ?? null,
+      })
+      .catch(() => undefined);
   }
 
   private async dispatchNewLiveEventNotifications(params: {
@@ -1606,6 +1674,37 @@ export class MatchSyncService {
       this.footballConfigService.isEventWaVarGoalEnabled(),
     ]);
     return red || yellow || sub || varGoal;
+  }
+
+  /** Fetches `/fixtures/events` when budget allows; logs and returns undefined on failure. */
+  private async tryFetchFixtureEvents(
+    fixtureId: number,
+    matchId: string,
+    source: string,
+  ): Promise<any[] | undefined> {
+    const canSpend = await this.rateLimiter.canMakeRequest();
+    if (!canSpend) {
+      this.logger.warn(
+        `Fixture events for match ${matchId}: skipping — no budget (${source})`,
+      );
+      return undefined;
+    }
+
+    try {
+      const eventsResponse = await this.apiClient.getFixtureEvents(fixtureId);
+      await this.rateLimiter.logRequest(
+        '/fixtures/events',
+        { fixture: fixtureId, source },
+        200,
+        undefined,
+      );
+      await this.syncPlan.incrementRequestsUsed(1);
+      return eventsResponse?.response ?? [];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Fixture events fetch failed for match ${matchId} (${source}): ${msg}`);
+      return undefined;
+    }
   }
 
   private async dispatchDetectedGoal(

@@ -4,7 +4,7 @@ import {
     BarChart3, Users, Trophy, Swords, CreditCard, Layers,
     Settings, LogOut, Shield, X, Target, ArrowLeft, RefreshCw,
     Sparkles, Coins, ChevronLeft, ChevronRight, MoreHorizontal,
-    PanelLeftClose, PanelLeftOpen, Bell, Mail, MessageCircle, TestTube, Sliders, Building2,
+    PanelLeftClose, PanelLeftOpen, Bell, Mail, MessageCircle, TestTube, Sliders, Building2, Sticker,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { useFootballSyncStore } from '../stores/football-sync.store';
@@ -28,6 +28,7 @@ const secondaryNavItems = [
     { to: '/admin/football-sync/plan', label: 'Plan de Sync', icon: BarChart3 },
     { to: '/admin/football-sync/settings', label: 'Sync Auto-Adaptable', icon: Sliders },
     { to: '/admin/automation', label: 'Automatización', icon: Bell },
+    { to: '/admin/automation/sticker-album', label: 'Álbum stickers', icon: Sticker },
     { to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle },
     { to: '/admin/email-providers', label: 'SMTP / Correo', icon: Mail },
     { to: '/admin/email-logs', label: 'Logs de Email', icon: Mail },
@@ -52,6 +53,7 @@ const sectionTitles: Record<string, string> = {
     '/admin/ai-usage': 'Consultas IA',
     '/admin/football-sync': 'Football Sync',
     '/admin/automation': 'Automatización',
+    '/admin/automation/sticker-album': 'Álbum de stickers',
     '/admin/whatsapp': 'WhatsApp Grupos',
     '/admin/email-providers': 'SMTP / Correo',
     '/admin/email-logs': 'Logs de Email',

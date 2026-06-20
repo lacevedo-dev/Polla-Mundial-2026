@@ -13,6 +13,7 @@ import {
   Sse,
   MessageEvent,
   Res,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Observable, map } from 'rxjs';
@@ -33,6 +34,9 @@ import {
 import { IsString, IsNumber, IsBoolean, IsOptional, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TournamentImportService } from './services/tournament-import.service';
+import { PlayerProfileCacheService } from './services/player-profile-cache.service';
+import { StickerAlbumService } from './services/sticker-album.service';
+import { WhatsappImageService } from '../whatsapp/whatsapp-image.service';
 
 class LinkMatchDto {
   @IsString()
@@ -74,6 +78,9 @@ export class FootballSyncController {
     private readonly scheduler: AdaptiveSyncScheduler,
     private readonly tournamentImport: TournamentImportService,
     private readonly syncEvents: SyncEventsService,
+    private readonly playerProfileCache: PlayerProfileCacheService,
+    private readonly stickerAlbum: StickerAlbumService,
+    private readonly waImage: WhatsappImageService,
   ) {}
 
   /**
@@ -237,6 +244,58 @@ export class FootballSyncController {
       message: 'World Cup team catalog backfill completed',
       ...result,
     };
+  }
+
+  /**
+   * Precarga plantillas (/players/squads) del catálogo WC en PlayerProfile.
+   * Recomendado antes del torneo: ~1 request por selección.
+   */
+  @Post('prewarm-player-profiles')
+  @ApiOperation({ summary: 'Precarga plantillas y opcionalmente perfiles completos de jugadores' })
+  async prewarmPlayerProfiles(
+    @Body() body: { season?: number; enrichProfiles?: boolean; maxProfileFetches?: number } = {},
+  ) {
+    const result = await this.playerProfileCache.prewarmWorldCupSquads({
+      season: body.season ?? 2026,
+      enrichProfiles: body.enrichProfiles ?? false,
+      maxProfileFetches: body.maxProfileFetches ?? 50,
+    });
+
+    return {
+      message: 'Precarga de plantillas completada',
+      ...result,
+    };
+  }
+
+  /** Álbum de preview: plantillas cacheadas agrupadas por selección. */
+  @Get('sticker-album')
+  @ApiOperation({ summary: 'Listado de stickers disponibles para preview (admin)' })
+  async getStickerAlbum() {
+    return this.stickerAlbum.getAlbum();
+  }
+
+  /** PNG idéntico al que se envía por WhatsApp al marcar un gol. */
+  @Get('sticker-preview/:playerApiId')
+  @Header('Content-Type', 'image/png')
+  @ApiOperation({ summary: 'Genera PNG de sticker para un jugador (preview admin)' })
+  async getStickerPreview(
+    @Param('playerApiId') playerApiId: string,
+    @Query('teamCode') teamCode: string | undefined,
+    @Res() res: Response,
+  ) {
+    const apiId = Number(playerApiId);
+    if (!Number.isFinite(apiId)) {
+      throw new HttpException('playerApiId inválido', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const payload = await this.stickerAlbum.resolvePreviewPayload(apiId, teamCode);
+      const buffer = await this.waImage.buildGoalSticker(payload);
+      res.set('Content-Type', 'image/png');
+      res.send(buffer);
+    } catch {
+      throw new HttpException('No se pudo generar el preview', HttpStatus.NOT_FOUND);
+    }
   }
 
   /**

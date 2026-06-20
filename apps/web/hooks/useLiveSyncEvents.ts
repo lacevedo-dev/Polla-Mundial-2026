@@ -2,6 +2,25 @@ import React from 'react';
 import { BASE_URL } from '../api';
 import { usePredictionStore, type LiveScoreUpdate } from '../stores/prediction.store';
 
+export interface MatchEventPlayerProfile {
+    photoUrl: string | null;
+    jerseyNumber: number | null;
+    birthDate: string | null;
+    height: string | null;
+    weight: string | null;
+    nationality: string | null;
+}
+
+export interface MatchEventTeamStickerTheme {
+    primary: string | null;
+    secondary: string | null;
+    accent: string | null;
+    pillFrom: string | null;
+    pillTo: string | null;
+    flagUrl?: string | null;
+    countryCode?: string | null;
+}
+
 export interface MatchEventItem {
     type: string;
     detail: string | null;
@@ -12,6 +31,8 @@ export interface MatchEventItem {
     teamId: string | null;
     annulled?: boolean;
     annulledReason?: string | null;
+    playerProfile?: MatchEventPlayerProfile | null;
+    teamStickerTheme?: MatchEventTeamStickerTheme | null;
 }
 
 export interface LiveSyncState {

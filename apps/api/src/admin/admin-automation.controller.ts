@@ -25,6 +25,8 @@ import { AutomationStepConfigService } from '../automation/config/automation-ste
 import { AutomationTimingConfigService } from '../automation/config/automation-timing-config.service';
 import { LiveDisplayConfigService } from '../automation/config/live-display-config.service';
 import type { LiveDisplaySettings } from '../automation/config/live-display-config.util';
+import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
+import type { GoalStickerSettings } from '../automation/config/goal-sticker-config.util';
 import { getFinalEscalationMinutesBeforeKickoff } from '../automation/config/automation-timing.util';
 import { AutomationRetryService } from '../automation/retry/automation-retry.service';
 import { AutomationMessagePreviewService } from '../automation/preview/automation-message-preview.service';
@@ -57,6 +59,7 @@ export class AdminAutomationController {
     private readonly stepConfig: AutomationStepConfigService,
     private readonly timingConfig: AutomationTimingConfigService,
     private readonly liveDisplayConfig: LiveDisplayConfigService,
+    private readonly goalStickerConfig: GoalStickerConfigService,
   ) {}
 
   /** Estado de canales y schedulers */
@@ -310,6 +313,7 @@ export class AdminAutomationController {
     const defaultCloseMinutes = 15;
     const timingSettings = await this.timingConfig.getSettings();
     const liveDisplay = await this.liveDisplayConfig.getSettings();
+    const goalSticker = await this.goalStickerConfig.getSettings();
 
     return {
       channels,
@@ -329,6 +333,7 @@ export class AdminAutomationController {
         timezone: 'America/Bogota',
       },
       liveDisplay,
+      goalSticker,
       automation: {
         emailBacklogAudit: {
           cron: '*/15 * * * *',
@@ -807,6 +812,18 @@ export class AdminAutomationController {
   @Put('live-display-settings')
   async updateLiveDisplaySettings(@Body() dto: Partial<LiveDisplaySettings>) {
     return this.liveDisplayConfig.updateSettings(dto);
+  }
+
+  /** Lee dónde se muestra el sticker Panini de goleador (dashboard / WhatsApp). */
+  @Get('goal-sticker-settings')
+  async getGoalStickerSettings() {
+    return this.goalStickerConfig.getSettings();
+  }
+
+  /** Actualiza destinos del sticker Panini al marcar un gol. */
+  @Put('goal-sticker-settings')
+  async updateGoalStickerSettings(@Body() dto: Partial<GoalStickerSettings>) {
+    return this.goalStickerConfig.updateSettings(dto);
   }
 
   /** Lee los overrides de canal por scheduler */
