@@ -34,6 +34,23 @@ export const WA_GROUP_MAX_ATTEMPTS = 3;
 /** Reintento tras fallo: antes 60s (parecía ~2 min con el cron de 1 min). */
 export const WA_GROUP_RETRY_DELAY_MS = 15_000;
 
+/** Mapeo inverso job → paso (para validar canal waGroup por paso concreto). */
+const WA_JOB_TYPE_TO_AUTOMATION_STEP: Partial<
+  Record<WhatsappGroupJobType, AutomationStep>
+> = {
+  [WhatsappGroupJobType.MATCH_REMINDER]: AutomationStep.MATCH_REMINDER,
+  [WhatsappGroupJobType.PREDICTION_CLOSED]: AutomationStep.PREDICTION_CLOSING,
+  [WhatsappGroupJobType.RESULT_NOTIFICATION]: AutomationStep.RESULT_NOTIFICATION,
+  [WhatsappGroupJobType.GOAL_SCORED]: AutomationStep.GOAL_SCORED,
+  [WhatsappGroupJobType.PREDICTION_REPORT]: AutomationStep.PREDICTION_REPORT,
+  [WhatsappGroupJobType.RESULT_REPORT]: AutomationStep.RESULT_REPORT,
+  [WhatsappGroupJobType.MATCH_START]: AutomationStep.MATCH_START,
+  [WhatsappGroupJobType.HALFTIME]: AutomationStep.HALFTIME,
+  [WhatsappGroupJobType.SECOND_HALF_START]: AutomationStep.SECOND_HALF_START,
+  [WhatsappGroupJobType.MATCH_LIVE_END]: AutomationStep.MATCH_LIVE_END,
+  [WhatsappGroupJobType.GOAL_IMPACT]: AutomationStep.GOAL_IMPACT,
+};
+
 /** Mapeo de job type a schedulerId (mismo id que usa el frontend) */
 const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.MATCH_REMINDER]:      'match_reminder',
@@ -136,10 +153,12 @@ export class WhatsappGroupService {
     const schedulerId = JOB_TYPE_TO_SCHEDULER[type];
     if (!schedulerId) return true;
 
+    const step = WA_JOB_TYPE_TO_AUTOMATION_STEP[type];
+
     try {
       const stepConfig = this.moduleRef.get(AutomationStepConfigService, { strict: false });
       if (stepConfig) {
-        return stepConfig.isSchedulerChannelEnabled(schedulerId, 'waGroup');
+        return stepConfig.isSchedulerChannelEnabled(schedulerId, 'waGroup', step);
       }
     } catch {
       // AutomationStepConfigService no disponible en arranque temprano.

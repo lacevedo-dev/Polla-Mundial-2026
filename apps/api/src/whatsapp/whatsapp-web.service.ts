@@ -29,6 +29,9 @@ export interface WhatsappSessionInfo {
 const RECONNECT_DELAY_MS = 10_000;
 const MAX_RECONNECT_ATTEMPTS = 12;
 const PRODUCTION_SESSION_PATH = '/data/wwebjs_auth';
+const DEFAULT_WA_WEB_HTML_URL =
+  'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html';
+const LOCAL_AUTH_CLIENT_ID = 'polla-wa-session';
 
 /** Normaliza teléfono de usuario a chatId whatsapp-web.js (`573001234567@c.us`). */
 export function normalizePhoneToWhatsAppChatId(
@@ -59,6 +62,8 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private initializing = false;
   private lastDisconnectReason: string | null = null;
+  private awaitingQrScan = false;
+  private qrLoggedForCurrentInit = false;
 
   constructor(private readonly config: ConfigService) {
     this.enabled = this.config.get<string>('WHATSAPP_WEB_ENABLED') === 'true';
@@ -131,13 +136,19 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
 
       const executablePath = this.config.get<string>('PUPPETEER_EXECUTABLE_PATH');
 
+      const webVersionUrl =
+        this.config.get<string>('WHATSAPP_WEB_VERSION_URL')?.trim() ||
+        DEFAULT_WA_WEB_HTML_URL;
+
       this.client = new Client({
-        authStrategy: new LocalAuth({ dataPath: this.sessionPath }),
+        authStrategy: new LocalAuth({
+          clientId: LOCAL_AUTH_CLIENT_ID,
+          dataPath: this.sessionPath,
+        }),
         // Evita desconexiones por cambios de versión de WhatsApp Web
         webVersionCache: {
           type: 'remote',
-          remotePath:
-            'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+          remotePath: webVersionUrl,
         },
         puppeteer: {
           headless: true,
@@ -148,22 +159,34 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
             '--disable-dev-shm-usage',
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
-            '--no-zygote',
             '--disable-gpu',
-            '--single-process',
           ],
         },
       });
 
+      this.qrLoggedForCurrentInit = false;
+
       this.client.on('qr', (qr: string) => {
         this.status = 'QR_READY';
+        this.awaitingQrScan = true;
         this.qrDataUrl = null;
         this.generateQrDataUrl(qr).catch(() => null);
-        this.logger.log('WhatsApp Web QR ready — scan from admin panel');
+        if (!this.qrLoggedForCurrentInit) {
+          this.qrLoggedForCurrentInit = true;
+          const persisted = this.hasPersistedSession();
+          this.logger.warn(
+            persisted
+              ? 'WhatsApp Web requiere escanear QR (sesión en disco inválida o expirada) — Admin → WhatsApp'
+              : 'WhatsApp Web QR listo — escanea desde Admin → WhatsApp',
+          );
+        } else {
+          this.logger.debug('WhatsApp Web QR refreshed');
+        }
       });
 
       this.client.on('ready', () => {
         this.status = 'CONNECTED';
+        this.awaitingQrScan = false;
         this.qrDataUrl = null;
         this.reconnectAttempts = 0;
         this.lastDisconnectReason = null;
@@ -171,13 +194,19 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       });
 
       this.client.on('authenticated', () => {
-        this.logger.log('WhatsApp Web authenticated — sesión guardada en disco');
+        this.awaitingQrScan = false;
+        this.logger.log(
+          `WhatsApp Web authenticated — sesión guardada en ${this.sessionPath}`,
+        );
       });
 
       this.client.on('auth_failure', (msg: string) => {
         this.status = 'AUTH_FAILURE';
+        this.awaitingQrScan = true;
         this.clearReconnectTimer();
-        this.logger.error(`WhatsApp Web auth failure: ${msg}`);
+        this.logger.error(
+          `WhatsApp Web auth failure: ${msg} — escanea QR de nuevo en Admin → WhatsApp`,
+        );
       });
 
       this.client.on('disconnected', (reason: string) => {
@@ -187,6 +216,7 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
 
         // LOGOUT = desvinculado desde el teléfono; requiere escanear QR de nuevo
         if (reason === 'LOGOUT') {
+          this.awaitingQrScan = true;
           this.clearReconnectTimer();
           return;
         }
@@ -206,6 +236,13 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
   }
 
   private scheduleReconnect(): void {
+    if (this.awaitingQrScan) {
+      this.logger.debug(
+        'WhatsApp Web: omitiendo reconexión automática — esperando escaneo de QR',
+      );
+      return;
+    }
+
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this.logger.warn(
         `WhatsApp Web: máximo de reconexiones alcanzado (${MAX_RECONNECT_ATTEMPTS}). Usa "Reconectar" en el panel.`,
@@ -228,6 +265,24 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
       this.reconnectTimer = null;
       void this.reinitialize();
     }, delay);
+  }
+
+  /**
+   * Si hay sesión persistida pero el cliente cayó, intenta restaurar sin bloquear el dispatcher.
+   */
+  async tryRestoreSessionIfNeeded(): Promise<void> {
+    if (!this.enabled || this.initializing || this.isConnected()) return;
+    if (this.awaitingQrScan || this.reconnectTimer) return;
+    if (!this.hasPersistedSession()) return;
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+
+    const status = this.getStatus();
+    if (status === 'AUTH_FAILURE' || status === 'QR_READY') return;
+
+    this.logger.log(
+      'WhatsApp Web: sesión en disco detectada — intentando restaurar conexión...',
+    );
+    await this.reinitialize();
   }
 
   /** Reinicializa el cliente reutilizando la sesión guardada en disco. */

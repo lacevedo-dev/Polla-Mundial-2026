@@ -24,7 +24,19 @@ export class WhatsappDispatcherService {
     if (this.running) {
       return { sent: 0, failed: 0, total: 0 };
     }
+
+    await this.waWeb.tryRestoreSessionIfNeeded();
+
     if (!this.waWeb.isConnected()) {
+      const pending = await this.waGroup.getPendingJobs(1);
+      if (pending.length > 0) {
+        const session = this.waWeb.getSessionInfo();
+        this.logger.warn(
+          `WA dispatcher omitido: status=${this.waWeb.getStatus()} ` +
+            `pendingJobs>=1 sessionOnDisk=${session.sessionExists} ` +
+            `(reconnect ${session.reconnectAttempts}/12)`,
+        );
+      }
       return { sent: 0, failed: 0, total: 0 };
     }
 
