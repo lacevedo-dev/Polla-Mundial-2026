@@ -19,6 +19,7 @@ export interface LiveSyncState {
     lastSyncAt: number | null;        // timestamp ms del último sync_completed
     syncIntervalMinutes: number;       // del plan (default 5)
     matchesUpdatedCount: number;       // cuántos match_updated recibidos en la sesión
+    syncCompletedCount: number;        // cuántos sync_completed recibidos en la sesión
 }
 
 export function useLiveSyncEvents(): LiveSyncState {
@@ -28,6 +29,7 @@ export function useLiveSyncEvents(): LiveSyncState {
         lastSyncAt: null,
         syncIntervalMinutes: 5,
         matchesUpdatedCount: 0,
+        syncCompletedCount: 0,
     });
 
     // Fetch initial sync info
@@ -89,7 +91,11 @@ export function useLiveSyncEvents(): LiveSyncState {
             try {
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const _data = JSON.parse(e.data as string) as { requestsUsed?: number };
-                setState((prev) => ({ ...prev, lastSyncAt: Date.now() }));
+                setState((prev) => ({
+                    ...prev,
+                    lastSyncAt: Date.now(),
+                    syncCompletedCount: prev.syncCompletedCount + 1,
+                }));
                 // Also fetch updated interval
                 fetch(`${BASE_URL}/matches/live/sync-info`, {
                     headers: { Authorization: `Bearer ${token}` },

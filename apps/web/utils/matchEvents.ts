@@ -117,20 +117,10 @@ export function partitionGoalsByTeam(
             continue;
         }
 
-        const canHome = runningHome < finalHome;
-        const canAway = runningAway < finalAway;
-        if (canHome && !canAway) {
+        if (runningHome < finalHome) {
             homeGoals.push(goal);
             runningHome++;
-        } else if (!canHome && canAway) {
-            awayGoals.push(goal);
-            runningAway++;
-        } else if (finalHome - runningHome >= finalAway - runningAway) {
-            if (runningHome >= finalHome) continue;
-            homeGoals.push(goal);
-            runningHome++;
-        } else {
-            if (runningAway >= finalAway) continue;
+        } else if (runningAway < finalAway) {
             awayGoals.push(goal);
             runningAway++;
         }
@@ -146,4 +136,28 @@ export function formatAnnulledGoalLabel(reason?: string | null): string {
 
 export function buildMatchEventRowKey(event: MatchEventItem): string {
     return `${event.type}|${event.minute}|${event.extraMin ?? ''}|${event.teamId ?? ''}|${normalizePlayerKey(event.playerName)}`;
+}
+
+function formatGoalMinute(event: MatchEventItem): string {
+    return `${event.minute}'${event.extraMin ? `+${event.extraMin}` : ''}`;
+}
+
+/** Agrupa goles por jugador: "Brobbey 5', 17'" */
+export function formatGoalScorersByPlayer(goals: MatchEventItem[]): string[] {
+    const byPlayer = new Map<string, string[]>();
+
+    for (const goal of goals) {
+        const isOG = goal.detail?.toLowerCase().includes('own goal');
+        const label = isOG
+            ? 'AG'
+            : (goal.playerName?.trim() || '—');
+        const displayName = isOG ? 'AG' : (label.split(/\s+/).pop() ?? label);
+        const mins = byPlayer.get(displayName) ?? [];
+        mins.push(formatGoalMinute(goal));
+        byPlayer.set(displayName, mins);
+    }
+
+    return [...byPlayer.entries()].map(
+        ([name, mins]) => `${name} ${mins.join(', ')}`,
+    );
 }

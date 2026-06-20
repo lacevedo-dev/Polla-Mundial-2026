@@ -10,46 +10,8 @@ import {
     dedupeMatchEvents,
     partitionGoalsByTeam,
     buildMatchEventRowKey,
+    formatGoalScorersByPlayer,
 } from '../../utils/matchEvents';
-
-function renderGoalLine(
-    event: MatchEventItem,
-    align: 'left' | 'right',
-    annulled = false,
-) {
-    const isOG = event.detail?.toLowerCase().includes('own goal');
-    const min = `${event.minute}'${event.extraMin ? `+${event.extraMin}` : ''}`;
-    const player = isOG ? 'OG' : (event.playerName?.split(' ').pop() ?? '—');
-    const tone = annulled ? 'text-white/35 line-through decoration-white/25' : 'text-white/70';
-
-    if (align === 'left') {
-        return (
-            <span key={buildMatchEventRowKey(event)} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
-                <span className={`text-[10px] ${annulled ? 'opacity-40' : ''}`}>{annulled ? '🚫' : '⚽'}</span>
-                <span className="truncate">{player}</span>
-                <span className="text-white/30 shrink-0">{min}</span>
-                {annulled && (
-                    <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide text-rose-300/90 bg-rose-500/10">
-                        {formatAnnulledGoalLabel(event.annulledReason)}
-                    </span>
-                )}
-            </span>
-        );
-    }
-
-    return (
-        <span key={buildMatchEventRowKey(event)} className={`flex items-center gap-1 text-[9px] font-bold ${tone}`}>
-            {annulled && (
-                <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide text-rose-300/90 bg-rose-500/10">
-                    {formatAnnulledGoalLabel(event.annulledReason)}
-                </span>
-            )}
-            <span className="text-white/30 shrink-0">{min}</span>
-            <span className="truncate">{player}</span>
-            <span className={`text-[10px] ${annulled ? 'opacity-40' : ''}`}>{annulled ? '🚫' : '⚽'}</span>
-        </span>
-    );
-}
 
 interface LiveStandingsData {
     myProvisionalPosition?: number | null;
@@ -188,19 +150,44 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                     </div>
 
                     {hasGoalSummary && (
-                        <div className="mt-2 pt-2 border-t border-white/5">
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
-                                    {homeGoals.map((e) => renderGoalLine(e, 'left'))}
-                                    {homeAnnulled.map((e) => renderGoalLine(e, 'left', true))}
+                        <div className="mt-2.5 pt-2.5 border-t border-white/10">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="min-w-0 space-y-1">
+                                    {formatGoalScorersByPlayer(homeGoals).map((line) => (
+                                        <p key={`home-${line}`} className="flex items-center gap-1 text-[10px] font-semibold text-white/75">
+                                            <span className="text-[11px]">⚽</span>
+                                            <span className="truncate">{line}</span>
+                                        </p>
+                                    ))}
+                                    {formatGoalScorersByPlayer(homeAnnulled).map((line) => (
+                                        <p key={`home-a-${line}`} className="flex items-center gap-1 text-[10px] font-semibold text-white/40 line-through">
+                                            <span>🚫</span>
+                                            <span className="truncate">{line}</span>
+                                        </p>
+                                    ))}
                                 </div>
-                                <div className="w-px bg-white/10 self-stretch mx-1" />
-                                <div className="flex flex-col items-end gap-0.5 min-w-0 flex-1">
-                                    {awayGoals.map((e) => renderGoalLine(e, 'right'))}
-                                    {awayAnnulled.map((e) => renderGoalLine(e, 'right', true))}
+                                <div className="min-w-0 space-y-1 text-right">
+                                    {formatGoalScorersByPlayer(awayGoals).map((line) => (
+                                        <p key={`away-${line}`} className="flex items-center justify-end gap-1 text-[10px] font-semibold text-white/75">
+                                            <span className="truncate">{line}</span>
+                                            <span className="text-[11px]">⚽</span>
+                                        </p>
+                                    ))}
+                                    {formatGoalScorersByPlayer(awayAnnulled).map((line) => (
+                                        <p key={`away-a-${line}`} className="flex items-center justify-end gap-1 text-[10px] font-semibold text-white/40 line-through">
+                                            <span className="truncate">{line}</span>
+                                            <span>🚫</span>
+                                        </p>
+                                    ))}
                                 </div>
                             </div>
                         </div>
+                    )}
+
+                    {expandLevel === 1 && !hasGoalSummary && (
+                        <p className="mt-2 text-center text-[9px] font-medium text-white/30">
+                            Goleadores en actualización…
+                        </p>
                     )}
 
                     {expandLevel === 2 && (

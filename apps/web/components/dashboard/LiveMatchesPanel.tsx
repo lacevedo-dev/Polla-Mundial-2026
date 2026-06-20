@@ -6,7 +6,7 @@ import { LiveMatchTimer } from '../live/LiveMatchTimer';
 import LiveMatchExpandedCard from './LiveMatchExpandedCard';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
-import { dedupeMatchEvents } from '../../utils/matchEvents';
+import { dedupeMatchEvents, formatGoalScorersByPlayer, partitionGoalsByTeam, splitGoalEvents } from '../../utils/matchEvents';
 import { calcLivePoints } from '../../utils/dashboard';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
@@ -44,6 +44,25 @@ interface LiveMatchesPanelProps {
 }
 
 /* ─── Chip helper ────────────────────────────────────────────────── */
+
+function getLatestGoalHint(
+    match: MatchViewModel,
+    matchEvents: Map<string, MatchEventItem[]>,
+): string | null {
+    const events = dedupeMatchEvents(
+        (matchEvents.get(match.id) ?? []).filter((e) => e.type === 'GOAL' && !e.annulled),
+    );
+    if (events.length === 0) return null;
+
+    const { active } = splitGoalEvents(events);
+    const latest = [...active].sort(
+        (a, b) => a.minute - b.minute || (a.extraMin ?? 0) - (b.extraMin ?? 0),
+    ).pop();
+    if (!latest) return null;
+
+    const name = latest.playerName?.split(/\s+/).pop() ?? 'Gol';
+    return `${name} ${latest.minute}'`;
+}
 
 function getChipStatus(match: MatchViewModel) {
     const pH = parseInt(match.prediction.home, 10);
@@ -87,6 +106,7 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                     const rH = match.result?.home ?? 0;
                     const rA = match.result?.away ?? 0;
                     const chipStatus = getChipStatus(match);
+                    const goalHint = getLatestGoalHint(match, matchEvents);
                     const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
                         ? 'border-lime-500/50'
                         : chipStatus === 'losing' ? 'border-rose-500/50' : 'border-white/10';
@@ -130,6 +150,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                     </span>
                                 </div>
                             </div>
+                            {goalHint && (
+                                <p className="xl:hidden mt-0.5 text-[8px] font-semibold text-lime-300/90 truncate w-full text-center">
+                                    ⚽ {goalHint}
+                                </p>
+                            )}
 
                             {/* Escritorio: centrado con timer arriba */}
                             <div className="hidden xl:w-full xl:flex xl:justify-center xl:mb-0.5">
@@ -154,6 +179,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                     <span className="text-[8px] font-bold text-white/80 truncate">{match.awayTeamCode || match.awayTeam.slice(0, 3)}</span>
                                 </div>
                             </div>
+                            {goalHint && (
+                                <p className="hidden xl:block mt-0.5 text-[7px] font-semibold text-lime-300/80 truncate w-full text-center">
+                                    ⚽ {goalHint}
+                                </p>
+                            )}
                         </button>
                     );
                 })}
@@ -227,6 +257,7 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                             const rH = match.result?.home ?? 0;
                             const rA = match.result?.away ?? 0;
                             const chipStatus = getChipStatus(match);
+                            const goalHint = getLatestGoalHint(match, matchEvents);
                             const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
                                 ? 'border-lime-500/50'
                                 : chipStatus === 'losing' ? 'border-rose-500/50' : 'border-slate-200';
@@ -267,6 +298,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                             </span>
                                         </div>
                                     </div>
+                                    {goalHint && (
+                                        <p className="mt-0.5 text-[8px] font-semibold text-lime-300/90 truncate w-full text-center">
+                                            ⚽ {goalHint}
+                                        </p>
+                                    )}
                                 </button>
                             );
                         })}
@@ -356,6 +392,18 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
     const expandedEvents = dedupeMatchEvents(
         (matchEvents.get(expandedMatch.id) ?? []).filter((e) => ['GOAL', 'CARD'].includes(e.type)),
     );
+    const { active: activeGoals } = splitGoalEvents(
+        expandedEvents.filter((e) => e.type === 'GOAL'),
+    );
+    const { homeGoals, awayGoals } = partitionGoalsByTeam(
+        activeGoals,
+        expandedMatch.homeTeamId,
+        expandedMatch.awayTeamId,
+        expandedRealHome,
+        expandedRealAway,
+    );
+    const homeScorers = formatGoalScorersByPlayer(homeGoals);
+    const awayScorers = formatGoalScorersByPlayer(awayGoals);
 
     return (
         <div className="rounded-lg bg-gradient-to-br from-rose-950 via-rose-950/80 to-slate-900 border border-rose-500/30 p-2.5 max-w-sm mx-auto">
@@ -403,6 +451,13 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
                     {expandedMatch.awayFlag && <img src={expandedMatch.awayFlag} alt="" className="h-4 w-6 rounded object-cover" />}
                 </div>
             </div>
+
+            {(homeScorers.length > 0 || awayScorers.length > 0) && (
+                <div className="mt-2 pt-2 border-t border-white/10 grid grid-cols-2 gap-2 text-[8px] font-semibold text-white/70">
+                    <div className="min-w-0 truncate">{homeScorers.join(' · ')}</div>
+                    <div className="min-w-0 truncate text-right">{awayScorers.join(' · ')}</div>
+                </div>
+            )}
 
             {expandLevel === 2 && expandedEvents.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-x-2 gap-y-0.5">

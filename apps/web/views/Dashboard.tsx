@@ -8,8 +8,8 @@ import { usePredictionStore, type MatchViewModel } from '../stores/prediction.st
 import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
-import { useLiveSyncEvents, type MatchEventItem } from '../hooks/useLiveSyncEvents';
-import { dedupeMatchEvents } from '../utils/matchEvents';
+import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
+import { useLiveMatchEvents } from '../hooks/useLiveMatchEvents';
 import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
@@ -75,7 +75,6 @@ const Dashboard: React.FC = () => {
 
     interface LiveStandingsData { hasLive: boolean; myProvisionalPosition: number | null; myPositionChange: number; myLivePoints: number; liveMatchCount: number; }
 
-    const [matchEvents, setMatchEvents] = useState<Map<string, MatchEventItem[]>>(new Map());
     const [liveStandings, setLiveStandings] = useState<LiveStandingsData | null>(null);
 
     const isLoading = leagueLoading || dashboardLoading;
@@ -89,9 +88,15 @@ const Dashboard: React.FC = () => {
     const isAdmin = isRealAdmin && !spectatorMode;
 
     const liveMatches = useMemo(() => matches.filter((m) => m.status === 'live'), [matches]);
+    const liveMatchIds = useMemo(() => liveMatches.map((m) => m.id), [liveMatches]);
+    const liveSync = useLiveSyncEvents();
+    const matchEvents = useLiveMatchEvents(liveMatchIds, {
+        matchesUpdatedCount: liveSync.matchesUpdatedCount,
+        syncCompletedCount: liveSync.syncCompletedCount,
+        syncIntervalMinutes: liveSync.syncIntervalMinutes,
+    });
     const upcomingMatches = useMemo(() => matches.filter((m) => m.status === 'open').slice(0, 3), [matches]);
     const nextUnsaved = useMemo(() => matches.find((m) => m.status === 'open' && !m.saved), [matches]);
-    const liveSync = useLiveSyncEvents();
 
     const topPlayers = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
 
@@ -103,16 +108,18 @@ const Dashboard: React.FC = () => {
     }, [liveMatches]);
 
     const handleChipClick = React.useCallback((matchId: string) => {
-        setExpandedMatchId(prev => {
-            if (prev !== matchId) {
-                setExpandLevel(1);
-                return matchId;
-            }
-            // Si ya está expandido, colapsarlo
+        if (expandedMatchId !== matchId) {
+            setExpandedMatchId(matchId);
             setExpandLevel(1);
-            return null;
-        });
-    }, []);
+            return;
+        }
+        if (expandLevel === 1) {
+            setExpandLevel(2);
+            return;
+        }
+        setExpandedMatchId(null);
+        setExpandLevel(1);
+    }, [expandedMatchId, expandLevel]);
 
     // Modo flotante para el panel de partidos en vivo
     const [isFloating, setIsFloating] = React.useState(() => {
@@ -235,43 +242,7 @@ const Dashboard: React.FC = () => {
         });
     }, [activeLeague?.id, fetchLeagueDetails, fetchLeagueMatches, fetchLeaderboard, resetLeagueData]);
 
-    // Load events for all live matches on mount and whenever liveMatches changes
-    useEffect(() => {
-        if (liveMatches.length === 0) return;
-        void Promise.all(
-            liveMatches.map((m) =>
-                request<MatchEventItem[]>(`/matches/${m.id}/events`)
-                    .then((events) => ({ id: m.id, events }))
-                    .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
-            ),
-        ).then((results) => {
-            setMatchEvents((prev) => {
-                const next = new Map(prev);
-                results.forEach((r) => next.set(r.id, dedupeMatchEvents(r.events)));
-                return next;
-            });
-        });
-    }, [liveMatches]);
-
-    // Refresh events for all live matches whenever SSE fires match_updated events
-    useEffect(() => {
-        if (liveSync.matchesUpdatedCount === 0 || liveMatches.length === 0) return;
-        void Promise.all(
-            liveMatches.map((m) =>
-                request<MatchEventItem[]>(`/matches/${m.id}/events`)
-                    .then((events) => ({ id: m.id, events }))
-                    .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
-            ),
-        ).then((results) => {
-            setMatchEvents((prev) => {
-                const next = new Map(prev);
-                results.forEach((r) => next.set(r.id, dedupeMatchEvents(r.events)));
-                return next;
-            });
-        });
-    }, [liveSync.matchesUpdatedCount, liveMatches]);
-
-    // Refresco periódico alineado con el intervalo de sync del backend (~1 min en vivo)
+    // Refresco periódico de partidos en vivo (eventos los maneja useLiveMatchEvents)
     useEffect(() => {
         if (!activeLeague?.id || liveMatches.length === 0) return;
 
@@ -282,21 +253,8 @@ const Dashboard: React.FC = () => {
             if (cancelled || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
                 return;
             }
-
             try {
                 await fetchLeagueMatches(activeLeague.id, { background: true });
-                const results = await Promise.all(
-                    liveMatches.map((m) =>
-                        request<MatchEventItem[]>(`/matches/${m.id}/events`)
-                            .then((events) => ({ id: m.id, events }))
-                            .catch(() => ({ id: m.id, events: [] as MatchEventItem[] })),
-                    ),
-                );
-                setMatchEvents((prev) => {
-                    const next = new Map(prev);
-                    results.forEach((r) => next.set(r.id, dedupeMatchEvents(r.events)));
-                    return next;
-                });
             } catch {
                 // silent background refresh
             }
@@ -310,7 +268,7 @@ const Dashboard: React.FC = () => {
             cancelled = true;
             window.clearInterval(intervalId);
         };
-    }, [activeLeague?.id, liveMatches, liveSync.syncIntervalMinutes, fetchLeagueMatches]);
+    }, [activeLeague?.id, liveMatches.length, liveSync.syncIntervalMinutes, fetchLeagueMatches]);
 
     useEffect(() => {
         if (liveMatches.length === 0 || !activeLeague?.id) { setLiveStandings(null); return; }
@@ -539,8 +497,8 @@ const Dashboard: React.FC = () => {
                     floatingExpanded={floatingExpanded}
                     draggable={draggable}
                     onChipClick={handleChipClick}
-                    onFloatingToggle={() => setIsFloating((v) => !v)}
-                    onFloatingExpandedToggle={() => setFloatingExpanded((v) => !v)}
+                    onSetFloating={setIsFloating}
+                    onSetFloatingExpanded={setFloatingExpanded}
                 />
             )}
 
