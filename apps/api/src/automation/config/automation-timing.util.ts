@@ -4,17 +4,24 @@ import type { EscalationCheckpointId } from '../types/automation.types';
 /** Minutos antes del kickoff en los que cierran las predicciones (por polla). */
 export const DEFAULT_CLOSE_PREDICTION_MINUTES = 15;
 
-/** Clave SystemConfig: minutos antes del kickoff para enviar el reporte de predicciones. */
+/** @deprecated Clave legacy; usar PREDICTION_REPORT_MINUTES_AFTER_CLOSE_KEY. */
 export const PREDICTION_REPORT_MINUTES_BEFORE_KEY =
   'automation:prediction_report_minutes_before';
 
-/** Valor por defecto: reporte T-15 (alineado con cierre típico de pollas). */
+/** Clave SystemConfig: minutos después del cierre para enviar el reporte de predicciones. */
+export const PREDICTION_REPORT_MINUTES_AFTER_CLOSE_KEY =
+  'automation:prediction_report_minutes_after_close';
+
+/** Valor por defecto legacy (solo observabilidad / migración). */
 export const DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE = 15;
+
+/** Valor por defecto: reporte 1 min después del cierre de pronósticos. */
+export const DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE = 1;
 
 /** Ventana de gracia (min) tras el kickoff para catch-up del reporte si el cron se retrasó. */
 export const PREDICTION_REPORT_CATCHUP_GRACE_MINUTES = 10;
 
-/** Ventana anticipada (min) para el primer disparo del cron antes del instante exacto T-N. */
+/** Ventana de gracia (min) tras el instante programado para tolerar jitter del cron. */
 export const PREDICTION_REPORT_WINDOW_GRACE_MINUTES = 2;
 
 export function normalizePredictionReportMinutesBefore(
@@ -42,6 +49,47 @@ export function parsePredictionReportMinutesBeforeConfig(
     }
   }
   return DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE;
+}
+
+export function normalizePredictionReportMinutesAfterClose(
+  value: number | null | undefined,
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE;
+  }
+  return Math.max(0, Math.min(30, Math.round(value)));
+}
+
+export function parsePredictionReportMinutesAfterCloseConfig(
+  raw: string | null | undefined,
+): number {
+  if (!raw) return DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE;
+  try {
+    const parsed = JSON.parse(raw) as { minutes?: unknown };
+    if (typeof parsed.minutes === 'number') {
+      return normalizePredictionReportMinutesAfterClose(parsed.minutes);
+    }
+  } catch {
+    const asNumber = Number(raw);
+    if (Number.isFinite(asNumber)) {
+      return normalizePredictionReportMinutesAfterClose(asNumber);
+    }
+  }
+  return DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE;
+}
+
+/** Instant programado del reporte = cierre de pronósticos + offset configurable. */
+export function getPredictionReportDueAt(
+  matchDate: Date,
+  closePredictionMinutes: number,
+  minutesAfterClose: number = DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE,
+): Date {
+  const normalizedClose = Math.max(1, Math.round(closePredictionMinutes));
+  const normalizedAfter = normalizePredictionReportMinutesAfterClose(minutesAfterClose);
+  return new Date(
+    matchDate.getTime() -
+      (normalizedClose - normalizedAfter) * 60_000,
+  );
 }
 
 /** Ventana de gracia del cron (minutos) para disparar un checkpoint. */

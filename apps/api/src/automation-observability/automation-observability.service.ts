@@ -13,9 +13,9 @@ import { buildWaGroupChannelBreakdown } from '../whatsapp/whatsapp-channel-statu
 import { AUTOMATION_STEP_ORDER, getCatalogEntry } from '../automation/config/automation-step-catalog';
 import { BOGOTA_LOCALE, BOGOTA_TIMEZONE } from '../automation/config/automation-datetime.util';
 import {
-  DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE,
-  parsePredictionReportMinutesBeforeConfig,
-  PREDICTION_REPORT_MINUTES_BEFORE_KEY,
+  DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE,
+  parsePredictionReportMinutesAfterCloseConfig,
+  PREDICTION_REPORT_MINUTES_AFTER_CLOSE_KEY,
 } from '../automation/config/automation-timing.util';
 import { findLeaguesExcludedFromAutomation } from '../automation/audience/automation-league-eligibility.util';
 
@@ -36,6 +36,7 @@ type StepScheduledContext = {
   matchDate: Date;
   closeMinutes: number | null;
   reportMinutesBeforeKickoff?: number | null;
+  minutesAfterClose?: number | null;
   matchStatus: MatchStatus;
 };
 
@@ -162,15 +163,15 @@ export class AutomationObservabilityService {
         return new Date(matchDate.getTime() - 60 * 60 * 1000);
       case AutomationStep.PREDICTION_CLOSING:
         return new Date(matchDate.getTime() - (closeMinutes ?? 15) * 60 * 1000);
-      case AutomationStep.PREDICTION_REPORT:
+      case AutomationStep.PREDICTION_REPORT: {
+        const normalizedClose = closeMinutes ?? 15;
+        const afterClose =
+          context.minutesAfterClose ??
+          DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE;
         return new Date(
-          matchDate.getTime() -
-            (context.reportMinutesBeforeKickoff ??
-              closeMinutes ??
-              DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE) *
-              60 *
-              1000,
+          matchDate.getTime() - (normalizedClose - afterClose) * 60 * 1000,
         );
+      }
       case AutomationStep.ESCALATION_T45:
         return new Date(matchDate.getTime() - 45 * 60 * 1000);
       case AutomationStep.ESCALATION_T30:
@@ -291,12 +292,12 @@ export class AutomationObservabilityService {
         },
       }),
       this.prisma.systemConfig.findUnique({
-        where: { key: PREDICTION_REPORT_MINUTES_BEFORE_KEY },
+        where: { key: PREDICTION_REPORT_MINUTES_AFTER_CLOSE_KEY },
         select: { value: true },
       }),
     ]);
 
-    const reportMinutesBeforeKickoff = parsePredictionReportMinutesBeforeConfig(
+    const minutesAfterClose = parsePredictionReportMinutesAfterCloseConfig(
       reportTimingRow?.value,
     );
 
@@ -357,7 +358,7 @@ export class AutomationObservabilityService {
           matchRuns,
           relevantLeagues,
           closeMinutes,
-          reportMinutesBeforeKickoff,
+          minutesAfterClose,
           now,
         });
 
@@ -520,15 +521,15 @@ export class AutomationObservabilityService {
     matchRuns: Array<AutomationRun & { league: { id: string; code: string; name: string } | null }>;
     relevantLeagues: Array<{ id: string; code: string; name: string; closePredictionMinutes: number }>;
     closeMinutes: number;
-    reportMinutesBeforeKickoff: number;
+    minutesAfterClose: number;
     now: Date;
   }) {
     const scheduledAt = this.getScheduledAt(params.step, {
       matchDate: params.match.matchDate,
       closeMinutes: params.closeMinutes,
-      reportMinutesBeforeKickoff:
+      minutesAfterClose:
         params.step === AutomationStep.PREDICTION_REPORT
-          ? params.reportMinutesBeforeKickoff
+          ? params.minutesAfterClose
           : undefined,
       matchStatus: params.match.status,
     });

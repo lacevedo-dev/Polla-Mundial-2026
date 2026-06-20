@@ -73,6 +73,7 @@ interface AutomationStatus {
   timingHints?: {
     defaultCloseMinutes: number;
     finalEscalationMinutesBeforeKickoff: number;
+    predictionReportMinutesAfterClose: number;
     predictionReportMinutesBefore: number;
     timezone: string;
   };
@@ -1221,26 +1222,31 @@ function AutomationTimingPanel({
   onSaved: (minutes: number) => void;
 }) {
   const [minutes, setMinutes] = React.useState(
-    timingHints?.predictionReportMinutesBefore ?? 15,
+    timingHints?.predictionReportMinutesAfterClose ?? 1,
   );
   const [saving, setSaving] = React.useState(false);
   const [msg, setMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
 
   React.useEffect(() => {
     if (timingHints) {
-      setMinutes(timingHints.predictionReportMinutesBefore);
+      setMinutes(timingHints.predictionReportMinutesAfterClose);
     }
-  }, [timingHints?.predictionReportMinutesBefore]);
+  }, [timingHints?.predictionReportMinutesAfterClose]);
 
   const handleSave = async () => {
     setSaving(true);
     setMsg(null);
     try {
-      const result = await request<{ predictionReportMinutesBefore: number }>(
+      const result = await request<{
+        predictionReportMinutesAfterClose: number;
+      }>(
         '/admin/automation/timing-settings',
-        { method: 'PUT', body: JSON.stringify({ predictionReportMinutesBefore: minutes }) },
+        {
+          method: 'PUT',
+          body: JSON.stringify({ predictionReportMinutesAfterClose: minutes }),
+        },
       );
-      onSaved(result.predictionReportMinutesBefore);
+      onSaved(result.predictionReportMinutesAfterClose);
       setMsg({ ok: true, text: 'Ajuste guardado correctamente' });
     } catch (e: unknown) {
       const text = e instanceof ApiError ? e.message : 'Error al guardar el ajuste';
@@ -1257,21 +1263,21 @@ function AutomationTimingPanel({
         <p className="text-sm font-semibold text-slate-900">Timing del reporte de predicciones</p>
       </div>
       <p className="mb-4 text-xs leading-relaxed text-slate-600">
-        Minutos antes del kickoff en que se publica el reporte de cierre (email + PDF/imagen al WA Grupo).
-        El cron revisa cada minuto; con <strong>15</strong> el envío ocurre en T-15 (o catch-up inmediato si hubo retraso).
-        Es independiente del cierre de pronósticos por polla (<code className="text-[10px]">closePredictionMinutes</code>).
+        Minutos después del cierre de pronósticos en que se publica el reporte (email + PDF/imagen al WA Grupo).
+        Con cierre típico a <strong>T-15</strong> y valor <strong>1</strong>, el envío ocurre en <strong>T-14</strong>
+        (un minuto después del cierre). El cron revisa cada minuto; si hubo retraso, hay catch-up hasta el kickoff.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">
-            Minutos antes del partido
+            Minutos después del cierre
           </label>
           <input
             type="number"
-            min={1}
-            max={120}
+            min={0}
+            max={30}
             value={minutes}
-            onChange={(e) => setMinutes(Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 15)))}
+            onChange={(e) => setMinutes(Math.max(0, Math.min(30, parseInt(e.target.value, 10) || 1)))}
             className="w-28 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
           />
         </div>
@@ -2043,7 +2049,8 @@ export default function AdminAutomation() {
             ...prev,
             timingHints: {
               ...prev.timingHints,
-              predictionReportMinutesBefore: minutes,
+              predictionReportMinutesAfterClose: minutes,
+              predictionReportMinutesBefore: Math.max(1, 15 - minutes),
             },
           }
         : prev,
@@ -2429,7 +2436,8 @@ export default function AdminAutomation() {
                 <>
                   {' '}Con cierre default {status.timingHints.defaultCloseMinutes} min → columna{' '}
                   <strong>{resolveEscalationFinalShortLabel(status.timingHints)}</strong>.
-                  {' '}Reporte de predicciones: <strong>T-{status.timingHints.predictionReportMinutesBefore}</strong>.
+                  {' '}Reporte de predicciones: <strong>{status.timingHints.predictionReportMinutesAfterClose} min después del cierre</strong>
+                  {' '}(≈ T-{status.timingHints.predictionReportMinutesBefore} con cierre default).
                 </>
               )}
             </p>

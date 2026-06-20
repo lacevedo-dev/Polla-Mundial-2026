@@ -43,7 +43,8 @@ describe('AdminAutomation', () => {
           timingHints: {
             defaultCloseMinutes: 15,
             finalEscalationMinutesBeforeKickoff: 20,
-            predictionReportMinutesBefore: 15,
+            predictionReportMinutesAfterClose: 1,
+            predictionReportMinutesBefore: 14,
             timezone: 'America/Bogota',
           },
         });

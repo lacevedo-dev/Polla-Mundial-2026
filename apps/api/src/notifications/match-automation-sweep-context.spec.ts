@@ -28,7 +28,42 @@ describe('getPendingReportMatches', () => {
     ],
   };
 
-  it('includes match exactly 15 minutes before kickoff', () => {
+  it('excludes match 2 minutes before close (T-17) when close is T-15', () => {
+    const now = new Date('2026-06-17T19:43:00.000Z');
+    const matches = getPendingReportMatches(
+      {
+        now,
+        activeLeagues: [],
+        scheduledMatches: [baseMatch],
+        maxClosePredictionMinutes: 15,
+      },
+      'league-1',
+      15,
+      1,
+    );
+
+    expect(matches).toHaveLength(0);
+  });
+
+  it('includes match 1 minute after close (T-14) when close is T-15', () => {
+    const now = new Date('2026-06-17T19:46:00.000Z');
+    const matches = getPendingReportMatches(
+      {
+        now,
+        activeLeagues: [],
+        scheduledMatches: [baseMatch],
+        maxClosePredictionMinutes: 15,
+      },
+      'league-1',
+      15,
+      1,
+    );
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0].id).toBe('match-1');
+  });
+
+  it('excludes match at exact close time (T-15)', () => {
     const now = new Date('2026-06-17T19:45:00.000Z');
     const matches = getPendingReportMatches(
       {
@@ -39,14 +74,14 @@ describe('getPendingReportMatches', () => {
       },
       'league-1',
       15,
+      1,
     );
 
-    expect(matches).toHaveLength(1);
-    expect(matches[0].id).toBe('match-1');
+    expect(matches).toHaveLength(0);
   });
 
   it('excludes match when report was already sent', () => {
-    const now = new Date('2026-06-17T19:45:00.000Z');
+    const now = new Date('2026-06-17T19:46:00.000Z');
     const matches = getPendingReportMatches(
       {
         now,
@@ -61,12 +96,13 @@ describe('getPendingReportMatches', () => {
       },
       'league-1',
       15,
+      1,
     );
 
     expect(matches).toHaveLength(0);
   });
 
-  it('catch-up sends after T-15 if cron was delayed', () => {
+  it('catch-up sends after due time if cron was delayed', () => {
     const now = new Date('2026-06-17T19:50:00.000Z');
     const matches = getCatchUpPredictionReportMatches(
       {
@@ -77,6 +113,7 @@ describe('getPendingReportMatches', () => {
       },
       'league-1',
       15,
+      1,
     );
 
     expect(matches).toHaveLength(1);

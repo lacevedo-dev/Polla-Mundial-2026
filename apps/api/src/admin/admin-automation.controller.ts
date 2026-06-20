@@ -318,7 +318,10 @@ export class AdminAutomationController {
         defaultCloseMinutes,
         finalEscalationMinutesBeforeKickoff:
           getFinalEscalationMinutesBeforeKickoff(defaultCloseMinutes),
-        predictionReportMinutesBefore: timingSettings.predictionReportMinutesBefore,
+        predictionReportMinutesAfterClose:
+          timingSettings.predictionReportMinutesAfterClose,
+        predictionReportMinutesBefore:
+          timingSettings.predictionReportMinutesBefore,
         timezone: 'America/Bogota',
       },
       automation: {
@@ -766,15 +769,25 @@ export class AdminAutomationController {
     return this.timingConfig.getSettings();
   }
 
-  /** Actualiza minutos antes del kickoff para el reporte de cierre de predicciones */
+  /** Actualiza minutos después del cierre para el reporte de predicciones */
   @Put('timing-settings')
   async updateTimingSettings(
-    @Body() dto: { predictionReportMinutesBefore?: number },
+    @Body()
+    dto: {
+      predictionReportMinutesAfterClose?: number;
+      predictionReportMinutesBefore?: number;
+    },
   ) {
-    if (dto.predictionReportMinutesBefore === undefined) {
-      throw new BadRequestException('predictionReportMinutesBefore es requerido');
+    if (
+      dto.predictionReportMinutesAfterClose === undefined &&
+      dto.predictionReportMinutesBefore === undefined
+    ) {
+      throw new BadRequestException(
+        'predictionReportMinutesAfterClose es requerido',
+      );
     }
     return this.timingConfig.updateSettings({
+      predictionReportMinutesAfterClose: dto.predictionReportMinutesAfterClose,
       predictionReportMinutesBefore: dto.predictionReportMinutesBefore,
     });
   }

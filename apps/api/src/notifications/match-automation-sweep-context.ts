@@ -1,9 +1,9 @@
 import { MatchStatus, MemberStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE,
+  DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE,
+  getPredictionReportDueAt,
   PREDICTION_REPORT_CATCHUP_GRACE_MINUTES,
-  PREDICTION_REPORT_WINDOW_GRACE_MINUTES,
 } from '../automation/config/automation-timing.util';
 
 const DEFAULT_CLOSE_PREDICTION_MINUTES = 15;
@@ -293,58 +293,62 @@ export function getClosingAlertMatches(
 export function getPendingReportMatches(
   context: MatchAutomationSweepContext,
   leagueId: string,
-  reportMinutesBeforeKickoff: number = DEFAULT_PREDICTION_REPORT_MINUTES_BEFORE,
+  closePredictionMinutes: number,
+  minutesAfterClose: number = DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE,
 ): MatchAutomationSweepMatch[] {
-  const normalizedMinutes = Math.max(1, Math.round(reportMinutesBeforeKickoff));
-  const primary = filterMatchesInFutureWindow(
-    context.scheduledMatches.filter(
-      (match) =>
-        match.predictionReportSentAt === null &&
-        match.predictions.some((prediction) => prediction.leagueId === leagueId),
+  return context.scheduledMatches.filter((match) =>
+    isPredictionReportPendingForLeague(
+      context.now,
+      match,
+      leagueId,
+      closePredictionMinutes,
+      minutesAfterClose,
     ),
-    context.now,
-    normalizedMinutes,
-    normalizedMinutes + PREDICTION_REPORT_WINDOW_GRACE_MINUTES,
   );
-  const catchUp = getCatchUpPredictionReportMatches(
-    context,
-    leagueId,
-    normalizedMinutes,
-  );
-  const seen = new Set<string>();
-  const merged: MatchAutomationSweepMatch[] = [];
-  for (const match of [...primary, ...catchUp]) {
-    if (seen.has(match.id)) continue;
-    seen.add(match.id);
-    merged.push(match);
-  }
-  return merged;
 }
 
-/** Partidos cuyo reporte T-N ya debió enviarse pero el kickoff aún no pasó (+ gracia). */
+/** Partidos cuyo reporte ya debió enviarse (post-cierre) pero el kickoff aún no pasó (+ gracia). */
 export function getCatchUpPredictionReportMatches(
   context: MatchAutomationSweepContext,
   leagueId: string,
-  reportMinutesBeforeKickoff: number,
+  closePredictionMinutes: number,
+  minutesAfterClose: number = DEFAULT_PREDICTION_REPORT_MINUTES_AFTER_CLOSE,
 ): MatchAutomationSweepMatch[] {
-  const now = context.now.getTime();
-  const catchUpEndMs = reportMinutesBeforeKickoff * 60_000;
+  return getPendingReportMatches(
+    context,
+    leagueId,
+    closePredictionMinutes,
+    minutesAfterClose,
+  );
+}
 
-  return context.scheduledMatches.filter((match) => {
-    if (match.predictionReportSentAt !== null) return false;
-    if (!match.predictions.some((prediction) => prediction.leagueId === leagueId)) {
-      return false;
-    }
-    const kickoffMs = match.matchDate.getTime();
-    const reportDueAt = kickoffMs - reportMinutesBeforeKickoff * 60_000;
-    const reportCatchUpUntil =
-      kickoffMs + PREDICTION_REPORT_CATCHUP_GRACE_MINUTES * 60_000;
-    if (now < reportDueAt) return false;
-    if (now >= reportCatchUpUntil) return false;
-    // Evita duplicar el rango ya cubierto por la ventana primaria hacia el futuro.
-    if (kickoffMs > now + catchUpEndMs) return false;
-    return true;
-  });
+function isPredictionReportPendingForLeague(
+  now: Date,
+  match: MatchAutomationSweepMatch,
+  leagueId: string,
+  closePredictionMinutes: number,
+  minutesAfterClose: number,
+): boolean {
+  if (match.predictionReportSentAt !== null) return false;
+  if (!match.predictions.some((prediction) => prediction.leagueId === leagueId)) {
+    return false;
+  }
+
+  const kickoffMs = match.matchDate.getTime();
+  const nowMs = now.getTime();
+  if (kickoffMs <= nowMs) return false;
+
+  const dueAt = getPredictionReportDueAt(
+    match.matchDate,
+    closePredictionMinutes,
+    minutesAfterClose,
+  );
+  const catchUpUntil =
+    kickoffMs + PREDICTION_REPORT_CATCHUP_GRACE_MINUTES * 60_000;
+
+  if (nowMs < dueAt.getTime()) return false;
+  if (nowMs >= catchUpUntil) return false;
+  return true;
 }
 
 export function getRelevantLeaguesForScheduledMatch(

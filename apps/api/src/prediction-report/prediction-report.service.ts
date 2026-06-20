@@ -12,6 +12,7 @@ import {
   MatchAutomationSweepContext,
   MatchAutomationSweepLeague,
 } from '../notifications/match-automation-sweep-context';
+import { getPredictionReportDueAt } from '../automation/config/automation-timing.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfReportService } from './pdf-report.service';
 import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
@@ -96,8 +97,8 @@ async sendPendingReports(
     }
 
     const now = context?.now ?? new Date();
-    const reportMinutesBeforeKickoff =
-      await this.timingConfig.getPredictionReportMinutesBefore();
+    const minutesAfterClose =
+      await this.timingConfig.getPredictionReportMinutesAfterClose();
 
     const leagues: PendingReportLeague[] = context
       ? context.activeLeagues.map((league) => ({
@@ -132,19 +133,20 @@ async sendPendingReports(
         ? getPendingReportMatches(
             context,
             league.id,
-            reportMinutesBeforeKickoff,
+            league.closePredictionMinutes,
+            minutesAfterClose,
           )
         : await this.prisma.match.findMany({
             where: {
               predictionReportSentAt: null,
               matchDate: {
-                gt: new Date(
-                  now.getTime() - reportMinutesBeforeKickoff * 60_000,
-                ),
+                gt: new Date(now.getTime() - 10 * 60_000),
                 lte: new Date(
                   now.getTime() +
-                    (reportMinutesBeforeKickoff +
-                      10) *
+                    Math.max(
+                      league.closePredictionMinutes,
+                      30,
+                    ) *
                       60_000,
                 ),
               },
@@ -166,6 +168,18 @@ async sendPendingReports(
           });
 
       for (const match of matches) {
+        if (
+          !context &&
+          now.getTime() <
+            getPredictionReportDueAt(
+              match.matchDate,
+              league.closePredictionMinutes,
+              minutesAfterClose,
+            ).getTime()
+        ) {
+          continue;
+        }
+
         const leaguePredictions = match.predictions
           .filter((prediction) => prediction.leagueId === league.id)
           .sort(
@@ -231,7 +245,13 @@ async sendPendingReports(
         AutomationStep.PREDICTION_REPORT,
         {
           matchDate: data.match.matchDate,
-          closeMinutes: reportMinutesBeforeKickoff,
+          closeMinutes: Math.min(
+            ...data.leaguesData.map((entry) => {
+              const league = leagues.find((item) => item.id === entry.leagueId);
+              return league?.closePredictionMinutes ?? 15;
+            }),
+          ),
+          minutesAfterClose,
           matchStatus: MatchStatus.SCHEDULED,
         },
       );

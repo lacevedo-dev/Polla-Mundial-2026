@@ -17,24 +17,36 @@ describe('AutomationTimingConfigService', () => {
     prisma.systemConfig.upsert.mockResolvedValue({});
   });
 
-  it('returns default 15 minutes when config is missing', async () => {
-    await expect(service.getPredictionReportMinutesBefore()).resolves.toBe(15);
+  it('returns default 1 minute after close when config is missing', async () => {
+    await expect(service.getPredictionReportMinutesAfterClose()).resolves.toBe(1);
   });
 
-  it('persists and reads custom minutes before kickoff', async () => {
+  it('persists and reads custom minutes after close', async () => {
     prisma.systemConfig.findUnique.mockResolvedValue({
-      value: JSON.stringify({ minutes: 20 }),
+      value: JSON.stringify({ minutes: 2 }),
     });
 
-    await expect(service.getPredictionReportMinutesBefore()).resolves.toBe(20);
+    await expect(service.getPredictionReportMinutesAfterClose()).resolves.toBe(2);
 
-    await service.updateSettings({ predictionReportMinutesBefore: 25 });
+    await service.updateSettings({ predictionReportMinutesAfterClose: 3 });
 
     expect(prisma.systemConfig.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { key: 'automation:prediction_report_minutes_before' },
+        where: { key: 'automation:prediction_report_minutes_after_close' },
         create: expect.objectContaining({
-          value: JSON.stringify({ minutes: 25 }),
+          value: JSON.stringify({ minutes: 3 }),
+        }),
+      }),
+    );
+  });
+
+  it('migrates legacy minutes-before-kickoff values to 1 minute after close', async () => {
+    await service.updateSettings({ predictionReportMinutesBefore: 15 });
+
+    expect(prisma.systemConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          value: JSON.stringify({ minutes: 1 }),
         }),
       }),
     );
