@@ -472,15 +472,21 @@ export class MatchSyncService {
       const liveExternalIds = new Set(
         response.response.map((fixture) => fixture.fixture.id.toString()),
       );
+      const kickoffRefresh = await this.refreshKickoffWindowMatches(
+        liveExternalIds,
+        eventSyncEnabled,
+      );
+      updatedCount += kickoffRefresh.updatedCount;
+
       const orphanRefresh = await this.refreshOrphanedLiveMatches(
         liveExternalIds,
         eventSyncEnabled,
       );
       updatedCount += orphanRefresh.updatedCount;
-      const requestsUsed = 1 + orphanRefresh.requestsUsed;
+      const requestsUsed = 1 + kickoffRefresh.requestsUsed + orphanRefresh.requestsUsed;
 
       this.logger.log(
-        `Live sync completed: ${updatedCount} matches updated from ${response.results} live fixtures (${orphanRefresh.updatedCount} orphaned finalized)`,
+        `Live sync completed: ${updatedCount} matches updated from ${response.results} live fixtures (${kickoffRefresh.updatedCount} kickoff, ${orphanRefresh.updatedCount} orphaned finalized)`,
       );
 
       await this.monitoring.createLog({
@@ -492,6 +498,7 @@ export class MatchSyncService {
         duration: Date.now() - startedAt,
         details: JSON.stringify({
           fixturesFetched: response.results,
+          kickoffRefreshed: kickoffRefresh.updatedCount,
           orphanedRefreshed: orphanRefresh.updatedCount,
           live: true,
         }),
@@ -518,6 +525,69 @@ export class MatchSyncService {
         error: error.message,
       };
     }
+  }
+
+  /**
+   * Partidos en ventana de kickoff aún SCHEDULED: consulta /fixtures?id= si no
+   * aparecieron en /fixtures?live=all (arranque reciente o feed con delay).
+   */
+  private async refreshKickoffWindowMatches(
+    liveExternalIds: Set<string>,
+    eventSyncEnabled: boolean,
+  ): Promise<{ updatedCount: number; requestsUsed: number }> {
+    const candidates =
+      await this.syncPlan.getPotentiallyLiveMatchesWithExternalId();
+    const toRefresh = candidates.filter(
+      (match) => !liveExternalIds.has(match.externalId),
+    );
+
+    if (toRefresh.length === 0) {
+      return { updatedCount: 0, requestsUsed: 0 };
+    }
+
+    this.logger.log(
+      `Refreshing ${toRefresh.length} kickoff-window match(es) via /fixtures?id=`,
+    );
+
+    let updatedCount = 0;
+    let requestsUsed = 0;
+
+    for (const match of toRefresh) {
+      if (!(await this.rateLimiter.canMakeRequest())) {
+        this.logger.warn(
+          'Kickoff-window refresh stopped: request budget exhausted',
+        );
+        break;
+      }
+
+      const fixtureId = parseInt(match.externalId, 10);
+      if (Number.isNaN(fixtureId)) continue;
+
+      try {
+        const response = await this.apiClient.getFixtureById(fixtureId);
+        requestsUsed++;
+        await this.rateLimiter.logRequest(
+          '/fixtures',
+          { id: match.externalId, source: 'kickoff_window_refresh' },
+          200,
+          response.results,
+        );
+
+        if (response.response?.[0]) {
+          const updated = await this.updateMatchFromFixture(response.response[0], {
+            eventSyncEnabled,
+          });
+          if (updated) updatedCount++;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Kickoff-window refresh failed for match ${match.id}: ${message}`,
+        );
+      }
+    }
+
+    return { updatedCount, requestsUsed };
   }
 
   /**

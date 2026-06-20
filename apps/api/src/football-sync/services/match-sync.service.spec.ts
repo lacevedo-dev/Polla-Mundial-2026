@@ -51,6 +51,7 @@ describe('MatchSyncService', () => {
 
   const mockSyncPlanService = {
     getCarryOverMatches: jest.fn(),
+    getPotentiallyLiveMatchesWithExternalId: jest.fn(),
     updateLastSyncTime: jest.fn(),
     incrementRequestsUsed: jest.fn(),
   };
@@ -102,6 +103,7 @@ describe('MatchSyncService', () => {
 
     service = module.get<MatchSyncService>(MatchSyncService);
     mockFootballConfigService.isEventSyncEnabled.mockResolvedValue(false);
+    mockSyncPlanService.getPotentiallyLiveMatchesWithExternalId.mockResolvedValue([]);
     mockPrismaService.team.findFirst.mockResolvedValue(null);
     mockPrismaService.team.updateMany.mockResolvedValue({ count: 0 });
   });

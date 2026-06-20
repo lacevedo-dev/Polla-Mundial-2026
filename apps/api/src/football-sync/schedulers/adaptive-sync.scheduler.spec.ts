@@ -83,6 +83,27 @@ describe('AdaptiveSyncScheduler', () => {
     expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
   });
 
+  it('uses live endpoint when adaptive sync runs with potentially live matches', async () => {
+    mockSyncPlanService.shouldSyncNow.mockResolvedValue(true);
+    mockSyncPlanService.countPotentiallyLiveMatches.mockResolvedValue(1);
+    mockSyncPlanService.calculateDailyPlan.mockResolvedValue({
+      date: '2026-06-19',
+      totalMatches: 1,
+      requestBudget: 10,
+      intervalMinutes: 5,
+      estimatedRequestsUsed: 2,
+      strategy: 'BALANCED',
+      hasLiveMatches: false,
+      nextSyncIn: 0,
+      lastSync: null,
+    });
+
+    await scheduler.adaptiveSyncTick();
+
+    expect(mockMatchSyncService.syncLiveMatches).toHaveBeenCalledTimes(1);
+    expect(mockMatchSyncService.syncTodayMatchesForTrigger).not.toHaveBeenCalled();
+  });
+
   it('runs peak-hours kickoff safety net when no LIVE matches yet', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-03-28T10:00:00'));
     mockSyncPlanService.shouldSyncNow.mockResolvedValue(false);

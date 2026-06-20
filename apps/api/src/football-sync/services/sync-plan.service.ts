@@ -360,14 +360,20 @@ export class SyncPlanService {
 
     const plan = await this.calculateDailyPlan();
 
+    const potentiallyLive = !plan.hasLiveMatches
+      ? await this.countPotentiallyLiveMatches()
+      : 0;
+
     // No live matches — check if any SCHEDULED match with externalId already started
     // (chicken-and-egg: they can't become LIVE without a sync)
-    if (!plan.hasLiveMatches) {
-      const potentiallyLive = await this.countPotentiallyLiveMatches();
-      if (potentiallyLive === 0) {
-        return false;
-      }
-      this.logger.debug(`No LIVE matches but ${potentiallyLive} potentially live — triggering sync`);
+    if (!plan.hasLiveMatches && potentiallyLive === 0) {
+      return false;
+    }
+
+    if (!plan.hasLiveMatches && potentiallyLive > 0) {
+      this.logger.debug(
+        `No LIVE matches but ${potentiallyLive} potentially live — triggering sync`,
+      );
     }
 
     // No requests available = can't sync
@@ -382,12 +388,34 @@ export class SyncPlanService {
       return false;
     }
 
-    // Check if enough time has passed since last sync
-    if (plan.nextSyncIn > 0) {
+    // Check if enough time has passed since last sync.
+    // Excepción: partidos en ventana de kickoff aún SCHEDULED — priorizar transición a LIVE.
+    if (plan.nextSyncIn > 0 && (plan.hasLiveMatches || potentiallyLive === 0)) {
       return false;
     }
 
     return true;
+  }
+
+  /**
+   * Partidos SCHEDULED cuyo kickoff ya pasó (ventana ~130 min), con fixture API vinculado.
+   */
+  async getPotentiallyLiveMatchesWithExternalId(): Promise<
+    Array<{ id: string; externalId: string }>
+  > {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 130 * 60 * 1000);
+    const rows = await this.prisma.match.findMany({
+      where: {
+        status: MatchStatus.SCHEDULED,
+        matchDate: { gte: windowStart, lte: now },
+        externalId: { not: null },
+      },
+      select: { id: true, externalId: true },
+    });
+    return rows.filter(
+      (row): row is { id: string; externalId: string } => !!row.externalId,
+    );
   }
 
   /**

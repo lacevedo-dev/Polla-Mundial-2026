@@ -175,7 +175,11 @@ export class AdaptiveSyncScheduler {
       });
 
       const planBeforeSync = await this.syncPlan.calculateDailyPlan();
-      const useLiveEndpoint = planBeforeSync.hasLiveMatches;
+      const potentiallyLiveCount = planBeforeSync.hasLiveMatches
+        ? 0
+        : await this.syncPlan.countPotentiallyLiveMatches();
+      const useLiveEndpoint =
+        planBeforeSync.hasLiveMatches || potentiallyLiveCount > 0;
 
       const manualSyncOptions = {
         logType: SyncLogType.MANUAL_SYNC,

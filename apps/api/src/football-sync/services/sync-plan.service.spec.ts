@@ -185,7 +185,7 @@ describe('SyncPlanService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false when no live matches', async () => {
+    it('should return false when no live matches and none potentially live', async () => {
       mockPrismaService.dailySyncPlan.findUnique.mockResolvedValue(null);
       mockPrismaService.match.groupBy.mockResolvedValue([
         { status: MatchStatus.SCHEDULED, _count: 3 },
@@ -201,7 +201,7 @@ describe('SyncPlanService', () => {
         requestsUsed: 20,
         requestsBudget: 80,
         strategy: SyncStrategy.BALANCED,
-        lastSyncAt: null,
+        lastSyncAt: new Date(Date.now() - 60_000),
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -209,6 +209,32 @@ describe('SyncPlanService', () => {
       const result = await service.shouldSyncNow();
 
       expect(result).toBe(false);
+    });
+
+    it('should sync during kickoff window even if plan interval has not elapsed', async () => {
+      mockPrismaService.dailySyncPlan.findUnique.mockResolvedValue(null);
+      mockPrismaService.match.groupBy.mockResolvedValue([
+        { status: MatchStatus.SCHEDULED, _count: 1 },
+      ]);
+      mockPrismaService.match.count.mockResolvedValue(1);
+      mockRateLimiter.getUsedRequestsToday.mockResolvedValue(20);
+      mockRateLimiter.getAvailableRequests.mockResolvedValue(80);
+      mockPrismaService.dailySyncPlan.upsert.mockResolvedValue({
+        id: 'test',
+        date: new Date().toISOString().split('T')[0],
+        totalMatches: 1,
+        intervalMinutes: 10,
+        requestsUsed: 20,
+        requestsBudget: 80,
+        strategy: SyncStrategy.BALANCED,
+        lastSyncAt: new Date(Date.now() - 60_000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const result = await service.shouldSyncNow();
+
+      expect(result).toBe(true);
     });
 
     it('should return false when no requests available', async () => {
