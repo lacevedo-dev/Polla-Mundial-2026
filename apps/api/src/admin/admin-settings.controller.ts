@@ -1,10 +1,15 @@
-import { BadRequestException, Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AdminService } from './admin.service';
 import { StickerAiConfigService } from '../stickers/sticker-ai-config.service';
+import { StickerGlobalReferenceService } from '../stickers/sticker-global-reference.service';
+import { StickerReferenceStorageService, type StickerUploadFile } from '../stickers/sticker-reference-storage.service';
+import { StickerTeamReferenceService } from '../stickers/sticker-team-reference.service';
 
 const PUBLIC_REGISTRATION_CONFIG_KEY = 'public_registration';
 
@@ -24,6 +29,9 @@ export class AdminSettingsController {
     constructor(
         private readonly adminService: AdminService,
         private readonly stickerAiConfig: StickerAiConfigService,
+        private readonly stickerTeamReferences: StickerTeamReferenceService,
+        private readonly stickerReferenceStorage: StickerReferenceStorageService,
+        private readonly stickerGlobalReferences: StickerGlobalReferenceService,
     ) {}
 
     @Get('ai')
@@ -186,5 +194,91 @@ export class AdminSettingsController {
     }) {
         const result = await this.stickerAiConfig.saveAdminConfig(dto);
         return { ok: true, keysCount: result.keysCount };
+    }
+
+    @Get('sticker-ai/references')
+    @ApiOperation({ summary: 'List global and per-team OpenAI sticker reference images' })
+    async getStickerReferences() {
+        return this.stickerTeamReferences.getAdminView();
+    }
+
+    @Patch('sticker-ai/references/teams/:countryCode')
+    @ApiOperation({ summary: 'Save kit description and image label for a team sticker reference' })
+    async saveTeamStickerReference(
+        @Param('countryCode') countryCode: string,
+        @Body() dto: { kitDescription?: string; imageLabel?: string },
+    ) {
+        await this.stickerTeamReferences.saveTeamReference(countryCode, dto);
+        return { ok: true };
+    }
+
+    @Post('sticker-ai/references/global')
+    @ApiOperation({ summary: 'Create a labeled global sticker reference slot' })
+    async createGlobalStickerReference(@Body() dto: { label: string; promptHint?: string }) {
+        return this.stickerGlobalReferences.createItem(dto);
+    }
+
+    @Patch('sticker-ai/references/global/:id')
+    @ApiOperation({ summary: 'Update label, prompt hint or sort order of a global reference' })
+    async updateGlobalStickerReference(
+        @Param('id') id: string,
+        @Body() dto: { label?: string; promptHint?: string; sortOrder?: number },
+    ) {
+        return this.stickerGlobalReferences.updateItem(id, dto);
+    }
+
+    @Delete('sticker-ai/references/global/:id')
+    @ApiOperation({ summary: 'Delete a global sticker reference slot and its upload' })
+    async deleteGlobalStickerReference(@Param('id') id: string) {
+        await this.stickerGlobalReferences.deleteItem(id);
+        return { ok: true };
+    }
+
+    @Post('sticker-ai/references/global/:id/upload')
+    @ApiOperation({ summary: 'Upload image for a labeled global sticker reference' })
+    @ApiConsumes('multipart/form-data')
+    @UseInterceptors(
+        FileInterceptor('file', {
+            storage: memoryStorage(),
+            limits: { fileSize: 8 * 1024 * 1024 },
+        }),
+    )
+    async uploadGlobalStickerReference(
+        @Param('id') id: string,
+        @UploadedFile() file?: StickerUploadFile,
+    ) {
+        if (!file) throw new BadRequestException('Archivo requerido');
+        return this.stickerGlobalReferences.saveUpload(id, file);
+    }
+
+    @Delete('sticker-ai/references/global/:id/upload')
+    @ApiOperation({ summary: 'Remove uploaded global reference image (falls back to bundled if any)' })
+    async deleteGlobalStickerReferenceUpload(@Param('id') id: string) {
+        return this.stickerGlobalReferences.deleteUpload(id);
+    }
+
+    @Post('sticker-ai/references/upload/team-uniform/:countryCode')
+    @ApiOperation({ summary: 'Upload Image D — team uniform / country sticker reference' })
+    @ApiConsumes('multipart/form-data')
+    @UseInterceptors(
+        FileInterceptor('file', {
+            storage: memoryStorage(),
+            limits: { fileSize: 8 * 1024 * 1024 },
+        }),
+    )
+    async uploadTeamUniform(
+        @Param('countryCode') countryCode: string,
+        @UploadedFile() file?: StickerUploadFile,
+    ) {
+        if (!file) throw new BadRequestException('Archivo requerido');
+        await this.stickerReferenceStorage.saveTeamUniformUpload(countryCode, file);
+        return { ok: true, countryCode };
+    }
+
+    @Delete('sticker-ai/references/upload/team-uniform/:countryCode')
+    @ApiOperation({ summary: 'Remove uploaded team uniform reference (falls back to bundled if any)' })
+    async deleteTeamUniform(@Param('countryCode') countryCode: string) {
+        const removed = this.stickerReferenceStorage.deleteTeamUniform(countryCode);
+        return { ok: true, removed };
     }
 }

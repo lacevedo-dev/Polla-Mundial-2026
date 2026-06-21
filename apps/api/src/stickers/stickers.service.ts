@@ -12,6 +12,9 @@ import OpenAI, { toFile } from 'openai';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateStickerDto } from './dto/generate-sticker.dto';
 import { StickerAiConfigService } from './sticker-ai-config.service';
+import { StickerGlobalReferenceService } from './sticker-global-reference.service';
+import { StickerReferenceStorageService } from './sticker-reference-storage.service';
+import { StickerTeamReferenceService } from './sticker-team-reference.service';
 import { buildPremiumStickerPrompt } from './stickers-prompt.util';
 import { loadStickerReferenceFiles } from './stickers-reference.util';
 import {
@@ -42,6 +45,9 @@ export class StickersService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly stickerAiConfig: StickerAiConfigService,
+    private readonly stickerReferenceStorage: StickerReferenceStorageService,
+    private readonly stickerTeamReferences: StickerTeamReferenceService,
+    private readonly stickerGlobalReferences: StickerGlobalReferenceService,
   ) {}
 
   isOpenAiConfigured(): boolean {
@@ -66,21 +72,30 @@ export class StickersService {
 
     const client = await this.getOpenAIClient();
     const runtime = await this.stickerAiConfig.getRuntimeConfig();
-    const prompt = buildPremiumStickerPrompt(dto, runtime.promptTemplate);
+    const referenceContext = await this.stickerTeamReferences.buildPromptContext(
+      dto.countryCode,
+      dto.countryName,
+    );
+    const prompt = buildPremiumStickerPrompt(dto, runtime.promptTemplate, referenceContext);
     const quality = dto.quality ?? runtime.quality;
     const fileName = buildPremiumStickerFileName(playerApiFootballId);
     const imageUrl = buildPremiumStickerPublicUrl(playerApiFootballId);
 
     try {
       const playerFile = await this.urlToOpenAIFile(dto.photoUrl, 'player-a.png');
-      const referenceFiles = await loadStickerReferenceFiles(dto.countryCode);
+      const globalFiles = await this.stickerGlobalReferences.resolveAttachedFiles();
+      const teamFile = this.stickerReferenceStorage.resolveTeamUniformReference(dto.countryCode);
+      const referenceFiles = await loadStickerReferenceFiles([
+        ...globalFiles,
+        ...(teamFile.source !== 'missing' ? [teamFile] : []),
+      ]);
       if (referenceFiles.length === 0) {
         this.logger.warn(
-          'Referencias B/C/D no encontradas en stickers/references; generando solo con Image A',
+          'Sin referencias globales ni de equipo; generando solo con Image A',
         );
       } else {
         this.logger.debug(
-          `Referencias sticker: Image A + ${referenceFiles.length} imagen(es) B/C/D`,
+          `Referencias sticker: Image A + ${referenceFiles.length} imagen(es) de referencia`,
         );
       }
 

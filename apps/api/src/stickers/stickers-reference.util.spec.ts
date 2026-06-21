@@ -1,30 +1,30 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import {
-  listAvailableReferenceAssets,
-  resolveCountryReferencePath,
-  resolveStickerReferencesDir,
-} from './stickers-reference.util';
+import { StickerReferenceStorageService } from './sticker-reference-storage.service';
+import { listAvailableReferenceAssets } from './stickers-reference.util';
 
 describe('stickers-reference.util', () => {
+  const storage = new StickerReferenceStorageService({
+    get: () => undefined,
+  } as never);
+
   it('resuelve directorio de referencias', () => {
-    expect(resolveStickerReferencesDir()).toContain('references');
+    expect(storage.resolveBundledReferencesDir()).toContain('references');
   });
 
   it('lista assets disponibles', () => {
-    const assets = listAvailableReferenceAssets();
-    expect(typeof assets.seriesMaster).toBe('boolean');
+    const assets = listAvailableReferenceAssets({
+      globalCount: 2,
+      bundledReferencesDir: storage.resolveBundledReferencesDir(),
+      uploadReferencesDir: storage.resolveUploadReferencesDir(),
+    });
+    expect(assets.globalReferences).toBe(2);
     expect(Array.isArray(assets.countryTemplates)).toBe(true);
   });
 
-  it('encuentra plantilla CIV si existe en disco', () => {
-    const dir = resolveStickerReferencesDir();
-    const civPath = path.join(dir, 'countries', 'CIV.png');
-    const resolved = resolveCountryReferencePath('CIV');
-    if (fs.existsSync(civPath)) {
-      expect(resolved).toBe(civPath);
-    } else {
-      expect(resolved).toBeNull();
-    }
+  it('resuelve referencia global parametrizable con fallback bundled o missing', () => {
+    const resolved = storage.resolveGlobalReferenceFile({
+      id: 'series-master',
+      bundledFile: 'series-master.png',
+    });
+    expect(['upload', 'bundled', 'missing']).toContain(resolved.source);
   });
 });

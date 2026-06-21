@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, Plus, X, RotateCcw, Image } from 'lucide-react';
+import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, Plus, X, RotateCcw, Image, Upload, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth.store';
 import { request } from '../../api';
 
@@ -104,6 +104,42 @@ interface StickerAiConfigForm {
     envApiKeyConfigured: boolean;
 }
 
+type StickerReferenceSource = 'upload' | 'bundled' | 'missing';
+
+interface StickerGlobalReferenceRow {
+    id: string;
+    label: string;
+    promptHint: string;
+    sortOrder: number;
+    image: { configured: boolean; source: StickerReferenceSource };
+}
+
+interface StickerTeamReferenceRow {
+    countryCode: string;
+    teamName: string;
+    flagUrl: string | null;
+    imageLabel: string;
+    kitDescription: string;
+    uniformImage: { configured: boolean; source: StickerReferenceSource };
+}
+
+interface StickerReferencesAdminView {
+    global: StickerGlobalReferenceRow[];
+    teams: StickerTeamReferenceRow[];
+}
+
+function referenceSourceLabel(source: StickerReferenceSource): string {
+    if (source === 'upload') return 'Subida';
+    if (source === 'bundled') return 'Incluida';
+    return 'Sin imagen';
+}
+
+function referenceSourceClass(source: StickerReferenceSource): string {
+    if (source === 'upload') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    if (source === 'bundled') return 'bg-cyan-50 text-cyan-700 border-cyan-100';
+    return 'bg-slate-50 text-slate-500 border-slate-100';
+}
+
 const AdminSettings: React.FC = () => {
     const { user } = useAuthStore();
     const [aiConfig, setAiConfig] = React.useState<AiConfigForm>({
@@ -135,6 +171,18 @@ const AdminSettings: React.FC = () => {
     const [showStickerNewKey, setShowStickerNewKey] = React.useState(false);
     const [newStickerKeyInput, setNewStickerKeyInput] = React.useState('');
     const [addingStickerKey, setAddingStickerKey] = React.useState(false);
+    const [stickerReferences, setStickerReferences] = React.useState<StickerReferencesAdminView | null>(null);
+    const [stickerReferencesLoading, setStickerReferencesLoading] = React.useState(false);
+    const [stickerReferencesError, setStickerReferencesError] = React.useState<string | null>(null);
+    const [stickerRefUploading, setStickerRefUploading] = React.useState<string | null>(null);
+    const [stickerGlobalDrafts, setStickerGlobalDrafts] = React.useState<Record<string, { label: string; promptHint: string }>>({});
+    const [stickerGlobalSaving, setStickerGlobalSaving] = React.useState<string | null>(null);
+    const [stickerGlobalCreating, setStickerGlobalCreating] = React.useState(false);
+    const [newGlobalLabel, setNewGlobalLabel] = React.useState('');
+    const [newGlobalPromptHint, setNewGlobalPromptHint] = React.useState('');
+    const [stickerTeamKitDrafts, setStickerTeamKitDrafts] = React.useState<Record<string, { kitDescription: string; imageLabel: string }>>({});
+    const [stickerTeamSaving, setStickerTeamSaving] = React.useState<string | null>(null);
+    const [stickerTeamUploading, setStickerTeamUploading] = React.useState<string | null>(null);
     const [publicRegistrationConfig, setPublicRegistrationConfig] = React.useState<PublicRegistrationConfigForm>(DEFAULT_PUBLIC_REGISTRATION_CONFIG);
     const [publicRegistrationLoading, setPublicRegistrationLoading] = React.useState(false);
     const [publicRegistrationSaving, setPublicRegistrationSaving] = React.useState(false);
@@ -190,6 +238,37 @@ const AdminSettings: React.FC = () => {
             .catch(() => {})
             .finally(() => setStickerAiLoading(false));
     }, []);
+
+    const loadStickerReferences = React.useCallback(async () => {
+        setStickerReferencesLoading(true);
+        setStickerReferencesError(null);
+        try {
+            const data = await request<StickerReferencesAdminView>('/admin/settings/sticker-ai/references');
+            setStickerReferences(data);
+            const globalDrafts: Record<string, { label: string; promptHint: string }> = {};
+            for (const item of data.global) {
+                globalDrafts[item.id] = { label: item.label, promptHint: item.promptHint };
+            }
+            setStickerGlobalDrafts(globalDrafts);
+            const teamDrafts: Record<string, { kitDescription: string; imageLabel: string }> = {};
+            for (const team of data.teams) {
+                teamDrafts[team.countryCode] = {
+                    kitDescription: team.kitDescription,
+                    imageLabel: team.imageLabel,
+                };
+            }
+            setStickerTeamKitDrafts(teamDrafts);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'No se pudieron cargar las referencias';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerReferencesLoading(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        loadStickerReferences();
+    }, [loadStickerReferences]);
 
 
     const [aiSaveError, setAiSaveError] = React.useState<string | null>(null);
@@ -297,6 +376,168 @@ const AdminSettings: React.FC = () => {
             setTimeout(() => { setStickerAiStatus('idle'); setStickerAiSaveError(null); }, 5000);
         } finally {
             setStickerAiSaving(false);
+        }
+    };
+
+    const uploadGlobalReference = async (id: string, file: File) => {
+        setStickerRefUploading(id);
+        setStickerReferencesError(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            await request(`/admin/settings/sticker-ai/references/global/${encodeURIComponent(id)}/upload`, {
+                method: 'POST',
+                body: formData,
+            });
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al subir la imagen';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerRefUploading(null);
+        }
+    };
+
+    const deleteGlobalReferenceUpload = async (id: string) => {
+        setStickerRefUploading(id);
+        setStickerReferencesError(null);
+        try {
+            await request(`/admin/settings/sticker-ai/references/global/${encodeURIComponent(id)}/upload`, {
+                method: 'DELETE',
+            });
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al quitar imagen';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerRefUploading(null);
+        }
+    };
+
+    const saveGlobalReference = async (id: string) => {
+        const draft = stickerGlobalDrafts[id];
+        if (!draft?.label.trim()) {
+            setStickerReferencesError('La etiqueta global es obligatoria');
+            return;
+        }
+        setStickerGlobalSaving(id);
+        setStickerReferencesError(null);
+        try {
+            await request(`/admin/settings/sticker-ai/references/global/${encodeURIComponent(id)}`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    label: draft.label,
+                    promptHint: draft.promptHint,
+                }),
+            });
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al guardar referencia';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerGlobalSaving(null);
+        }
+    };
+
+    const createGlobalReference = async () => {
+        if (!newGlobalLabel.trim()) {
+            setStickerReferencesError('Indica una etiqueta para la nueva referencia');
+            return;
+        }
+        setStickerGlobalCreating(true);
+        setStickerReferencesError(null);
+        try {
+            await request('/admin/settings/sticker-ai/references/global', {
+                method: 'POST',
+                body: JSON.stringify({
+                    label: newGlobalLabel,
+                    promptHint: newGlobalPromptHint,
+                }),
+            });
+            setNewGlobalLabel('');
+            setNewGlobalPromptHint('');
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al crear referencia';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerGlobalCreating(false);
+        }
+    };
+
+    const deleteGlobalReference = async (id: string) => {
+        setStickerGlobalSaving(id);
+        setStickerReferencesError(null);
+        try {
+            await request(`/admin/settings/sticker-ai/references/global/${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+            });
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al eliminar referencia';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerGlobalSaving(null);
+        }
+    };
+
+    const uploadTeamUniformReference = async (countryCode: string, file: File) => {
+        setStickerTeamUploading(countryCode);
+        setStickerReferencesError(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            await request(
+                `/admin/settings/sticker-ai/references/upload/team-uniform/${encodeURIComponent(countryCode)}`,
+                { method: 'POST', body: formData },
+            );
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al subir uniforme';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerTeamUploading(null);
+        }
+    };
+
+    const saveTeamReference = async (countryCode: string) => {
+        setStickerTeamSaving(countryCode);
+        setStickerReferencesError(null);
+        try {
+            const draft = stickerTeamKitDrafts[countryCode] ?? { kitDescription: '', imageLabel: '' };
+            await request(
+                `/admin/settings/sticker-ai/references/teams/${encodeURIComponent(countryCode)}`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        kitDescription: draft.kitDescription,
+                        imageLabel: draft.imageLabel,
+                    }),
+                },
+            );
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al guardar descripción';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerTeamSaving(null);
+        }
+    };
+
+    const deleteTeamUniformReference = async (countryCode: string) => {
+        setStickerTeamUploading(countryCode);
+        setStickerReferencesError(null);
+        try {
+            await request(
+                `/admin/settings/sticker-ai/references/upload/team-uniform/${encodeURIComponent(countryCode)}`,
+                { method: 'DELETE' },
+            );
+            await loadStickerReferences();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al eliminar uniforme';
+            setStickerReferencesError(msg);
+        } finally {
+            setStickerTeamUploading(null);
         }
     };
 
@@ -931,8 +1172,8 @@ const AdminSettings: React.FC = () => {
                                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs leading-relaxed text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
                             />
                             <p className="mt-1 text-[9px] text-slate-400">
-                                Placeholders: {'{{PLAYER_NAME}}'}, {'{{PLAYER_NUMBER}}'}, {'{{BIRTH_DATE}}'}, {'{{HEIGHT}}'}, {'{{WEIGHT}}'}, {'{{COUNTRY_CODE}}'}, {'{{COUNTRY_NAME}}'}.
-                                Imágenes: A=foto jugador, B=series-master, C=logo FIFA, D=plantilla país (CIV.png, etc.).
+                                Placeholders: {'{{PLAYER_NAME}}'}, {'{{PLAYER_NUMBER}}'}, {'{{BIRTH_DATE}}'}, {'{{HEIGHT}}'}, {'{{WEIGHT}}'}, {'{{COUNTRY_CODE}}'}, {'{{COUNTRY_NAME}}'}, {'{{TEAM_KIT_DESCRIPTION}}'}, {'{{REFERENCE_IMAGES}}'}.
+                                Imágenes: A=foto jugador (automática), B=series master, C=logo FIFA, D=uniforme por país.
                             </p>
                         </div>
 
@@ -945,6 +1186,278 @@ const AdminSettings: React.FC = () => {
                             {stickerAiSaving ? 'Guardando...' : 'Guardar configuración Stickers'}
                         </button>
                     </form>
+                )}
+            </div>
+
+            {/* Sticker reference images */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100">
+                            <Upload size={18} className="text-violet-700" />
+                        </div>
+                        <div>
+                            <p className="font-black text-slate-900">Stickers — Imágenes de referencia</p>
+                            <p className="text-xs text-slate-400">
+                                Referencias fijas con etiqueta + hint para el prompt. Equipos: una imagen y descripción por selección.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => loadStickerReferences()}
+                        disabled={stickerReferencesLoading}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                        Actualizar
+                    </button>
+                </div>
+
+                {stickerReferencesError && (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+                        <AlertCircle size={14} />
+                        {stickerReferencesError}
+                    </div>
+                )}
+
+                {stickerReferencesLoading && !stickerReferences ? (
+                    <div className="h-40 animate-pulse rounded-xl bg-slate-100" />
+                ) : stickerReferences && (
+                    <div className="space-y-6">
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
+                            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-violet-700">
+                                Referencias fijas (todas las generaciones)
+                            </p>
+                            <div className="space-y-3">
+                                {stickerReferences.global.map((item) => (
+                                    <div key={item.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                                        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                                            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${referenceSourceClass(item.image.source)}`}>
+                                                {referenceSourceLabel(item.image.source)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => void deleteGlobalReference(item.id)}
+                                                disabled={stickerGlobalSaving === item.id}
+                                                className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:underline disabled:opacity-50"
+                                            >
+                                                <Trash2 size={12} />
+                                                Eliminar slot
+                                            </button>
+                                        </div>
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                            <div>
+                                                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                    Etiqueta (aparece en {'{{REFERENCE_IMAGES}}'})
+                                                </label>
+                                                <input
+                                                    value={stickerGlobalDrafts[item.id]?.label ?? item.label}
+                                                    onChange={(e) => setStickerGlobalDrafts((prev) => ({
+                                                        ...prev,
+                                                        [item.id]: {
+                                                            label: e.target.value,
+                                                            promptHint: prev[item.id]?.promptHint ?? item.promptHint,
+                                                        },
+                                                    }))}
+                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                    Instrucción para el prompt
+                                                </label>
+                                                <textarea
+                                                    rows={2}
+                                                    value={stickerGlobalDrafts[item.id]?.promptHint ?? item.promptHint}
+                                                    onChange={(e) => setStickerGlobalDrafts((prev) => ({
+                                                        ...prev,
+                                                        [item.id]: {
+                                                            label: prev[item.id]?.label ?? item.label,
+                                                            promptHint: e.target.value,
+                                                        },
+                                                    }))}
+                                                    placeholder="Cómo debe usar OpenAI esta imagen..."
+                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => saveGlobalReference(item.id)}
+                                                disabled={stickerGlobalSaving === item.id}
+                                                className="rounded-lg bg-violet-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white hover:bg-violet-500 disabled:opacity-50"
+                                            >
+                                                {stickerGlobalSaving === item.id ? '...' : 'Guardar'}
+                                            </button>
+                                            <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50">
+                                                <Upload size={12} />
+                                                {stickerRefUploading === item.id ? '...' : 'Subir imagen'}
+                                                <input
+                                                    type="file"
+                                                    accept="image/png,image/jpeg,image/webp"
+                                                    className="hidden"
+                                                    disabled={stickerRefUploading !== null}
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) void uploadGlobalReference(item.id, file);
+                                                        e.target.value = '';
+                                                    }}
+                                                />
+                                            </label>
+                                            {item.image.source === 'upload' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void deleteGlobalReferenceUpload(item.id)}
+                                                    disabled={stickerRefUploading === item.id}
+                                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-100 bg-rose-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                                >
+                                                    Quitar subida
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="mt-4 rounded-2xl border border-dashed border-violet-200 bg-white/70 p-4">
+                                <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Nueva referencia fija</p>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <input
+                                        value={newGlobalLabel}
+                                        onChange={(e) => setNewGlobalLabel(e.target.value)}
+                                        placeholder="Ej.: Image B — Series master"
+                                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                    />
+                                    <input
+                                        value={newGlobalPromptHint}
+                                        onChange={(e) => setNewGlobalPromptHint(e.target.value)}
+                                        placeholder="Instrucción para el prompt..."
+                                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => void createGlobalReference()}
+                                    disabled={stickerGlobalCreating}
+                                    className="mt-3 inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white hover:bg-slate-800 disabled:opacity-50"
+                                >
+                                    <Plus size={12} />
+                                    {stickerGlobalCreating ? 'Creando...' : 'Agregar referencia'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                Referencias por selección (una por equipo)
+                            </p>
+                            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                                <table className="min-w-full text-left text-xs">
+                                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                        <tr>
+                                            <th className="px-4 py-3">Equipo</th>
+                                            <th className="px-4 py-3">Código</th>
+                                            <th className="px-4 py-3">Imagen</th>
+                                            <th className="px-4 py-3 min-w-[160px]">Etiqueta prompt</th>
+                                            <th className="px-4 py-3 min-w-[220px]">Descripción kit</th>
+                                            <th className="px-4 py-3">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {stickerReferences.teams.map((team) => (
+                                            <tr key={team.countryCode} className="align-top">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        {team.flagUrl ? (
+                                                            <img src={team.flagUrl} alt="" className="h-5 w-5 rounded-full object-cover" />
+                                                        ) : null}
+                                                        <span className="font-bold text-slate-800">{team.teamName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 font-mono font-bold text-slate-700">{team.countryCode}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${referenceSourceClass(team.uniformImage.source)}`}>
+                                                        {referenceSourceLabel(team.uniformImage.source)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <input
+                                                        value={stickerTeamKitDrafts[team.countryCode]?.imageLabel ?? team.imageLabel}
+                                                        onChange={(e) => setStickerTeamKitDrafts((prev) => ({
+                                                            ...prev,
+                                                            [team.countryCode]: {
+                                                                imageLabel: e.target.value,
+                                                                kitDescription: prev[team.countryCode]?.kitDescription ?? team.kitDescription,
+                                                            },
+                                                        }))}
+                                                        placeholder="Uniforme selección CIV"
+                                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <textarea
+                                                        rows={2}
+                                                        value={stickerTeamKitDrafts[team.countryCode]?.kitDescription ?? team.kitDescription}
+                                                        onChange={(e) => setStickerTeamKitDrafts((prev) => ({
+                                                            ...prev,
+                                                            [team.countryCode]: {
+                                                                kitDescription: e.target.value,
+                                                                imageLabel: prev[team.countryCode]?.imageLabel ?? team.imageLabel,
+                                                            },
+                                                        }))}
+                                                        placeholder="Ej.: camiseta naranja local con detalles aqua/mint..."
+                                                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => saveTeamReference(team.countryCode)}
+                                                            disabled={stickerTeamSaving === team.countryCode}
+                                                            className="rounded-lg bg-violet-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white hover:bg-violet-500 disabled:opacity-50"
+                                                        >
+                                                            {stickerTeamSaving === team.countryCode ? '...' : 'Guardar'}
+                                                        </button>
+                                                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50">
+                                                            <Upload size={12} />
+                                                            {stickerTeamUploading === team.countryCode ? '...' : 'Subir D'}
+                                                            <input
+                                                                type="file"
+                                                                accept="image/png,image/jpeg,image/webp"
+                                                                className="hidden"
+                                                                disabled={stickerTeamUploading !== null}
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files?.[0];
+                                                                    if (file) void uploadTeamUniformReference(team.countryCode, file);
+                                                                    e.target.value = '';
+                                                                }}
+                                                            />
+                                                        </label>
+                                                        {team.uniformImage.source === 'upload' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => deleteTeamUniformReference(team.countryCode)}
+                                                                disabled={stickerTeamUploading === team.countryCode}
+                                                                className="inline-flex items-center gap-1 rounded-lg border border-rose-100 bg-rose-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                                Quitar
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="mt-2 text-[9px] text-slate-400">
+                                Image A (foto del jugador) es automática. Cada referencia fija genera una línea en {'{{REFERENCE_IMAGES}}'} con su etiqueta e instrucción. Por equipo configuras etiqueta, descripción del kit e imagen de uniforme.
+                            </p>
+                        </div>
+                    </div>
                 )}
             </div>
 

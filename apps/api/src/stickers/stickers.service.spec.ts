@@ -37,6 +37,24 @@ describe('StickersService cache', () => {
       isEnvApiKeyConfigured: jest.fn().mockReturnValue(false),
     };
 
+    const stickerReferenceStorage = {
+      resolveTeamUniformReference: jest.fn().mockReturnValue({ source: 'missing', absolutePath: '', uploadName: 'x.png' }),
+      resolveUploadReferencesDir: jest.fn().mockReturnValue(tmpUploads),
+      resolveBundledReferencesDir: jest.fn().mockReturnValue(tmpUploads),
+    };
+
+    const stickerGlobalReferences = {
+      resolveAttachedFiles: jest.fn().mockResolvedValue([]),
+    };
+
+    const stickerTeamReferences = {
+      buildPromptContext: jest.fn().mockResolvedValue({
+        globalReferences: [],
+        teamReference: { label: 'Uniforme selección', attached: false },
+        teamKitDescription: 'Test kit',
+      }),
+    };
+
     service = new StickersService(
       {
         get: (key: string) => {
@@ -46,6 +64,9 @@ describe('StickersService cache', () => {
       } as never,
       prisma as never,
       stickerAiConfig as never,
+      stickerReferenceStorage as never,
+      stickerTeamReferences as never,
+      stickerGlobalReferences as never,
     );
   });
 

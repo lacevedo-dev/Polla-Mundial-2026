@@ -1,9 +1,7 @@
 import React from 'react';
 import type { GoalScorerStickerProps } from './GoalScorerStickerCard';
 import {
-    buildPremiumCatalogNumber,
-    buildPremiumFooterCode,
-    formatJerseyNumberPadded,
+    formatJerseyBadge,
     formatPremiumDisplayName,
     resolvePremiumStats,
     resolveStickerCountryCode,
@@ -11,6 +9,7 @@ import {
     resolveWorldCupBackgroundDigits,
     type PremiumStatItem,
 } from './goal-sticker-view.util';
+import { FIFA_2026_STICKER_BADGE_SVG, STICKER_BRAND_RING, STICKER_WEBSITE_URL } from '../../utils/fifa-2026-sticker-badge';
 
 const CARD_W = 340;
 const CARD_H = 453;
@@ -42,26 +41,25 @@ function StatIcon({ type }: { type: PremiumStatItem['type'] }) {
     );
 }
 
-function TrophyBadge({ primary }: { primary: string }) {
+function Fifa2026LogoBadge() {
     return (
         <div className="flex h-[78px] w-[62px] flex-col items-center justify-center rounded-2xl bg-white/95 px-1 shadow-xl">
-            <svg viewBox="0 0 48 48" className="h-11 w-11" aria-hidden>
-                <defs>
-                    <linearGradient id="trophyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor={primary} />
-                        <stop offset="100%" stopColor="#0ea5e9" />
-                    </linearGradient>
-                </defs>
-                <path
-                    d="M14 8h20v6c0 5.5-4.5 10-10 10S14 19.5 14 14V8z"
-                    fill="url(#trophyGrad)"
-                />
-                <path d="M10 10h4v4c0 1.1-.9 2-2 2h-2V10zM38 10h-4v4c0 1.1.9 2 2 2h2V10z" fill="url(#trophyGrad)" />
-                <path d="M18 28h12v3H18z" fill="#12345a" />
-                <path d="M16 31h16v4a2 2 0 01-2 2H18a2 2 0 01-2-2v-4z" fill="#12345a" />
-                <ellipse cx="24" cy="14" rx="6" ry="2" fill="white" opacity="0.35" />
-            </svg>
-            <span className="mt-0.5 text-[9px] font-black tracking-wide text-[#12345a]">FOOTBALL</span>
+            <div
+                className="h-[68px] w-[52px]"
+                dangerouslySetInnerHTML={{ __html: FIFA_2026_STICKER_BADGE_SVG }}
+            />
+        </div>
+    );
+}
+
+function PollaBrandBadge() {
+    return (
+        <div className="relative flex h-[58px] w-[58px] flex-col items-center justify-center rounded-full border-[3px] border-[#c41e1e] bg-gradient-to-br from-[#f5c518] via-[#fbbf24] to-[#f59e0b] shadow-[0_4px_14px_rgba(0,0,0,.35)]">
+            <span className="absolute inset-[5px] rounded-full border border-[#c41e1e]/40" />
+            <span className="text-[13px] font-black leading-none tracking-tight text-[#991b1b]">PM</span>
+            <span className="mt-0.5 max-w-[48px] text-center text-[5px] font-black uppercase leading-[1.05] tracking-wide text-[#991b1b]">
+                {STICKER_BRAND_RING}
+            </span>
         </div>
     );
 }
@@ -78,9 +76,7 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
     const [bgDigitLeft, bgDigitRight] = resolveWorldCupBackgroundDigits();
     const stats = resolvePremiumStats(event);
     const displayName = formatPremiumDisplayName(event.playerName);
-    const jerseyPadded = formatJerseyNumberPadded(profile?.jerseyNumber);
-    const footerCode = buildPremiumFooterCode(countryCode, profile?.jerseyNumber);
-    const catalogNumber = buildPremiumCatalogNumber(profile?.jerseyNumber, event.minute);
+    const jerseyNumber = formatJerseyBadge(profile?.jerseyNumber);
 
     return (
         <div
@@ -129,7 +125,7 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                 />
 
                 <div className="absolute right-5 top-5 z-40">
-                    <TrophyBadge primary={theme.primary} />
+                    <Fifa2026LogoBadge />
                 </div>
 
                 <div className="absolute left-1/2 top-[38px] z-30 h-[310px] w-[250px] -translate-x-1/2">
@@ -153,20 +149,7 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                     <div className="absolute right-3 top-12 z-30 h-[210px] w-5 rounded-full bg-cyan-300/50 blur-md" />
                 </div>
 
-                {/* Dorsal destacado — identificador del jugador aparte del 26 de fondo */}
-                <div
-                    className="absolute left-[52px] top-[168px] z-[45] flex h-[78px] w-[78px] items-center justify-center rounded-full border-[5px] border-white bg-white/95 shadow-[0_8px_24px_rgba(0,0,0,.35)]"
-                    aria-label={`Dorsal ${jerseyPadded}`}
-                >
-                    <span
-                        className="text-[34px] font-black leading-none tracking-tight"
-                        style={{ color: theme.accent }}
-                    >
-                        {jerseyPadded}
-                    </span>
-                </div>
-
-                <div className="absolute right-[10px] bottom-[34px] z-50 flex flex-col items-center gap-2">
+                <div className="absolute right-[10px] bottom-[52px] z-50 flex flex-col items-center gap-2">
                     <div className="h-[54px] w-[54px] rounded-full bg-white p-[5px] shadow-xl">
                         {flagUrl ? (
                             <img src={flagUrl} alt="" className="h-full w-full rounded-full object-cover" />
@@ -190,9 +173,9 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                     </div>
                 </div>
 
-                <div className="absolute bottom-[62px] left-5 right-[78px] z-50">
+                <div className="absolute bottom-[36px] left-5 right-[78px] z-50">
                     <div
-                        className="rounded-[22px] border-[3px] border-white px-4 py-3 shadow-xl"
+                        className="relative rounded-[22px] border-[3px] border-white px-4 pb-5 pt-3 shadow-xl"
                         style={{ background: theme.pillFrom }}
                     >
                         <div className="text-[17px] font-black uppercase leading-tight tracking-tight text-white sm:text-[19px]">
@@ -208,33 +191,22 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                                 ))}
                             </div>
                         )}
+                        <div
+                            className="absolute -bottom-[18px] left-1/2 z-[55] flex h-[36px] min-w-[52px] -translate-x-1/2 items-center justify-center rounded-b-xl rounded-t-md border-[3px] border-white px-3 text-[18px] font-black text-white shadow-lg"
+                            style={{ background: theme.primary }}
+                            aria-label={`Dorsal ${jerseyNumber}`}
+                        >
+                            {jerseyNumber}
+                        </div>
                     </div>
                 </div>
 
-                <div className="absolute bottom-3 left-5 right-5 z-50 flex items-center gap-2">
-                    <div
-                        className="flex h-[36px] flex-1 items-center justify-center rounded-xl border-[3px] border-white text-[15px] font-black tracking-wide text-white"
-                        style={{ background: theme.pillFrom }}
-                    >
-                        {footerCode}
-                    </div>
-                    <div
-                        className="flex h-[48px] w-[48px] items-center justify-center rounded-b-2xl rounded-t-md border-[3px] border-white text-lg font-black text-white"
-                        style={{ background: theme.primary }}
-                    >
-                        {catalogNumber}
-                    </div>
-                    <div
-                        className="relative h-[36px] flex-1 overflow-hidden rounded-xl border-[3px] border-white"
-                        style={{ background: theme.pillTo }}
-                    >
-                        <div
-                            className="absolute inset-0 opacity-50"
-                            style={{
-                                background: `linear-gradient(135deg, color-mix(in srgb, ${theme.secondary} 60%, transparent), color-mix(in srgb, ${theme.accent} 50%, transparent))`,
-                            }}
-                        />
-                    </div>
+                <div className="absolute bottom-0 left-0 right-0 z-50 flex h-[32px] items-center justify-center border-t-[3px] border-white bg-[#f5c518]">
+                    <span className="text-[11px] font-black tracking-wide text-[#1a1a1a]">{STICKER_WEBSITE_URL}</span>
+                </div>
+
+                <div className="absolute bottom-[10px] right-3 z-[60]">
+                    <PollaBrandBadge />
                 </div>
 
                 <div className="pointer-events-none absolute inset-[10px] rounded-[22px] border border-white/60" />

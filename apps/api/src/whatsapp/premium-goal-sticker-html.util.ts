@@ -1,5 +1,16 @@
 import type { GoalStickerParams } from './whatsapp-image.service';
 
+const STICKER_WEBSITE_URL = 'www.tupollamundial.com';
+const STICKER_BRAND_RING = 'POLLA MUNDIALISTA 2026';
+
+const FIFA_2026_STICKER_BADGE_SVG = `<svg viewBox="0 0 48 64" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <text x="2" y="36" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#12345a">2</text>
+  <text x="22" y="36" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#12345a">6</text>
+  <path d="M28 14c3 0 5.5 2.2 5.5 5.5 0 2.8-1.6 4.8-3.8 6.2l-1.7 1.1v3.2h-3V26.8l-1.7-1.1C21.1 24.3 19.5 22.3 19.5 19.5 19.5 16.2 22 14 25 14h3z" fill="#12345a"/>
+  <path d="M24 28h4v2.5c0 1.2-.8 2-2 2h0c-1.2 0-2-.8-2-2V28z" fill="#12345a"/>
+  <text x="24" y="58" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="9" font-weight="900" fill="#12345a" letter-spacing="0.08em">FIFA</text>
+</svg>`;
+
 function esc(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -48,51 +59,24 @@ function resolveCountryLabel(params: GoalStickerParams): string {
   return words.map((w) => w[0]).join('').slice(0, 3).toUpperCase();
 }
 
-function formatJerseyPadded(jersey: number | string | null | undefined, digits = 3): string {
-  const n = jersey != null && jersey !== '' ? Number(jersey) : 10;
-  return String(Number.isFinite(n) ? n : 10).padStart(digits, '0').slice(-digits);
-}
-
-function buildFooterCode(country: string, jersey: number | string | null | undefined): string {
-  return `${country} ${formatJerseyPadded(jersey)}`.trim().toUpperCase();
-}
-
-function buildCatalogNumber(jersey: number | string | null | undefined, minute: number | null | undefined): string {
-  const j = String(jersey != null && jersey !== '' ? jersey : 10).padStart(2, '0');
-  const min = String(minute ?? 0).padStart(1, '0');
-  return `${j}${min}`.slice(0, 3);
+function formatJerseyDisplay(jersey: number | string | null | undefined): string {
+  if (jersey == null || jersey === '') return '10';
+  return String(jersey);
 }
 
 function formatDisplayName(name: string): string {
   return name.trim().toUpperCase();
 }
 
-const TROPHY_SVG = `<svg class="trophy-svg" viewBox="0 0 48 48" aria-hidden="true">
-  <defs>
-    <linearGradient id="trophyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="var(--primary)"/>
-      <stop offset="100%" stop-color="#0ea5e9"/>
-    </linearGradient>
-  </defs>
-  <path d="M14 8h20v6c0 5.5-4.5 10-10 10S14 19.5 14 14V8z" fill="url(#trophyGrad)"/>
-  <path d="M10 10h4v4c0 1.1-.9 2-2 2h-2V10zM38 10h-4v4c0 1.1.9 2 2 2h2V10z" fill="url(#trophyGrad)"/>
-  <path d="M18 28h12v3H18z" fill="#12345a"/>
-  <path d="M16 31h16v4a2 2 0 01-2 2H18a2 2 0 01-2-2v-4z" fill="#12345a"/>
-  <ellipse cx="24" cy="14" rx="6" ry="2" fill="white" opacity="0.35"/>
-</svg>`;
-
 export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   const primary = params.themePrimary ?? '#16b8b3';
   const secondary = params.themeSecondary ?? '#f58220';
   const accent = params.themeAccent ?? '#078c43';
   const pillFrom = params.themePillFrom ?? '#df3328';
-  const pillTo = params.themePillTo ?? '#ef4a27';
   const country = resolveCountryLabel(params);
   const stats = resolveStats(params);
   const displayName = formatDisplayName(params.playerName);
-  const footerCode = buildFooterCode(country, params.jerseyNumber);
-  const jerseyPadded = formatJerseyPadded(params.jerseyNumber);
-  const catalogNumber = buildCatalogNumber(params.jerseyNumber, params.minute ?? null);
+  const jerseyNumber = formatJerseyDisplay(params.jerseyNumber);
   const statsHtml = stats
     .map((stat) => `<span class="stat-item">${statIcon(stat.type)}<span>${esc(stat.value)}</span></span>`)
     .join('');
@@ -153,11 +137,10 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
     position: absolute; right: 20px; top: 20px; z-index: 40;
     width: 62px; height: 78px; border-radius: 16px; background: rgba(255,255,255,.95);
     box-shadow: 0 8px 24px rgba(0,0,0,.2);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     padding: 4px 2px;
   }
-  .trophy-svg { width: 44px; height: 44px; }
-  .wc-badge span { margin-top: 2px; font-size: 9px; font-weight: 900; color: #12345a; letter-spacing: .04em; }
+  .wc-badge svg { width: 52px; height: 68px; }
   .player-wrap {
     position: absolute; left: 50%; top: 38px; z-index: 30;
     width: 250px; height: 310px; transform: translateX(-50%);
@@ -174,21 +157,13 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
     mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
   }
-  .jersey-badge {
-    position: absolute; left: 52px; top: 168px; z-index: 45;
-    width: 78px; height: 78px; border-radius: 999px;
-    border: 5px solid #fff; background: rgba(255,255,255,.95);
-    box-shadow: 0 8px 24px rgba(0,0,0,.35);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 34px; font-weight: 900; line-height: 1; color: ${esc(accent)};
-  }
   .photo-placeholder {
     width: 96px; height: 96px; margin: 64px auto 0; border-radius: 999px;
     border: 4px solid rgba(255,255,255,.6); background: rgba(255,255,255,.2);
     object-fit: unset; inset: unset; position: relative;
   }
   .country-col {
-    position: absolute; right: 10px; bottom: 34px; z-index: 50;
+    position: absolute; right: 10px; bottom: 52px; z-index: 50;
     display: flex; flex-direction: column; align-items: center; gap: 8px;
   }
   .flag-wrap {
@@ -208,8 +183,8 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
     text-shadow: 2px 2px 0 #008fbd;
   }
   .name-box {
-    position: absolute; left: 20px; right: 78px; bottom: 62px; z-index: 50;
-    border-radius: 22px; border: 3px solid #fff; padding: 12px 16px;
+    position: absolute; left: 20px; right: 78px; bottom: 36px; z-index: 50;
+    border-radius: 22px; border: 3px solid #fff; padding: 12px 16px 20px;
     background: ${esc(pillFrom)}; box-shadow: 0 8px 24px rgba(0,0,0,.25);
   }
   .name-line {
@@ -223,29 +198,38 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   }
   .stat-item { display: flex; align-items: center; gap: 6px; }
   .stat-icon { width: 14px; height: 14px; opacity: .9; flex-shrink: 0; }
-  .footer {
-    position: absolute; left: 20px; right: 20px; bottom: 12px; z-index: 50;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .footer-code, .footer-catalog, .footer-accent {
-    border: 3px solid #fff; color: #fff; font-weight: 900;
+  .number-shield {
+    position: absolute; left: 50%; bottom: -18px; z-index: 55;
+    transform: translateX(-50%);
+    min-width: 52px; height: 36px; padding: 0 12px;
+    border: 3px solid #fff; border-radius: 6px 6px 16px 16px;
+    background: ${esc(primary)}; color: #fff;
     display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 900; line-height: 1;
+    box-shadow: 0 8px 18px rgba(0,0,0,.25);
   }
-  .footer-code {
-    flex: 1; height: 36px; border-radius: 12px; font-size: 15px;
-    letter-spacing: .04em; background: ${esc(pillFrom)};
+  .website-strip {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 50;
+    height: 32px; border-top: 3px solid #fff; background: #f5c518;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 900; letter-spacing: .04em; color: #1a1a1a;
   }
-  .footer-catalog {
-    width: 48px; height: 48px; border-radius: 0 0 16px 16px; border-top-left-radius: 6px;
-    border-top-right-radius: 6px; font-size: 18px; background: ${esc(primary)};
+  .polla-badge {
+    position: absolute; right: 12px; bottom: 10px; z-index: 60;
+    width: 58px; height: 58px; border-radius: 999px;
+    border: 3px solid #c41e1e;
+    background: linear-gradient(135deg, #f5c518, #fbbf24, #f59e0b);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
   }
-  .footer-accent {
-    flex: 1; height: 36px; border-radius: 12px; position: relative; overflow: hidden;
-    background: ${esc(pillTo)};
+  .polla-badge .pm {
+    font-size: 13px; font-weight: 900; line-height: 1; color: #991b1b;
   }
-  .footer-accent::after {
-    content: ''; position: absolute; inset: 0; opacity: .5;
-    background: linear-gradient(135deg, color-mix(in srgb, ${esc(secondary)} 60%, transparent), color-mix(in srgb, ${esc(accent)} 50%, transparent));
+  .polla-badge .ring {
+    margin-top: 2px; max-width: 48px;
+    font-size: 5px; font-weight: 900; line-height: 1.05;
+    letter-spacing: .04em; text-transform: uppercase; color: #991b1b;
   }
   .inner-border {
     pointer-events: none; position: absolute; inset: 10px;
@@ -259,12 +243,11 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   <div class="digit-right" aria-hidden="true">6</div>
   <div class="brush-orange"></div>
   <div class="brush-green"></div>
-  <div class="wc-badge">${TROPHY_SVG}<span>FOOTBALL</span></div>
+  <div class="wc-badge">${FIFA_2026_STICKER_BADGE_SVG}</div>
   <div class="player-wrap">
     <div class="player-glow"></div>
     ${photoHtml}
   </div>
-  <div class="jersey-badge" aria-hidden="true">${esc(jerseyPadded)}</div>
   <div class="country-col">
     <div class="flag-wrap">${flagHtml}</div>
     <div class="country-stack">${countryLetters}</div>
@@ -272,11 +255,12 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   <div class="name-box">
     <div class="name-line">${esc(displayName)}</div>
     ${stats.length > 0 ? `<div class="stats-line">${statsHtml}</div>` : ''}
+    <div class="number-shield">${esc(jerseyNumber)}</div>
   </div>
-  <div class="footer">
-    <div class="footer-code">${esc(footerCode)}</div>
-    <div class="footer-catalog">${esc(catalogNumber)}</div>
-    <div class="footer-accent"></div>
+  <div class="website-strip">${esc(STICKER_WEBSITE_URL)}</div>
+  <div class="polla-badge">
+    <span class="pm">PM</span>
+    <span class="ring">${esc(STICKER_BRAND_RING)}</span>
   </div>
   <div class="inner-border"></div>
 </div>
