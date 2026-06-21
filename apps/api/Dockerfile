@@ -105,5 +105,5 @@ RUN mkdir -p /data/wwebjs_auth /data/uploads/avatars /data/uploads/branding
 # Asegúrate de pasar el env var correspondiente al levantar el contenedor
 EXPOSE 3000
 
-# Migraciones + arranque (prisma migrate deploy en cada deploy)
+# Migraciones automáticas en cada arranque (docker-entrypoint.sh → prisma migrate deploy con reintentos)
 ENTRYPOINT ["./docker-entrypoint.sh"]
