@@ -43,7 +43,7 @@ export function buildGenerateStickerDto(input: BuildStickerDtoInput): GenerateSt
     nationality: profile.nationality,
   });
 
-  const jersey = profile.jerseyNumber ?? 10;
+  const jersey = profile.jerseyNumber;
   const minute = input.minute ?? null;
 
   return {
@@ -55,8 +55,8 @@ export function buildGenerateStickerDto(input: BuildStickerDtoInput): GenerateSt
     weight: profile.weight ?? '—',
     countryCode,
     countryName: teamName,
-    cardCode: buildPremiumFooterCode(countryCode, jersey),
-    stickerNumber: buildPremiumCatalogNumber(jersey, minute),
-    mainNumber: profile.jerseyNumber != null ? String(profile.jerseyNumber) : undefined,
+    cardCode: jersey != null ? buildPremiumFooterCode(countryCode, jersey) : countryCode,
+    stickerNumber: jersey != null ? buildPremiumCatalogNumber(jersey, minute) : '',
+    mainNumber: jersey != null ? String(jersey) : undefined,
   };
 }

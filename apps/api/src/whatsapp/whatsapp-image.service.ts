@@ -116,7 +116,7 @@ function resolveCountryVerticalLabel(params: GoalStickerParams): string {
 
 function resolveJerseyGraphic(params: GoalStickerParams): string {
   const n = params.jerseyNumber;
-  if (n == null || n === '') return '10';
+  if (n == null || n === '') return '';
   return String(n).slice(0, 2);
 }
 

@@ -59,8 +59,8 @@ function resolveCountryLabel(params: GoalStickerParams): string {
   return words.map((w) => w[0]).join('').slice(0, 3).toUpperCase();
 }
 
-function formatJerseyDisplay(jersey: number | string | null | undefined): string {
-  if (jersey == null || jersey === '') return '10';
+function formatJerseyDisplay(jersey: number | string | null | undefined): string | null {
+  if (jersey == null || jersey === '') return null;
   return String(jersey);
 }
 
@@ -255,7 +255,7 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   <div class="name-box">
     <div class="name-line">${esc(displayName)}</div>
     ${stats.length > 0 ? `<div class="stats-line">${statsHtml}</div>` : ''}
-    <div class="number-shield">${esc(jerseyNumber)}</div>
+    ${jerseyNumber != null ? `<div class="number-shield">${esc(jerseyNumber)}</div>` : ''}
   </div>
   <div class="website-strip">${esc(STICKER_WEBSITE_URL)}</div>
   <div class="polla-badge">

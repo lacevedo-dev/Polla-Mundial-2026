@@ -113,6 +113,6 @@ export function formatPremiumDisplayName(name: string): string {
 }
 
 export function formatJerseyBadge(jerseyNumber?: number | null): string {
-    if (jerseyNumber == null) return '—';
+    if (jerseyNumber == null) return '';
     return String(jerseyNumber);
 }

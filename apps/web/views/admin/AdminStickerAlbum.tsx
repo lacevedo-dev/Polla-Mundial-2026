@@ -185,8 +185,8 @@ function buildOpenAiStickerPayload(
 ) {
   const countryCode =
     team.code && team.code !== '—' ? team.code.toUpperCase().slice(0, 3) : 'GOL';
-  const jersey = player.jerseyNumber ?? 10;
-  const jerseyPadded = String(jersey).padStart(3, '0');
+  const jersey = player.jerseyNumber;
+  const jerseyPadded = jersey != null ? String(jersey).padStart(3, '0') : '';
   const minutePadded = String(ctx.minute ?? 0).padStart(1, '0');
 
   return {
@@ -198,9 +198,9 @@ function buildOpenAiStickerPayload(
     weight: player.weight?.trim() || '—',
     countryCode,
     countryName: team.name,
-    cardCode: `${countryCode} ${jerseyPadded}`.trim(),
-    stickerNumber: `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3),
-    mainNumber: player.jerseyNumber != null ? String(player.jerseyNumber) : undefined,
+    cardCode: jerseyPadded ? `${countryCode} ${jerseyPadded}`.trim() : countryCode,
+    stickerNumber: jersey != null ? `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3) : '',
+    mainNumber: jersey != null ? String(jersey) : undefined,
     quality: 'high' as const,
   };
 }

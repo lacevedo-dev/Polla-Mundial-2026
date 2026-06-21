@@ -76,7 +76,8 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
     const [bgDigitLeft, bgDigitRight] = resolveWorldCupBackgroundDigits();
     const stats = resolvePremiumStats(event);
     const displayName = formatPremiumDisplayName(event.playerName);
-    const jerseyNumber = formatJerseyBadge(profile?.jerseyNumber);
+    const hasJerseyNumber = profile?.jerseyNumber != null;
+    const jerseyNumber = hasJerseyNumber ? formatJerseyBadge(profile!.jerseyNumber) : '';
 
     return (
         <div
@@ -191,13 +192,15 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                                 ))}
                             </div>
                         )}
-                        <div
-                            className="absolute -bottom-[18px] left-1/2 z-[55] flex h-[36px] min-w-[52px] -translate-x-1/2 items-center justify-center rounded-b-xl rounded-t-md border-[3px] border-white px-3 text-[18px] font-black text-white shadow-lg"
-                            style={{ background: theme.primary }}
-                            aria-label={`Dorsal ${jerseyNumber}`}
-                        >
-                            {jerseyNumber}
-                        </div>
+                        {hasJerseyNumber && (
+                            <div
+                                className="absolute -bottom-[18px] left-1/2 z-[55] flex h-[36px] min-w-[52px] -translate-x-1/2 items-center justify-center rounded-b-xl rounded-t-md border-[3px] border-white px-3 text-[18px] font-black text-white shadow-lg"
+                                style={{ background: theme.primary }}
+                                aria-label={`Dorsal ${jerseyNumber}`}
+                            >
+                                {jerseyNumber}
+                            </div>
+                        )}
                     </div>
                 </div>
 

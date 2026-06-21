@@ -81,8 +81,8 @@ describe('stickers-prompt.util', () => {
     expect(prompt).toContain('Image A');
   });
 
-  it('usa 10 solo si no hay mainNumber', () => {
-    expect(resolvePlayerNumber({ ...dto, mainNumber: undefined })).toBe('10');
+  it('usa cadena vacía si no hay mainNumber', () => {
+    expect(resolvePlayerNumber({ ...dto, mainNumber: undefined })).toBe('');
     expect(resolvePlayerNumber({ ...dto, mainNumber: '25' })).toBe('25');
   });
 });

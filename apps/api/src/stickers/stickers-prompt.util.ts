@@ -143,7 +143,7 @@ function normalizeHeight(height: string): string {
 
 export function resolvePlayerNumber(dto: GenerateStickerDto): string {
   if (dto.mainNumber?.trim()) return dto.mainNumber.trim();
-  return '10';
+  return '';
 }
 
 export function buildReferenceImagesBlock(
