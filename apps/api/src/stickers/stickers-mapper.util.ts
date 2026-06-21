@@ -13,8 +13,8 @@ export type BuildStickerDtoInput = {
 };
 
 function buildPremiumFooterCode(countryCode: string, jerseyNumber: number): string {
-  const jersey = String(jerseyNumber).padStart(2, '0');
-  return `${countryCode}${jersey}`.slice(0, 5).toUpperCase();
+  const jersey = String(jerseyNumber).padStart(3, '0').slice(-3);
+  return `${countryCode} ${jersey}`.trim().toUpperCase();
 }
 
 function buildPremiumCatalogNumber(jerseyNumber: number, minute: number | null): string {

@@ -4,9 +4,9 @@ import type { GoalStickerVariant } from '../../utils/goalStickerConfig';
 import { PremiumPaniniStickerCard } from './PremiumPaniniStickerCard';
 import {
     formatClassicStatsLine,
-    resolveJerseyDigits,
     resolveStickerCountryCode,
     resolveStickerTheme,
+    resolveWorldCupBackgroundDigits,
 } from './goal-sticker-view.util';
 
 export interface GoalScorerStickerProps {
@@ -38,7 +38,7 @@ const ClassicGoalScorerStickerCard: React.FC<GoalScorerStickerProps> = (props) =
                 ? 'Penalti'
                 : 'Gol';
     const countryCode = resolveStickerCountryCode(event, teamName);
-    const [digit1, digit2] = resolveJerseyDigits(profile?.jerseyNumber ?? null);
+    const [digit1, digit2] = resolveWorldCupBackgroundDigits();
     const statsLine = formatClassicStatsLine(event, props, minuteLabel, detailLabel);
 
     return (

@@ -11,6 +11,7 @@ import * as path from 'path';
 import OpenAI, { toFile } from 'openai';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateStickerDto } from './dto/generate-sticker.dto';
+import { StickerAiConfigService } from './sticker-ai-config.service';
 import { buildPremiumStickerPrompt } from './stickers-prompt.util';
 import {
   buildPremiumStickerFileName,
@@ -39,10 +40,16 @@ export class StickersService {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly stickerAiConfig: StickerAiConfigService,
   ) {}
 
   isOpenAiConfigured(): boolean {
-    return Boolean(this.config.get<string>('OPENAI_API_KEY')?.trim());
+    return this.stickerAiConfig.isEnvApiKeyConfigured();
+  }
+
+  async isStickerAiReady(): Promise<boolean> {
+    const runtime = await this.stickerAiConfig.getRuntimeConfig();
+    return Boolean(runtime.apiKey);
   }
 
   async getOrGenerateSticker(dto: GenerateStickerDto): Promise<GenerateStickerResult> {
@@ -56,9 +63,10 @@ export class StickersService {
       }
     }
 
-    const client = this.getOpenAIClient();
-    const prompt = buildPremiumStickerPrompt(dto);
-    const quality = dto.quality ?? this.resolveDefaultQuality();
+    const client = await this.getOpenAIClient();
+    const runtime = await this.stickerAiConfig.getRuntimeConfig();
+    const prompt = buildPremiumStickerPrompt(dto, runtime.promptTemplate);
+    const quality = dto.quality ?? runtime.quality;
     const fileName = buildPremiumStickerFileName(playerApiFootballId);
     const imageUrl = buildPremiumStickerPublicUrl(playerApiFootballId);
 
@@ -66,7 +74,7 @@ export class StickersService {
       const imageFile = await this.urlToOpenAIFile(dto.photoUrl);
 
       const response = await client.images.edit({
-        model: this.config.get<string>('OPENAI_STICKER_MODEL')?.trim() || 'gpt-image-2',
+        model: runtime.model,
         image: [imageFile],
         prompt,
         size: '1024x1536',
@@ -207,27 +215,23 @@ export class StickersService {
     return result;
   }
 
-  private getOpenAIClient(): OpenAI {
-    const apiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
+  private openaiKey: string | null = null;
+
+  private async getOpenAIClient(): Promise<OpenAI> {
+    const runtime = await this.stickerAiConfig.getRuntimeConfig();
+    const apiKey = runtime.apiKey;
     if (!apiKey) {
       throw new ServiceUnavailableException(
-        'OPENAI_API_KEY no está configurada en el servidor',
+        'OpenAI no está configurado. Agrega API keys en Admin → Sistema → Stickers OpenAI o define OPENAI_API_KEY.',
       );
     }
 
-    if (!this.openai) {
+    if (!this.openai || this.openaiKey !== apiKey) {
       this.openai = new OpenAI({ apiKey });
+      this.openaiKey = apiKey;
     }
 
     return this.openai;
-  }
-
-  private resolveDefaultQuality(): 'low' | 'medium' | 'high' | 'auto' {
-    const raw = this.config.get<string>('OPENAI_STICKER_QUALITY')?.trim().toLowerCase();
-    if (raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'auto') {
-      return raw;
-    }
-    return 'high';
   }
 
   private resolveStickersOutputDir(): string {

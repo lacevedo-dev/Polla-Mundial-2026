@@ -27,6 +27,16 @@ describe('StickersService cache', () => {
       },
     };
 
+    const stickerAiConfig = {
+      getRuntimeConfig: jest.fn().mockResolvedValue({
+        apiKey: null,
+        model: 'gpt-image-2',
+        quality: 'high',
+        promptTemplate: 'test prompt',
+      }),
+      isEnvApiKeyConfigured: jest.fn().mockReturnValue(false),
+    };
+
     service = new StickersService(
       {
         get: (key: string) => {
@@ -35,6 +45,7 @@ describe('StickersService cache', () => {
         },
       } as never,
       prisma as never,
+      stickerAiConfig as never,
     );
   });
 

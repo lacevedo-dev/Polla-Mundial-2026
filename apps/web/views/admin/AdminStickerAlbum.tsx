@@ -141,6 +141,24 @@ async function fetchWaStickerBlob(
 
 type PreviewMode = 'dashboard' | 'whatsapp' | 'openai';
 
+const PREVIEW_MODE_META: Record<
+  PreviewMode,
+  { label: string; description: string }
+> = {
+  dashboard: {
+    label: 'Diseño actual',
+    description: 'Componente React premium usado en el dashboard en vivo cuando la variante es «álbum».',
+  },
+  whatsapp: {
+    label: 'WA PNG',
+    description: 'PNG generado con Puppeteer — es lo que se envía por WhatsApp si OpenAI no está disponible.',
+  },
+  openai: {
+    label: 'OpenAI',
+    description: 'Imagen IA (gpt-image). Requiere API key en Sistema → Stickers OpenAI o OPENAI_API_KEY.',
+  },
+};
+
 function formatStickerBirthDate(raw: string | null): string {
   if (!raw?.trim()) return '—';
   const parsed = new Date(raw);
@@ -159,7 +177,7 @@ function buildOpenAiStickerPayload(
   const countryCode =
     team.code && team.code !== '—' ? team.code.toUpperCase().slice(0, 3) : 'GOL';
   const jersey = player.jerseyNumber ?? 10;
-  const jerseyPadded = String(jersey).padStart(2, '0');
+  const jerseyPadded = String(jersey).padStart(3, '0');
   const minutePadded = String(ctx.minute ?? 0).padStart(1, '0');
 
   return {
@@ -171,8 +189,8 @@ function buildOpenAiStickerPayload(
     weight: player.weight?.trim() || '—',
     countryCode,
     countryName: team.name,
-    cardCode: `${countryCode}${jerseyPadded}`.slice(0, 5),
-    stickerNumber: `${jerseyPadded}${minutePadded}`.slice(0, 3),
+    cardCode: `${countryCode} ${jerseyPadded}`.trim(),
+    stickerNumber: `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3),
     mainNumber: String(jersey),
     quality: 'high' as const,
   };
@@ -380,7 +398,7 @@ const StickerAlbumCard: React.FC<{
   const stickerProps = buildStickerProps(player, team, ctx);
 
   return (
-    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+    <article className="flex min-h-[520px] flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-bold text-slate-900">{player.name}</p>
@@ -395,7 +413,7 @@ const StickerAlbumCard: React.FC<{
         )}
       </div>
 
-      <div className="mb-3 min-h-[220px] flex items-center justify-center">
+      <div className="flex flex-1 items-center justify-center py-2">
         {mode === 'dashboard' ? (
           <GoalScorerStickerCard {...stickerProps} variant={variant} />
         ) : mode === 'whatsapp' ? (
@@ -410,34 +428,24 @@ const StickerAlbumCard: React.FC<{
         )}
       </div>
 
-      <div className="mt-auto flex gap-1 rounded-xl bg-slate-100 p-1">
-        <button
-          type="button"
-          onClick={() => setMode('dashboard')}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors ${
-            mode === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Diseño actual
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('whatsapp')}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors ${
-            mode === 'whatsapp' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          WA PNG
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('openai')}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors ${
-            mode === 'openai' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          OpenAI
-        </button>
+      <div className="mt-auto space-y-2 border-t border-slate-100 pt-3">
+        <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+          {(Object.keys(PREVIEW_MODE_META) as PreviewMode[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setMode(key)}
+              className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors ${
+                mode === key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {PREVIEW_MODE_META[key].label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] leading-relaxed text-slate-500">
+          {PREVIEW_MODE_META[mode].description}
+        </p>
       </div>
     </article>
   );

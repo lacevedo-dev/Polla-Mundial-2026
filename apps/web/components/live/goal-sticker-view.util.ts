@@ -39,6 +39,30 @@ export function resolveJerseyDigits(jerseyNumber?: number | null): [string, stri
     return [raw[0] ?? '1', raw[1] ?? '0'];
 }
 
+/** Dígitos de fondo fijos para el Mundial 2026. */
+export function resolveWorldCupBackgroundDigits(): [string, string] {
+    return ['2', '6'];
+}
+
+export function formatJerseyNumberPadded(jerseyNumber?: number | null, digits = 3): string {
+    const n = jerseyNumber ?? 10;
+    return String(n).padStart(digits, '0').slice(-digits);
+}
+
+export type PremiumStatItem = {
+    type: 'birth' | 'height' | 'weight';
+    value: string;
+};
+
+export function resolvePremiumStats(event: MatchEventItem): PremiumStatItem[] {
+    const profile = event.playerProfile;
+    const items: PremiumStatItem[] = [];
+    if (profile?.birthDate) items.push({ type: 'birth', value: profile.birthDate });
+    if (profile?.height?.trim()) items.push({ type: 'height', value: profile.height.trim() });
+    if (profile?.weight?.trim()) items.push({ type: 'weight', value: profile.weight.trim() });
+    return items;
+}
+
 export function formatClassicStatsLine(
     event: MatchEventItem,
     props: GoalScorerStickerProps,
@@ -64,8 +88,8 @@ export function formatPremiumStatsParts(event: MatchEventItem): string[] {
 }
 
 export function buildPremiumFooterCode(countryCode: string, jerseyNumber?: number | null): string {
-    const jersey = String(jerseyNumber ?? 0).padStart(2, '0');
-    return `${countryCode}${jersey}`.slice(0, 5).toUpperCase();
+    const jersey = formatJerseyNumberPadded(jerseyNumber, 3);
+    return `${countryCode} ${jersey}`.trim().toUpperCase();
 }
 
 export function buildPremiumCatalogNumber(jerseyNumber?: number | null, minute?: number | null): string {

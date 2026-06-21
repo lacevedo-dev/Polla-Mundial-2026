@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, Plus, X, RotateCcw } from 'lucide-react';
+import { Shield, Database, Key, Users, Trophy, Target, Swords, CreditCard, BarChart3, Brain, Eye, EyeOff, Save, CheckCircle2, AlertCircle, Plus, X, RotateCcw, Image } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth.store';
 import { request } from '../../api';
 
@@ -80,6 +80,89 @@ const DEFAULT_PUBLIC_REGISTRATION_CONFIG: PublicRegistrationConfigForm = {
     defaultLeagueName: 'Polla Mundialista 2026',
 };
 
+const DEFAULT_STICKER_PROMPT = `Create a premium collectible football sticker card in portrait orientation.
+
+Use the supplied player image as the identity reference.
+Preserve the player's face, beard, skin tone, facial proportions, and general identity.
+Transform the source photo into a polished high-end football trading card portrait.
+The player must feel naturally integrated into the graphic design, not pasted on top.
+
+STYLE:
+- premium football sticker / collectible sports card
+- high contrast, vivid color, clean composition
+- cinematic sports lighting
+- realistic portrait blended with graphic overlays
+- strong teal/cyan rim glow around the player silhouette
+- dynamic paint strokes, halftone dots, shards, splashes, diagonal lines, and textured brush effects
+- elegant layered composition with depth
+- modern football album sticker aesthetic
+
+COMPOSITION:
+- vertical portrait card, 1024x1536
+- rounded white border around the full card
+- teal/turquoise main background
+- centered player bust/torso, large and dominant
+- off-white textured central graphic area behind the player
+- huge stylized background numerals: orange "{{digitLeft}}" on the left and green "{{digitRight}}" on the right
+- top-right generic football tournament badge in white and teal with the word "FOOTBALL"
+- do not use any official FIFA logo, Panini logo, club logo, or copyrighted tournament branding
+- right side circular flag badge of {{countryName}}
+- right side vertical stacked country letters: "{{countryCode}}"
+- bottom large red rounded name panel
+- bottom segmented footer with player code and sticker number
+
+PLAYER TREATMENT:
+- improve the source photo so it looks like a professional sports poster portrait
+- avoid passport photo or ID photo feeling
+- add subtle athletic posture and premium sports-card lighting while preserving identity
+- white football jersey with green trim and subtle geometric fabric texture
+- jersey number "{{mainNumber}}" clearly visible on the chest (large, readable, like official national team kit)
+- use a generic {{countryName}}-inspired football crest, but do not copy any official logo exactly
+- blend the lower body into brush strokes and paint textures
+- add cyan rim light, soft shadow, glow, and graphic overlays around shoulders and torso
+- make the player visually embedded into the artwork
+
+TEXT TO RENDER EXACTLY:
+Player name: "{{playerName}}"
+Stats line: "{{birthDate}} • {{height}} • {{weight}}"
+Left footer code: "{{cardCode}}"
+Center footer number: "{{stickerNumber}}"
+Right-side vertical letters: "{{countryCode}}"
+Top-right badge text: "FOOTBALL"
+
+DESIGN DETAILS:
+- bottom main panel in vivid red with white bold uppercase text
+- footer left capsule in red with white text "{{cardCode}}"
+- center shield/badge in teal with white number "{{stickerNumber}}"
+- footer right capsule in orange/red with halftone dot pattern
+- dominant palette: teal, cyan, orange, green, white, and red
+- crisp polished collectible-card aesthetic
+- high detail, sharp finish, premium football sticker result
+- original design inspired by collectible football stickers, not a direct copy of any real brand.`;
+
+const STICKER_MODEL_OPTIONS = [
+    { value: 'gpt-image-2', label: 'GPT Image 2 — stickers premium (recomendado)' },
+    { value: 'gpt-image-1.5', label: 'GPT Image 1.5 — alternativa' },
+];
+
+const STICKER_QUALITY_OPTIONS = [
+    { value: 'high', label: 'Alta — mejor detalle' },
+    { value: 'medium', label: 'Media — balance costo/calidad' },
+    { value: 'low', label: 'Baja — más económico' },
+    { value: 'auto', label: 'Auto — según modelo' },
+];
+
+type StickerAiQuality = 'low' | 'medium' | 'high' | 'auto';
+
+interface StickerAiConfigForm {
+    apiKeys: string[];
+    activeKeyIndex: number;
+    model: string;
+    quality: StickerAiQuality;
+    systemPrompt: string;
+    envApiKeyConfigured: boolean;
+}
+
 const AdminSettings: React.FC = () => {
     const { user } = useAuthStore();
     const [aiConfig, setAiConfig] = React.useState<AiConfigForm>({
@@ -95,6 +178,21 @@ const AdminSettings: React.FC = () => {
     const [showNewKey, setShowNewKey] = React.useState(false);
     const [newKeyInput, setNewKeyInput] = React.useState('');
     const [addingKey, setAddingKey] = React.useState(false);
+    const [stickerAiConfig, setStickerAiConfig] = React.useState<StickerAiConfigForm>({
+        apiKeys: [],
+        activeKeyIndex: 0,
+        model: 'gpt-image-2',
+        quality: 'high',
+        systemPrompt: DEFAULT_STICKER_PROMPT,
+        envApiKeyConfigured: false,
+    });
+    const [stickerAiLoading, setStickerAiLoading] = React.useState(false);
+    const [stickerAiSaving, setStickerAiSaving] = React.useState(false);
+    const [stickerAiStatus, setStickerAiStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
+    const [stickerAiSaveError, setStickerAiSaveError] = React.useState<string | null>(null);
+    const [showStickerNewKey, setShowStickerNewKey] = React.useState(false);
+    const [newStickerKeyInput, setNewStickerKeyInput] = React.useState('');
+    const [addingStickerKey, setAddingStickerKey] = React.useState(false);
     const [publicRegistrationConfig, setPublicRegistrationConfig] = React.useState<PublicRegistrationConfigForm>(DEFAULT_PUBLIC_REGISTRATION_CONFIG);
     const [publicRegistrationLoading, setPublicRegistrationLoading] = React.useState(false);
     const [publicRegistrationSaving, setPublicRegistrationSaving] = React.useState(false);
@@ -130,6 +228,24 @@ const AdminSettings: React.FC = () => {
             })
             .catch(() => {})
             .finally(() => setAiLoading(false));
+    }, []);
+
+    React.useEffect(() => {
+        setStickerAiLoading(true);
+        request<any>('/admin/settings/sticker-ai')
+            .then((data) => {
+                setStickerAiConfig((prev) => ({
+                    ...prev,
+                    apiKeys: Array.isArray(data.apiKeys) ? data.apiKeys : prev.apiKeys,
+                    activeKeyIndex: data.activeKeyIndex ?? 0,
+                    model: data.model ?? prev.model,
+                    quality: (data.quality as StickerAiQuality) ?? prev.quality,
+                    systemPrompt: data.systemPrompt || DEFAULT_STICKER_PROMPT,
+                    envApiKeyConfigured: Boolean(data.envApiKeyConfigured),
+                }));
+            })
+            .catch(() => {})
+            .finally(() => setStickerAiLoading(false));
     }, []);
 
 
@@ -197,6 +313,47 @@ const AdminSettings: React.FC = () => {
             setTimeout(() => { setAiStatus('idle'); setAiSaveError(null); }, 5000);
         } finally {
             setAiSaving(false);
+        }
+    };
+
+    const handleSaveStickerAi = async (event?: React.FormEvent<HTMLFormElement>) => {
+        event?.preventDefault();
+        if (stickerAiConfig.apiKeys.length === 0 && !stickerAiConfig.envApiKeyConfigured) {
+            setStickerAiSaveError('Agrega al menos una API key o define OPENAI_API_KEY en el servidor.');
+            setStickerAiStatus('error');
+            setTimeout(() => { setStickerAiStatus('idle'); setStickerAiSaveError(null); }, 4000);
+            return;
+        }
+        setStickerAiSaving(true);
+        setStickerAiStatus('idle');
+        setStickerAiSaveError(null);
+        try {
+            await request('/admin/settings/sticker-ai', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    apiKeys: stickerAiConfig.apiKeys,
+                    activeKeyIndex: stickerAiConfig.activeKeyIndex,
+                    model: stickerAiConfig.model,
+                    quality: stickerAiConfig.quality,
+                    systemPrompt: stickerAiConfig.systemPrompt,
+                }),
+            });
+            setStickerAiStatus('saved');
+            const refreshed = await request<any>('/admin/settings/sticker-ai');
+            setStickerAiConfig((prev) => ({
+                ...prev,
+                apiKeys: Array.isArray(refreshed.apiKeys) ? refreshed.apiKeys : prev.apiKeys,
+                activeKeyIndex: refreshed.activeKeyIndex ?? prev.activeKeyIndex,
+                envApiKeyConfigured: Boolean(refreshed.envApiKeyConfigured),
+            }));
+            setTimeout(() => setStickerAiStatus('idle'), 3000);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al guardar la configuración';
+            setStickerAiSaveError(msg);
+            setStickerAiStatus('error');
+            setTimeout(() => { setStickerAiStatus('idle'); setStickerAiSaveError(null); }, 5000);
+        } finally {
+            setStickerAiSaving(false);
         }
     };
 
@@ -612,6 +769,233 @@ const AdminSettings: React.FC = () => {
                         >
                             <Save size={14} />
                             {aiSaving ? 'Guardando...' : 'Guardar configuración IA'}
+                        </button>
+                    </form>
+                )}
+            </div>
+
+            {/* Stickers OpenAI Configuration */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100">
+                            <Image size={18} className="text-cyan-700" />
+                        </div>
+                        <div>
+                            <p className="font-black text-slate-900">Stickers OpenAI — Configuración</p>
+                            <p className="text-xs text-slate-400">API key, modelo y prompt para stickers premium con OpenAI</p>
+                        </div>
+                    </div>
+                    {stickerAiStatus === 'saved' && (
+                        <span className="flex items-center gap-1.5 text-xs font-black text-lime-600">
+                            <CheckCircle2 size={14} /> Guardado
+                        </span>
+                    )}
+                    {stickerAiStatus === 'error' && (
+                        <span className="flex items-center gap-1.5 text-xs font-black text-rose-600">
+                            <AlertCircle size={14} /> {stickerAiSaveError ?? 'Error al guardar'}
+                        </span>
+                    )}
+                </div>
+
+                {stickerAiConfig.envApiKeyConfigured && stickerAiConfig.apiKeys.length === 0 && (
+                    <div className="mb-4 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-xs text-cyan-800">
+                        OPENAI_API_KEY detectada en el servidor. Las keys de esta pantalla son opcionales; si no agregas ninguna, se usará la variable de entorno.
+                    </div>
+                )}
+
+                {stickerAiLoading ? (
+                    <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
+                ) : (
+                    <form className="space-y-4" onSubmit={handleSaveStickerAi}>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Modelo OpenAI
+                                </label>
+                                <select
+                                    value={stickerAiConfig.model}
+                                    onChange={(e) => setStickerAiConfig((prev) => ({ ...prev, model: e.target.value }))}
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                >
+                                    {STICKER_MODEL_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Calidad de imagen
+                                </label>
+                                <select
+                                    value={stickerAiConfig.quality}
+                                    onChange={(e) => setStickerAiConfig((prev) => ({
+                                        ...prev,
+                                        quality: e.target.value as StickerAiQuality,
+                                    }))}
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                >
+                                    {STICKER_QUALITY_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="mb-2 flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    API Keys — Rotación automática
+                                </label>
+                                <span className="flex items-center gap-1 text-[9px] text-slate-400">
+                                    <RotateCcw size={10} />
+                                    {stickerAiConfig.apiKeys.length} key{stickerAiConfig.apiKeys.length !== 1 ? 's' : ''} configurada{stickerAiConfig.apiKeys.length !== 1 ? 's' : ''}
+                                </span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                {stickerAiConfig.apiKeys.length === 0 && !addingStickerKey && (
+                                    <div className="rounded-xl border border-dashed border-slate-200 p-3 text-center text-xs text-slate-400">
+                                        Sin keys en BD. Usa OPENAI_API_KEY del servidor o agrega una key aquí.
+                                    </div>
+                                )}
+                                {stickerAiConfig.apiKeys.map((key, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${
+                                            idx === stickerAiConfig.activeKeyIndex
+                                                ? 'border-lime-200 bg-lime-50'
+                                                : 'border-slate-200 bg-slate-50'
+                                        }`}
+                                    >
+                                        <Key size={12} className="shrink-0 text-slate-400" />
+                                        <span className="flex-1 font-mono text-xs text-slate-600">{key}</span>
+                                        {idx === stickerAiConfig.activeKeyIndex && (
+                                            <span className="rounded-full bg-lime-200 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-lime-800">
+                                                Activa
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            title="Eliminar key"
+                                            onClick={() => {
+                                                const next = stickerAiConfig.apiKeys.filter((_, i) => i !== idx);
+                                                setStickerAiConfig((prev) => ({
+                                                    ...prev,
+                                                    apiKeys: next,
+                                                    activeKeyIndex: Math.min(prev.activeKeyIndex, Math.max(0, next.length - 1)),
+                                                }));
+                                            }}
+                                            className="ml-1 rounded-lg p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {addingStickerKey ? (
+                                <div className="mt-2 flex gap-2">
+                                    <div className="relative flex-1">
+                                        <input
+                                            type={showStickerNewKey ? 'text' : 'password'}
+                                            name="sticker-ai-api-key"
+                                            value={newStickerKeyInput}
+                                            onChange={(e) => setNewStickerKeyInput(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && newStickerKeyInput.trim()) {
+                                                    setStickerAiConfig((prev) => ({
+                                                        ...prev,
+                                                        apiKeys: [...prev.apiKeys, newStickerKeyInput.trim()],
+                                                    }));
+                                                    setNewStickerKeyInput('');
+                                                    setAddingStickerKey(false);
+                                                }
+                                                if (e.key === 'Escape') { setAddingStickerKey(false); setNewStickerKeyInput(''); }
+                                            }}
+                                            placeholder="sk-..."
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-9 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                            autoComplete="new-password"
+                                            autoFocus
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowStickerNewKey((v) => !v)}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            {showStickerNewKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (newStickerKeyInput.trim()) {
+                                                setStickerAiConfig((prev) => ({
+                                                    ...prev,
+                                                    apiKeys: [...prev.apiKeys, newStickerKeyInput.trim()],
+                                                }));
+                                                setNewStickerKeyInput('');
+                                                setAddingStickerKey(false);
+                                            }
+                                        }}
+                                        className="rounded-xl bg-lime-400 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-900 hover:bg-lime-300"
+                                    >
+                                        Añadir
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAddingStickerKey(false); setNewStickerKeyInput(''); }}
+                                        className="rounded-xl border border-slate-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setAddingStickerKey(true)}
+                                    className="mt-2 flex items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                                >
+                                    <Plus size={12} /> Agregar API Key
+                                </button>
+                            )}
+
+                            <p className="mt-1.5 text-[9px] text-slate-400">
+                                Las keys en BD tienen prioridad sobre OPENAI_API_KEY. Si una key falla por cuota, rota a la siguiente.
+                            </p>
+                        </div>
+
+                        <div>
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                    Prompt de generación
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setStickerAiConfig((prev) => ({ ...prev, systemPrompt: DEFAULT_STICKER_PROMPT }))}
+                                    className="text-[9px] font-black uppercase tracking-wider text-amber-600 hover:underline"
+                                >
+                                    Restaurar predeterminado
+                                </button>
+                            </div>
+                            <textarea
+                                rows={10}
+                                value={stickerAiConfig.systemPrompt}
+                                onChange={(e) => setStickerAiConfig((prev) => ({ ...prev, systemPrompt: e.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs leading-relaxed text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                            <p className="mt-1 text-[9px] text-slate-400">
+                                Placeholders: {'{{playerName}}'}, {'{{mainNumber}}'}, {'{{digitLeft}}'}, {'{{digitRight}}'}, {'{{countryCode}}'}, {'{{countryName}}'}, {'{{birthDate}}'}, {'{{height}}'}, {'{{weight}}'}, {'{{cardCode}}'}, {'{{stickerNumber}}'}.
+                            </p>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={stickerAiSaving}
+                            className="flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-900 transition-all hover:bg-amber-300 disabled:opacity-50"
+                        >
+                            <Save size={14} />
+                            {stickerAiSaving ? 'Guardando...' : 'Guardar configuración Stickers'}
                         </button>
                     </form>
                 )}

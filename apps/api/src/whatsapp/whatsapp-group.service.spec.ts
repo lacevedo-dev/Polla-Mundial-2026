@@ -10,7 +10,7 @@ import { GoalStickerConfigService } from '../automation/config/goal-sticker-conf
 import { StickersService } from '../stickers/stickers.service';
 
 const mockStickersService = {
-  isOpenAiConfigured: jest.fn().mockReturnValue(false),
+  isStickerAiReady: jest.fn().mockResolvedValue(false),
   getOrGenerateSticker: jest.fn(),
   readCachedStickerBuffer: jest.fn(),
 };

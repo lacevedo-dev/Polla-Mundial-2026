@@ -1163,7 +1163,7 @@ export class WhatsappGroupService {
 
     if (
       settings.variant === 'premium' &&
-      this.stickersService.isOpenAiConfigured() &&
+      (await this.stickersService.isStickerAiReady()) &&
       playerExternalId &&
       ctx.profile?.photoUrl
     ) {

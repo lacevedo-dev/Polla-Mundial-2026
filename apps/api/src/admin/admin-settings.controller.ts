@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AdminService } from './admin.service';
+import { StickerAiConfigService } from '../stickers/sticker-ai-config.service';
 
 const PUBLIC_REGISTRATION_CONFIG_KEY = 'public_registration';
 
@@ -20,7 +21,10 @@ function normalizePublicRegistrationConfig(value: any) {
 @Roles('SUPERADMIN')
 @Controller('admin/settings')
 export class AdminSettingsController {
-    constructor(private readonly adminService: AdminService) {}
+    constructor(
+        private readonly adminService: AdminService,
+        private readonly stickerAiConfig: StickerAiConfigService,
+    ) {}
 
     @Get('ai')
     @ApiOperation({ summary: 'Get AI integration configuration' })
@@ -163,5 +167,24 @@ export class AdminSettingsController {
 
         await this.adminService.setSystemConfig('ai_config', config);
         return { ok: true, keysCount: finalKeys.length };
+    }
+
+    @Get('sticker-ai')
+    @ApiOperation({ summary: 'Get OpenAI sticker generation configuration' })
+    async getStickerAiConfig() {
+        return this.stickerAiConfig.getAdminConfig();
+    }
+
+    @Patch('sticker-ai')
+    @ApiOperation({ summary: 'Save OpenAI sticker generation configuration' })
+    async saveStickerAiConfig(@Body() dto: {
+        apiKeys?: string[];
+        activeKeyIndex?: number;
+        model: string;
+        quality: string;
+        systemPrompt: string;
+    }) {
+        const result = await this.stickerAiConfig.saveAdminConfig(dto);
+        return { ok: true, keysCount: result.keysCount };
     }
 }
