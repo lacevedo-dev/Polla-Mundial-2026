@@ -1,97 +1,161 @@
 import type { GenerateStickerDto } from './dto/generate-sticker.dto';
 
 export const STICKER_PROMPT_PLACEHOLDERS = [
-  'playerName',
-  'birthDate',
-  'height',
-  'weight',
-  'countryCode',
-  'countryName',
-  'cardCode',
-  'stickerNumber',
-  'mainNumber',
-  'digitLeft',
-  'digitRight',
+  'PLAYER_NAME',
+  'BIRTH_DATE',
+  'HEIGHT',
+  'WEIGHT',
+  'COUNTRY_CODE',
+  'COUNTRY_NAME',
+  'PLAYER_NUMBER',
 ] as const;
 
 export const DEFAULT_STICKER_PROMPT_TEMPLATE = `
-Create a premium collectible football sticker card in portrait orientation.
+Create a premium collectible football sticker card in portrait orientation, highly consistent with the provided reference layout.
 
-Use the supplied player image as the identity reference.
-Preserve the player's face, beard, skin tone, facial proportions, and general identity.
-Transform the source photo into a polished high-end football trading card portrait.
-The player must feel naturally integrated into the graphic design, not pasted on top.
+REFERENCE USAGE:
+- Image A is the player identity reference. Preserve the player's face, skin tone, hairstyle, beard, and general recognizability.
+- Image B is the main visual style and layout reference. Follow its composition very closely.
+- Image C is the official-style top-right 2026 tournament logo reference. Recreate that same logo structure and placement consistently.
+- Image D (when provided) is the national team uniform / country sticker reference. Match kit colors and styling.
+
+MAIN GOAL:
+Generate a football sticker that strongly matches the established series design, keeping the same visual system, same proportions, same structure, and same layout across all players. The only main changing elements should be the player identity, the player name, the stats, the national team uniform, the country, and the player number.
 
 STYLE:
-- premium football sticker / collectible sports card
-- high contrast, vivid color, clean composition
-- cinematic sports lighting
-- realistic portrait blended with graphic overlays
-- strong teal/cyan rim glow around the player silhouette
-- dynamic paint strokes, halftone dots, shards, splashes, diagonal lines, and textured brush effects
-- elegant layered composition with depth
-- modern football album sticker aesthetic
+- premium football sticker card
+- polished collectible-card aesthetic
+- clean, sharp, vivid, high contrast
+- modern football album style
+- dynamic but organized composition
+- visually rich but consistent
+- slightly stylized realism
+- professional sports-poster look
+- crisp typography
+- bright colors
+- elegant textures and subtle halftone details
 
-COMPOSITION:
-- vertical portrait card, 1024x1536
-- rounded white border around the full card
-- teal/turquoise main background
-- centered player bust/torso, large and dominant
-- off-white textured central graphic area behind the player
-- huge stylized background numerals: orange "{{digitLeft}}" on the left and green "{{digitRight}}" on the right
-- top-right generic football tournament badge in white and teal with the word "FOOTBALL"
-- do not use any official FIFA logo, Panini logo, club logo, or copyrighted tournament branding
-- right side circular flag badge of {{countryName}}
-- right side vertical stacked country letters: "{{countryCode}}"
+CARD STRUCTURE:
+- vertical sticker format
+- rounded white outer border
+- turquoise / teal background
+- very large background number "26" behind the player, with the "2" in orange on the left and the "6" in green on the right
+- the "26" must be large, bold, integrated into the background, and slightly faded / blended / textured, so it feels embedded and not flat
+- player centered and dominant in the composition
+- top-right 2026 tournament logo must match Image C closely: white "26" structure with the cup silhouette in the middle and the text "FIFA" below
+- right-side circular country flag
+- right-side vertical country code letters
 - bottom large red rounded name panel
-- bottom segmented footer with player code and sticker number
+- lower red footer strip
+- central shield/tab at bottom containing the player's number
+- bottom yellow strip containing the website
+- bottom-right circular badge for "POLLA MUNDIALISTA 2026"
 
 PLAYER TREATMENT:
-- improve the source photo so it looks like a professional sports poster portrait
-- avoid passport photo or ID photo feeling
-- add subtle athletic posture and premium sports-card lighting while preserving identity
-- white football jersey with green trim and subtle geometric fabric texture
-- jersey number "{{mainNumber}}" clearly visible on the chest (large, readable, like official national team kit)
-- use a generic {{countryName}}-inspired football crest, but do not copy any official logo exactly
-- blend the lower body into brush strokes and paint textures
-- add cyan rim light, soft shadow, glow, and graphic overlays around shoulders and torso
-- make the player visually embedded into the artwork
+- the player must not look like a pasted ID photo
+- transform the source into a premium sports portrait
+- preserve identity faithfully
+- use the current national team kit shown in the uniform reference style
+- the jersey must clearly show the player number "{{PLAYER_NUMBER}}" on the chest
+- the player should be shown from chest to mid torso
+- realistic football-shirt fabric texture
+- subtle lighting glow around the player edges
+- soft integration between player and background
+- clean cutout with premium sports-card finish
+
+LAYOUT DETAILS:
+- top-right logo fixed and consistent
+- large faded background 26
+- red lower name panel with white uppercase text
+- smaller white stats line below the name
+- bottom center shield must contain the player number "{{PLAYER_NUMBER}}"
+- right-side vertical country code must read "{{COUNTRY_CODE}}"
+- circular flag badge must match "{{COUNTRY_NAME}}"
+- bottom yellow strip must include the exact text: "www.tupollamundial.com"
+- bottom-right circular badge must read "POLLA MUNDIALISTA 2026"
+- the circular badge should be yellow and red, inspired by classic collectible sticker branding, with a distinctive central monogram "PM"
+- keep badge placement and style consistent across the whole series
 
 TEXT TO RENDER EXACTLY:
-Player name: "{{playerName}}"
-Stats line: "{{birthDate}} • {{height}} • {{weight}}"
-Left footer code: "{{cardCode}}"
-Center footer number: "{{stickerNumber}}"
-Right-side vertical letters: "{{countryCode}}"
-Top-right badge text: "FOOTBALL"
+Player name: "{{PLAYER_NAME}}"
+Stats line: "{{BIRTH_DATE}} | {{HEIGHT}} | {{WEIGHT}}"
+Country code: "{{COUNTRY_CODE}}"
+Website: "www.tupollamundial.com"
+Circular badge text: "POLLA MUNDIALISTA 2026"
+Bottom shield number: "{{PLAYER_NUMBER}}"
+Jersey number: "{{PLAYER_NUMBER}}"
+Top-right logo text: "FIFA"
 
-DESIGN DETAILS:
-- bottom main panel in vivid red with white bold uppercase text
-- footer left capsule in red with white text "{{cardCode}}"
-- center shield/badge in teal with white number "{{stickerNumber}}"
-- footer right capsule in orange/red with halftone dot pattern
-- dominant palette: teal, cyan, orange, green, white, and red
-- crisp polished collectible-card aesthetic
-- high detail, sharp finish, premium football sticker result
-- original design inspired by collectible football stickers, not a direct copy of any real brand.
+IMPORTANT CONSISTENCY RULES:
+- keep the same layout proportions in every generation
+- keep the same top-right logo design in every generation
+- keep the same circular badge design in every generation
+- keep the same border thickness in every generation
+- keep the same placement of the name box, stats line, website strip, flag, and country code
+- keep the same color language and design hierarchy
+- keep the same visual identity across the full sticker collection
+
+DO NOT:
+- do not invent a different top-right logo
+- do not change the tournament logo structure
+- do not replace the large faded 26 with other shapes
+- do not change the position of the nameplate
+- do not create random extra logos
+- do not add unnecessary text
+- do not use a different country code than "{{COUNTRY_CODE}}"
+- do not use a different player number than "{{PLAYER_NUMBER}}"
+- do not make the player look like a passport photo
+- do not distort the face
+- do not create multiple players
+- do not make the sticker look like a different card series
+
+FINAL RESULT:
+A highly consistent football collectible sticker that matches the reference series very closely, with the same general layout and branding structure, but customized for the specific player.
+
+This image is part of a fixed sticker collection series.
+Maintain the same visual template, same composition logic, same logo treatment, same footer treatment, same spacing, and same branding placement as the series master reference.
+Variation should be minimal and limited only to the player identity, player text, country flag, and jersey details.
 `.trim();
 
+function normalizeHeight(height: string): string {
+  const trimmed = height.trim();
+  if (!trimmed) return trimmed;
+  if (/\s+m$/i.test(trimmed)) return trimmed;
+  if (/m$/i.test(trimmed)) {
+    return trimmed.replace(/m$/i, ' m');
+  }
+  return trimmed;
+}
+
+export function resolvePlayerNumber(dto: GenerateStickerDto): string {
+  if (dto.mainNumber?.trim()) return dto.mainNumber.trim();
+  return '10';
+}
+
 export function buildStickerPromptVariables(dto: GenerateStickerDto): Record<string, string> {
-  const mainNumber = dto.mainNumber ?? '10';
-  const jerseyDigits = mainNumber.padStart(2, '0').slice(-2);
+  const playerNumber = resolvePlayerNumber(dto);
+  const height = normalizeHeight(dto.height);
 
   return {
-    playerName: dto.playerName,
+    PLAYER_NAME: dto.playerName.trim().toUpperCase(),
+    BIRTH_DATE: dto.birthDate,
+    HEIGHT: height,
+    WEIGHT: dto.weight,
+    COUNTRY_CODE: dto.countryCode.trim().toUpperCase().slice(0, 3),
+    COUNTRY_NAME: dto.countryName,
+    PLAYER_NUMBER: playerNumber,
+    // Compatibilidad con plantillas antiguas en BD
+    playerName: dto.playerName.trim().toUpperCase(),
     birthDate: dto.birthDate,
-    height: dto.height,
+    height,
     weight: dto.weight,
-    countryCode: dto.countryCode,
+    countryCode: dto.countryCode.trim().toUpperCase().slice(0, 3),
     countryName: dto.countryName,
+    mainNumber: playerNumber,
     cardCode: dto.cardCode,
     stickerNumber: dto.stickerNumber,
-    mainNumber,
-    digitLeft: jerseyDigits[0] ?? '1',
-    digitRight: jerseyDigits[1] ?? '0',
+    digitLeft: '2',
+    digitRight: '6',
   };
 }
 

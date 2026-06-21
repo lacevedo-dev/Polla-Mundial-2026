@@ -169,6 +169,15 @@ function formatStickerBirthDate(raw: string | null): string {
   return `${day}-${month}-${year}`;
 }
 
+function formatStickerHeight(raw: string | null): string {
+  if (!raw?.trim()) return '—';
+  const trimmed = raw.trim();
+  if (/m$/i.test(trimmed) && !/\s/.test(trimmed)) {
+    return trimmed.replace(/m$/i, ' m');
+  }
+  return trimmed;
+}
+
 function buildOpenAiStickerPayload(
   player: StickerAlbumPlayer,
   team: StickerAlbumTeam,
@@ -185,13 +194,13 @@ function buildOpenAiStickerPayload(
     photoUrl: player.photoUrl!,
     playerName: player.name.trim().toUpperCase(),
     birthDate: formatStickerBirthDate(player.birthDate),
-    height: player.height?.trim() || '—',
+    height: formatStickerHeight(player.height),
     weight: player.weight?.trim() || '—',
     countryCode,
     countryName: team.name,
     cardCode: `${countryCode} ${jerseyPadded}`.trim(),
     stickerNumber: `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3),
-    mainNumber: String(jersey),
+    mainNumber: player.jerseyNumber != null ? String(player.jerseyNumber) : undefined,
     quality: 'high' as const,
   };
 }

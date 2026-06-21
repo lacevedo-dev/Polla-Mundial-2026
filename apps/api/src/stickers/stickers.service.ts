@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GenerateStickerDto } from './dto/generate-sticker.dto';
 import { StickerAiConfigService } from './sticker-ai-config.service';
 import { buildPremiumStickerPrompt } from './stickers-prompt.util';
+import { loadStickerReferenceFiles } from './stickers-reference.util';
 import {
   buildPremiumStickerFileName,
   buildPremiumStickerPublicUrl,
@@ -71,11 +72,21 @@ export class StickersService {
     const imageUrl = buildPremiumStickerPublicUrl(playerApiFootballId);
 
     try {
-      const imageFile = await this.urlToOpenAIFile(dto.photoUrl);
+      const playerFile = await this.urlToOpenAIFile(dto.photoUrl, 'player-a.png');
+      const referenceFiles = await loadStickerReferenceFiles(dto.countryCode);
+      if (referenceFiles.length === 0) {
+        this.logger.warn(
+          'Referencias B/C/D no encontradas en stickers/references; generando solo con Image A',
+        );
+      } else {
+        this.logger.debug(
+          `Referencias sticker: Image A + ${referenceFiles.length} imagen(es) B/C/D`,
+        );
+      }
 
       const response = await client.images.edit({
         model: runtime.model,
-        image: [imageFile],
+        image: [playerFile, ...referenceFiles],
         prompt,
         size: '1024x1536',
         quality,
@@ -240,7 +251,7 @@ export class StickersService {
     return path.join(base, 'stickers');
   }
 
-  private async urlToOpenAIFile(url: string) {
+  private async urlToOpenAIFile(url: string, fileName = 'player.png') {
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -259,6 +270,6 @@ export class StickersService {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    return await toFile(buffer, 'player.png', { type: contentType });
+    return await toFile(buffer, fileName, { type: contentType });
   }
 }

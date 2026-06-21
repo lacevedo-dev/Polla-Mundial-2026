@@ -12,6 +12,15 @@ export type BuildStickerDtoInput = {
   minute?: number | null;
 };
 
+function formatStickerHeight(height: string | null): string {
+  if (!height?.trim()) return '—';
+  const trimmed = height.trim();
+  if (/m$/i.test(trimmed) && !/\s/.test(trimmed)) {
+    return trimmed.replace(/m$/i, ' m');
+  }
+  return trimmed;
+}
+
 function buildPremiumFooterCode(countryCode: string, jerseyNumber: number): string {
   const jersey = String(jerseyNumber).padStart(3, '0').slice(-3);
   return `${countryCode} ${jersey}`.trim().toUpperCase();
@@ -42,12 +51,12 @@ export function buildGenerateStickerDto(input: BuildStickerDtoInput): GenerateSt
     photoUrl: profile.photoUrl,
     playerName: profile.name.trim().toUpperCase(),
     birthDate: profile.birthDate ?? '—',
-    height: profile.height ?? '—',
+    height: formatStickerHeight(profile.height),
     weight: profile.weight ?? '—',
     countryCode,
     countryName: teamName,
     cardCode: buildPremiumFooterCode(countryCode, jersey),
     stickerNumber: buildPremiumCatalogNumber(jersey, minute),
-    mainNumber: String(jersey),
+    mainNumber: profile.jerseyNumber != null ? String(profile.jerseyNumber) : undefined,
   };
 }

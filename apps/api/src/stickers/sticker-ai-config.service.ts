@@ -22,6 +22,7 @@ export type StickerAiConfigAdmin = {
   model: string;
   quality: StickerAiQuality;
   systemPrompt: string;
+  defaultSystemPrompt: string;
   envApiKeyConfigured: boolean;
 };
 
@@ -110,6 +111,7 @@ export class StickerAiConfigService {
       model: stored.model,
       quality: stored.quality,
       systemPrompt: stored.systemPrompt,
+      defaultSystemPrompt: DEFAULT_STICKER_PROMPT_TEMPLATE,
       envApiKeyConfigured: Boolean(envApiKey),
     };
   }
