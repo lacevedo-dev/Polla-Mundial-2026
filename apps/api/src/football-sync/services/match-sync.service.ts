@@ -780,11 +780,13 @@ export class MatchSyncService {
         // Identify scorers/minutes from preloaded timeline when available.
         let goalEvents: ParsedGoalEvent[] = [];
         if (totalGoalsDelta >= 1 && cachedFixtureEvents !== undefined) {
+          const goalEventSkip = Math.max(storedGoalCount, prevHome + prevAway);
           goalEvents = this.parseGoalEventsFromResponse(
             cachedFixtureEvents,
             fixture.teams.home.id,
             fixture.teams.away.id,
             totalGoalsDelta,
+            goalEventSkip,
           );
 
           this.logger.log(
@@ -1167,6 +1169,7 @@ export class MatchSyncService {
     homeTeamApiId: number,
     awayTeamApiId: number,
     count: number,
+    skip = 0,
   ): ParsedGoalEvent[] {
     const resolveTeamId = (apiTeamId: number | undefined | null): string | null => {
       if (apiTeamId == null) return null;
@@ -1181,6 +1184,7 @@ export class MatchSyncService {
       count,
       homeTeamApiId,
       awayTeamApiId,
+      skip,
     );
   }
 

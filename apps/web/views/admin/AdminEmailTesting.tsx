@@ -45,6 +45,7 @@ interface TestResult {
   timestamp: Date;
   recipientEmail: string;
   subject: string;
+  queueInfo?: string;
   attempts?: ProviderAttempt[];
   totalProviders?: number;
 }
@@ -327,9 +328,11 @@ export default function AdminEmailTesting() {
     }
   };
 
-  const formatDate = (date: string | null) => {
+  const formatDate = (date: string | Date | null | undefined) => {
     if (!date) return '—';
-    return new Date(date).toLocaleString('es-CO', {
+    const parsed = typeof date === 'string' ? new Date(date) : date;
+    if (Number.isNaN(parsed.getTime())) return '—';
+    return parsed.toLocaleString('es-CO', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -823,7 +826,7 @@ export default function AdminEmailTesting() {
                   <CardDescription>Monitoreo de proveedores de correo y cuotas diarias</CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={unblockAllProviders} disabled={loadingProviders} variant="destructive" size="sm">
+                  <Button onClick={unblockAllProviders} disabled={loadingProviders} variant="outline" size="sm" className="border-rose-300 text-rose-700 hover:bg-rose-50">
                     <ShieldAlert className="w-4 h-4 mr-2" />
                     Desbloquear Todos
                   </Button>

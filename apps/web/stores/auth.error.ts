@@ -12,7 +12,7 @@ const GENERIC_OPERATIONAL_MESSAGES = new Set([
     'network error',
 ]);
 
-export type AuthAction = 'register' | 'login' | 'verifyEmail' | 'resendVerification';
+export type AuthAction = 'register' | 'login' | 'verifyEmail' | 'resendVerification' | 'updateProfile';
 
 export function normalizeAuthError(error: unknown, action: AuthAction): Error {
     if (error instanceof ApiError) {
@@ -64,7 +64,11 @@ function isOperationalApiError(error: ApiError, action: AuthAction): boolean {
 }
 
 function getOperationalMessage(action: AuthAction): string {
-    return action === 'register'
-        ? REGISTER_TEMPORARILY_UNAVAILABLE_MESSAGE
-        : LOGIN_TEMPORARILY_UNAVAILABLE_MESSAGE;
+    if (action === 'register') {
+        return REGISTER_TEMPORARILY_UNAVAILABLE_MESSAGE;
+    }
+    if (action === 'updateProfile') {
+        return 'No fue posible actualizar tu perfil. Intenta nuevamente en unos minutos.';
+    }
+    return LOGIN_TEMPORARILY_UNAVAILABLE_MESSAGE;
 }

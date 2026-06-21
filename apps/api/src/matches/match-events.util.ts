@@ -333,6 +333,20 @@ export function resolveGoalBeneficiaryIsHome(
   return teamId === homeTeamApiId;
 }
 
+/** Índice 1-based del gol en la secuencia cronológica a partir del marcador tras el gol. */
+export function goalIndexFromScore(homeScore: number, awayScore: number): number {
+  return homeScore + awayScore;
+}
+
+/** Extrae marcador de dedupeKey GOAL_SCORED:match:league:home-away */
+export function parseGoalScoredJobDedupeKey(
+  dedupeKey: string,
+): { homeScore: number; awayScore: number } | null {
+  const match = /^GOAL_SCORED:[^:]+:[^:]+:(\d+)-(\d+)$/.exec(dedupeKey);
+  if (!match) return null;
+  return { homeScore: Number(match[1]), awayScore: Number(match[2]) };
+}
+
 /** Goles válidos para notificaciones (excluye anulados en la línea temporal). */
 export function filterActiveGoalEventsFromTimeline(
   rawEvents: ApiFixtureEvent[],
@@ -340,6 +354,7 @@ export function filterActiveGoalEventsFromTimeline(
   count: number,
   homeTeamApiId: number,
   awayTeamApiId: number,
+  skip = 0,
 ): Array<{
   isHomeGoal: boolean;
   minute: number;
@@ -368,5 +383,5 @@ export function filterActiveGoalEventsFromTimeline(
     }))
     .filter((goal) => !annulledKeys.has(goal.key));
 
-  return goals.slice(-count).map(({ key: _key, ...goal }) => goal);
+  return goals.slice(skip, skip + count).map(({ key: _key, ...goal }) => goal);
 }

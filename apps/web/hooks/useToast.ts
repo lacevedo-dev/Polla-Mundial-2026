@@ -9,9 +9,14 @@ export interface ToastMessage {
 export function useToast() {
     const [toasts, setToasts] = React.useState<ToastMessage[]>([]);
 
-    const showToast = React.useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    const showToast = React.useCallback((
+        message: string,
+        type: 'success' | 'error' | 'warning' | 'info' = 'success',
+    ) => {
         const id = `${Date.now()}-${Math.random()}`;
-        setToasts((prev) => [...prev, { id, message, type }]);
+        const normalized: ToastMessage['type'] =
+            type === 'warning' ? 'error' : type === 'info' ? 'success' : type;
+        setToasts((prev) => [...prev, { id, message, type: normalized }]);
         setTimeout(() => {
             setToasts((prev) => prev.filter((t) => t.id !== id));
         }, 3000);

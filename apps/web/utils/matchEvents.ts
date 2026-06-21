@@ -15,6 +15,8 @@ function eventInformativeness(event: MatchEventItem): number {
     if ((event.detail ?? '').trim()) score += 1;
     if (event.annulled) score += 8;
     if (event.annulledReason) score += 2;
+    if (event.playerExternalId != null) score += 3;
+    if (event.playerProfile?.photoUrl?.trim()) score += 2;
     return score;
 }
 

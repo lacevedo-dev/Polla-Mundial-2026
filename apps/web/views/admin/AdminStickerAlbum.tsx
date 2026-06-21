@@ -199,8 +199,12 @@ function buildOpenAiStickerPayload(
     countryCode,
     countryName: team.name,
     cardCode: jerseyPadded ? `${countryCode} ${jerseyPadded}`.trim() : countryCode,
-    stickerNumber: jersey != null ? `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3) : '',
-    mainNumber: jersey != null ? String(jersey) : undefined,
+    ...(jersey != null
+      ? {
+          stickerNumber: `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3),
+          mainNumber: String(jersey),
+        }
+      : {}),
     quality: 'high' as const,
   };
 }

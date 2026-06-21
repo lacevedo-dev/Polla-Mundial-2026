@@ -32,8 +32,6 @@ import LiveMatchesPanel from '../components/dashboard/LiveMatchesPanel';
 import InviteModal from './modals/InviteModal';
 import LeagueConfigModal from './modals/LeagueConfigModal';
 
-const ADMIN_COMMISSION = 0.1;
-
 /* ─── Dashboard ────────────────────────────────────────────────── */
 
 const Dashboard: React.FC = () => {
@@ -72,7 +70,6 @@ const Dashboard: React.FC = () => {
     const [leagueDropOpen, setLeagueDropOpen] = useState(false);
     const [quickPreds, setQuickPreds] = useState<Record<string, { home: string; away: string }>>({});
     const [savingMatchId, setSavingMatchId] = useState<string | null>(null);
-    const [scoringTab, setScoringTab] = useState<'resultado' | 'bonos' | 'desempate'>('resultado');
     const [currentTime, setCurrentTime] = useState(() => Date.now());
 
     interface LiveStandingsData { hasLive: boolean; myProvisionalPosition: number | null; myPositionChange: number; myLivePoints: number; liveMatchCount: number; }
@@ -486,32 +483,34 @@ const Dashboard: React.FC = () => {
                         {spectatorMode ? (
                             <motion.div key="spectator-left" {...fade(0.05)} className="space-y-5">
                                 <MyStatsCard
-                                    myEntry={myEntry ?? null}
-                                    stats={stats}
-                                    lastHit={lastHit ?? null}
-                                    nextUnsaved={nextUnsaved ?? null}
+                                    totalPoints={myEntry?.points ?? 0}
+                                    exactPredictions={myEntry?.exactCount ?? 0}
+                                    correctResults={myEntry?.winnerCount ?? 0}
+                                    streak={stats?.racha ?? null}
+                                    rate={stats?.tasa ?? null}
+                                    rank={myEntry?.rank ?? null}
+                                    totalPredictions={predictions?.length ?? 0}
                                 />
                             </motion.div>
                         ) : (
                             <motion.div key="admin-left" {...fade(0.05)} className="space-y-5">
                                 <FinancialCard
                                     prizes={prizes}
-                                    activeLeague={activeLeague}
+                                    leagueStatus={activeLeague?.status}
+                                    baseFee={activeLeague?.settings.baseFee}
+                                    currency={activeLeague?.settings.currency}
                                     isAdmin={isAdmin}
-                                    adminCommission={ADMIN_COMMISSION}
                                 />
                                 <LeagueOccupancyCard
                                     memberCount={memberCount}
                                     maxParticipants={maxParticipants}
-                                    leagueCode={activeLeague?.code}
+                                    occupancyPct={occupancyPct}
                                     isAdmin={isAdmin}
+                                    hasCode={!!activeLeague?.code}
                                     onConfigOpen={() => setConfigOpen(true)}
                                     onInviteOpen={() => setInviteOpen(true)}
                                 />
-                                <ScoringRulesCard
-                                    activeTab={scoringTab}
-                                    onTabChange={setScoringTab}
-                                />
+                                <ScoringRulesCard />
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -519,7 +518,7 @@ const Dashboard: React.FC = () => {
 
                 {/* ── Center column ── */}
                 <div className="space-y-5">
-                    <PrizesCard prizes={prizes} activeLeague={activeLeague} />
+                    <PrizesCard prizes={prizes} />
                     {!spectatorMode && <PerformanceCard stats={stats} />}
                     <RecentPredictionsCard predictions={predictions} />
                 </div>

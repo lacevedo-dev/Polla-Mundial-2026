@@ -56,7 +56,11 @@ export function buildGenerateStickerDto(input: BuildStickerDtoInput): GenerateSt
     countryCode,
     countryName: teamName,
     cardCode: jersey != null ? buildPremiumFooterCode(countryCode, jersey) : countryCode,
-    stickerNumber: jersey != null ? buildPremiumCatalogNumber(jersey, minute) : '',
-    mainNumber: jersey != null ? String(jersey) : undefined,
+    ...(jersey != null
+      ? {
+          stickerNumber: buildPremiumCatalogNumber(jersey, minute),
+          mainNumber: String(jersey),
+        }
+      : {}),
   };
 }

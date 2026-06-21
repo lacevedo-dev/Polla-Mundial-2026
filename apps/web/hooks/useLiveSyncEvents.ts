@@ -31,6 +31,7 @@ export interface MatchEventItem {
     teamId: string | null;
     annulled?: boolean;
     annulledReason?: string | null;
+    playerExternalId?: number | null;
     playerProfile?: MatchEventPlayerProfile | null;
     teamStickerTheme?: MatchEventTeamStickerTheme | null;
 }

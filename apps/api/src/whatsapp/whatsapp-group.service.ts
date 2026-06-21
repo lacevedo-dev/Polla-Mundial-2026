@@ -28,7 +28,9 @@ import { isTextOnlyWhatsappGroupJob } from './whatsapp-group-job.util';
 import { WhatsappDispatcherService } from './whatsapp-dispatcher.service';
 import {
   formatRedCardReason,
+  goalIndexFromScore,
   normalizeEventPlayerKey,
+  parseGoalScoredJobDedupeKey,
 } from '../matches/match-events.util';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
 import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
@@ -307,7 +309,11 @@ export class WhatsappGroupService {
         (await this.goalStickerConfig.isActiveFor('whatsappGroup'))
       ) {
         caption = job.caption || (await this.buildTextCaption(job));
-        const imageBuffer = await this.buildGoalStickerImageBuffer(job.matchId, job.league.name);
+        const imageBuffer = await this.buildGoalStickerImageBuffer(
+          job.matchId,
+          job.league.name,
+          job.dedupeKey,
+        );
         if (imageBuffer) {
           await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
         } else {
@@ -1108,6 +1114,7 @@ export class WhatsappGroupService {
   private async resolveGoalStickerContext(
     matchId: string,
     leagueName: string,
+    dedupeKey?: string | null,
   ) {
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
@@ -1116,10 +1123,20 @@ export class WhatsappGroupService {
     if (!match) return null;
 
     const goals = await this.prisma.matchEvent.findMany({
-      where: { matchId, type: 'GOAL' },
-      orderBy: [{ minute: 'desc' }, { extraMin: 'desc' }, { updatedAt: 'desc' }],
+      where: { matchId, type: 'GOAL', annulled: false },
+      orderBy: [{ minute: 'asc' }, { extraMin: 'asc' }, { updatedAt: 'asc' }],
     });
-    const latest = goals.find((goal) => !goal.annulled) ?? goals[0];
+    if (goals.length === 0) return null;
+
+    const scoreHint = dedupeKey ? parseGoalScoredJobDedupeKey(dedupeKey) : null;
+    const goalIndex = scoreHint
+      ? goalIndexFromScore(scoreHint.homeScore, scoreHint.awayScore) - 1
+      : goals.length - 1;
+    const latest =
+      goalIndex >= 0 && goalIndex < goals.length
+        ? goals[goalIndex]
+        : goals[goals.length - 1];
+
     if (!latest?.playerName?.trim()) return null;
 
     const scoringTeam =
@@ -1154,8 +1171,9 @@ export class WhatsappGroupService {
   private async buildGoalStickerImageBuffer(
     matchId: string,
     leagueName: string,
+    dedupeKey?: string | null,
   ): Promise<Buffer | null> {
-    const ctx = await this.resolveGoalStickerContext(matchId, leagueName);
+    const ctx = await this.resolveGoalStickerContext(matchId, leagueName, dedupeKey);
     if (!ctx) return null;
 
     const settings = await this.goalStickerConfig.getSettings();

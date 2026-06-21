@@ -27,11 +27,9 @@ import {
     DEFAULT_GOAL_STICKER_SETTINGS,
 } from '../../utils/goalStickerConfig';
 import {
-    GoalScorerStickerCard,
-    pickLatestActiveGoal,
-    resolveGoalTeamFlag,
-    resolveGoalTeamName,
-} from '../live/GoalScorerStickerCard';
+    LiveGoalStickerPanel,
+    useLiveGoalStickerSelection,
+} from '../live/LiveGoalStickerPanel';
 
 interface LiveStandingsData {
     myProvisionalPosition?: number | null;
@@ -119,9 +117,10 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
         !eventsLoading;
     const showDashboardSticker =
         isGoalStickerActiveFor(goalSticker, 'dashboard') && liveDisplay.goals;
-    const latestGoalForSticker = showDashboardSticker
-        ? pickLatestActiveGoal(expandedEvents.filter((e) => e.type === 'GOAL'))
-        : null;
+    const { selectedGoal, selectGoal, isGoalSelected } = useLiveGoalStickerSelection(
+        expandedMatch.id,
+        activeGoals,
+    );
 
     return (
         <AnimatePresence>
@@ -242,26 +241,19 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </p>
                     )}
 
-                    {latestGoalForSticker && (
-                        <GoalScorerStickerCard
+                    {showDashboardSticker && selectedGoal && activeGoals.length > 0 && (
+                        <LiveGoalStickerPanel
+                            matchId={expandedMatch.id}
+                            goals={activeGoals}
+                            selectedGoal={selectedGoal}
+                            onSelectGoal={selectGoal}
                             variant={goalSticker.variant}
-                            event={latestGoalForSticker}
-                            teamName={resolveGoalTeamName(
-                                latestGoalForSticker,
-                                expandedMatch.homeTeamId,
-                                expandedMatch.awayTeamId,
-                                expandedMatch.homeTeam,
-                                expandedMatch.awayTeam,
-                            )}
-                            teamFlagUrl={resolveGoalTeamFlag(
-                                latestGoalForSticker,
-                                expandedMatch.homeTeamId,
-                                expandedMatch.awayTeamId,
-                                expandedMatch.homeFlag,
-                                expandedMatch.awayFlag,
-                            )}
+                            homeTeamId={expandedMatch.homeTeamId}
+                            awayTeamId={expandedMatch.awayTeamId}
                             homeTeam={expandedMatch.homeTeam}
                             awayTeam={expandedMatch.awayTeam}
+                            homeFlag={expandedMatch.homeFlag}
+                            awayFlag={expandedMatch.awayFlag}
                             homeScore={expandedRealHome}
                             awayScore={expandedRealAway}
                         />
@@ -303,8 +295,42 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                                 : isSub
                                                     ? `${e.playerName ?? '—'} ↔ ${e.assistName ?? '—'}`
                                                 : (e.playerName ?? '—');
+                                        const isSelectedGoalSticker =
+                                            showDashboardSticker && isGoal && !isAnnulledGoal && isGoalSelected(e);
                                         return (
-                                            <div key={buildMatchEventRowKey(e)} className="flex items-center gap-2">
+                                            <div
+                                                key={buildMatchEventRowKey(e)}
+                                                className={`flex items-center gap-2 rounded-md transition-colors ${
+                                                    isGoal && !isAnnulledGoal && showDashboardSticker
+                                                        ? 'cursor-pointer hover:bg-white/5'
+                                                        : ''
+                                                } ${isSelectedGoalSticker ? 'bg-lime-400/10 ring-1 ring-lime-400/30' : ''}`}
+                                                onClick={
+                                                    isGoal && !isAnnulledGoal && showDashboardSticker
+                                                        ? () => selectGoal(e)
+                                                        : undefined
+                                                }
+                                                onKeyDown={
+                                                    isGoal && !isAnnulledGoal && showDashboardSticker
+                                                        ? (ev) => {
+                                                            if (ev.key === 'Enter' || ev.key === ' ') {
+                                                                ev.preventDefault();
+                                                                selectGoal(e);
+                                                            }
+                                                        }
+                                                        : undefined
+                                                }
+                                                role={
+                                                    isGoal && !isAnnulledGoal && showDashboardSticker
+                                                        ? 'button'
+                                                        : undefined
+                                                }
+                                                tabIndex={
+                                                    isGoal && !isAnnulledGoal && showDashboardSticker
+                                                        ? 0
+                                                        : undefined
+                                                }
+                                            >
                                                 <span className="w-8 shrink-0 text-right text-[9px] font-black text-white/30 tabular-nums">{min}</span>
                                                 <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black ${iconBg}`}>{icon}</span>
                                                 <span className={`min-w-0 flex-1 truncate text-[9px] font-bold ${isVar || isAnnulledGoal ? 'text-rose-200/80 line-through decoration-rose-200/30' : 'text-white/60'}`}>

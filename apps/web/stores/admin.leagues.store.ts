@@ -233,7 +233,9 @@ export const useAdminLeaguesStore = create<AdminLeaguesState>((set, get) => ({
             if (filters.tournamentId) params.set('tournamentId', filters.tournamentId);
             if (filters.phase) params.set('phase', filters.phase);
 
-            const res = await request(`/admin/leagues/${leagueId}/matches?${params}`);
+            const res = await request<AdminLeagueMatch[]>(
+                `/admin/leagues/${leagueId}/matches?${params}`,
+            );
             set({ leagueMatches: res, isLoadingMatches: false });
         } catch (error) {
             set({ isLoadingMatches: false, error: error instanceof Error ? error.message : 'Error' });

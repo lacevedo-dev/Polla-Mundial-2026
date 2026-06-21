@@ -222,8 +222,8 @@ export function buildStickerPromptVariables(
     countryCode: dto.countryCode.trim().toUpperCase().slice(0, 3),
     countryName: dto.countryName,
     mainNumber: playerNumber,
-    cardCode: dto.cardCode,
-    stickerNumber: dto.stickerNumber,
+    cardCode: dto.cardCode ?? '',
+    stickerNumber: dto.stickerNumber ?? '',
     digitLeft: '2',
     digitRight: '6',
   };

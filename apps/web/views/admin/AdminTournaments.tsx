@@ -153,8 +153,7 @@ const AdminTournaments: React.FC = () => {
                                                 {tournament.name}
                                             </h3>
                                             <StatusBadge
-                                                status={tournament.active ? 'active' : 'inactive'}
-                                                label={tournament.active ? 'Activo' : 'Inactivo'}
+                                                status={tournament.active ? 'ACTIVE' : 'INACTIVE'}
                                             />
                                         </div>
                                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
@@ -189,8 +188,9 @@ const AdminTournaments: React.FC = () => {
 
                         <div className="border-t border-slate-200 p-4">
                             <AdminPagination
-                                currentPage={filters.page}
-                                totalPages={Math.ceil(total / filters.limit)}
+                                page={filters.page}
+                                limit={filters.limit}
+                                total={total}
                                 onPageChange={(page) => setFilters({ page })}
                             />
                         </div>

@@ -5,6 +5,7 @@ export type LiveGoalEventSnapshot = {
   detail: string | null;
   playerName: string | null;
   assistName: string | null;
+  playerExternalId?: number | null;
   minute: number;
   extraMin: number | null;
   teamId: string | null;
@@ -53,6 +54,7 @@ export async function fetchLiveGoalEventSnapshots(
       detail: true,
       playerName: true,
       assistName: true,
+      playerExternalId: true,
       minute: true,
       extraMin: true,
       teamId: true,

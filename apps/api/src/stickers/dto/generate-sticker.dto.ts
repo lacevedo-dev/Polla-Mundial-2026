@@ -56,15 +56,21 @@ export class GenerateStickerDto {
   @IsNotEmpty()
   countryName: string;
 
-  @ApiProperty({ example: 'CIV27' })
+  @ApiPropertyOptional({
+    example: 'CIV27',
+    description: 'Código de catálogo; opcional si no hay dorsal',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  cardCode: string;
+  cardCode?: string;
 
-  @ApiProperty({ example: '261' })
+  @ApiPropertyOptional({
+    example: '261',
+    description: 'Número de sticker; opcional si no hay dorsal',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  stickerNumber: string;
+  stickerNumber?: string;
 
   @ApiPropertyOptional({ example: '25' })
   @IsString()

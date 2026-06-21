@@ -3,11 +3,14 @@ import {
   computeAnnulledGoalKeysFromTimeline,
   computeScoreExcessAnnulments,
   dedupeMatchEvents,
+  filterActiveGoalEventsFromTimeline,
   formatAnnulledReason,
   formatRedCardReason,
+  goalIndexFromScore,
   isRedCardDetail,
   isYellowCardDetail,
   normalizeEventPlayerKey,
+  parseGoalScoredJobDedupeKey,
   resolveGoalBeneficiaryIsHome,
 } from './match-events.util';
 
@@ -229,5 +232,71 @@ describe('match-events.util', () => {
 
     expect(events).toHaveLength(2);
     expect(events.map((event) => event.minute)).toEqual([40, 65]);
+  });
+
+  it('parseGoalScoredJobDedupeKey extrae marcador del job WA', () => {
+    expect(parseGoalScoredJobDedupeKey('GOAL_SCORED:m1:l1:0-3')).toEqual({
+      homeScore: 0,
+      awayScore: 3,
+    });
+    expect(parseGoalScoredJobDedupeKey('GOAL_SCORED:m1:l1:2-1')).toEqual({
+      homeScore: 2,
+      awayScore: 1,
+    });
+    expect(parseGoalScoredJobDedupeKey('OTHER:m1:l1')).toBeNull();
+  });
+
+  it('goalIndexFromScore mapea gol N al marcador acumulado', () => {
+    expect(goalIndexFromScore(0, 1)).toBe(1);
+    expect(goalIndexFromScore(0, 3)).toBe(3);
+    expect(goalIndexFromScore(2, 1)).toBe(3);
+  });
+
+  it('filterActiveGoalEventsFromTimeline respeta skip para no repetir goleador', () => {
+    const resolveTeamId = (apiTeamId: number | undefined | null) =>
+      apiTeamId === 10 ? 'home' : apiTeamId === 20 ? 'away' : null;
+
+    const timeline = [
+      {
+        type: 'Goal',
+        detail: 'Normal Goal',
+        time: { elapsed: 4 },
+        team: { id: 20 },
+        player: { name: 'D. Kamada' },
+      },
+      {
+        type: 'Goal',
+        detail: 'Normal Goal',
+        time: { elapsed: 31 },
+        team: { id: 20 },
+        player: { name: 'A. Ueda' },
+      },
+    ];
+
+    expect(
+      filterActiveGoalEventsFromTimeline(
+        timeline,
+        resolveTeamId,
+        1,
+        10,
+        20,
+        0,
+      ),
+    ).toEqual([
+      expect.objectContaining({ playerName: 'D. Kamada', minute: 4 }),
+    ]);
+
+    expect(
+      filterActiveGoalEventsFromTimeline(
+        timeline,
+        resolveTeamId,
+        1,
+        10,
+        20,
+        1,
+      ),
+    ).toEqual([
+      expect.objectContaining({ playerName: 'A. Ueda', minute: 31 }),
+    ]);
   });
 });
