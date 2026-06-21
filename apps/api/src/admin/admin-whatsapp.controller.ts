@@ -7,14 +7,21 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { WhatsappGroupJobType } from '@prisma/client';
+import {
+  WhatsappGroupJobType,
+  WhatsappJobStatus,
+  WhatsappPersonalSource,
+  WhatsappPersonalVia,
+} from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { WhatsappWebService } from '../whatsapp/whatsapp-web.service';
 import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
+import { WhatsappPersonalService } from '../notifications/whatsapp-personal.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('admin/whatsapp')
@@ -24,6 +31,7 @@ export class AdminWhatsappController {
   constructor(
     private readonly waWeb: WhatsappWebService,
     private readonly waGroup: WhatsappGroupService,
+    private readonly waPersonal: WhatsappPersonalService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -69,11 +77,38 @@ export class AdminWhatsappController {
     }
   }
 
-  /** Jobs recientes */
+  /** Jobs recientes de grupos */
   @Get('jobs')
-  async recentJobs() {
-    const jobs = await this.waGroup.getRecentJobs(50);
+  async recentJobs(
+    @Query('limit') limit?: string,
+    @Query('status') status?: WhatsappJobStatus,
+    @Query('type') type?: WhatsappGroupJobType,
+  ) {
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    const jobs = await this.waGroup.getRecentJobs({
+      limit: parsedLimit && Number.isFinite(parsedLimit) ? parsedLimit : 100,
+      status,
+      type,
+    });
     return { jobs };
+  }
+
+  /** Logs recientes de WhatsApp personal */
+  @Get('personal-logs')
+  async personalLogs(
+    @Query('limit') limit?: string,
+    @Query('status') status?: WhatsappJobStatus,
+    @Query('source') source?: WhatsappPersonalSource,
+    @Query('via') via?: WhatsappPersonalVia,
+  ) {
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    const logs = await this.waPersonal.getRecentLogs({
+      limit: parsedLimit && Number.isFinite(parsedLimit) ? parsedLimit : 100,
+      status,
+      source,
+      via,
+    });
+    return { logs };
   }
 
   /** Reintentar un job fallido */
@@ -140,6 +175,13 @@ export class AdminWhatsappController {
   @Delete('jobs/:jobId')
   async deleteJob(@Param('jobId') jobId: string) {
     await this.prisma.whatsappGroupJob.delete({ where: { id: jobId } });
+    return { ok: true };
+  }
+
+  /** Eliminar un log de WhatsApp personal */
+  @Delete('personal-logs/:logId')
+  async deletePersonalLog(@Param('logId') logId: string) {
+    await this.waPersonal.deleteLog(logId);
     return { ok: true };
   }
 }

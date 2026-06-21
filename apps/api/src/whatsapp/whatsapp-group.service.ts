@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
-import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep, MemberStatus } from '@prisma/client';
+import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep, MemberStatus, Prisma } from '@prisma/client';
 import { logGoalAutomation } from '../automation/live/goal-automation-observability.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWebService } from './whatsapp-web.service';
@@ -419,8 +419,18 @@ export class WhatsappGroupService {
     });
   }
 
-  async getRecentJobs(limit = 50) {
+  async getRecentJobs(options: {
+    limit?: number;
+    status?: WhatsappJobStatus;
+    type?: WhatsappGroupJobType;
+  } = {}) {
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 200);
+    const where: Prisma.WhatsappGroupJobWhereInput = {};
+    if (options.status) where.status = options.status;
+    if (options.type) where.type = options.type;
+
     return this.prisma.whatsappGroupJob.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: { league: { select: { name: true, code: true } } },
@@ -1179,7 +1189,7 @@ export class WhatsappGroupService {
     }
 
     const payload = buildGoalStickerParams({
-      playerName: ctx.latest.playerName.trim(),
+      playerName: (ctx.latest.playerName ?? '').trim(),
       teamName: ctx.scoringTeam.name,
       minute: ctx.latest.minute,
       homeTeam: ctx.match.homeTeam.name,
@@ -1208,7 +1218,7 @@ export class WhatsappGroupService {
     if (!ctx) return null;
 
     return buildGoalStickerParams({
-      playerName: ctx.latest.playerName.trim(),
+      playerName: (ctx.latest.playerName ?? '').trim(),
       teamName: ctx.scoringTeam.name,
       minute: ctx.latest.minute,
       homeTeam: ctx.match.homeTeam.name,

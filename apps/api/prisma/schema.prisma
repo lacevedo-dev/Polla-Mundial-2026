@@ -40,6 +40,7 @@ model User {
   verificationTokens       VerificationToken[]
   passwordResetTokens      PasswordResetToken[]
   tenantMemberships        TenantMember[]
+  whatsappPersonalLogs     WhatsappPersonalLog[]
 
   @@index([email])
   @@index([status])
@@ -112,6 +113,7 @@ model League {
   tenant                   CorporateTenant?          @relation(fields: [tenantId], references: [id])
 
   whatsappGroupJobs        WhatsappGroupJob[]
+  whatsappPersonalLogs     WhatsappPersonalLog[]
 
   @@index([code])
   @@index([status])
@@ -1408,4 +1410,41 @@ enum WhatsappJobStatus {
   SENDING
   SENT
   FAILED
+}
+
+model WhatsappPersonalLog {
+  id               String                   @id @default(cuid())
+  status           WhatsappJobStatus
+  source           WhatsappPersonalSource
+  automationStep   AutomationStep?
+  notificationType NotificationType?
+  userId           String?
+  userName         String?                  @db.VarChar(120)
+  countryCode      String                   @default("+57") @db.VarChar(8)
+  phone            String                   @db.VarChar(32)
+  message          String                   @db.LongText
+  via              WhatsappPersonalVia?
+  lastError        String?                  @db.Text
+  leagueId         String?
+  matchId          String?
+  sentAt           DateTime?
+  createdAt        DateTime                 @default(now())
+  user             User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  league           League?                  @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([leagueId])
+  @@index([source])
+}
+
+enum WhatsappPersonalSource {
+  AUTOMATION
+  PAYMENT_REMINDER
+  LEAGUE_BROADCAST
+}
+
+enum WhatsappPersonalVia {
+  WHATSAPP_WEB
+  TWILIO
 }

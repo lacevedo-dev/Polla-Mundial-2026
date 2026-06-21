@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, WhatsappPersonalSource } from '@prisma/client';
 import { EmailQueueService } from '../email/email-queue.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { NotificationsService } from './notifications.service';
@@ -42,6 +42,13 @@ export class PaymentReminderNotifier {
         params.phone,
         `${params.title}\n${params.body}`,
         params.userName,
+        {
+          userId: params.userId,
+          userName: params.userName,
+          source: WhatsappPersonalSource.PAYMENT_REMINDER,
+          leagueId: params.leagueId,
+          notificationType: NotificationType.PAYMENT_CONFIRMED,
+        },
       );
       whatsappSent = wa.sent;
       whatsappVia = wa.via ?? null;

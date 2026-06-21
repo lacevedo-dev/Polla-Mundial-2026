@@ -69,6 +69,14 @@ describe('AutomationDeliveryService', () => {
       '+57',
       '3001234567',
       'Resultado\nGanaste puntos',
+      undefined,
+      expect.objectContaining({
+        userId: 'u1',
+        source: 'AUTOMATION',
+        automationStep: AutomationStep.RESULT_NOTIFICATION,
+        notificationType: NotificationType.RESULT_PUBLISHED,
+        matchId: 'm1',
+      }),
     );
     expect(result.whatsappSent).toBe(true);
     expect(push.sendToUser).not.toHaveBeenCalled();

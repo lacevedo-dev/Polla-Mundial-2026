@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AutomationStep } from '@prisma/client';
+import { WhatsappPersonalSource } from '@prisma/client';
 import { PushNotificationsService } from '../../push-notifications/push-notifications.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WhatsappPersonalService } from '../../notifications/whatsapp-personal.service';
@@ -110,10 +111,23 @@ export class AutomationDeliveryService {
     let whatsappSent = false;
     if (channels.whatsapp && contact?.phone) {
       const waMessage = `${params.title}\n${params.body}`;
+      const leagueId =
+        typeof params.data.leagueId === 'string' ? params.data.leagueId : undefined;
+      const matchId =
+        typeof params.data.matchId === 'string' ? params.data.matchId : undefined;
       const wa = await this.waPersonal.send(
         contact.countryCode,
         contact.phone,
         waMessage,
+        undefined,
+        {
+          userId: params.userId,
+          source: WhatsappPersonalSource.AUTOMATION,
+          automationStep: params.step,
+          notificationType: params.type,
+          leagueId,
+          matchId,
+        },
       );
       whatsappSent = wa.sent;
     }

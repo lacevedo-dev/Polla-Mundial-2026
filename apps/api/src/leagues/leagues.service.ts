@@ -2,7 +2,7 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
-import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Phase, Plan } from '@prisma/client';
+import { MemberRole, MemberStatus, LeagueStatus, ScoringType, InviteStatus, Phase, Plan, WhatsappPersonalSource } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { ParticipationService } from '../participation/participation.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -929,6 +929,12 @@ export class LeaguesService {
                             user.phone,
                             message,
                             user.name,
+                            {
+                                userId: user.id,
+                                userName: user.name,
+                                source: WhatsappPersonalSource.LEAGUE_BROADCAST,
+                                leagueId,
+                            },
                         );
                         results[`whatsapp_personal:${user.id}`] = sent;
                         if (sent && via) {
