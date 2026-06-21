@@ -54,7 +54,7 @@ PLAYER TREATMENT:
 - avoid passport photo or ID photo feeling
 - add subtle athletic posture and premium sports-card lighting while preserving identity
 - white football jersey with green trim and subtle geometric fabric texture
-- jersey number "${mainNumber}" on chest
+- jersey number "${mainNumber}" clearly visible on the chest (large, readable, like official national team kit)
 - use a generic ${countryName}-inspired football crest, but do not copy any official logo exactly
 - blend the lower body into brush strokes and paint textures
 - add cyan rim light, soft shadow, glow, and graphic overlays around shoulders and torso

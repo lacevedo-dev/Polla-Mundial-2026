@@ -1,13 +1,13 @@
 import React from 'react';
 import type { GoalScorerStickerProps } from './GoalScorerStickerCard';
 import {
-    buildPremiumCatalogNumber,
     buildPremiumFooterCode,
+    formatJerseyBadge,
+    formatPremiumDisplayName,
     formatPremiumStatsParts,
     resolveJerseyDigits,
     resolveStickerCountryCode,
     resolveStickerTheme,
-    splitPlayerName,
 } from './goal-sticker-view.util';
 
 const CARD_W = 340;
@@ -26,9 +26,9 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
     const countryCode = resolveStickerCountryCode(event, teamName);
     const [digit1, digit2] = resolveJerseyDigits(profile?.jerseyNumber ?? null);
     const statsParts = formatPremiumStatsParts(event);
-    const nameParts = splitPlayerName(event.playerName);
+    const displayName = formatPremiumDisplayName(event.playerName);
+    const jerseyBadge = formatJerseyBadge(profile?.jerseyNumber);
     const footerCode = buildPremiumFooterCode(countryCode, profile?.jerseyNumber);
-    const catalogNumber = buildPremiumCatalogNumber(profile?.jerseyNumber, event.minute);
 
     return (
         <div
@@ -101,6 +101,15 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                     ) : (
                         <div className="relative z-20 mx-auto mt-16 h-24 w-24 rounded-full border-4 border-white/60 bg-white/20" />
                     )}
+                    {profile?.jerseyNumber != null && (
+                        <div
+                            className="absolute left-[58px] top-[118px] z-40 text-[32px] font-black leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,.35)]"
+                            style={{ color: theme.accent }}
+                            aria-hidden
+                        >
+                            {profile.jerseyNumber}
+                        </div>
+                    )}
                     <div className="absolute right-3 top-12 z-30 h-[210px] w-5 rounded-full bg-cyan-300/50 blur-md" />
                 </div>
 
@@ -134,9 +143,8 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                         className="rounded-[22px] border-[3px] border-white px-4 py-3 shadow-xl"
                         style={{ background: theme.pillFrom }}
                     >
-                        <div className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
-                            {nameParts.first ? `${nameParts.first} ` : ''}
-                            <span className="font-black">{nameParts.last}</span>
+                        <div className="text-[17px] font-black uppercase leading-tight tracking-tight text-white sm:text-[19px]">
+                            {displayName}
                         </div>
                         {statsParts.length > 0 && (
                             <div className="mt-3 flex flex-wrap items-center gap-3 text-[13px] font-black text-white">
@@ -162,7 +170,7 @@ export const PremiumPaniniStickerCard: React.FC<GoalScorerStickerProps> = (props
                         className="flex h-[48px] w-[48px] items-center justify-center rounded-b-2xl rounded-t-md border-[3px] border-white text-xl font-black text-white"
                         style={{ background: theme.primary }}
                     >
-                        {catalogNumber}
+                        {jerseyBadge}
                     </div>
                     <div
                         className="relative h-[36px] flex-1 overflow-hidden rounded-xl border-[3px] border-white"

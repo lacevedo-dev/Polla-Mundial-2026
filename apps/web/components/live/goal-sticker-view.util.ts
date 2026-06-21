@@ -82,3 +82,13 @@ export function splitPlayerName(name: string): { first: string; last: string } {
         last: parts[parts.length - 1] ?? '',
     };
 }
+
+/** Nombre completo en mayúsculas para la franja del sticker (estilo álbum). */
+export function formatPremiumDisplayName(name: string): string {
+    return name.trim().toUpperCase();
+}
+
+export function formatJerseyBadge(jerseyNumber?: number | null): string {
+    if (jerseyNumber == null) return '—';
+    return String(jerseyNumber);
+}

@@ -6,6 +6,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Sparkles,
   Sticker,
   Users,
 } from 'lucide-react';
@@ -138,6 +139,170 @@ async function fetchWaStickerBlob(
   return URL.createObjectURL(blob);
 }
 
+type PreviewMode = 'dashboard' | 'whatsapp' | 'openai';
+
+function formatStickerBirthDate(raw: string | null): string {
+  if (!raw?.trim()) return '—';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw.trim();
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const year = parsed.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+function buildOpenAiStickerPayload(
+  player: StickerAlbumPlayer,
+  team: StickerAlbumTeam,
+  ctx: StickerAlbumResponse['previewContext'],
+) {
+  const countryCode =
+    team.code && team.code !== '—' ? team.code.toUpperCase().slice(0, 3) : 'GOL';
+  const jersey = player.jerseyNumber ?? 10;
+  const jerseyPadded = String(jersey).padStart(2, '0');
+  const minutePadded = String(ctx.minute ?? 0).padStart(1, '0');
+
+  return {
+    playerApiFootballId: player.apiFootballPlayerId,
+    photoUrl: player.photoUrl!,
+    playerName: player.name.trim().toUpperCase(),
+    birthDate: formatStickerBirthDate(player.birthDate),
+    height: player.height?.trim() || '—',
+    weight: player.weight?.trim() || '—',
+    countryCode,
+    countryName: team.name,
+    cardCode: `${countryCode}${jerseyPadded}`.slice(0, 5),
+    stickerNumber: `${jerseyPadded}${minutePadded}`.slice(0, 3),
+    mainNumber: String(jersey),
+    quality: 'high' as const,
+  };
+}
+
+function resolveStickerImageUrl(imageUrl: string): string {
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
+  const base = BASE_URL.replace(/\/$/, '');
+  const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+  return `${base}${path}`;
+}
+
+const OpenAiStickerPreview: React.FC<{
+  player: StickerAlbumPlayer;
+  team: StickerAlbumTeam;
+  ctx: StickerAlbumResponse['previewContext'];
+}> = ({ player, team, ctx }) => {
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  const [cached, setCached] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [generating, setGenerating] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadCached = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await request<{
+        ok?: boolean;
+        cached?: boolean;
+        imageUrl?: string;
+      }>(`/admin/stickers/cached/${player.apiFootballPlayerId}`);
+      if (data.ok && data.cached && data.imageUrl) {
+        setImageUrl(resolveStickerImageUrl(data.imageUrl));
+        setCached(true);
+      } else {
+        setImageUrl(null);
+        setCached(false);
+      }
+    } catch {
+      setImageUrl(null);
+      setCached(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [player.apiFootballPlayerId]);
+
+  React.useEffect(() => {
+    void loadCached();
+  }, [loadCached]);
+
+  const handleGenerate = async (force = false) => {
+    if (!player.photoUrl) {
+      setError('Sin foto del jugador. Ejecuta «Precargar plantillas» primero.');
+      return;
+    }
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await request<{ imageUrl: string; cached: boolean }>('/admin/stickers/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...buildOpenAiStickerPayload(player, team, ctx),
+          forceRegenerate: force,
+        }),
+      });
+      setImageUrl(resolveStickerImageUrl(result.imageUrl));
+      setCached(result.cached);
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.message : 'Error al generar con OpenAI');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed border-violet-200 bg-violet-50/50">
+        <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={`Sticker OpenAI: ${player.name}`}
+          className="mx-auto w-full max-w-[220px] rounded-xl shadow-md"
+        />
+      ) : (
+        <div className="flex h-[220px] w-full max-w-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 text-center text-xs text-violet-800">
+          <Sparkles className="mb-2 h-5 w-5 text-violet-500" />
+          Sin imagen OpenAI cacheada para este jugador.
+        </div>
+      )}
+      {cached && imageUrl && (
+        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+          Desde caché
+        </span>
+      )}
+      {error && <p className="text-center text-[11px] text-rose-600">{error}</p>}
+      <div className="flex flex-wrap justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handleGenerate(imageUrl != null)}
+          disabled={generating}
+          className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[10px] font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+        >
+          {generating ? 'Generando…' : imageUrl ? 'Regenerar IA' : 'Generar con OpenAI'}
+        </button>
+        {imageUrl && (
+          <button
+            type="button"
+            onClick={() => void loadCached()}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50"
+          >
+            Recargar caché
+          </button>
+        )}
+      </div>
+      <p className="text-center text-[10px] leading-relaxed text-slate-500">
+        Requiere <code className="rounded bg-slate-100 px-1">OPENAI_API_KEY</code>. Dorsal{' '}
+        {player.jerseyNumber != null ? `#${player.jerseyNumber}` : 'por defecto'}.
+      </p>
+    </div>
+  );
+};
+
 const WaStickerPreview: React.FC<{
   playerApiId: number;
   teamCode: string;
@@ -211,7 +376,7 @@ const StickerAlbumCard: React.FC<{
   ctx: StickerAlbumResponse['previewContext'];
   variant: GoalStickerVariant;
 }> = ({ player, team, ctx, variant }) => {
-  const [mode, setMode] = React.useState<'dashboard' | 'whatsapp'>('dashboard');
+  const [mode, setMode] = React.useState<PreviewMode>('dashboard');
   const stickerProps = buildStickerProps(player, team, ctx);
 
   return (
@@ -233,13 +398,15 @@ const StickerAlbumCard: React.FC<{
       <div className="mb-3 min-h-[220px] flex items-center justify-center">
         {mode === 'dashboard' ? (
           <GoalScorerStickerCard {...stickerProps} variant={variant} />
-        ) : (
+        ) : mode === 'whatsapp' ? (
           <WaStickerPreview
             playerApiId={player.apiFootballPlayerId}
             teamCode={team.code}
             playerName={player.name}
             variant={variant}
           />
+        ) : (
+          <OpenAiStickerPreview player={player} team={team} ctx={ctx} />
         )}
       </div>
 
@@ -251,7 +418,7 @@ const StickerAlbumCard: React.FC<{
             mode === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          Dashboard
+          Diseño actual
         </button>
         <button
           type="button"
@@ -260,7 +427,16 @@ const StickerAlbumCard: React.FC<{
             mode === 'whatsapp' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          WhatsApp PNG
+          WA PNG
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('openai')}
+          className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors ${
+            mode === 'openai' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          OpenAI
         </button>
       </div>
     </article>
@@ -353,8 +529,8 @@ export default function AdminStickerAlbum() {
             <h1 className="text-2xl font-black tracking-tight text-slate-900">Álbum de stickers</h1>
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-            Previsualiza las cartas de goleador tal como se ven en el dashboard EN VIVO y el PNG que se envía por WhatsApp.
-            Usa los ejemplos demo si aún no hay plantillas precargadas.
+            Compara el diseño actual (React/HTML), el PNG de WhatsApp y la versión generada con OpenAI.
+            Cada carta muestra dorsal, nombre completo en mayúsculas y datos del jugador.
           </p>
         </div>
 

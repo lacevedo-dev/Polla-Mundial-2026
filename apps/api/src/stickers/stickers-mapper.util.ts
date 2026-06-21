@@ -40,7 +40,7 @@ export function buildGenerateStickerDto(input: BuildStickerDtoInput): GenerateSt
   return {
     playerApiFootballId: profile.apiFootballPlayerId,
     photoUrl: profile.photoUrl,
-    playerName: profile.name,
+    playerName: profile.name.trim().toUpperCase(),
     birthDate: profile.birthDate ?? '—',
     height: profile.height ?? '—',
     weight: profile.weight ?? '—',

@@ -42,21 +42,18 @@ function resolveJerseyDigits(params: GoalStickerParams): [string, string] {
   return [raw[0] ?? '1', raw[1] ?? '0'];
 }
 
-function splitName(name: string): { first: string; last: string } {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return { first: '', last: parts[0] ?? '' };
-  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] ?? '' };
-}
-
 function buildFooterCode(country: string, jersey: number | string | null | undefined): string {
   const j = String(jersey ?? 0).padStart(2, '0');
   return `${country}${j}`.slice(0, 5).toUpperCase();
 }
 
-function buildCatalogNumber(jersey: number | string | null | undefined, minute: number | null): string {
-  const j = String(jersey ?? 10).padStart(2, '0');
-  const m = String(minute ?? 0).padStart(1, '0');
-  return `${j}${m}`.slice(0, 3);
+function formatJerseyBadge(jersey: number | string | null | undefined): string {
+  if (jersey == null || jersey === '') return '—';
+  return String(jersey);
+}
+
+function formatDisplayName(name: string): string {
+  return name.trim().toUpperCase();
 }
 
 export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
@@ -68,9 +65,9 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   const country = resolveCountryLabel(params);
   const [digit1, digit2] = resolveJerseyDigits(params);
   const statsParts = formatStatsParts(params);
-  const nameParts = splitName(params.playerName);
+  const displayName = formatDisplayName(params.playerName);
   const footerCode = buildFooterCode(country, params.jerseyNumber);
-  const catalogNumber = buildCatalogNumber(params.jerseyNumber, params.minute);
+  const jerseyBadge = formatJerseyBadge(params.jerseyNumber);
   const statsHtml = statsParts
     .map((part, i) => `${i > 0 ? '<span class="dot">•</span>' : ''}<span>${esc(part)}</span>`)
     .join('');
@@ -154,6 +151,12 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
     filter: contrast(1.08) saturate(1.12) brightness(1.03) drop-shadow(0 16px 18px rgba(0,0,0,.45));
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
     mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
+  }
+  .jersey-chest {
+    position: absolute; left: 58px; top: 118px; z-index: 40;
+    font-size: 32px; font-weight: 900; line-height: 1;
+    color: ${esc(accent)};
+    text-shadow: 0 2px 4px rgba(0,0,0,.35);
   }
   .photo-placeholder {
     width: 96px; height: 96px; margin: 64px auto 0; border-radius: 999px;
@@ -240,17 +243,18 @@ export function buildPremiumGoalStickerHtml(params: GoalStickerParams): string {
   <div class="player-wrap">
     <div class="player-glow"></div>
     ${photoHtml}
+    ${params.jerseyNumber != null && params.jerseyNumber !== '' ? `<div class="jersey-chest" aria-hidden="true">${esc(String(params.jerseyNumber))}</div>` : ''}
   </div>
   <div class="halftone-mid"></div>
   <div class="flag-wrap">${flagHtml}</div>
   <div class="country-stack">${countryLetters}</div>
   <div class="name-box">
-    <div class="name-line">${esc(nameParts.first ? `${nameParts.first} ` : '')}<strong>${esc(nameParts.last)}</strong></div>
+    <div class="name-line">${esc(displayName)}</div>
     ${statsParts.length > 0 ? `<div class="stats-line">${statsHtml}</div>` : ''}
   </div>
   <div class="footer">
     <div class="footer-code">${esc(footerCode)}</div>
-    <div class="footer-catalog">${esc(catalogNumber)}</div>
+    <div class="footer-catalog">${esc(jerseyBadge)}</div>
     <div class="footer-dots"></div>
   </div>
   <div class="inner-border"></div>
