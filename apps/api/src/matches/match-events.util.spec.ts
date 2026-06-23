@@ -12,6 +12,7 @@ import {
   normalizeEventPlayerKey,
   parseGoalScoredJobDedupeKey,
   resolveGoalBeneficiaryIsHome,
+  resolveGoalPlayerTeamApiId,
   resolveGoalPlayerTeamIdForSticker,
   findGoalEventIndexForScore,
 } from './match-events.util';
@@ -101,6 +102,32 @@ describe('match-events.util', () => {
         playerName: 'Baumgartner',
       }),
     )).toBe(true);
+  });
+
+  it('resolveGoalPlayerTeamApiId devuelve el club del jugador en autogol', () => {
+    expect(
+      resolveGoalPlayerTeamApiId(
+        { type: 'Goal', detail: 'Own Goal', team: { id: 10 } },
+        10,
+        20,
+      ),
+    ).toBe(20);
+
+    expect(
+      resolveGoalPlayerTeamApiId(
+        { type: 'Goal', detail: 'Own Goal', team: { id: 20 } },
+        10,
+        20,
+      ),
+    ).toBe(10);
+
+    expect(
+      resolveGoalPlayerTeamApiId(
+        { type: 'Goal', detail: 'Normal Goal', team: { id: 10 } },
+        10,
+        20,
+      ),
+    ).toBe(10);
   });
 
   it('asigna autogol al equipo que suma en el marcador (team del evento = beneficiario)', () => {

@@ -318,6 +318,35 @@ export function resolveGoalAnnulments(
   return annulled;
 }
 
+/** Equipo del jugador en el evento (en autogol, rival del beneficiario en team). */
+export function resolveGoalPlayerTeamApiId(
+  ev: ApiFixtureEvent,
+  homeTeamApiId: number,
+  awayTeamApiId: number,
+): number | undefined {
+  const teamId = ev.team?.id;
+  if (teamId == null) return undefined;
+  if ((ev.detail ?? '') === 'Own Goal') {
+    if (teamId === homeTeamApiId) return awayTeamApiId;
+    if (teamId === awayTeamApiId) return homeTeamApiId;
+    return teamId;
+  }
+  return teamId;
+}
+
+/** Equipo del jugador para UI/álbum (en autogol teamId almacenado = beneficiario). */
+export function resolveGoalPlayerTeamIdFromStored(
+  goal: GoalEventForTeamResolve,
+  match: MatchSidesForGoalTeam,
+): string | null {
+  if ((goal.detail ?? '') !== 'Own Goal') {
+    return goal.teamId;
+  }
+  if (goal.teamId === match.homeTeamId) return match.awayTeamId;
+  if (goal.teamId === match.awayTeamId) return match.homeTeamId;
+  return null;
+}
+
 /** Equipo que suma en el marcador (en autogol, team del evento = beneficiario). */
 export function resolveGoalBeneficiaryIsHome(
   ev: ApiFixtureEvent,

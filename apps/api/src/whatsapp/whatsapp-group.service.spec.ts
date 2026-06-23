@@ -96,6 +96,15 @@ describe('WhatsappGroupService', () => {
 
     jest.clearAllMocks();
     mockPrisma.systemConfig.findUnique.mockResolvedValue(null);
+    mockGoalStickerConfig.getSettings.mockResolvedValue({
+      enabled: false,
+      dashboard: false,
+      whatsappGroup: false,
+      variant: 'classic',
+    });
+    mockStickersService.isStickerAiReady.mockResolvedValue(false);
+    mockStickersService.readCachedStickerBuffer.mockResolvedValue(null);
+    mockStickersService.getOrGenerateSticker.mockReset();
   });
 
   describe('enqueueForLeague', () => {
@@ -345,6 +354,93 @@ describe('WhatsappGroupService', () => {
       await service.processJob('job1');
 
       expect(mockReportService.getResultsDataForLeague).not.toHaveBeenCalled();
+    });
+
+    it('GOAL_SCORED premium OpenAI espera PNG y no usa render HTML', async () => {
+      mockGoalStickerConfig.isActiveFor.mockResolvedValue(true);
+      mockGoalStickerConfig.getSettings.mockResolvedValue({
+        enabled: true,
+        dashboard: true,
+        whatsappGroup: true,
+        variant: 'premium',
+      });
+      mockStickersService.isStickerAiReady.mockResolvedValue(true);
+      const openAiBuffer = Buffer.alloc(10_000, 1);
+      mockStickersService.readCachedStickerBuffer
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(openAiBuffer);
+      mockStickersService.getOrGenerateSticker.mockResolvedValue({
+        ok: true,
+        cached: false,
+        imageUrl: '/uploads/stickers/77-premium.png',
+        fileName: '77-premium.png',
+        playerApiFootballId: 77,
+      });
+
+      const visibleCaption = '⚽ Gol Leao';
+      const storedCaption = encodeGoalJobCaption(visibleCaption, {
+        scorerName: 'R. Leao',
+        assistName: null,
+        goalDetail: 'Normal Goal',
+        elapsed: 87,
+        homeScore: 5,
+        awayScore: 0,
+        scoringTeam: 'Portugal',
+      });
+      mockPrisma.whatsappGroupJob.findUnique
+        .mockResolvedValueOnce({
+          id: 'job-goal-premium',
+          status: WhatsappJobStatus.PENDING,
+          type: WhatsappGroupJobType.GOAL_SCORED,
+          matchId: 'm1',
+          leagueId: 'l1',
+          groupId: 'g@g.us',
+          caption: storedCaption,
+          dedupeKey: 'GOAL_SCORED:m1:l1:5-0',
+          league: { name: 'Liga', code: 'LIG', whatsappGroupId: 'g@g.us' },
+        })
+        .mockResolvedValueOnce({ attemptCount: 1 });
+      mockPrisma.whatsappGroupJob.update.mockResolvedValue({});
+      mockPrisma.match.findUnique.mockResolvedValue({
+        id: 'm1',
+        homeTeamId: 'home-id',
+        awayTeamId: 'away-id',
+        homeScore: 5,
+        awayScore: 0,
+        homeTeam: { id: 'home-id', name: 'Portugal', apiFootballTeamId: 10, flagUrl: null, code: 'POR', shortCode: 'POR' },
+        awayTeam: { id: 'away-id', name: 'Uzbekistan', apiFootballTeamId: 20, flagUrl: null, code: 'UZB', shortCode: 'UZB' },
+      });
+      mockPrisma.matchEvent.findMany.mockResolvedValue([
+        {
+          playerName: 'R. Leao',
+          teamId: 'home-id',
+          detail: 'Normal Goal',
+          minute: 87,
+          assistName: null,
+          playerExternalId: 77,
+        },
+      ]);
+      mockPrisma.playerProfile.findUnique.mockResolvedValue({
+        apiFootballPlayerId: 77,
+        name: 'R. Leao',
+        photoUrl: 'https://example.com/leao.png',
+        nationality: 'PRT',
+        jerseyNumber: 17,
+        height: '180',
+        weight: '75',
+        birthDate: '1999-06-10',
+      });
+
+      await service.processJob('job-goal-premium');
+
+      expect(mockStickersService.getOrGenerateSticker).toHaveBeenCalled();
+      expect(mockWaImage.buildGoalSticker).not.toHaveBeenCalled();
+      expect(mockWaWeb.sendImageToGroup).toHaveBeenCalledWith(
+        'g@g.us',
+        visibleCaption,
+        openAiBuffer,
+        'goleador.png',
+      );
     });
 
     it('GOAL_SCORED envía imagen con caption cuando sticker WA está activo', async () => {

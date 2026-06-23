@@ -132,7 +132,9 @@ export class PlayerProfileCacheService {
         height: parsed.height ?? undefined,
         weight: parsed.weight ?? undefined,
         jerseyNumber: parsed.jerseyNumber ?? undefined,
-        teamApiFootballId: options.teamApiFootballId ?? undefined,
+        ...(options.teamApiFootballId != null
+          ? { teamApiFootballId: options.teamApiFootballId }
+          : {}),
         profileFetchedAt: options.profileFetchedAt ?? undefined,
       },
     });

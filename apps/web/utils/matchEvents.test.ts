@@ -37,6 +37,30 @@ describe('partitionGoalsByTeam', () => {
         expect(homeGoals).toHaveLength(2);
         expect(awayGoals).toHaveLength(0);
     });
+
+    it('lista autogoles bajo el equipo del jugador, no el beneficiario', () => {
+        const goals = [
+            {
+                ...goal(39, 'C. Ronaldo', 'home-id'),
+                detail: 'Normal Goal',
+            },
+            {
+                ...goal(60, 'A. Khusanov', 'home-id'),
+                detail: 'Own Goal',
+            },
+        ];
+
+        const { homeGoals, awayGoals } = partitionGoalsByTeam(
+            goals,
+            'home-id',
+            'away-id',
+            2,
+            0,
+        );
+
+        expect(homeGoals.map((g) => g.playerName)).toEqual(['C. Ronaldo']);
+        expect(awayGoals.map((g) => g.playerName)).toEqual(['A. Khusanov']);
+    });
 });
 
 describe('formatGoalScorersByPlayer', () => {

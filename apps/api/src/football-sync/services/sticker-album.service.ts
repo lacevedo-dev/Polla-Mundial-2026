@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { GoalStickerParams } from '../../whatsapp/whatsapp-image.service';
 import { buildGoalStickerParams } from './goal-sticker-payload.util';
 import { resolveTeamStickerTheme } from '../catalog/team-sticker-theme.util';
+import { resolveGoalPlayerTeamIdFromStored } from '../../matches/match-events.util';
 
 export type StickerAlbumPlayer = {
   apiFootballPlayerId: number;
@@ -99,6 +100,8 @@ export class StickerAlbumService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getAlbum(): Promise<StickerAlbumResponse> {
+    await this.reconcileOwnGoalProfileTeams();
+
     const [teams, profiles] = await Promise.all([
       this.prisma.team.findMany({
         where: { apiFootballTeamId: { not: null } },
@@ -207,6 +210,56 @@ export class StickerAlbumService {
       },
       teams: useDemos ? DEMO_TEAMS : teamsWithPlayers,
     };
+  }
+
+  /** Corrige perfiles asignados al beneficiario del autogol en lugar del club del jugador. */
+  private async reconcileOwnGoalProfileTeams(): Promise<void> {
+    const ownGoals = await this.prisma.matchEvent.findMany({
+      where: {
+        type: 'GOAL',
+        detail: 'Own Goal',
+        playerExternalId: { not: null },
+        teamId: { not: null },
+      },
+      select: {
+        playerExternalId: true,
+        teamId: true,
+        match: {
+          select: {
+            homeTeamId: true,
+            awayTeamId: true,
+            homeTeam: { select: { apiFootballTeamId: true } },
+            awayTeam: { select: { apiFootballTeamId: true } },
+          },
+        },
+      },
+    });
+
+    for (const event of ownGoals) {
+      const playerExternalId = event.playerExternalId;
+      const match = event.match;
+      if (playerExternalId == null || !match || !event.teamId) continue;
+
+      const playerTeamId = resolveGoalPlayerTeamIdFromStored(
+        { teamId: event.teamId, detail: 'Own Goal' },
+        { homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId },
+      );
+      const playerTeamApiId =
+        playerTeamId === match.homeTeamId
+          ? match.homeTeam.apiFootballTeamId
+          : playerTeamId === match.awayTeamId
+            ? match.awayTeam.apiFootballTeamId
+            : null;
+      if (playerTeamApiId == null) continue;
+
+      await this.prisma.playerProfile.updateMany({
+        where: {
+          apiFootballPlayerId: playerExternalId,
+          NOT: { teamApiFootballId: playerTeamApiId },
+        },
+        data: { teamApiFootballId: playerTeamApiId },
+      });
+    }
   }
 
   async resolvePreviewPayload(

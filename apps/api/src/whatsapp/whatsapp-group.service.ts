@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
-import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep, MemberStatus, Prisma } from '@prisma/client';
+import { WhatsappGroupJobType, WhatsappJobStatus, AutomationStep, MemberStatus, Prisma, PlayerProfile } from '@prisma/client';
 import { logGoalAutomation } from '../automation/live/goal-automation-observability.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWebService } from './whatsapp-web.service';
@@ -47,7 +47,10 @@ import { buildGenerateStickerDto } from '../stickers/stickers-mapper.util';
 const GOAL_STICKER_WAIT_MS =
   process.env.NODE_ENV === 'test'
     ? [0]
-    : [0, 3_000, 5_000, 7_000, 10_000, 15_000, 20_000, 30_000];
+    : [0, 3_000, 5_000, 8_000, 12_000, 18_000, 25_000, 35_000, 45_000, 60_000];
+
+/** PNG OpenAI mínimo razonable (evita enviar archivo vacío o corrupto). */
+const MIN_OPENAI_GOAL_STICKER_BYTES = 8_000;
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
@@ -1329,35 +1332,15 @@ export class WhatsappGroupService {
     if (!ctx) return null;
 
     const settings = await this.goalStickerConfig.getSettings();
-    const playerExternalId = ctx.latest.playerExternalId;
     const scoreHome = ctx.scoreHint?.homeScore ?? ctx.match.homeScore ?? 0;
     const scoreAway = ctx.scoreHint?.awayScore ?? ctx.match.awayScore ?? 0;
 
-    if (
+    const wantsOpenAiPremium =
       settings.variant === 'premium' &&
-      (await this.stickersService.isStickerAiReady()) &&
-      playerExternalId &&
-      ctx.profile?.photoUrl
-    ) {
-      const dto = buildGenerateStickerDto({
-        profile: ctx.profile,
-        team: ctx.playerTeam,
-        teamName: ctx.playerTeam.name,
-        minute: ctx.latest.minute,
-      });
+      (await this.stickersService.isStickerAiReady());
 
-      if (dto) {
-        try {
-          await this.stickersService.getOrGenerateSticker(dto);
-          const cached = await this.stickersService.readCachedStickerBuffer(playerExternalId);
-          if (cached) return cached;
-        } catch (error) {
-          this.logger.warn(
-            `OpenAI sticker falló para jugador ${playerExternalId}; usando render HTML`,
-            error instanceof Error ? error.message : error,
-          );
-        }
-      }
+    if (wantsOpenAiPremium) {
+      return this.buildOpenAiGoalStickerBuffer(ctx);
     }
 
     const payload = buildGoalStickerParams({
@@ -1380,6 +1363,54 @@ export class WhatsappGroupService {
       ...payload,
       variant: settings.variant,
     });
+  }
+
+  /**
+   * Sticker premium vía OpenAI: no usar render HTML en WA (llega sin foto del jugador).
+   * Devuelve null hasta tener perfil + PNG generado en disco.
+   */
+  private async buildOpenAiGoalStickerBuffer(ctx: {
+    latest: { playerExternalId: number | null; minute: number };
+    profile: PlayerProfile | null;
+    playerTeam: { name: string; code: string | null; shortCode: string | null };
+  }): Promise<Buffer | null> {
+    const playerExternalId = ctx.latest.playerExternalId;
+    const profile = ctx.profile;
+    if (!playerExternalId || !profile?.photoUrl?.trim()) {
+      return null;
+    }
+
+    const dto = buildGenerateStickerDto({
+      profile,
+      team: ctx.playerTeam,
+      teamName: ctx.playerTeam.name,
+      minute: ctx.latest.minute,
+    });
+    if (!dto) return null;
+
+    const cachedBefore = await this.stickersService.readCachedStickerBuffer(playerExternalId);
+    if (this.isValidOpenAiGoalStickerBuffer(cachedBefore)) {
+      return cachedBefore;
+    }
+
+    try {
+      await this.stickersService.getOrGenerateSticker(dto);
+      const cached = await this.stickersService.readCachedStickerBuffer(playerExternalId);
+      if (this.isValidOpenAiGoalStickerBuffer(cached)) {
+        return cached;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `OpenAI sticker falló para jugador ${playerExternalId}; se reintentará`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+
+    return null;
+  }
+
+  private isValidOpenAiGoalStickerBuffer(buffer: Buffer | null): buffer is Buffer {
+    return buffer != null && buffer.length >= MIN_OPENAI_GOAL_STICKER_BYTES;
   }
 
   private async resolveGoalStickerPayload(

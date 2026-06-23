@@ -23,6 +23,7 @@ import {
   isYellowCardDetail,
   isVarGoalCancelledDetail,
   resolveGoalAnnulments,
+  resolveGoalPlayerTeamApiId,
   type NewRedCardEvent,
   type NewSubstitutionEvent,
   type NewVarGoalAnnulmentEvent,
@@ -1251,6 +1252,30 @@ export class MatchSyncService {
       return null;
     };
 
+    const homeTeamApiId =
+      context?.homeTeamApiId ?? match?.homeTeam.apiFootballTeamId ?? 0;
+    const awayTeamApiId =
+      context?.awayTeamApiId ?? match?.awayTeam.apiFootballTeamId ?? 0;
+
+    const resolvePlayerTeamApiForProfileWarm = (
+      ev: { type?: string; detail?: string | null; team?: { id?: number } },
+    ): number | null => {
+      if (!homeTeamApiId || !awayTeamApiId) return ev.team?.id ?? null;
+      return resolveGoalPlayerTeamApiId(ev, homeTeamApiId, awayTeamApiId) ?? null;
+    };
+
+    const normalizeApiPlayerName = (name: string | null): string | null => {
+      const trimmed = (name ?? '').trim();
+      if (!trimmed) return null;
+      return trimmed
+        .replace(/&apos;/gi, "'")
+        .replace(/&#0*39;/g, "'")
+        .replace(/&quot;/gi, '"')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>');
+    };
+
     let relevantEvents = 0;
     const newRedCards: NewRedCardEvent[] = [];
     const newYellowCards: NewYellowCardEvent[] = [];
@@ -1261,8 +1286,8 @@ export class MatchSyncService {
       const detail: string = ev.detail ?? '';
       const minute: number = ev.time?.elapsed ?? 0;
       const extraMin: number | null = ev.time?.extra ?? null;
-      const playerName: string | null = ev.player?.name ?? null;
-      const assistName: string | null = ev.assist?.name ?? null;
+      const playerName: string | null = normalizeApiPlayerName(ev.player?.name ?? null);
+      const assistName: string | null = normalizeApiPlayerName(ev.assist?.name ?? null);
       const playerExternalId =
         ev.player?.id != null && Number.isFinite(Number(ev.player.id))
           ? Number(ev.player.id)
@@ -1358,7 +1383,10 @@ export class MatchSyncService {
             },
           });
           if (eventType === 'GOAL' && playerExternalId) {
-            this.schedulePlayerProfileWarm(playerExternalId, ev.team?.id ?? null);
+            this.schedulePlayerProfileWarm(
+              playerExternalId,
+              resolvePlayerTeamApiForProfileWarm(ev),
+            );
           }
           continue;
         }
@@ -1396,7 +1424,10 @@ export class MatchSyncService {
         });
 
         if (eventType === 'GOAL' && playerExternalId) {
-          this.schedulePlayerProfileWarm(playerExternalId, ev.team?.id ?? null);
+          this.schedulePlayerProfileWarm(
+            playerExternalId,
+            resolvePlayerTeamApiForProfileWarm(ev),
+          );
         }
 
         if (eventType === 'CARD' && isRedCardDetail(detail)) {

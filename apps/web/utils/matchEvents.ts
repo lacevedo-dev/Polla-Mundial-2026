@@ -83,6 +83,36 @@ export function dedupeGoalEvents(events: MatchEventItem[]): MatchEventItem[] {
     return dedupeMatchEvents(events.filter((event) => event.type === 'GOAL'));
 }
 
+function isOwnGoalDetail(detail: string | null | undefined): boolean {
+    return (detail ?? '').toLowerCase().includes('own goal');
+}
+
+/** Equipo del jugador en UI (en autogol, teamId del evento = beneficiario en marcador). */
+export function resolveGoalScorerTeamId(
+    goal: MatchEventItem,
+    homeTeamId: string,
+    awayTeamId: string,
+): string | null {
+    if (!isOwnGoalDetail(goal.detail)) {
+        return goal.teamId;
+    }
+    if (goal.teamId === homeTeamId) return awayTeamId;
+    if (goal.teamId === awayTeamId) return homeTeamId;
+    return goal.teamId;
+}
+
+/** Equipo que suma en el marcador (teamId almacenado; en autogol = beneficiario). */
+export function resolveGoalBeneficiaryTeamId(
+    goal: MatchEventItem,
+    homeTeamId: string,
+    awayTeamId: string,
+): string | null {
+    if (!isOwnGoalDetail(goal.detail)) {
+        return goal.teamId;
+    }
+    return goal.teamId;
+}
+
 export function splitGoalEvents(events: MatchEventItem[]): {
     active: MatchEventItem[];
     annulled: MatchEventItem[];
@@ -110,16 +140,23 @@ export function partitionGoalsByTeam(
     let runningAway = 0;
 
     for (const goal of sorted) {
-        if (goal.teamId === homeTeamId) {
+        const beneficiaryId = resolveGoalBeneficiaryTeamId(goal, homeTeamId, awayTeamId);
+        const scorerTeamId = resolveGoalScorerTeamId(goal, homeTeamId, awayTeamId);
+
+        if (beneficiaryId === homeTeamId) {
             if (runningHome >= finalHome) continue;
-            homeGoals.push(goal);
             runningHome++;
+            if (scorerTeamId === homeTeamId) homeGoals.push(goal);
+            else if (scorerTeamId === awayTeamId) awayGoals.push(goal);
+            else homeGoals.push(goal);
             continue;
         }
-        if (goal.teamId === awayTeamId) {
+        if (beneficiaryId === awayTeamId) {
             if (runningAway >= finalAway) continue;
-            awayGoals.push(goal);
             runningAway++;
+            if (scorerTeamId === homeTeamId) homeGoals.push(goal);
+            else if (scorerTeamId === awayTeamId) awayGoals.push(goal);
+            else awayGoals.push(goal);
             continue;
         }
 
