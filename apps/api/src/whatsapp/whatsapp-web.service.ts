@@ -421,6 +421,7 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
     caption: string,
     imageBuffer: Buffer,
     filename = 'sticker.png',
+    mimeType = 'image/png',
   ): Promise<void> {
     if (!this.isConnected() || !this.client) {
       throw new Error('WhatsApp Web is not connected');
@@ -433,7 +434,7 @@ export class WhatsappWebService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const imageMedia = new MessageMedia(
-        'image/png',
+        mimeType,
         imageBuffer.toString('base64'),
         filename,
       );

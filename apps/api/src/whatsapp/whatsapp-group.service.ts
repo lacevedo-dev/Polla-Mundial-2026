@@ -353,7 +353,13 @@ export class WhatsappGroupService {
             'Sticker de goleador no disponible (eventos o imagen aún en proceso)',
           );
         }
-        await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
+        await this.waWeb.sendImageToGroup(
+          job.groupId,
+          caption,
+          imageBuffer,
+          'goleador.jpg',
+          'image/jpeg',
+        );
       } else {
         // Text-only notification messages (no image/PDF)
         const parsedCaption = parseGoalJobCaption(job.caption || '');

@@ -23,9 +23,14 @@ import {
   buildPremiumStickerFileName,
   buildPremiumStickerPublicUrl,
   premiumStickerFileExists,
-  readPremiumStickerBuffer,
-  resolvePremiumStickerFilePath,
+  readPremiumStickerFileBuffer,
+  removePremiumStickerFiles,
+  writePremiumStickerWebp,
 } from './stickers-cache.util';
+import {
+  optimizeOpenAiStickerPng,
+  stickerFileToWhatsappJpeg,
+} from './stickers-optimize.util';
 
 export type GenerateStickerResult = {
   ok: true;
@@ -70,6 +75,8 @@ export class StickersService {
       if (cached) {
         return this.buildResult(cached, playerApiFootballId, true, dto);
       }
+    } else {
+      removePremiumStickerFiles(outputDir, playerApiFootballId);
     }
 
     const client = await this.getOpenAIClient();
@@ -80,8 +87,6 @@ export class StickersService {
     );
     const prompt = buildPremiumStickerPrompt(dto, runtime.promptTemplate, referenceContext);
     const quality = dto.quality ?? runtime.quality;
-    const fileName = buildPremiumStickerFileName(playerApiFootballId);
-    const imageUrl = buildPremiumStickerPublicUrl(playerApiFootballId);
 
     try {
       const playerFile = await this.urlToOpenAIFile(dto.photoUrl, 'player-a.png');
@@ -116,16 +121,26 @@ export class StickersService {
         throw new InternalServerErrorException('OpenAI no devolvió imagen en base64');
       }
 
-      fs.mkdirSync(outputDir, { recursive: true });
-      fs.writeFileSync(
-        resolvePremiumStickerFilePath(outputDir, playerApiFootballId),
-        Buffer.from(base64, 'base64'),
+      const rawPng = Buffer.from(base64, 'base64');
+      const persisted = await this.persistOptimizedSticker(
+        outputDir,
+        playerApiFootballId,
+        rawPng,
       );
 
-      await this.persistStickerReference(playerApiFootballId, dto.playerName, imageUrl);
+      await this.persistStickerReference(
+        playerApiFootballId,
+        dto.playerName,
+        persisted.imageUrl,
+      );
 
       return this.buildResult(
-        { fileName, imageUrl, base64, prompt },
+        {
+          fileName: persisted.fileName,
+          imageUrl: persisted.imageUrl,
+          base64: persisted.webpBase64,
+          prompt,
+        },
         playerApiFootballId,
         false,
         dto,
@@ -211,12 +226,31 @@ export class StickersService {
     });
   }
 
+  /** Buffer JPEG optimizado para envío por WhatsApp. */
   async readCachedStickerBuffer(playerApiFootballId: number): Promise<Buffer | null> {
-    return readPremiumStickerBuffer(this.resolveStickersOutputDir(), playerApiFootballId);
+    const outputDir = this.resolveStickersOutputDir();
+    const stored = readPremiumStickerFileBuffer(outputDir, playerApiFootballId);
+    if (!stored) return null;
+
+    if (stored.isLegacyPng) {
+      const migrated = await this.migrateLegacyPngToWebp(
+        outputDir,
+        playerApiFootballId,
+        stored.buffer,
+      );
+      return migrated.whatsappJpeg;
+    }
+
+    return stickerFileToWhatsappJpeg(stored.buffer);
   }
 
   async getCachedSticker(playerApiFootballId: number): Promise<GenerateStickerResult | null> {
     const outputDir = this.resolveStickersOutputDir();
+    const stored = readPremiumStickerFileBuffer(outputDir, playerApiFootballId);
+    if (stored?.isLegacyPng) {
+      await this.migrateLegacyPngToWebp(outputDir, playerApiFootballId, stored.buffer);
+    }
+
     const cached = await this.resolveCachedSticker(playerApiFootballId, outputDir);
     if (!cached) return null;
 
@@ -239,7 +273,7 @@ export class StickersService {
     });
 
     const fileName = buildPremiumStickerFileName(playerApiFootballId);
-    const imageUrl = profile?.premiumStickerUrl ?? buildPremiumStickerPublicUrl(playerApiFootballId);
+    const imageUrl = buildPremiumStickerPublicUrl(playerApiFootballId);
 
     if (!premiumStickerFileExists(outputDir, playerApiFootballId)) {
       if (profile?.premiumStickerUrl) {
@@ -251,6 +285,68 @@ export class StickersService {
     }
 
     return { fileName, imageUrl };
+  }
+
+  private async persistOptimizedSticker(
+    outputDir: string,
+    playerApiFootballId: number,
+    rawPng: Buffer,
+  ): Promise<{
+    fileName: string;
+    imageUrl: string;
+    webpBase64: string;
+    whatsappJpeg: Buffer;
+  }> {
+    const optimized = await optimizeOpenAiStickerPng(rawPng);
+    writePremiumStickerWebp(outputDir, playerApiFootballId, optimized.webp);
+
+    const fileName = buildPremiumStickerFileName(playerApiFootballId);
+    const imageUrl = buildPremiumStickerPublicUrl(playerApiFootballId);
+
+    this.logger.debug(
+      `Sticker optimizado jugador ${playerApiFootballId}: PNG ${rawPng.length} → WebP ${optimized.webp.length} B (WA JPEG ${optimized.whatsappJpeg.length} B)`,
+    );
+
+    return {
+      fileName,
+      imageUrl,
+      webpBase64: optimized.webp.toString('base64'),
+      whatsappJpeg: optimized.whatsappJpeg,
+    };
+  }
+
+  /** Migra PNG legado a WebP en disco (automático al leer caché antigua). */
+  private async migrateLegacyPngToWebp(
+    outputDir: string,
+    playerApiFootballId: number,
+    legacyPng: Buffer,
+  ): Promise<{ whatsappJpeg: Buffer; imageUrl: string }> {
+    removePremiumStickerFiles(outputDir, playerApiFootballId);
+    const persisted = await this.persistOptimizedSticker(
+      outputDir,
+      playerApiFootballId,
+      legacyPng,
+    );
+
+    const profile = await this.prisma.playerProfile.findUnique({
+      where: { apiFootballPlayerId: playerApiFootballId },
+      select: { name: true },
+    });
+
+    await this.persistStickerReference(
+      playerApiFootballId,
+      profile?.name ?? `Jugador ${playerApiFootballId}`,
+      persisted.imageUrl,
+    );
+
+    this.logger.log(
+      `Sticker PNG legado migrado a WebP para jugador ${playerApiFootballId}`,
+    );
+
+    return {
+      whatsappJpeg: persisted.whatsappJpeg,
+      imageUrl: persisted.imageUrl,
+    };
   }
 
   private async persistStickerReference(
@@ -290,7 +386,7 @@ export class StickersService {
 
     if (dto.includeBase64 && payload.base64) {
       result.imageBase64 = payload.base64;
-      result.imageDataUrl = `data:image/png;base64,${payload.base64}`;
+      result.imageDataUrl = `data:image/webp;base64,${payload.base64}`;
     }
 
     if (dto.includePrompt && payload.prompt) {

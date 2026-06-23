@@ -439,7 +439,8 @@ describe('WhatsappGroupService', () => {
         'g@g.us',
         visibleCaption,
         openAiBuffer,
-        'goleador.png',
+        'goleador.jpg',
+        'image/jpeg',
       );
     });
 
@@ -505,7 +506,8 @@ describe('WhatsappGroupService', () => {
         'g@g.us',
         visibleCaption,
         expect.any(Buffer),
-        'goleador.png',
+        'goleador.jpg',
+        'image/jpeg',
       );
       expect(mockWaWeb.sendTextToGroup).not.toHaveBeenCalled();
     });

@@ -9,8 +9,8 @@ import * as path from 'path';
 
 describe('stickers-cache.util', () => {
   it('builds deterministic file names and public urls', () => {
-    expect(buildPremiumStickerFileName(1642)).toBe('1642-premium.png');
-    expect(buildPremiumStickerPublicUrl(1642)).toBe('/uploads/stickers/1642-premium.png');
+    expect(buildPremiumStickerFileName(1642)).toBe('1642-premium.webp');
+    expect(buildPremiumStickerPublicUrl(1642)).toBe('/uploads/stickers/1642-premium.webp');
   });
 
   it('detects cached files on disk', () => {

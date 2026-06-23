@@ -85,7 +85,7 @@ describe('StickersService cache', () => {
     fs.mkdirSync(stickersDir, { recursive: true });
     fs.writeFileSync(
       path.join(stickersDir, buildPremiumStickerFileName(playerApiFootballId)),
-      Buffer.from('cached-png'),
+      Buffer.from('cached-webp'),
     );
 
     prisma.playerProfile.findUnique.mockResolvedValue({
