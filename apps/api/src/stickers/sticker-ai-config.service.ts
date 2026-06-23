@@ -19,7 +19,7 @@ export type StickerAiQuality = 'low' | 'medium' | 'high' | 'auto';
 export type StickerAiConfigStored = {
   apiKeys: string[];
   activeKeyIndex: number;
-  model: string;
+  model: StickerAiModelId;
   quality: StickerAiQuality;
   systemPrompt: string;
 };
@@ -37,7 +37,7 @@ export type StickerAiConfigAdmin = {
 
 export type StickerAiRuntimeConfig = {
   apiKey: string | null;
-  model: string;
+  model: StickerAiModelId;
   quality: StickerAiQuality;
   promptTemplate: string;
 };
