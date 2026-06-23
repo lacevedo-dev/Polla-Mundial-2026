@@ -30,6 +30,15 @@ const mockPrisma = {
   league: {
     findUnique: jest.fn(),
   },
+  match: {
+    findUnique: jest.fn(),
+  },
+  matchEvent: {
+    findMany: jest.fn(),
+  },
+  playerProfile: {
+    findUnique: jest.fn(),
+  },
   systemConfig: {
     findUnique: jest.fn(),
   },
@@ -162,53 +171,16 @@ describe('WhatsappGroupService', () => {
         scoringTeam: 'A',
         elapsed: 67,
         leagueName: 'Liga',
-        scorerName: 'Messi',
       });
 
       expect(ok).toBe(true);
+      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledTimes(1);
       expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             type: WhatsappGroupJobType.GOAL_SCORED,
             dedupeKey: 'GOAL_SCORED:m1:l1:2-1',
             groupId: 'g@g.us',
-          }),
-        }),
-      );
-      expect(mockPrisma.whatsappGroupJob.create).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ type: WhatsappGroupJobType.GOAL_STICKER }),
-        }),
-      );
-    });
-
-    it('encola sticker aparte cuando whatsappGroup sticker está activo', async () => {
-      mockGoalStickerConfig.isActiveFor.mockResolvedValue(true);
-      mockPrisma.league.findUnique.mockResolvedValue({ whatsappGroupId: 'g@g.us', name: 'Liga' });
-      mockPrisma.whatsappGroupJob.findUnique.mockResolvedValue(null);
-      mockPrisma.whatsappGroupJob.create
-        .mockResolvedValueOnce({ id: 'job-goal' })
-        .mockResolvedValueOnce({ id: 'job-sticker' });
-
-      await service.enqueueGoalNotification('m1', 'l1', {
-        homeTeam: 'A',
-        awayTeam: 'B',
-        homeScore: 2,
-        awayScore: 1,
-        scoringTeam: 'A',
-        elapsed: 67,
-        leagueName: 'Liga',
-        scorerName: 'Messi',
-      });
-
-      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.whatsappGroupJob.create).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          data: expect.objectContaining({
-            type: WhatsappGroupJobType.GOAL_STICKER,
-            dedupeKey: 'GOAL_STICKER:m1:l1:2-1',
-            caption: '🎴 Sticker goleador — Messi',
           }),
         }),
       );
@@ -374,7 +346,7 @@ describe('WhatsappGroupService', () => {
       expect(mockReportService.getResultsDataForLeague).not.toHaveBeenCalled();
     });
 
-    it('GOAL_SCORED envía solo texto sin generar sticker', async () => {
+    it('GOAL_SCORED envía imagen con caption cuando sticker WA está activo', async () => {
       mockGoalStickerConfig.isActiveFor.mockResolvedValue(true);
       mockPrisma.whatsappGroupJob.findUnique
         .mockResolvedValueOnce({
@@ -390,12 +362,45 @@ describe('WhatsappGroupService', () => {
         })
         .mockResolvedValueOnce({ attemptCount: 1 });
       mockPrisma.whatsappGroupJob.update.mockResolvedValue({});
+      mockPrisma.match.findUnique.mockResolvedValue({
+        id: 'm1',
+        homeTeamId: 'home-id',
+        awayTeamId: 'away-id',
+        homeScore: 1,
+        awayScore: 0,
+        homeTeam: { id: 'home-id', name: 'Local', apiFootballTeamId: 10, flagUrl: null, code: 'LOC', shortCode: 'LOC' },
+        awayTeam: { id: 'away-id', name: 'Visitante', apiFootballTeamId: 20, flagUrl: null, code: 'VIS', shortCode: 'VIS' },
+      });
+      mockPrisma.matchEvent.findMany.mockResolvedValue([
+        {
+          playerName: 'Defensa',
+          teamId: 'home-id',
+          detail: 'Own Goal',
+          minute: 55,
+          assistName: null,
+          playerExternalId: 99,
+        },
+      ]);
+      mockPrisma.playerProfile.findUnique.mockResolvedValue({
+        apiFootballPlayerId: 99,
+        name: 'Defensa',
+        photoUrl: 'https://example.com/p.png',
+        nationality: 'COL',
+        jerseyNumber: 4,
+        height: '180',
+        weight: '75',
+        birthDate: '1990-01-01',
+      });
 
       await service.processJob('job-goal');
 
-      expect(mockWaWeb.sendTextToGroup).toHaveBeenCalledWith('g@g.us', '⚽ Gol');
-      expect(mockWaImage.buildGoalSticker).not.toHaveBeenCalled();
-      expect(mockWaWeb.sendImageToGroup).not.toHaveBeenCalled();
+      expect(mockWaWeb.sendImageToGroup).toHaveBeenCalledWith(
+        'g@g.us',
+        '⚽ Gol',
+        expect.any(Buffer),
+        'goleador.png',
+      );
+      expect(mockWaWeb.sendTextToGroup).not.toHaveBeenCalled();
     });
   });
 

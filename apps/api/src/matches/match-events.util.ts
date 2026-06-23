@@ -338,13 +338,89 @@ export function goalIndexFromScore(homeScore: number, awayScore: number): number
   return homeScore + awayScore;
 }
 
-/** Extrae marcador de dedupeKey GOAL_SCORED:match:league:home-away */
+/** Extrae marcador de dedupeKey GOAL_SCORED|GOAL_STICKER:match:league:home-away */
 export function parseGoalScoredJobDedupeKey(
   dedupeKey: string,
 ): { homeScore: number; awayScore: number } | null {
-  const match = /^GOAL_SCORED:[^:]+:[^:]+:(\d+)-(\d+)$/.exec(dedupeKey);
+  const match = /^GOAL_(?:SCORED|STICKER):[^:]+:[^:]+:(\d+)-(\d+)$/.exec(dedupeKey);
   if (!match) return null;
   return { homeScore: Number(match[1]), awayScore: Number(match[2]) };
+}
+
+export type GoalEventForTeamResolve = {
+  teamId: string | null;
+  detail: string | null;
+};
+
+export type MatchSidesForGoalTeam = {
+  homeTeamId: string;
+  awayTeamId: string;
+};
+
+/** Aplica un gol al marcador parcial (en autogol teamId = club del jugador, API-Football). */
+export function applyStoredGoalToRunningScore(
+  goal: GoalEventForTeamResolve,
+  match: MatchSidesForGoalTeam,
+  score: { home: number; away: number },
+): void {
+  if ((goal.detail ?? '') === 'Own Goal') {
+    if (goal.teamId === match.homeTeamId) {
+      score.away += 1;
+      return;
+    }
+    if (goal.teamId === match.awayTeamId) {
+      score.home += 1;
+      return;
+    }
+    return;
+  }
+  if (goal.teamId === match.homeTeamId) score.home += 1;
+  else if (goal.teamId === match.awayTeamId) score.away += 1;
+}
+
+/**
+ * Equipo del jugador para sticker/uniforme.
+ * En autogol el beneficiario suma en el marcador; el jugador viste su club (el rival).
+ */
+export function resolveGoalPlayerTeamIdForSticker(
+  goal: GoalEventForTeamResolve,
+  match: MatchSidesForGoalTeam,
+  context?: {
+    allGoals?: GoalEventForTeamResolve[];
+    goalIndex?: number;
+    scoreAfterGoal?: { homeScore: number; awayScore: number } | null;
+  },
+): string | null {
+  if ((goal.detail ?? '') !== 'Own Goal') {
+    if (goal.teamId === match.homeTeamId || goal.teamId === match.awayTeamId) {
+      return goal.teamId;
+    }
+    return null;
+  }
+
+  const {
+    allGoals = [],
+    goalIndex = 0,
+    scoreAfterGoal = null,
+  } = context ?? {};
+
+  if (scoreAfterGoal) {
+    const before = { home: 0, away: 0 };
+    for (let i = 0; i < goalIndex; i++) {
+      applyStoredGoalToRunningScore(allGoals[i], match, before);
+    }
+    if (scoreAfterGoal.homeScore > before.home) {
+      return match.awayTeamId;
+    }
+    if (scoreAfterGoal.awayScore > before.away) {
+      return match.homeTeamId;
+    }
+  }
+
+  if (goal.teamId === match.homeTeamId || goal.teamId === match.awayTeamId) {
+    return goal.teamId;
+  }
+  return null;
 }
 
 /** Goles válidos para notificaciones (excluye anulados en la línea temporal). */

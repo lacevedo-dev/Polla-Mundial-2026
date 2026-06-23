@@ -12,6 +12,7 @@ import {
   normalizeEventPlayerKey,
   parseGoalScoredJobDedupeKey,
   resolveGoalBeneficiaryIsHome,
+  resolveGoalPlayerTeamIdForSticker,
 } from './match-events.util';
 
 describe('match-events.util', () => {
@@ -127,6 +128,38 @@ describe('match-events.util', () => {
         20,
       ),
     ).toBe(false);
+  });
+
+  it('resolveGoalPlayerTeamIdForSticker usa el club del jugador en autogol', () => {
+    const match = { homeTeamId: 'home', awayTeamId: 'away' };
+    const ownGoal = { teamId: 'home', detail: 'Own Goal' };
+
+    expect(
+      resolveGoalPlayerTeamIdForSticker(ownGoal, match, {
+        allGoals: [ownGoal],
+        goalIndex: 0,
+        scoreAfterGoal: { homeScore: 0, awayScore: 1 },
+      }),
+    ).toBe('home');
+
+    expect(
+      resolveGoalPlayerTeamIdForSticker(
+        { teamId: 'away', detail: 'Own Goal' },
+        match,
+        {
+          allGoals: [{ teamId: 'away', detail: 'Own Goal' }],
+          goalIndex: 0,
+          scoreAfterGoal: { homeScore: 1, awayScore: 0 },
+        },
+      ),
+    ).toBe('away');
+  });
+
+  it('parseGoalScoredJobDedupeKey acepta GOAL_STICKER', () => {
+    expect(parseGoalScoredJobDedupeKey('GOAL_STICKER:m:l:2-1')).toEqual({
+      homeScore: 2,
+      awayScore: 1,
+    });
   });
 
   it('deduplica goles con el mismo minuto, equipo y apellido', () => {

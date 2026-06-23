@@ -31,6 +31,7 @@ import {
   goalIndexFromScore,
   normalizeEventPlayerKey,
   parseGoalScoredJobDedupeKey,
+  resolveGoalPlayerTeamIdForSticker,
 } from '../matches/match-events.util';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
 import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
@@ -307,29 +308,22 @@ export class WhatsappGroupService {
           pdfBuffer,
           pdfFilename,
         });
-      } else if (job.type === WhatsappGroupJobType.GOAL_STICKER) {
+      } else if (
+        (job.type === WhatsappGroupJobType.GOAL_SCORED ||
+          job.type === WhatsappGroupJobType.GOAL_STICKER) &&
+        (await this.goalStickerConfig.isActiveFor('whatsappGroup'))
+      ) {
+        caption = job.caption || (await this.buildTextCaption(job));
         const imageBuffer = await this.buildGoalStickerImageBuffer(
           job.matchId,
           job.league.name,
           job.dedupeKey,
         );
-        if (!imageBuffer) {
-          caption = job.caption || '🎴 Sticker goleador (sin imagen)';
-          await this.prisma.whatsappGroupJob.update({
-            where: { id: jobId },
-            data: {
-              status: WhatsappJobStatus.SENT,
-              sentAt: new Date(),
-              caption: `${caption}\n⚠️ No se pudo generar el sticker`,
-              lastError: null,
-            },
-          });
-          this.logger.warn(`GOAL_STICKER job ${jobId}: sin imagen, omitido envío WA`);
-          return;
+        if (imageBuffer) {
+          await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
+        } else {
+          await this.waWeb.sendTextToGroup(job.groupId, caption);
         }
-
-        caption = job.caption || '🎴 Sticker goleador';
-        await this.waWeb.sendImageToGroup(job.groupId, '', imageBuffer, 'goleador.png');
       } else {
         // Text-only notification messages (no image/PDF)
         caption = job.caption || await this.buildTextCaption(job);
@@ -520,14 +514,6 @@ export class WhatsappGroupService {
       type: WhatsappGroupJobType.GOAL_SCORED,
     });
     if (reconciled !== 'none') {
-      if (reconciled === 'requeued') {
-        await this.enqueueGoalStickerJob(matchId, leagueId, {
-          homeScore: params.homeScore,
-          awayScore: params.awayScore,
-          scorerName: params.scorerName,
-          groupId: league.whatsappGroupId,
-        });
-      }
       return true;
     }
 
@@ -544,93 +530,12 @@ export class WhatsappGroupService {
         },
       });
       this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.GOAL_SCORED);
-      await this.enqueueGoalStickerJob(matchId, leagueId, {
-        homeScore: params.homeScore,
-        awayScore: params.awayScore,
-        scorerName: params.scorerName,
-        groupId: league.whatsappGroupId,
-      });
       return true;
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
       if (code === 'P2002') {
         this.logger.warn(`GOAL_SCORED: job duplicado ${dedupeKey}`);
         return false;
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Encola el sticker de goleador por separado del mensaje de texto.
-   * La generación (especialmente álbum IA) puede tardar; no bloquea el aviso de gol.
-   */
-  private async enqueueGoalStickerJob(
-    matchId: string,
-    leagueId: string,
-    params: {
-      homeScore: number;
-      awayScore: number;
-      scorerName?: string | null;
-      groupId: string;
-    },
-  ): Promise<void> {
-    if (!(await this.goalStickerConfig.isActiveFor('whatsappGroup'))) {
-      return;
-    }
-
-    const dedupeKey = `GOAL_STICKER:${matchId}:${leagueId}:${params.homeScore}-${params.awayScore}`;
-    const scorerLabel = params.scorerName?.trim();
-    const caption = scorerLabel
-      ? `🎴 Sticker goleador — ${scorerLabel}`
-      : '🎴 Sticker goleador';
-
-    const existing = await this.prisma.whatsappGroupJob.findUnique({
-      where: { dedupeKey },
-      select: { id: true, status: true },
-    });
-
-    if (existing?.status === WhatsappJobStatus.SENT) {
-      return;
-    }
-
-    if (
-      existing?.status === WhatsappJobStatus.FAILED ||
-      existing?.status === WhatsappJobStatus.PENDING
-    ) {
-      await this.prisma.whatsappGroupJob.update({
-        where: { id: existing.id },
-        data: {
-          status: WhatsappJobStatus.PENDING,
-          caption,
-          lastError: null,
-          ...(existing.status === WhatsappJobStatus.FAILED ? { attemptCount: 0 } : {}),
-        },
-      });
-      return;
-    }
-
-    if (existing?.status === WhatsappJobStatus.SENDING) {
-      return;
-    }
-
-    try {
-      await this.prisma.whatsappGroupJob.create({
-        data: {
-          type: WhatsappGroupJobType.GOAL_STICKER,
-          matchId,
-          leagueId,
-          groupId: params.groupId,
-          dedupeKey,
-          caption,
-          status: WhatsappJobStatus.PENDING,
-        },
-      });
-    } catch (error: unknown) {
-      const code = (error as { code?: string })?.code;
-      if (code === 'P2002') {
-        this.logger.warn(`GOAL_STICKER: job duplicado ${dedupeKey}`);
-        return;
       }
       throw error;
     }
@@ -1239,12 +1144,25 @@ export class WhatsappGroupService {
 
     if (!latest?.playerName?.trim()) return null;
 
-    const scoringTeam =
-      latest.teamId === match.homeTeamId
+    const playerTeamId = resolveGoalPlayerTeamIdForSticker(
+      latest,
+      { homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId },
+      {
+        allGoals: goals,
+        goalIndex,
+        scoreAfterGoal: scoreHint,
+      },
+    );
+    const playerTeam =
+      playerTeamId === match.homeTeamId
         ? match.homeTeam
-        : latest.teamId === match.awayTeamId
+        : playerTeamId === match.awayTeamId
           ? match.awayTeam
-          : match.homeTeam;
+          : latest.teamId === match.homeTeamId
+            ? match.homeTeam
+            : latest.teamId === match.awayTeamId
+              ? match.awayTeam
+              : match.homeTeam;
 
     let profile = latest.playerExternalId
       ? await this.prisma.playerProfile.findUnique({
@@ -1257,7 +1175,7 @@ export class WhatsappGroupService {
         const cache = this.moduleRef.get(PlayerProfileCacheService, { strict: false });
         profile =
           (await cache?.ensureProfile(latest.playerExternalId, {
-            teamApiFootballId: scoringTeam.apiFootballTeamId,
+            teamApiFootballId: playerTeam.apiFootballTeamId,
             jerseyNumber: profile?.jerseyNumber ?? null,
           })) ?? profile;
       } catch {
@@ -1265,7 +1183,7 @@ export class WhatsappGroupService {
       }
     }
 
-    return { match, latest, scoringTeam, profile };
+    return { match, latest, playerTeam, profile };
   }
 
   private async buildGoalStickerImageBuffer(
@@ -1287,8 +1205,8 @@ export class WhatsappGroupService {
     ) {
       const dto = buildGenerateStickerDto({
         profile: ctx.profile,
-        team: ctx.scoringTeam,
-        teamName: ctx.scoringTeam.name,
+        team: ctx.playerTeam,
+        teamName: ctx.playerTeam.name,
         minute: ctx.latest.minute,
       });
 
@@ -1308,7 +1226,7 @@ export class WhatsappGroupService {
 
     const payload = buildGoalStickerParams({
       playerName: (ctx.latest.playerName ?? '').trim(),
-      teamName: ctx.scoringTeam.name,
+      teamName: ctx.playerTeam.name,
       minute: ctx.latest.minute,
       homeTeam: ctx.match.homeTeam.name,
       awayTeam: ctx.match.awayTeam.name,
@@ -1317,8 +1235,8 @@ export class WhatsappGroupService {
       leagueName,
       assistName: ctx.latest.assistName,
       goalDetail: ctx.latest.detail,
-      team: ctx.scoringTeam,
-      teamFlagUrl: ctx.scoringTeam.flagUrl,
+      team: ctx.playerTeam,
+      teamFlagUrl: ctx.playerTeam.flagUrl,
       profile: ctx.profile,
     });
 
@@ -1337,7 +1255,7 @@ export class WhatsappGroupService {
 
     return buildGoalStickerParams({
       playerName: (ctx.latest.playerName ?? '').trim(),
-      teamName: ctx.scoringTeam.name,
+      teamName: ctx.playerTeam.name,
       minute: ctx.latest.minute,
       homeTeam: ctx.match.homeTeam.name,
       awayTeam: ctx.match.awayTeam.name,
@@ -1346,8 +1264,8 @@ export class WhatsappGroupService {
       leagueName,
       assistName: ctx.latest.assistName,
       goalDetail: ctx.latest.detail,
-      team: ctx.scoringTeam,
-      teamFlagUrl: ctx.scoringTeam.flagUrl,
+      team: ctx.playerTeam,
+      teamFlagUrl: ctx.playerTeam.flagUrl,
       profile: ctx.profile,
     });
   }
