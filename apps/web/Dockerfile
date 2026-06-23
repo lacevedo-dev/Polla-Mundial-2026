@@ -32,6 +32,7 @@ RUN echo "Source cache bust: $CACHEBUST"
 # Copiar el todo el código del frontend y el paquete compartido
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
+COPY docs/Logo.png ./docs/Logo.png
 
 # DEBUG: verifica que el código clonado tiene los fixes del error #185
 # (Esto se puede eliminar una vez confirmado el deploy correcto)
