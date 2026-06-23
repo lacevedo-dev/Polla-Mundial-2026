@@ -16,6 +16,9 @@ describe('StickersService cache', () => {
       findUnique: jest.Mock;
       upsert: jest.Mock;
     };
+    team: {
+      findFirst: jest.Mock;
+    };
   };
 
   beforeEach(() => {
@@ -24,6 +27,9 @@ describe('StickersService cache', () => {
       playerProfile: {
         findUnique: jest.fn(),
         upsert: jest.fn(),
+      },
+      team: {
+        findFirst: jest.fn(),
       },
     };
 
@@ -103,5 +109,26 @@ describe('StickersService cache', () => {
     expect(result.cached).toBe(true);
     expect(result.imageUrl).toBe(buildPremiumStickerPublicUrl(playerApiFootballId));
     expect(prisma.playerProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('generateFromAlbum rejects missing profile', async () => {
+    prisma.playerProfile.findUnique = jest.fn().mockResolvedValue(null);
+
+    await expect(
+      service.generateFromAlbum({ playerApiFootballId: 999 }),
+    ).rejects.toThrow('no está en caché');
+  });
+
+  it('generateFromAlbum rejects profile without photo', async () => {
+    prisma.playerProfile.findUnique = jest.fn().mockResolvedValue({
+      apiFootballPlayerId: 999,
+      photoUrl: null,
+      name: 'Test',
+      teamApiFootballId: 8,
+    });
+
+    await expect(
+      service.generateFromAlbum({ playerApiFootballId: 999 }),
+    ).rejects.toThrow('Sin foto del jugador');
   });
 });

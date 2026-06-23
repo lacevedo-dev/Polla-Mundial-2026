@@ -5,6 +5,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { StickersService } from './stickers.service';
 import { GenerateStickerDto } from './dto/generate-sticker.dto';
+import { GenerateStickerFromAlbumDto } from './dto/generate-sticker-from-album.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -30,5 +31,13 @@ export class StickersController {
   })
   async generate(@Body() dto: GenerateStickerDto) {
     return this.stickersService.getOrGenerateSticker(dto);
+  }
+
+  @Post('generate-from-album')
+  @ApiOperation({
+    summary: 'Genera sticker OpenAI desde PlayerProfile (álbum admin)',
+  })
+  async generateFromAlbum(@Body() dto: GenerateStickerFromAlbumDto) {
+    return this.stickersService.generateFromAlbum(dto);
   }
 }

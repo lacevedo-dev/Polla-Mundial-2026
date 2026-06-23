@@ -11,6 +11,8 @@ import * as path from 'path';
 import OpenAI, { toFile } from 'openai';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateStickerDto } from './dto/generate-sticker.dto';
+import { GenerateStickerFromAlbumDto } from './dto/generate-sticker-from-album.dto';
+import { buildGenerateStickerDto } from './stickers-mapper.util';
 import { StickerAiConfigService } from './sticker-ai-config.service';
 import { StickerGlobalReferenceService } from './sticker-global-reference.service';
 import { StickerReferenceStorageService } from './sticker-reference-storage.service';
@@ -150,6 +152,63 @@ export class StickersService {
   /** Compatibilidad con el endpoint admin existente. */
   async generateSticker(dto: GenerateStickerDto): Promise<GenerateStickerResult> {
     return this.getOrGenerateSticker(dto);
+  }
+
+  /** Genera desde PlayerProfile en BD (payload canónico, evita desajustes del admin). */
+  async generateFromAlbum(dto: GenerateStickerFromAlbumDto): Promise<GenerateStickerResult> {
+    const profile = await this.prisma.playerProfile.findUnique({
+      where: { apiFootballPlayerId: dto.playerApiFootballId },
+    });
+
+    if (!profile) {
+      throw new BadRequestException(
+        `Jugador ${dto.playerApiFootballId} no está en caché. Ejecuta «Precargar plantillas» primero.`,
+      );
+    }
+
+    if (!profile.photoUrl?.trim()) {
+      throw new BadRequestException(
+        'Sin foto del jugador. Ejecuta «Precargar plantillas» con enriquecimiento de perfiles.',
+      );
+    }
+
+    const team = await this.resolveTeamForStickerProfile(profile, dto.teamCode);
+    const teamName = team?.name ?? profile.nationality ?? 'Selección';
+    const generateDto = buildGenerateStickerDto({
+      profile,
+      team,
+      teamName,
+      minute: dto.minute ?? null,
+    });
+
+    if (!generateDto) {
+      throw new BadRequestException(
+        'No se pudo preparar el sticker (falta foto u otros datos del jugador).',
+      );
+    }
+
+    return this.getOrGenerateSticker({
+      ...generateDto,
+      forceRegenerate: dto.forceRegenerate,
+    });
+  }
+
+  private async resolveTeamForStickerProfile(
+    profile: { teamApiFootballId: number | null },
+    teamCode?: string,
+  ) {
+    if (profile.teamApiFootballId != null) {
+      return this.prisma.team.findFirst({
+        where: { apiFootballTeamId: profile.teamApiFootballId },
+      });
+    }
+
+    const code = teamCode?.trim();
+    if (!code || code === '—') return null;
+
+    return this.prisma.team.findFirst({
+      where: { OR: [{ code }, { shortCode: code }] },
+    });
   }
 
   async readCachedStickerBuffer(playerApiFootballId: number): Promise<Buffer | null> {

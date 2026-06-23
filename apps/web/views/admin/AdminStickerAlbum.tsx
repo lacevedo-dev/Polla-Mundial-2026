@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {
   ArrowLeft,
   BookOpen,
@@ -12,6 +13,8 @@ import {
   Sparkles,
   Sticker,
   Users,
+  X,
+  ZoomIn,
 } from 'lucide-react';
 import { ApiError, BASE_URL, request } from '../../api';
 import {
@@ -344,54 +347,87 @@ function TeamAlbumIndexNav({
   );
 }
 
-function formatStickerBirthDate(raw: string | null): string {
-  if (!raw?.trim()) return '—';
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw.trim();
-  const day = String(parsed.getDate()).padStart(2, '0');
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const year = parsed.getFullYear();
-  return `${day}-${month}-${year}`;
+function StickerExpandLightbox({
+  open,
+  onOpenChange,
+  playerName,
+  teamName,
+  previewMode,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  playerName: string;
+  teamName: string;
+  previewMode: PreviewMode;
+  children: React.ReactNode;
+}) {
+  const dialogTitleId = React.useId();
+  const modeLabel = PREVIEW_MODE_META[previewMode].label;
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <DialogPrimitive.Content
+          className={`fixed left-1/2 top-1/2 z-50 flex max-h-[min(94vh,900px)] w-[calc(100vw-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-w-xl md:max-w-2xl ${FOCUS_RING}`}
+          aria-describedby={undefined}
+        >
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="min-w-0">
+              <DialogPrimitive.Title id={dialogTitleId} className="truncate text-sm font-black text-slate-900">
+                {playerName}
+              </DialogPrimitive.Title>
+              <p className="truncate text-xs text-slate-500">
+                {teamName} · {modeLabel}
+              </p>
+            </div>
+            <DialogPrimitive.Close
+              type="button"
+              className={`shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 ${FOCUS_RING}`}
+              aria-label="Cerrar vista ampliada"
+            >
+              <X size={18} aria-hidden="true" />
+            </DialogPrimitive.Close>
+          </div>
+          <div className="flex flex-1 items-center justify-center overflow-y-auto bg-slate-50 p-4 sm:p-6">
+            {children}
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
 }
 
-function formatStickerHeight(raw: string | null): string {
-  if (!raw?.trim()) return '—';
-  const trimmed = raw.trim();
-  if (/m$/i.test(trimmed) && !/\s/.test(trimmed)) {
-    return trimmed.replace(/m$/i, ' m');
-  }
-  return trimmed;
-}
-
-function buildOpenAiStickerPayload(
-  player: StickerAlbumPlayer,
-  team: StickerAlbumTeam,
-  ctx: StickerAlbumResponse['previewContext'],
-) {
-  const countryCode =
-    team.code && team.code !== '—' ? team.code.toUpperCase().slice(0, 3) : 'GOL';
-  const jersey = player.jerseyNumber;
-  const jerseyPadded = jersey != null ? String(jersey).padStart(3, '0') : '';
-  const minutePadded = String(ctx.minute ?? 0).padStart(1, '0');
-
-  return {
-    playerApiFootballId: player.apiFootballPlayerId,
-    photoUrl: player.photoUrl!,
-    playerName: player.name.trim().toUpperCase(),
-    birthDate: formatStickerBirthDate(player.birthDate),
-    height: formatStickerHeight(player.height),
-    weight: player.weight?.trim() || '—',
-    countryCode,
-    countryName: team.name,
-    cardCode: jerseyPadded ? `${countryCode} ${jerseyPadded}`.trim() : countryCode,
-    ...(jersey != null
-      ? {
-          stickerNumber: `${String(jersey).padStart(2, '0')}${minutePadded}`.slice(0, 3),
-          mainNumber: String(jersey),
-        }
-      : {}),
-    quality: 'high' as const,
-  };
+function ExpandablePreviewTrigger({
+  label,
+  onExpand,
+  compact,
+  children,
+}: {
+  label: string;
+  onExpand: () => void;
+  compact?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      aria-label={label}
+      className={`group/preview relative flex w-full items-center justify-center ${compact ? 'h-full' : ''} cursor-zoom-in ${FOCUS_RING}`}
+    >
+      {children}
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute rounded-full bg-slate-900/75 p-2 text-white shadow-lg transition-opacity ${
+          compact ? 'bottom-2 right-2 opacity-100 sm:opacity-0 sm:group-hover/preview:opacity-100' : 'bottom-3 right-3 opacity-0 group-hover/preview:opacity-100'
+        }`}
+      >
+        <ZoomIn size={compact ? 14 : 16} />
+      </span>
+    </button>
+  );
 }
 
 function resolveStickerImageUrl(imageUrl: string): string {
@@ -406,7 +442,9 @@ const OpenAiStickerPreview: React.FC<{
   team: StickerAlbumTeam;
   ctx: StickerAlbumResponse['previewContext'];
   compact?: boolean;
-}> = ({ player, team, ctx, compact = false }) => {
+  enlarged?: boolean;
+  onExpand?: () => void;
+}> = ({ player, team, ctx, compact = false, enlarged = false, onExpand }) => {
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
   const [cached, setCached] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
@@ -442,28 +480,48 @@ const OpenAiStickerPreview: React.FC<{
   }, [loadCached]);
 
   const handleGenerate = async (force = false) => {
+    if (player.isDemo || player.apiFootballPlayerId < 1) {
+      setError('Jugador de demo. Ejecuta «Precargar plantillas» para generar stickers reales.');
+      return;
+    }
     if (!player.photoUrl) {
-      setError('Sin foto del jugador. Ejecuta «Precargar plantillas» primero.');
+      setError('Sin foto del jugador. Ejecuta «Precargar plantillas» con enriquecimiento de perfiles.');
       return;
     }
     setGenerating(true);
     setError(null);
     try {
-      const result = await request<{ imageUrl: string; cached: boolean }>('/admin/stickers/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...buildOpenAiStickerPayload(player, team, ctx),
-          forceRegenerate: force,
-        }),
-      });
+      const result = await request<{ imageUrl: string; cached: boolean }>(
+        '/admin/stickers/generate-from-album',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            playerApiFootballId: player.apiFootballPlayerId,
+            teamCode: team.code !== '—' ? team.code : undefined,
+            minute: ctx.minute,
+            forceRegenerate: force,
+          }),
+        },
+      );
       setImageUrl(resolveStickerImageUrl(result.imageUrl));
       setCached(result.cached);
     } catch (e: unknown) {
-      setError(e instanceof ApiError ? e.message : 'Error al generar con OpenAI');
+      if (e instanceof ApiError) {
+        const detail = e.status ? ` (HTTP ${e.status})` : '';
+        setError(`${e.message}${detail}`);
+      } else {
+        setError('Error al generar con OpenAI');
+      }
     } finally {
       setGenerating(false);
     }
   };
+
+  const imageClassName = enlarged
+    ? 'mx-auto w-full max-w-[min(420px,88vw)] rounded-xl shadow-lg'
+    : compact
+      ? 'h-full w-full object-contain'
+      : 'mx-auto w-full max-w-[220px] rounded-xl shadow-md';
 
   if (loading) {
     return (
@@ -485,11 +543,26 @@ const OpenAiStickerPreview: React.FC<{
     return (
       <div className="flex h-full w-full flex-col items-center justify-center">
         {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={`Sticker OpenAI de ${player.name}, ${team.name}`}
-            className="h-full w-full object-contain"
-          />
+          onExpand ? (
+            <ExpandablePreviewTrigger
+              label={`Ampliar sticker OpenAI de ${player.name}`}
+              onExpand={onExpand}
+              compact
+            >
+              <img
+                src={imageUrl}
+                alt=""
+                aria-hidden="true"
+                className="h-full w-full object-contain"
+              />
+            </ExpandablePreviewTrigger>
+          ) : (
+            <img
+              src={imageUrl}
+              alt={`Sticker OpenAI de ${player.name}, ${team.name}`}
+              className="h-full w-full object-contain"
+            />
+          )
         ) : (
           <button
             type="button"
@@ -521,11 +594,17 @@ const OpenAiStickerPreview: React.FC<{
   return (
     <div className="flex flex-col items-center gap-3">
       {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={`Sticker OpenAI de ${player.name}, ${team.name}`}
-          className="mx-auto w-full max-w-[220px] rounded-xl shadow-md"
-        />
+        onExpand ? (
+          <ExpandablePreviewTrigger label={`Ampliar sticker OpenAI de ${player.name}`} onExpand={onExpand}>
+            <img src={imageUrl} alt="" aria-hidden="true" className={imageClassName} />
+          </ExpandablePreviewTrigger>
+        ) : (
+          <img
+            src={imageUrl}
+            alt={`Sticker OpenAI de ${player.name}, ${team.name}`}
+            className={imageClassName}
+          />
+        )
       ) : (
         <div
           role="status"
@@ -579,7 +658,9 @@ const WaStickerPreview: React.FC<{
   playerName: string;
   variant: GoalStickerVariant;
   compact?: boolean;
-}> = ({ playerApiId, teamCode, playerName, variant, compact = false }) => {
+  enlarged?: boolean;
+  onExpand?: () => void;
+}> = ({ playerApiId, teamCode, playerName, variant, compact = false, enlarged = false, onExpand }) => {
   const [src, setSrc] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -645,13 +726,34 @@ const WaStickerPreview: React.FC<{
     );
   }
 
-  return (
+  const imageClassName = enlarged
+    ? 'mx-auto w-full max-w-[min(420px,88vw)] rounded-xl shadow-lg'
+    : compact
+      ? 'h-full w-full object-contain'
+      : 'mx-auto w-full max-w-[220px] rounded-xl shadow-md';
+
+  const image = (
     <img
       src={src}
-      alt={`Sticker WhatsApp de ${playerName}`}
-      className={compact ? 'h-full w-full object-contain' : 'mx-auto w-full max-w-[220px] rounded-xl shadow-md'}
+      alt={onExpand ? '' : `Sticker WhatsApp de ${playerName}`}
+      aria-hidden={onExpand ? true : undefined}
+      className={imageClassName}
     />
   );
+
+  if (onExpand) {
+    return (
+      <ExpandablePreviewTrigger
+        label={`Ampliar sticker WhatsApp de ${playerName}`}
+        onExpand={onExpand}
+        compact={compact}
+      >
+        {image}
+      </ExpandablePreviewTrigger>
+    );
+  }
+
+  return image;
 };
 
 const StickerAlbumCard: React.FC<{
@@ -662,97 +764,145 @@ const StickerAlbumCard: React.FC<{
   previewMode: PreviewMode;
   layout: AlbumLayout;
 }> = ({ player, team, ctx, variant, previewMode, layout }) => {
+  const [expanded, setExpanded] = React.useState(false);
   const stickerProps = buildStickerProps(player, team, ctx);
   const isCompact = layout === 'album';
+  const expandLabel = `Ampliar sticker de ${player.name}, ${team.name}`;
 
-  const previewContent =
+  const renderPreview = (options: { compact: boolean; enlarged?: boolean; onExpand?: () => void }) =>
     previewMode === 'dashboard' ? (
-      <div className={isCompact ? 'origin-top scale-[0.55]' : undefined}>
-        <GoalScorerStickerCard {...stickerProps} variant={variant} />
-      </div>
+      options.onExpand ? (
+        <ExpandablePreviewTrigger label={expandLabel} onExpand={options.onExpand} compact={options.compact}>
+          <div className={options.compact ? 'origin-top scale-[0.55]' : options.enlarged ? 'scale-110' : undefined}>
+            <GoalScorerStickerCard {...stickerProps} variant={variant} />
+          </div>
+        </ExpandablePreviewTrigger>
+      ) : (
+        <div className={options.compact ? 'origin-top scale-[0.55]' : options.enlarged ? 'scale-110' : undefined}>
+          <GoalScorerStickerCard {...stickerProps} variant={variant} />
+        </div>
+      )
     ) : previewMode === 'whatsapp' ? (
       <WaStickerPreview
         playerApiId={player.apiFootballPlayerId}
         teamCode={team.code}
         playerName={player.name}
         variant={variant}
-        compact={isCompact}
+        compact={options.compact}
+        enlarged={options.enlarged}
+        onExpand={options.onExpand}
       />
     ) : (
-      <OpenAiStickerPreview player={player} team={team} ctx={ctx} compact={isCompact} />
+      <OpenAiStickerPreview
+        player={player}
+        team={team}
+        ctx={ctx}
+        compact={options.compact}
+        enlarged={options.enlarged}
+        onExpand={options.onExpand}
+      />
     );
+
+  const previewContent = renderPreview({
+    compact: isCompact,
+    onExpand: () => setExpanded(true),
+  });
+
+  const expandedPreview = renderPreview({ compact: false, enlarged: true });
 
   if (isCompact) {
     return (
-      <article
-        id={`sticker-player-${player.apiFootballPlayerId}`}
-        aria-label={`Sticker de ${player.name}, ${team.name}`}
-        className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-amber-300 hover:shadow-md"
-      >
-        <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-gradient-to-b from-slate-50 to-white p-2">
-          <div className="w-full scale-[0.92] transition group-hover:scale-100 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
-            {previewContent}
+      <>
+        <article
+          id={`sticker-player-${player.apiFootballPlayerId}`}
+          aria-label={`Sticker de ${player.name}, ${team.name}`}
+          className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-amber-300 hover:shadow-md"
+        >
+          <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-gradient-to-b from-slate-50 to-white p-2">
+            <div className="h-full w-full">{previewContent}</div>
+            {team.flagUrl && (
+              <img
+                src={team.flagUrl}
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute right-2 top-2 h-5 w-5 rounded-full border border-white object-cover shadow-sm"
+              />
+            )}
+            {player.jerseyNumber != null && (
+              <span
+                aria-label={`Dorsal ${player.jerseyNumber}`}
+                className="pointer-events-none absolute left-2 top-2 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-black text-white"
+              >
+                #{player.jerseyNumber}
+              </span>
+            )}
           </div>
-          {team.flagUrl && (
-            <img
-              src={team.flagUrl}
-              alt=""
-              aria-hidden="true"
-              className="absolute right-2 top-2 h-5 w-5 rounded-full border border-white object-cover shadow-sm"
-            />
-          )}
-          {player.jerseyNumber != null && (
-            <span
-              aria-label={`Dorsal ${player.jerseyNumber}`}
-              className="absolute left-2 top-2 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-black text-white"
-            >
-              #{player.jerseyNumber}
-            </span>
-          )}
-        </div>
-        <div className="border-t border-slate-100 px-2.5 py-2">
-          <h3 className="truncate text-xs font-bold text-slate-900">{player.name}</h3>
-          <p className="truncate text-[10px] text-slate-500">
-            {team.name}
-            {player.isDemo ? ' · demo' : ''}
-          </p>
-        </div>
-      </article>
+          <div className="border-t border-slate-100 px-2.5 py-2">
+            <h3 className="truncate text-xs font-bold text-slate-900">{player.name}</h3>
+            <p className="truncate text-[10px] text-slate-500">
+              {team.name}
+              {player.isDemo ? ' · demo' : ''}
+            </p>
+          </div>
+        </article>
+
+        <StickerExpandLightbox
+          open={expanded}
+          onOpenChange={setExpanded}
+          playerName={player.name}
+          teamName={team.name}
+          previewMode={previewMode}
+        >
+          {expanded ? expandedPreview : null}
+        </StickerExpandLightbox>
+      </>
     );
   }
 
   return (
-    <article
-      id={`sticker-player-${player.apiFootballPlayerId}`}
-      aria-label={`Sticker de ${player.name}, ${team.name}`}
-      className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:min-h-[480px] lg:min-h-[520px]"
-    >
-      <header className="mb-2 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-bold text-slate-900">{player.name}</h3>
-          <p className="truncate text-[10px] text-slate-500">
-            {team.name}
-            {player.jerseyNumber != null ? ` · #${player.jerseyNumber}` : ''}
-            {player.isDemo ? ' · demo' : ''}
+    <>
+      <article
+        id={`sticker-player-${player.apiFootballPlayerId}`}
+        aria-label={`Sticker de ${player.name}, ${team.name}`}
+        className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:min-h-[480px] lg:min-h-[520px]"
+      >
+        <header className="mb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-bold text-slate-900">{player.name}</h3>
+            <p className="truncate text-[10px] text-slate-500">
+              {team.name}
+              {player.jerseyNumber != null ? ` · #${player.jerseyNumber}` : ''}
+              {player.isDemo ? ' · demo' : ''}
+            </p>
+          </div>
+          {team.flagUrl && (
+            <img
+              src={team.flagUrl}
+              alt={`Bandera de ${team.name}`}
+              className="h-6 w-6 shrink-0 rounded-full border object-cover"
+            />
+          )}
+        </header>
+
+        <div className="flex flex-1 items-center justify-center py-2">{previewContent}</div>
+
+        <footer className="mt-auto border-t border-slate-100 pt-3">
+          <p className="text-[10px] leading-relaxed text-slate-500">
+            {PREVIEW_MODE_META[previewMode].description}
           </p>
-        </div>
-        {team.flagUrl && (
-          <img
-            src={team.flagUrl}
-            alt={`Bandera de ${team.name}`}
-            className="h-6 w-6 shrink-0 rounded-full border object-cover"
-          />
-        )}
-      </header>
+        </footer>
+      </article>
 
-      <div className="flex flex-1 items-center justify-center py-2">{previewContent}</div>
-
-      <footer className="mt-auto border-t border-slate-100 pt-3">
-        <p className="text-[10px] leading-relaxed text-slate-500">
-          {PREVIEW_MODE_META[previewMode].description}
-        </p>
-      </footer>
-    </article>
+      <StickerExpandLightbox
+        open={expanded}
+        onOpenChange={setExpanded}
+        playerName={player.name}
+        teamName={team.name}
+        previewMode={previewMode}
+      >
+        {expanded ? expandedPreview : null}
+      </StickerExpandLightbox>
+    </>
   );
 };
 
