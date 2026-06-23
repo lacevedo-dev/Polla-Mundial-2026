@@ -25,6 +25,7 @@ export type WhatsappGroupJobType =
   | 'PREDICTION_CLOSED'
   | 'RESULT_NOTIFICATION'
   | 'GOAL_SCORED'
+  | 'GOAL_STICKER'
   | 'PRE_MATCH_ESCALATION'
   | 'MATCH_START'
   | 'HALFTIME'

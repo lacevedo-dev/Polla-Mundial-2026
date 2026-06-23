@@ -48,6 +48,7 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   PREDICTION_CLOSED: 'Cierre predicciones',
   RESULT_NOTIFICATION: 'Resultado final',
   GOAL_SCORED: 'Gol en vivo',
+  GOAL_STICKER: 'Sticker goleador',
   PRE_MATCH_ESCALATION: 'Escalación pre-partido',
   MATCH_START: 'Inicio partido',
   HALFTIME: 'Medio tiempo',

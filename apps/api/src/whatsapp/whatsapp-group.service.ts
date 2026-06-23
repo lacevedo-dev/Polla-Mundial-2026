@@ -50,6 +50,7 @@ const WA_JOB_TYPE_TO_AUTOMATION_STEP: Partial<
   [WhatsappGroupJobType.PREDICTION_CLOSED]: AutomationStep.PREDICTION_CLOSING,
   [WhatsappGroupJobType.RESULT_NOTIFICATION]: AutomationStep.RESULT_NOTIFICATION,
   [WhatsappGroupJobType.GOAL_SCORED]: AutomationStep.GOAL_SCORED,
+  [WhatsappGroupJobType.GOAL_STICKER]: AutomationStep.GOAL_SCORED,
   [WhatsappGroupJobType.PREDICTION_REPORT]: AutomationStep.PREDICTION_REPORT,
   [WhatsappGroupJobType.RESULT_REPORT]: AutomationStep.RESULT_REPORT,
   [WhatsappGroupJobType.MATCH_START]: AutomationStep.MATCH_START,
@@ -65,6 +66,7 @@ const JOB_TYPE_TO_SCHEDULER: Partial<Record<WhatsappGroupJobType, string>> = {
   [WhatsappGroupJobType.PREDICTION_CLOSED]:   'prediction_closing',
   [WhatsappGroupJobType.RESULT_NOTIFICATION]: 'match_result',
   [WhatsappGroupJobType.GOAL_SCORED]:         'live_goal',
+  [WhatsappGroupJobType.GOAL_STICKER]:        'live_goal',
   [WhatsappGroupJobType.PREDICTION_REPORT]:   'prediction_report',
   [WhatsappGroupJobType.RESULT_REPORT]:       'result_report',
   [WhatsappGroupJobType.PRE_MATCH_ESCALATION]: 'pre_match_escalation',
@@ -245,7 +247,8 @@ export class WhatsappGroupService {
 
     const isGoalJob =
       job.type === WhatsappGroupJobType.GOAL_SCORED ||
-      job.type === WhatsappGroupJobType.GOAL_IMPACT;
+      job.type === WhatsappGroupJobType.GOAL_IMPACT ||
+      job.type === WhatsappGroupJobType.GOAL_STICKER;
 
     if (isGoalJob) {
       logGoalAutomation(this.logger, 'goal_wa_job_processing', {
@@ -304,21 +307,29 @@ export class WhatsappGroupService {
           pdfBuffer,
           pdfFilename,
         });
-      } else if (
-        job.type === WhatsappGroupJobType.GOAL_SCORED &&
-        (await this.goalStickerConfig.isActiveFor('whatsappGroup'))
-      ) {
-        caption = job.caption || (await this.buildTextCaption(job));
+      } else if (job.type === WhatsappGroupJobType.GOAL_STICKER) {
         const imageBuffer = await this.buildGoalStickerImageBuffer(
           job.matchId,
           job.league.name,
           job.dedupeKey,
         );
-        if (imageBuffer) {
-          await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
-        } else {
-          await this.waWeb.sendTextToGroup(job.groupId, caption);
+        if (!imageBuffer) {
+          caption = job.caption || '🎴 Sticker goleador (sin imagen)';
+          await this.prisma.whatsappGroupJob.update({
+            where: { id: jobId },
+            data: {
+              status: WhatsappJobStatus.SENT,
+              sentAt: new Date(),
+              caption: `${caption}\n⚠️ No se pudo generar el sticker`,
+              lastError: null,
+            },
+          });
+          this.logger.warn(`GOAL_STICKER job ${jobId}: sin imagen, omitido envío WA`);
+          return;
         }
+
+        caption = job.caption || '🎴 Sticker goleador';
+        await this.waWeb.sendImageToGroup(job.groupId, '', imageBuffer, 'goleador.png');
       } else {
         // Text-only notification messages (no image/PDF)
         caption = job.caption || await this.buildTextCaption(job);
@@ -509,6 +520,14 @@ export class WhatsappGroupService {
       type: WhatsappGroupJobType.GOAL_SCORED,
     });
     if (reconciled !== 'none') {
+      if (reconciled === 'requeued') {
+        await this.enqueueGoalStickerJob(matchId, leagueId, {
+          homeScore: params.homeScore,
+          awayScore: params.awayScore,
+          scorerName: params.scorerName,
+          groupId: league.whatsappGroupId,
+        });
+      }
       return true;
     }
 
@@ -525,12 +544,93 @@ export class WhatsappGroupService {
         },
       });
       this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.GOAL_SCORED);
+      await this.enqueueGoalStickerJob(matchId, leagueId, {
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        scorerName: params.scorerName,
+        groupId: league.whatsappGroupId,
+      });
       return true;
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
       if (code === 'P2002') {
         this.logger.warn(`GOAL_SCORED: job duplicado ${dedupeKey}`);
         return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Encola el sticker de goleador por separado del mensaje de texto.
+   * La generación (especialmente álbum IA) puede tardar; no bloquea el aviso de gol.
+   */
+  private async enqueueGoalStickerJob(
+    matchId: string,
+    leagueId: string,
+    params: {
+      homeScore: number;
+      awayScore: number;
+      scorerName?: string | null;
+      groupId: string;
+    },
+  ): Promise<void> {
+    if (!(await this.goalStickerConfig.isActiveFor('whatsappGroup'))) {
+      return;
+    }
+
+    const dedupeKey = `GOAL_STICKER:${matchId}:${leagueId}:${params.homeScore}-${params.awayScore}`;
+    const scorerLabel = params.scorerName?.trim();
+    const caption = scorerLabel
+      ? `🎴 Sticker goleador — ${scorerLabel}`
+      : '🎴 Sticker goleador';
+
+    const existing = await this.prisma.whatsappGroupJob.findUnique({
+      where: { dedupeKey },
+      select: { id: true, status: true },
+    });
+
+    if (existing?.status === WhatsappJobStatus.SENT) {
+      return;
+    }
+
+    if (
+      existing?.status === WhatsappJobStatus.FAILED ||
+      existing?.status === WhatsappJobStatus.PENDING
+    ) {
+      await this.prisma.whatsappGroupJob.update({
+        where: { id: existing.id },
+        data: {
+          status: WhatsappJobStatus.PENDING,
+          caption,
+          lastError: null,
+          ...(existing.status === WhatsappJobStatus.FAILED ? { attemptCount: 0 } : {}),
+        },
+      });
+      return;
+    }
+
+    if (existing?.status === WhatsappJobStatus.SENDING) {
+      return;
+    }
+
+    try {
+      await this.prisma.whatsappGroupJob.create({
+        data: {
+          type: WhatsappGroupJobType.GOAL_STICKER,
+          matchId,
+          leagueId,
+          groupId: params.groupId,
+          dedupeKey,
+          caption,
+          status: WhatsappJobStatus.PENDING,
+        },
+      });
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === 'P2002') {
+        this.logger.warn(`GOAL_STICKER: job duplicado ${dedupeKey}`);
+        return;
       }
       throw error;
     }
