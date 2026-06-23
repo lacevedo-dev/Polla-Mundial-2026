@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['favicon.svg', 'icons/*.png', 'icons/*.svg'],
+        includeAssets: ['favicon-16.png', 'favicon-32.png', 'icons/*.png'],
         manifest: {
           name: 'Polla Mundial 2026',
           short_name: 'Polla 2026',

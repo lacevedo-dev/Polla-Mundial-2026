@@ -20,8 +20,8 @@ self.addEventListener('push', (event) => {
   const {
     title = 'Polla 2026',
     body = '',
-    icon = '/icons/pwa-192.svg',
-    badge = '/icons/pwa-192.svg',
+    icon = '/icons/pwa-192.png',
+    badge = '/icons/pwa-192.png',
     tag,
     data = {},
     actions = [],
