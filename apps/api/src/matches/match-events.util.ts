@@ -318,7 +318,7 @@ export function resolveGoalAnnulments(
   return annulled;
 }
 
-/** Equipo que suma en el marcador (autogol → rival del jugador). */
+/** Equipo que suma en el marcador (en autogol, team del evento = beneficiario). */
 export function resolveGoalBeneficiaryIsHome(
   ev: ApiFixtureEvent,
   homeTeamApiId: number,
@@ -326,8 +326,8 @@ export function resolveGoalBeneficiaryIsHome(
 ): boolean {
   const teamId = ev.team?.id;
   if ((ev.detail ?? '') === 'Own Goal') {
-    if (teamId === homeTeamApiId) return false;
-    if (teamId === awayTeamApiId) return true;
+    if (teamId === homeTeamApiId) return true;
+    if (teamId === awayTeamApiId) return false;
     return false;
   }
   return teamId === homeTeamApiId;
@@ -350,6 +350,7 @@ export function parseGoalScoredJobDedupeKey(
 export type GoalEventForTeamResolve = {
   teamId: string | null;
   detail: string | null;
+  playerName?: string | null;
 };
 
 export type MatchSidesForGoalTeam = {
@@ -357,7 +358,7 @@ export type MatchSidesForGoalTeam = {
   awayTeamId: string;
 };
 
-/** Aplica un gol al marcador parcial (en autogol teamId = club del jugador, API-Football). */
+/** Aplica un gol al marcador parcial (en autogol teamId = equipo que suma). */
 export function applyStoredGoalToRunningScore(
   goal: GoalEventForTeamResolve,
   match: MatchSidesForGoalTeam,
@@ -365,11 +366,11 @@ export function applyStoredGoalToRunningScore(
 ): void {
   if ((goal.detail ?? '') === 'Own Goal') {
     if (goal.teamId === match.homeTeamId) {
-      score.away += 1;
+      score.home += 1;
       return;
     }
     if (goal.teamId === match.awayTeamId) {
-      score.home += 1;
+      score.away += 1;
       return;
     }
     return;
@@ -417,9 +418,8 @@ export function resolveGoalPlayerTeamIdForSticker(
     }
   }
 
-  if (goal.teamId === match.homeTeamId || goal.teamId === match.awayTeamId) {
-    return goal.teamId;
-  }
+  if (goal.teamId === match.homeTeamId) return match.awayTeamId;
+  if (goal.teamId === match.awayTeamId) return match.homeTeamId;
   return null;
 }
 
@@ -428,15 +428,25 @@ export function findGoalEventIndexForScore(
   goals: GoalEventForTeamResolve[],
   match: MatchSidesForGoalTeam,
   scoreAfter: { homeScore: number; awayScore: number },
+  scorerName?: string | null,
 ): number | null {
   const running = { home: 0, away: 0 };
+  const matches: number[] = [];
   for (let i = 0; i < goals.length; i++) {
     applyStoredGoalToRunningScore(goals[i], match, running);
     if (running.home === scoreAfter.homeScore && running.away === scoreAfter.awayScore) {
-      return i;
+      matches.push(i);
     }
   }
-  return null;
+  if (matches.length === 0) return null;
+  if (matches.length === 1 || !scorerName?.trim()) {
+    return matches[matches.length - 1];
+  }
+  const scorerKey = normalizeEventPlayerKey(scorerName);
+  const byScorer = matches.filter(
+    (index) => normalizeEventPlayerKey(goals[index].playerName) === scorerKey,
+  );
+  return byScorer.length > 0 ? byScorer[byScorer.length - 1] : matches[matches.length - 1];
 }
 
 /** Goles válidos para notificaciones (excluye anulados en la línea temporal). */

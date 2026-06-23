@@ -1203,7 +1203,7 @@ export class WhatsappGroupService {
 
     let goalIndex =
       scoreHint != null
-        ? findGoalEventIndexForScore(goals, match, scoreHint)
+        ? findGoalEventIndexForScore(goals, match, scoreHint, meta?.scorerName)
         : goals.length > 0
           ? goals.length - 1
           : null;

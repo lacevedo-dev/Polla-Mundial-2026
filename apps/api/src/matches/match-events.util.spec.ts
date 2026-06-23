@@ -103,14 +103,14 @@ describe('match-events.util', () => {
     )).toBe(true);
   });
 
-  it('asigna autogol al equipo que suma en el marcador', () => {
+  it('asigna autogol al equipo que suma en el marcador (team del evento = beneficiario)', () => {
     expect(
       resolveGoalBeneficiaryIsHome(
         {
           type: 'Goal',
           detail: 'Own Goal',
-          team: { id: 20 },
-          player: { name: 'Y. Al Arab' },
+          team: { id: 10 },
+          player: { name: 'A. Khusanov' },
         },
         10,
         20,
@@ -122,8 +122,8 @@ describe('match-events.util', () => {
         {
           type: 'Goal',
           detail: 'Own Goal',
-          team: { id: 10 },
-          player: { name: 'Defensa local' },
+          team: { id: 20 },
+          player: { name: 'Defensa visitante' },
         },
         10,
         20,
@@ -133,15 +133,15 @@ describe('match-events.util', () => {
 
   it('resolveGoalPlayerTeamIdForSticker usa el club del jugador en autogol', () => {
     const match = { homeTeamId: 'home', awayTeamId: 'away' };
-    const ownGoal = { teamId: 'home', detail: 'Own Goal' };
+    const ownGoalHomeBenefits = { teamId: 'home', detail: 'Own Goal' };
 
     expect(
-      resolveGoalPlayerTeamIdForSticker(ownGoal, match, {
-        allGoals: [ownGoal],
+      resolveGoalPlayerTeamIdForSticker(ownGoalHomeBenefits, match, {
+        allGoals: [ownGoalHomeBenefits],
         goalIndex: 0,
-        scoreAfterGoal: { homeScore: 0, awayScore: 1 },
+        scoreAfterGoal: { homeScore: 1, awayScore: 0 },
       }),
-    ).toBe('home');
+    ).toBe('away');
 
     expect(
       resolveGoalPlayerTeamIdForSticker(
@@ -150,10 +150,31 @@ describe('match-events.util', () => {
         {
           allGoals: [{ teamId: 'away', detail: 'Own Goal' }],
           goalIndex: 0,
-          scoreAfterGoal: { homeScore: 1, awayScore: 0 },
+          scoreAfterGoal: { homeScore: 0, awayScore: 1 },
         },
       ),
-    ).toBe('away');
+    ).toBe('home');
+  });
+
+  it('findGoalEventIndexForScore ubica autogol Portugal 3-0 → 4-0', () => {
+    const match = { homeTeamId: 'home', awayTeamId: 'away' };
+    const goals = [
+      { teamId: 'home', detail: 'Normal Goal' },
+      { teamId: 'home', detail: 'Normal Goal' },
+      { teamId: 'home', detail: 'Normal Goal' },
+      {
+        teamId: 'home',
+        detail: 'Own Goal',
+        playerName: 'A. Khusanov',
+      },
+    ];
+
+    expect(
+      findGoalEventIndexForScore(goals, match, { homeScore: 4, awayScore: 0 }),
+    ).toBe(3);
+    expect(
+      findGoalEventIndexForScore(goals, match, { homeScore: 4, awayScore: 0 }, 'A. Khusanov'),
+    ).toBe(3);
   });
 
   it('findGoalEventIndexForScore ubica el gol correcto en la línea temporal', () => {
