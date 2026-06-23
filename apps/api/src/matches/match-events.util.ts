@@ -423,6 +423,22 @@ export function resolveGoalPlayerTeamIdForSticker(
   return null;
 }
 
+/** Índice del gol en la línea temporal cuyo marcador acumulado coincide con scoreAfter. */
+export function findGoalEventIndexForScore(
+  goals: GoalEventForTeamResolve[],
+  match: MatchSidesForGoalTeam,
+  scoreAfter: { homeScore: number; awayScore: number },
+): number | null {
+  const running = { home: 0, away: 0 };
+  for (let i = 0; i < goals.length; i++) {
+    applyStoredGoalToRunningScore(goals[i], match, running);
+    if (running.home === scoreAfter.homeScore && running.away === scoreAfter.awayScore) {
+      return i;
+    }
+  }
+  return null;
+}
+
 /** Goles válidos para notificaciones (excluye anulados en la línea temporal). */
 export function filterActiveGoalEventsFromTimeline(
   rawEvents: ApiFixtureEvent[],

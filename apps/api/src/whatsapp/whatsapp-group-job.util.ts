@@ -5,7 +5,6 @@ export const TEXT_ONLY_WHATSAPP_GROUP_JOB_TYPES = new Set<WhatsappGroupJobType>(
   WhatsappGroupJobType.MATCH_REMINDER,
   WhatsappGroupJobType.PREDICTION_CLOSED,
   WhatsappGroupJobType.RESULT_NOTIFICATION,
-  WhatsappGroupJobType.GOAL_SCORED,
   WhatsappGroupJobType.PRE_MATCH_ESCALATION,
   WhatsappGroupJobType.MATCH_START,
   WhatsappGroupJobType.HALFTIME,

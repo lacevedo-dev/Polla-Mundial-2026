@@ -27,16 +27,27 @@ import {
 import { isTextOnlyWhatsappGroupJob } from './whatsapp-group-job.util';
 import { WhatsappDispatcherService } from './whatsapp-dispatcher.service';
 import {
+  encodeGoalJobCaption,
+  parseGoalJobCaption,
+  type StoredGoalJobMeta,
+} from './goal-job-caption.util';
+import {
   formatRedCardReason,
-  goalIndexFromScore,
   normalizeEventPlayerKey,
   parseGoalScoredJobDedupeKey,
+  findGoalEventIndexForScore,
   resolveGoalPlayerTeamIdForSticker,
 } from '../matches/match-events.util';
 import { AutomationStepConfigService } from '../automation/config/automation-step-config.service';
 import { GoalStickerConfigService } from '../automation/config/goal-sticker-config.service';
 import { StickersService } from '../stickers/stickers.service';
 import { buildGenerateStickerDto } from '../stickers/stickers-mapper.util';
+
+/** Reintentos internos esperando sync de eventos / generación IA del sticker de gol. */
+const GOAL_STICKER_WAIT_MS =
+  process.env.NODE_ENV === 'test'
+    ? [0]
+    : [0, 3_000, 5_000, 7_000, 10_000, 15_000, 20_000, 30_000];
 
 /** Reintentos automáticos al fallar envío WA Grupo. */
 export const WA_GROUP_MAX_ATTEMPTS = 3;
@@ -105,6 +116,17 @@ export class WhatsappGroupService {
     } catch {
       // Dispatcher aún no registrado (arranque).
     }
+  }
+
+  private async scheduleGoalJobDispatch(jobId: string): Promise<void> {
+    if (await this.goalStickerConfig.isActiveFor('whatsappGroup')) {
+      return;
+    }
+    this.scheduleTextJobDispatch(jobId, WhatsappGroupJobType.GOAL_SCORED);
+  }
+
+  private waitMs(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -313,20 +335,26 @@ export class WhatsappGroupService {
           job.type === WhatsappGroupJobType.GOAL_STICKER) &&
         (await this.goalStickerConfig.isActiveFor('whatsappGroup'))
       ) {
-        caption = job.caption || (await this.buildTextCaption(job));
-        const imageBuffer = await this.buildGoalStickerImageBuffer(
+        const parsedCaption = parseGoalJobCaption(job.caption || '');
+        caption =
+          parsedCaption.caption ||
+          (await this.buildTextCaption(job));
+        const imageBuffer = await this.buildGoalStickerImageBufferWithWait(
           job.matchId,
           job.league.name,
           job.dedupeKey,
+          parsedCaption.meta,
         );
-        if (imageBuffer) {
-          await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
-        } else {
-          await this.waWeb.sendTextToGroup(job.groupId, caption);
+        if (!imageBuffer) {
+          throw new Error(
+            'Sticker de goleador no disponible (eventos o imagen aún en proceso)',
+          );
         }
+        await this.waWeb.sendImageToGroup(job.groupId, caption, imageBuffer, 'goleador.png');
       } else {
         // Text-only notification messages (no image/PDF)
-        caption = job.caption || await this.buildTextCaption(job);
+        const parsedCaption = parseGoalJobCaption(job.caption || '');
+        caption = parsedCaption.caption || await this.buildTextCaption(job);
         await this.waWeb.sendTextToGroup(job.groupId, caption);
       }
 
@@ -440,12 +468,17 @@ export class WhatsappGroupService {
     if (options.status) where.status = options.status;
     if (options.type) where.type = options.type;
 
-    return this.prisma.whatsappGroupJob.findMany({
+    const jobs = await this.prisma.whatsappGroupJob.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: { league: { select: { name: true, code: true } } },
     });
+
+    return jobs.map((job) => ({
+      ...job,
+      caption: parseGoalJobCaption(job.caption).caption,
+    }));
   }
 
   async resetFailedJob(jobId: string): Promise<void> {
@@ -500,7 +533,15 @@ export class WhatsappGroupService {
       return false;
     }
 
-    const caption = buildGoalCaption(params);
+    const caption = encodeGoalJobCaption(buildGoalCaption(params), {
+      scorerName: params.scorerName ?? null,
+      assistName: params.assistName ?? null,
+      goalDetail: params.goalDetail ?? null,
+      elapsed: params.elapsed,
+      homeScore: params.homeScore,
+      awayScore: params.awayScore,
+      scoringTeam: params.scoringTeam,
+    });
     const dedupeKey = `GOAL_SCORED:${matchId}:${leagueId}:${params.homeScore}-${params.awayScore}`;
 
     const existing = await this.prisma.whatsappGroupJob.findUnique({
@@ -529,7 +570,7 @@ export class WhatsappGroupService {
           status: WhatsappJobStatus.PENDING,
         },
       });
-      this.scheduleTextJobDispatch(job.id, WhatsappGroupJobType.GOAL_SCORED);
+      void this.scheduleGoalJobDispatch(job.id);
       return true;
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code;
@@ -1116,10 +1157,31 @@ export class WhatsappGroupService {
     }
   }
 
+  private resolvePlayerTeamFromMatch(
+    match: {
+      homeTeamId: string;
+      awayTeamId: string;
+      homeTeam: { id: string; name: string; apiFootballTeamId: number | null; flagUrl: string | null; code: string; shortCode: string | null };
+      awayTeam: { id: string; name: string; apiFootballTeamId: number | null; flagUrl: string | null; code: string; shortCode: string | null };
+    },
+    teamId: string | null,
+    meta?: StoredGoalJobMeta | null,
+  ) {
+    if (teamId === match.homeTeamId) return match.homeTeam;
+    if (teamId === match.awayTeamId) return match.awayTeam;
+    const scoringTeam = meta?.scoringTeam?.trim();
+    if (scoringTeam) {
+      if (scoringTeam === match.homeTeam.name) return match.homeTeam;
+      if (scoringTeam === match.awayTeam.name) return match.awayTeam;
+    }
+    return match.homeTeam;
+  }
+
   private async resolveGoalStickerContext(
     matchId: string,
     leagueName: string,
     dedupeKey?: string | null,
+    meta?: StoredGoalJobMeta | null,
   ) {
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
@@ -1131,16 +1193,75 @@ export class WhatsappGroupService {
       where: { matchId, type: 'GOAL', annulled: false },
       orderBy: [{ minute: 'asc' }, { extraMin: 'asc' }, { updatedAt: 'asc' }],
     });
-    if (goals.length === 0) return null;
 
-    const scoreHint = dedupeKey ? parseGoalScoredJobDedupeKey(dedupeKey) : null;
-    const goalIndex = scoreHint
-      ? goalIndexFromScore(scoreHint.homeScore, scoreHint.awayScore) - 1
-      : goals.length - 1;
-    const latest =
-      goalIndex >= 0 && goalIndex < goals.length
+    const scoreHint =
+      meta != null
+        ? { homeScore: meta.homeScore, awayScore: meta.awayScore }
+        : dedupeKey
+          ? parseGoalScoredJobDedupeKey(dedupeKey)
+          : null;
+
+    let goalIndex =
+      scoreHint != null
+        ? findGoalEventIndexForScore(goals, match, scoreHint)
+        : goals.length > 0
+          ? goals.length - 1
+          : null;
+
+    if (goalIndex == null && meta?.elapsed != null) {
+      const minuteMatches = goals
+        .map((goal, index) => ({ goal, index }))
+        .filter(({ goal }) => goal.minute === meta.elapsed);
+      if (minuteMatches.length === 1) {
+        goalIndex = minuteMatches[0].index;
+      } else if (minuteMatches.length > 1 && meta.scorerName?.trim()) {
+        const scorerKey = normalizeEventPlayerKey(meta.scorerName);
+        const byName = minuteMatches.find(
+          ({ goal }) => normalizeEventPlayerKey(goal.playerName) === scorerKey,
+        );
+        if (byName) goalIndex = byName.index;
+      }
+    }
+
+    let latest =
+      goalIndex != null && goalIndex >= 0 && goalIndex < goals.length
         ? goals[goalIndex]
-        : goals[goals.length - 1];
+        : null;
+
+    if (
+      latest?.playerName?.trim() &&
+      meta?.scorerName?.trim() &&
+      normalizeEventPlayerKey(latest.playerName) !== normalizeEventPlayerKey(meta.scorerName)
+    ) {
+      return null;
+    }
+
+    if (!latest?.playerName?.trim() && meta?.scorerName?.trim()) {
+      const inferredTeamId =
+        meta.scoringTeam === match.homeTeam.name
+          ? match.homeTeamId
+          : meta.scoringTeam === match.awayTeam.name
+            ? match.awayTeamId
+            : null;
+      latest = {
+        id: 'synthetic',
+        matchId,
+        type: 'GOAL',
+        playerName: meta.scorerName.trim(),
+        assistName: meta.assistName ?? null,
+        detail: meta.goalDetail ?? null,
+        minute: meta.elapsed ?? 0,
+        extraMin: null,
+        teamId: inferredTeamId,
+        playerExternalId: null,
+        assistExternalId: null,
+        annulled: false,
+        annulledReason: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      goalIndex = goalIndex ?? 0;
+    }
 
     if (!latest?.playerName?.trim()) return null;
 
@@ -1149,20 +1270,11 @@ export class WhatsappGroupService {
       { homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId },
       {
         allGoals: goals,
-        goalIndex,
+        goalIndex: goalIndex ?? 0,
         scoreAfterGoal: scoreHint,
       },
     );
-    const playerTeam =
-      playerTeamId === match.homeTeamId
-        ? match.homeTeam
-        : playerTeamId === match.awayTeamId
-          ? match.awayTeam
-          : latest.teamId === match.homeTeamId
-            ? match.homeTeam
-            : latest.teamId === match.awayTeamId
-              ? match.awayTeam
-              : match.homeTeam;
+    const playerTeam = this.resolvePlayerTeamFromMatch(match, playerTeamId, meta);
 
     let profile = latest.playerExternalId
       ? await this.prisma.playerProfile.findUnique({
@@ -1183,19 +1295,43 @@ export class WhatsappGroupService {
       }
     }
 
-    return { match, latest, playerTeam, profile };
+    return { match, latest, playerTeam, profile, scoreHint };
+  }
+
+  private async buildGoalStickerImageBufferWithWait(
+    matchId: string,
+    leagueName: string,
+    dedupeKey?: string | null,
+    meta?: StoredGoalJobMeta | null,
+  ): Promise<Buffer | null> {
+    for (const waitMs of GOAL_STICKER_WAIT_MS) {
+      if (waitMs > 0) {
+        await this.waitMs(waitMs);
+      }
+      const buffer = await this.buildGoalStickerImageBuffer(
+        matchId,
+        leagueName,
+        dedupeKey,
+        meta,
+      );
+      if (buffer) return buffer;
+    }
+    return null;
   }
 
   private async buildGoalStickerImageBuffer(
     matchId: string,
     leagueName: string,
     dedupeKey?: string | null,
+    meta?: StoredGoalJobMeta | null,
   ): Promise<Buffer | null> {
-    const ctx = await this.resolveGoalStickerContext(matchId, leagueName, dedupeKey);
+    const ctx = await this.resolveGoalStickerContext(matchId, leagueName, dedupeKey, meta);
     if (!ctx) return null;
 
     const settings = await this.goalStickerConfig.getSettings();
     const playerExternalId = ctx.latest.playerExternalId;
+    const scoreHome = ctx.scoreHint?.homeScore ?? ctx.match.homeScore ?? 0;
+    const scoreAway = ctx.scoreHint?.awayScore ?? ctx.match.awayScore ?? 0;
 
     if (
       settings.variant === 'premium' &&
@@ -1230,8 +1366,8 @@ export class WhatsappGroupService {
       minute: ctx.latest.minute,
       homeTeam: ctx.match.homeTeam.name,
       awayTeam: ctx.match.awayTeam.name,
-      homeScore: ctx.match.homeScore ?? 0,
-      awayScore: ctx.match.awayScore ?? 0,
+      homeScore: scoreHome,
+      awayScore: scoreAway,
       leagueName,
       assistName: ctx.latest.assistName,
       goalDetail: ctx.latest.detail,

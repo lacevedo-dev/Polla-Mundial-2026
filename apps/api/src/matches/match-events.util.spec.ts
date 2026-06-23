@@ -13,6 +13,7 @@ import {
   parseGoalScoredJobDedupeKey,
   resolveGoalBeneficiaryIsHome,
   resolveGoalPlayerTeamIdForSticker,
+  findGoalEventIndexForScore,
 } from './match-events.util';
 
 describe('match-events.util', () => {
@@ -153,6 +154,18 @@ describe('match-events.util', () => {
         },
       ),
     ).toBe('away');
+  });
+
+  it('findGoalEventIndexForScore ubica el gol correcto en la línea temporal', () => {
+    const match = { homeTeamId: 'home', awayTeamId: 'away' };
+    const goals = [
+      { teamId: 'home', detail: 'Normal Goal' },
+      { teamId: 'away', detail: 'Normal Goal' },
+    ];
+
+    expect(findGoalEventIndexForScore(goals, match, { homeScore: 1, awayScore: 0 })).toBe(0);
+    expect(findGoalEventIndexForScore(goals, match, { homeScore: 1, awayScore: 1 })).toBe(1);
+    expect(findGoalEventIndexForScore(goals, match, { homeScore: 2, awayScore: 1 })).toBeNull();
   });
 
   it('parseGoalScoredJobDedupeKey acepta GOAL_STICKER', () => {

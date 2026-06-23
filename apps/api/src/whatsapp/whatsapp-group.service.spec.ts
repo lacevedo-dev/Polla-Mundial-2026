@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { WhatsappGroupJobType, WhatsappJobStatus } from '@prisma/client';
 import { WhatsappGroupService } from './whatsapp-group.service';
+import { encodeGoalJobCaption } from './goal-job-caption.util';
 import { WhatsappWebService } from './whatsapp-web.service';
 import { WhatsappImageService } from './whatsapp-image.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -348,6 +349,16 @@ describe('WhatsappGroupService', () => {
 
     it('GOAL_SCORED envía imagen con caption cuando sticker WA está activo', async () => {
       mockGoalStickerConfig.isActiveFor.mockResolvedValue(true);
+      const visibleCaption = '⚽ Gol';
+      const storedCaption = encodeGoalJobCaption(visibleCaption, {
+        scorerName: 'Defensa',
+        assistName: null,
+        goalDetail: 'Own Goal',
+        elapsed: 55,
+        homeScore: 1,
+        awayScore: 0,
+        scoringTeam: 'Local',
+      });
       mockPrisma.whatsappGroupJob.findUnique
         .mockResolvedValueOnce({
           id: 'job-goal',
@@ -356,7 +367,7 @@ describe('WhatsappGroupService', () => {
           matchId: 'm1',
           leagueId: 'l1',
           groupId: 'g@g.us',
-          caption: '⚽ Gol',
+          caption: storedCaption,
           dedupeKey: 'GOAL_SCORED:m1:l1:1-0',
           league: { name: 'Liga', code: 'LIG', whatsappGroupId: 'g@g.us' },
         })
@@ -396,7 +407,7 @@ describe('WhatsappGroupService', () => {
 
       expect(mockWaWeb.sendImageToGroup).toHaveBeenCalledWith(
         'g@g.us',
-        '⚽ Gol',
+        visibleCaption,
         expect.any(Buffer),
         'goleador.png',
       );
