@@ -81,9 +81,13 @@ const DEFAULT_PUBLIC_REGISTRATION_CONFIG: PublicRegistrationConfigForm = {
 };
 
 const STICKER_MODEL_OPTIONS = [
-    { value: 'gpt-image-2', label: 'GPT Image 2 — stickers premium (recomendado)' },
-    { value: 'gpt-image-1.5', label: 'GPT Image 1.5 — alternativa' },
-];
+    { value: 'gpt-image-2', label: 'GPT Image 2 — máxima calidad (recomendado)' },
+    { value: 'gpt-image-1.5', label: 'GPT Image 1.5 — alta calidad, costo intermedio' },
+    { value: 'gpt-image-1-mini', label: 'GPT Image 1 Mini — económico para alto volumen' },
+    { value: 'gpt-image-1', label: 'GPT Image 1 — alternativa clásica' },
+] as const;
+
+type StickerModelOption = { value: string; label: string; description?: string };
 
 const STICKER_QUALITY_OPTIONS = [
     { value: 'high', label: 'Alta — mejor detalle' },
@@ -168,6 +172,9 @@ const AdminSettings: React.FC = () => {
     const [stickerAiSaving, setStickerAiSaving] = React.useState(false);
     const [stickerAiStatus, setStickerAiStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
     const [stickerAiSaveError, setStickerAiSaveError] = React.useState<string | null>(null);
+    const [stickerModelOptions, setStickerModelOptions] = React.useState<StickerModelOption[]>(
+        [...STICKER_MODEL_OPTIONS],
+    );
     const [showStickerNewKey, setShowStickerNewKey] = React.useState(false);
     const [newStickerKeyInput, setNewStickerKeyInput] = React.useState('');
     const [addingStickerKey, setAddingStickerKey] = React.useState(false);
@@ -234,6 +241,15 @@ const AdminSettings: React.FC = () => {
                     defaultSystemPrompt: data.defaultSystemPrompt || prev.defaultSystemPrompt,
                     envApiKeyConfigured: Boolean(data.envApiKeyConfigured),
                 }));
+                if (Array.isArray(data.availableModels) && data.availableModels.length > 0) {
+                    setStickerModelOptions(
+                        data.availableModels.map((m: { id: string; label: string; description?: string }) => ({
+                            value: m.id,
+                            label: m.label,
+                            description: m.description,
+                        })),
+                    );
+                }
             })
             .catch(() => {})
             .finally(() => setStickerAiLoading(false));
@@ -1002,10 +1018,15 @@ const AdminSettings: React.FC = () => {
                                     onChange={(e) => setStickerAiConfig((prev) => ({ ...prev, model: e.target.value }))}
                                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
                                 >
-                                    {STICKER_MODEL_OPTIONS.map((opt) => (
+                                    {stickerModelOptions.map((opt) => (
                                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                                     ))}
                                 </select>
+                                {stickerModelOptions.find((m) => m.value === stickerAiConfig.model)?.description && (
+                                    <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+                                        {stickerModelOptions.find((m) => m.value === stickerAiConfig.model)?.description}
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">

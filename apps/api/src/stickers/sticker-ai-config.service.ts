@@ -3,6 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { serializeSystemConfigValue, parseSystemConfigValue } from '../system-config/system-config.util';
 import { DEFAULT_STICKER_PROMPT_TEMPLATE } from './stickers-prompt.util';
+import {
+  DEFAULT_STICKER_AI_MODEL,
+  normalizeStickerAiModel,
+  STICKER_AI_MODEL_OPTIONS,
+  type StickerAiModelId,
+} from './sticker-ai-config.util';
+
+export { STICKER_AI_MODEL_OPTIONS, DEFAULT_STICKER_AI_MODEL } from './sticker-ai-config.util';
 
 export const STICKER_AI_CONFIG_KEY = 'sticker_ai_config';
 
@@ -19,11 +27,12 @@ export type StickerAiConfigStored = {
 export type StickerAiConfigAdmin = {
   apiKeys: string[];
   activeKeyIndex: number;
-  model: string;
+  model: StickerAiModelId;
   quality: StickerAiQuality;
   systemPrompt: string;
   defaultSystemPrompt: string;
   envApiKeyConfigured: boolean;
+  availableModels: typeof STICKER_AI_MODEL_OPTIONS;
 };
 
 export type StickerAiRuntimeConfig = {
@@ -33,7 +42,7 @@ export type StickerAiRuntimeConfig = {
   promptTemplate: string;
 };
 
-const DEFAULT_MODEL = 'gpt-image-2';
+const DEFAULT_MODEL = DEFAULT_STICKER_AI_MODEL;
 const DEFAULT_QUALITY: StickerAiQuality = 'high';
 
 function maskApiKey(key: string): string {
@@ -66,7 +75,9 @@ function parseStoredConfig(value: unknown): StickerAiConfigStored {
   return {
     apiKeys,
     activeKeyIndex,
-    model: typeof record.model === 'string' && record.model.trim() ? record.model.trim() : DEFAULT_MODEL,
+    model: normalizeStickerAiModel(
+      typeof record.model === 'string' ? record.model : undefined,
+    ),
     quality: normalizeQuality(record.quality),
     systemPrompt:
       typeof record.systemPrompt === 'string' && record.systemPrompt.trim()
@@ -113,6 +124,7 @@ export class StickerAiConfigService {
       systemPrompt: stored.systemPrompt,
       defaultSystemPrompt: DEFAULT_STICKER_PROMPT_TEMPLATE,
       envApiKeyConfigured: Boolean(envApiKey),
+      availableModels: STICKER_AI_MODEL_OPTIONS,
     };
   }
 
@@ -132,7 +144,7 @@ export class StickerAiConfigService {
         dto.activeKeyIndex ?? 0,
         Math.max(0, finalKeys.length - 1),
       ),
-      model: dto.model?.trim() || DEFAULT_MODEL,
+      model: normalizeStickerAiModel(dto.model),
       quality: normalizeQuality(dto.quality),
       systemPrompt: dto.systemPrompt?.trim() || DEFAULT_STICKER_PROMPT_TEMPLATE,
     };
@@ -159,7 +171,7 @@ export class StickerAiConfigService {
 
     return {
       apiKey: configKey ?? envKey,
-      model: stored.model || envModel || DEFAULT_MODEL,
+      model: normalizeStickerAiModel(stored.model || envModel),
       quality: stored.quality ?? normalizeQuality(envQuality),
       promptTemplate: stored.systemPrompt?.trim() || DEFAULT_STICKER_PROMPT_TEMPLATE,
     };
