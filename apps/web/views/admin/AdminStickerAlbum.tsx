@@ -430,11 +430,18 @@ function ExpandablePreviewTrigger({
   );
 }
 
-function resolveStickerImageUrl(imageUrl: string): string {
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return imageUrl;
-  const base = BASE_URL.replace(/\/$/, '');
-  const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
-  return `${base}${path}`;
+function resolveStickerImageUrl(imageUrl: string, cacheBust?: number | string | null): string {
+  let resolved: string;
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    resolved = imageUrl;
+  } else {
+    const base = BASE_URL.replace(/\/$/, '');
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    resolved = `${base}${path}`;
+  }
+  if (cacheBust == null || cacheBust === '') return resolved;
+  const sep = resolved.includes('?') ? '&' : '?';
+  return `${resolved}${sep}v=${encodeURIComponent(String(cacheBust))}`;
 }
 
 const OpenAiStickerPreview: React.FC<{
@@ -461,7 +468,7 @@ const OpenAiStickerPreview: React.FC<{
         imageUrl?: string;
       }>(`/admin/stickers/cached/${player.apiFootballPlayerId}`);
       if (data.ok && data.cached && data.imageUrl) {
-        setImageUrl(resolveStickerImageUrl(data.imageUrl));
+        setImageUrl(resolveStickerImageUrl(data.imageUrl, Date.now()));
         setCached(true);
       } else {
         setImageUrl(null);
@@ -503,7 +510,7 @@ const OpenAiStickerPreview: React.FC<{
           }),
         },
       );
-      setImageUrl(resolveStickerImageUrl(result.imageUrl));
+      setImageUrl(resolveStickerImageUrl(result.imageUrl, Date.now()));
       setCached(result.cached);
     } catch (e: unknown) {
       if (e instanceof ApiError) {
@@ -550,6 +557,7 @@ const OpenAiStickerPreview: React.FC<{
               compact
             >
               <img
+                key={imageUrl}
                 src={imageUrl}
                 alt=""
                 aria-hidden="true"
@@ -558,6 +566,7 @@ const OpenAiStickerPreview: React.FC<{
             </ExpandablePreviewTrigger>
           ) : (
             <img
+              key={imageUrl}
               src={imageUrl}
               alt={`Sticker OpenAI de ${player.name}, ${team.name}`}
               className="h-full w-full object-contain"
@@ -596,10 +605,11 @@ const OpenAiStickerPreview: React.FC<{
       {imageUrl ? (
         onExpand ? (
           <ExpandablePreviewTrigger label={`Ampliar sticker OpenAI de ${player.name}`} onExpand={onExpand}>
-            <img src={imageUrl} alt="" aria-hidden="true" className={imageClassName} />
+            <img key={imageUrl} src={imageUrl} alt="" aria-hidden="true" className={imageClassName} />
           </ExpandablePreviewTrigger>
         ) : (
           <img
+            key={imageUrl}
             src={imageUrl}
             alt={`Sticker OpenAI de ${player.name}, ${team.name}`}
             className={imageClassName}
@@ -617,6 +627,11 @@ const OpenAiStickerPreview: React.FC<{
       {cached && imageUrl && (
         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
           Desde caché
+        </span>
+      )}
+      {!cached && imageUrl && !generating && (
+        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-800">
+          Recién generado
         </span>
       )}
       {error && (
