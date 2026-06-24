@@ -1,5 +1,5 @@
 import React from 'react';
-import { probeOpenAiStickerUrl, resolveOpenAiStickerUrl } from '../utils/openAiSticker.util';
+import { resolveAvailableOpenAiStickerUrl } from '../utils/openAiSticker.util';
 
 export function useOpenAiStickerImage(
     playerExternalId: number | null | undefined,
@@ -15,13 +15,12 @@ export function useOpenAiStickerImage(
         }
 
         let cancelled = false;
-        const url = resolveOpenAiStickerUrl(playerExternalId);
         setLoading(true);
         setImageUrl(null);
 
-        void probeOpenAiStickerUrl(url).then((ok) => {
+        void resolveAvailableOpenAiStickerUrl(playerExternalId).then((url) => {
             if (cancelled) return;
-            setImageUrl(ok ? url : null);
+            setImageUrl(url);
             setLoading(false);
         });
 

@@ -88,6 +88,8 @@ const LiveGoalStickerDisplay: React.FC<{
             <img
                 src={openAiUrl}
                 alt={`Sticker IA: ${event.playerName ?? 'goleador'}`}
+                loading="lazy"
+                decoding="async"
                 className={
                     compact
                         ? 'mx-auto h-20 w-auto max-w-[56px] rounded-lg border border-white/20 object-contain shadow-md'
