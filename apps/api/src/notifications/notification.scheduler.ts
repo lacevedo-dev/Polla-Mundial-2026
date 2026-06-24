@@ -19,6 +19,7 @@ import {
   MatchAutomationSweepContext,
 } from './match-automation-sweep-context';
 import { WhatsappGroupService } from '../whatsapp/whatsapp-group.service';
+import { isMatchReadyForResultNotification } from '../automation/post-match/match-result-ready.util';
 
 export type { MatchReminderRetrySummary } from '../automation/delivery/automation-delivery.types';
 
@@ -505,7 +506,7 @@ export class NotificationScheduler {
           homeTeam: true,
           awayTeam: true,
           predictions: {
-            select: { userId: true, points: true, leagueId: true },
+            select: { userId: true, points: true, leagueId: true, pointDetail: true },
           },
         },
         take: 20,
@@ -514,6 +515,13 @@ export class NotificationScheduler {
       const processedNotificationKeys = new Set<string>();
 
       for (const match of matches) {
+        if (!isMatchReadyForResultNotification(match)) {
+          this.logger.debug(
+            `Omitiendo resultado para ${match.id}: puntos aún no calculados`,
+          );
+          continue;
+        }
+
         const scheduledAt = this.observability.getScheduledAt(
           AutomationStep.RESULT_NOTIFICATION,
           {

@@ -901,6 +901,10 @@ export class MatchSyncService {
         },
       });
 
+      if (status === MatchStatus.FINISHED && (scoreChanged || transitionedToFinished)) {
+        await this.finalizeFinishedMatchPoints(match, updatedMatch, fixture);
+      }
+
       // Sync goal/card events inline to avoid overlapping DB work when the
       // runtime is constrained to a single MariaDB connection.
       const currentStatusShort = fixture.fixture.status.short ?? null;
@@ -1110,8 +1114,9 @@ export class MatchSyncService {
         });
       }
 
-      // When the match reaches FINISHED we must calculate points and enqueue the
-      // result email even if the score was already present before the final status.
+      // When the match reaches FINISHED we must enqueue the result email even if
+      // the score was already present before the final status. Points were calculated
+      // right after the status update to avoid racing with RESULT_NOTIFICATION.
       if (status === MatchStatus.FINISHED && (scoreChanged || transitionedToFinished)) {
         if (transitionedToFinished) {
           await this.maybeDispatchLiveEvent('MATCH_LIVE_END', {
@@ -1125,35 +1130,13 @@ export class MatchSyncService {
           });
         }
 
-        this.logger.log(`Match ${match.id} finished, calculating points`);
-        await this.predictionsService.calculateMatchPoints(match.id);
-
-        // Set advancingTeamId for knockout matches
-        if (match.phase !== Phase.GROUP) {
-          const h = fixture.goals.home ?? 0;
-          const a = fixture.goals.away ?? 0;
-          if (h !== a) {
-            const advancingTeamId = h > a
-              ? (updatedMatch.homeTeamId ?? match.homeTeamId)
-              : (updatedMatch.awayTeamId ?? match.awayTeamId);
-            await this.prisma.match.update({
-              where: { id: match.id },
-              data: { advancingTeamId },
-            });
-          }
-        }
-        // Calculate phase bonuses after advancement is set
-        await this.runFinishedMatchSideEffect(
-          `calculate phase bonuses for match ${match.id}`,
-          () => this.predictionsService.calculatePhaseBonuses(match.id),
-        );
         await this.runFinishedMatchSideEffect(
           `send results email for match ${match.id}`,
           () => this.predictionReport.sendMatchResultsReport(match.id),
         );
 
-        // Las notificaciones push de resultados se envían desde NotificationScheduler.sendMatchResultNotifications()
-        // en el sweep automático cada minuto, que ya tiene lógica de agrupamiento por usuario y prevención de duplicados.
+        // Las notificaciones push de resultados se envían desde PostMatchOrchestrator
+        // / NotificationScheduler cuando los puntos ya están persistidos.
       }
 
       return true;
@@ -1795,6 +1778,35 @@ export class MatchSyncService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Live event ${event} failed for match ${ctx.matchId}: ${message}`);
     }
+  }
+
+  private async finalizeFinishedMatchPoints(
+    match: { id: string; phase: Phase; homeTeamId: string; awayTeamId: string },
+    updatedMatch: { homeTeamId: string; awayTeamId: string },
+    fixture: ApiFootballFixture,
+  ): Promise<void> {
+    this.logger.log(`Match ${match.id} finished, calculating points`);
+    await this.predictionsService.calculateMatchPoints(match.id);
+
+    if (match.phase !== Phase.GROUP) {
+      const h = fixture.goals.home ?? 0;
+      const a = fixture.goals.away ?? 0;
+      if (h !== a) {
+        const advancingTeamId =
+          h > a
+            ? (updatedMatch.homeTeamId ?? match.homeTeamId)
+            : (updatedMatch.awayTeamId ?? match.awayTeamId);
+        await this.prisma.match.update({
+          where: { id: match.id },
+          data: { advancingTeamId },
+        });
+      }
+    }
+
+    await this.runFinishedMatchSideEffect(
+      `calculate phase bonuses for match ${match.id}`,
+      () => this.predictionsService.calculatePhaseBonuses(match.id),
+    );
   }
 
   private async runFinishedMatchSideEffect(

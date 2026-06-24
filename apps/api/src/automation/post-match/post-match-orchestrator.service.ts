@@ -19,6 +19,7 @@ import { WhatsappGroupService } from '../../whatsapp/whatsapp-group.service';
 import { AutomationFeatureFlagsService } from '../config/automation-feature-flags.service';
 import { AutomationStepConfigService } from '../config/automation-step-config.service';
 import { buildMatchResultNotificationKey } from './post-match-dedupe.util';
+import { isMatchReadyForResultNotification } from './match-result-ready.util';
 import {
   buildResultUserMessage,
   buildResultWaCaption,
@@ -104,6 +105,13 @@ export class PostMatchOrchestratorService {
       const processedNotificationKeys = new Set<string>();
 
       for (const match of matches) {
+        if (!isMatchReadyForResultNotification(match)) {
+          this.logger.debug(
+            `Omitiendo resultado v2 para ${match.id}: puntos aún no calculados`,
+          );
+          continue;
+        }
+
         const scheduledAt = this.observability.getScheduledAt(
           AutomationStep.RESULT_NOTIFICATION,
           {
