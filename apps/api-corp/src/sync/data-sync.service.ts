@@ -449,10 +449,10 @@ export class DataSyncService implements OnModuleInit {
         }
     }
 
-    /** Sincroniza partidos cada 10 minutos y punt?a pron?sticos cuando el marcador final llega. */
+    /** Sincroniza partidos cada 10 minutos, puntúa pronósticos y actualiza LeagueMatch. */
     @Cron(CronExpression.EVERY_10_MINUTES)
-    async syncMatches(): Promise<{ synced: number; skipped: number; scored: number }> {
-        if (!this.internalApiKey) return { synced: 0, skipped: 0, scored: 0 };
+    async syncMatches(): Promise<{ synced: number; skipped: number; scored: number; leagueMatchesSynced: number }> {
+        if (!this.internalApiKey) return { synced: 0, skipped: 0, scored: 0, leagueMatchesSynced: 0 };
 
         try {
             this.logger.log('Sincronizando partidos...');
@@ -474,6 +474,7 @@ export class DataSyncService implements OnModuleInit {
             let synced = 0;
             let skipped = 0;
             const scoreCandidates = new Set<string>();
+            const syncedMatchIds: string[] = [];
 
             for (const match of matches) {
                 const matchDate = match.matchDate ?? match.date;
@@ -485,6 +486,7 @@ export class DataSyncService implements OnModuleInit {
                 try {
                     const { syncedMatchId, existingBeforeSync } = await this.upsertSyncedMatch(match, matchDate);
                     synced += 1;
+                    syncedMatchIds.push(syncedMatchId);
 
                     const isFinished = match.status === 'FINISHED'
                         && match.homeScore != null
@@ -511,14 +513,17 @@ export class DataSyncService implements OnModuleInit {
             }
             scored += await this.scoreBacklogFinishedMatches(30);
 
+            const leagueMatchesSynced = await this.syncLeagueMatchesForSyncedMatches(syncedMatchIds);
+
             this.logger.log(
                 `${synced} partidos sincronizados${skipped ? ` (${skipped} omitidos por datos incompletos)` : ''}` +
-                `${scored ? `, ${scored} partido(s) puntuados` : ''}`,
+                `${scored ? `, ${scored} partido(s) puntuados` : ''}` +
+                `${leagueMatchesSynced ? `, ${leagueMatchesSynced} LeagueMatch sincronizado(s)` : ''}`,
             );
-            return { synced, skipped, scored };
+            return { synced, skipped, scored, leagueMatchesSynced };
         } catch (error) {
             this.logger.error('Error sincronizando partidos:', this.formatError(error));
-            return { synced: 0, skipped: 0, scored: 0 };
+            return { synced: 0, skipped: 0, scored: 0, leagueMatchesSynced: 0 };
         }
     }
 
@@ -590,7 +595,7 @@ export class DataSyncService implements OnModuleInit {
     }
 
     /** Sincronizacion inicial/manual completa. La data corporativa solo se sincroniza aqui, no por cron. */
-    async syncAll(): Promise<{ ok: boolean; bootstrap?: Awaited<ReturnType<DataSyncService['syncCorporateBootstrap']>>; tournaments?: number; teams?: number; matches?: { synced: number; skipped: number }; skipped?: boolean; reason?: string }> {
+    async syncAll(): Promise<{ ok: boolean; bootstrap?: Awaited<ReturnType<DataSyncService['syncCorporateBootstrap']>>; tournaments?: number; teams?: number; matches?: { synced: number; skipped: number; scored: number; leagueMatchesSynced: number }; skipped?: boolean; reason?: string }> {
         if (!this.internalApiKey) {
             this.logger.warn('Sincronizacion omitida: INTERNAL_API_KEY no configurado');
             return { ok: false, skipped: true, reason: 'INTERNAL_API_KEY no configurado' };
@@ -802,7 +807,49 @@ export class DataSyncService implements OnModuleInit {
         );
     }
 
-    private async existsById(modelName: 'tournament' | 'match', id: string): Promise<boolean> {
+    /**
+     * Sincroniza los registros LeagueMatch del API principal para los partidos dados.
+     * Se llama desde syncMatches() para que las activaciones automáticas propaguen a corp.
+     */
+    private async syncLeagueMatchesForSyncedMatches(matchIds: string[]): Promise<number> {
+        if (!matchIds.length) return 0;
+
+        const response = await axios.get(`${this.mainApiUrl}/internal/league-matches`, {
+            headers: { 'x-internal-api-key': this.internalApiKey },
+            params: { matchIds: matchIds.join(',') },
+        });
+
+        const leagueMatches = Array.isArray(response.data) ? response.data : [];
+        let synced = 0;
+
+        for (const lm of leagueMatches) {
+            if (!lm?.id || !lm?.leagueId || !lm?.matchId) continue;
+            if (!await this.existsById('match', lm.matchId)) continue;
+            if (!await this.existsById('league', lm.leagueId)) continue;
+
+            await this.prisma.leagueMatch.upsert({
+                where: { id: lm.id },
+                create: {
+                    id: lm.id,
+                    leagueId: lm.leagueId,
+                    matchId: lm.matchId,
+                    active: lm.active !== false,
+                    addedAt: lm.addedAt ? new Date(lm.addedAt) : new Date(),
+                    addedBy: lm.addedBy ?? null,
+                } as any,
+                update: {
+                    active: lm.active !== false,
+                    addedAt: lm.addedAt ? new Date(lm.addedAt) : new Date(),
+                    addedBy: lm.addedBy ?? null,
+                } as any,
+            });
+            synced += 1;
+        }
+
+        return synced;
+    }
+
+    private async existsById(modelName: 'tournament' | 'match' | 'league', id: string): Promise<boolean> {
         const model = (this.prisma as any)[modelName];
         const record = await model.findUnique({ where: { id }, select: { id: true } });
         return Boolean(record);

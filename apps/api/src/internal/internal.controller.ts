@@ -211,6 +211,26 @@ export class InternalController {
         return { ok: true, action: 'created', userId: user.id };
     }
 
+    // ── LeagueMatch ───────────────────────────────────────────────────────────
+
+    @Get('league-matches')
+    async getLeagueMatches(
+        @Headers('x-internal-api-key') apiKey: string,
+        @Query('matchIds') matchIds?: string,
+    ) {
+        this.assertApiKey(apiKey);
+        const where: any = {};
+        if (matchIds) {
+            const ids = matchIds.split(',').map((id) => id.trim()).filter(Boolean);
+            if (ids.length > 0) where.matchId = { in: ids };
+        }
+        return this.prisma.leagueMatch.findMany({
+            where,
+            orderBy: { addedAt: 'asc' },
+            take: 2000,
+        });
+    }
+
     // ── Status ────────────────────────────────────────────────────────────────
 
     @Get('status')
