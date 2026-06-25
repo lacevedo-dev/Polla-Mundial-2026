@@ -190,8 +190,12 @@ export class DataSyncService implements OnModuleInit {
                 // cambios hechos por el administrador en /admin/settings.
                 for (const member of tenant.members ?? []) {
                     if (!member?.id || !member?.user?.id) continue;
-                    await this.upsertCorporateUser(member.user);
-                    counts.users += 1;
+                    try {
+                        await this.upsertCorporateUser(member.user);
+                        counts.users += 1;
+                    } catch (userError) {
+                        this.logger.warn(`Usuario ${member.user.id} omitido en bootstrap: ${this.formatError(userError)}`);
+                    }
                     await this.prisma.tenantMember.upsert({
                         where: { id: member.id },
                         create: {
@@ -262,7 +266,11 @@ export class DataSyncService implements OnModuleInit {
 
                     for (const leagueMember of league.members ?? []) {
                         if (!leagueMember?.id || !leagueMember?.user?.id) continue;
-                        await this.upsertCorporateUser(leagueMember.user);
+                        try {
+                            await this.upsertCorporateUser(leagueMember.user);
+                        } catch (userError) {
+                            this.logger.warn(`Usuario ${leagueMember.user.id} omitido en bootstrap de polla: ${this.formatError(userError)}`);
+                        }
                         await this.prisma.leagueMember.upsert({
                             where: { id: leagueMember.id },
                             create: {
@@ -303,10 +311,10 @@ export class DataSyncService implements OnModuleInit {
                     }
 
                     for (const leagueMatch of league.leagueMatches ?? []) {
-                        if (!leagueMatch?.id || !leagueMatch?.leagueId || !leagueMatch?.matchId) continue;
+                        if (!leagueMatch?.leagueId || !leagueMatch?.matchId) continue;
                         if (!await this.existsById('match', leagueMatch.matchId)) continue;
                         await this.prisma.leagueMatch.upsert({
-                            where: { id: leagueMatch.id },
+                            where: { leagueId_matchId: { leagueId: leagueMatch.leagueId, matchId: leagueMatch.matchId } },
                             create: {
                                 id: leagueMatch.id,
                                 leagueId: leagueMatch.leagueId,
@@ -316,8 +324,6 @@ export class DataSyncService implements OnModuleInit {
                                 addedBy: leagueMatch.addedBy ?? null,
                             } as any,
                             update: {
-                                leagueId: leagueMatch.leagueId,
-                                matchId: leagueMatch.matchId,
                                 active: leagueMatch.active !== false,
                                 addedAt: leagueMatch.addedAt ? new Date(leagueMatch.addedAt) : new Date(),
                                 addedBy: leagueMatch.addedBy ?? null,
@@ -823,12 +829,12 @@ export class DataSyncService implements OnModuleInit {
         let synced = 0;
 
         for (const lm of leagueMatches) {
-            if (!lm?.id || !lm?.leagueId || !lm?.matchId) continue;
+            if (!lm?.leagueId || !lm?.matchId) continue;
             if (!await this.existsById('match', lm.matchId)) continue;
             if (!await this.existsById('league', lm.leagueId)) continue;
 
             await this.prisma.leagueMatch.upsert({
-                where: { id: lm.id },
+                where: { leagueId_matchId: { leagueId: lm.leagueId, matchId: lm.matchId } },
                 create: {
                     id: lm.id,
                     leagueId: lm.leagueId,
