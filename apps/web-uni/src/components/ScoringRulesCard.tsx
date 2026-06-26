@@ -4,19 +4,47 @@ import { TIEBREAK_CRITERIA } from '@polla-2026/shared';
 
 type ScoringTab = 'resultado' | 'bonos' | 'desempate';
 
+interface ScoringRule {
+    ruleType: string;
+    points: number;
+    active?: boolean;
+    description?: string | null;
+}
+
 interface ScoringRulesCardProps {
     defaultExpanded?: boolean;
     defaultTab?: ScoringTab;
     className?: string;
+    scoringRules?: ScoringRule[];
+}
+
+function getPoints(rules: ScoringRule[] | undefined, ruleType: string, fallback: number): number {
+    if (!rules) return fallback;
+    const rule = rules.find((r) => r.ruleType === ruleType && r.active !== false);
+    return rule?.points ?? fallback;
+}
+
+function fmtPts(n: number): string {
+    return `${n} ${n === 1 ? 'pt' : 'pts'}`;
 }
 
 export function ScoringRulesCard({
     defaultExpanded = false,
     defaultTab = 'desempate',
     className = '',
+    scoringRules,
 }: ScoringRulesCardProps) {
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [scoringTab, setScoringTab] = useState<ScoringTab>(defaultTab);
+
+    const exactScore    = getPoints(scoringRules, 'EXACT_SCORE',        5);
+    const correctWinner = getPoints(scoringRules, 'CORRECT_WINNER',     2);
+    const teamGoals     = getPoints(scoringRules, 'TEAM_GOALS',         1);
+    const uniquePred    = getPoints(scoringRules, 'UNIQUE_PREDICTION',  5);
+    const bonusR16      = getPoints(scoringRules, 'PHASE_BONUS_R16',    8);
+    const bonusQF       = getPoints(scoringRules, 'PHASE_BONUS_QF',     4);
+    const bonusSF       = getPoints(scoringRules, 'PHASE_BONUS_SF',     2);
+    const bonusFinal    = getPoints(scoringRules, 'PHASE_BONUS_FINAL',  5);
 
     return (
         <article
@@ -84,10 +112,10 @@ export function ScoringRulesCard({
                         className="space-y-1.5"
                     >
                         {[
-                            { label: 'Marcador exacto', sub: 'Ambos goles exactos', pts: '5 pts', icon: '🎯', accent: 'border-amber-100 bg-amber-50', text: 'text-amber-700' },
-                            { label: 'Ganador + gol', sub: 'Resultado + un marcador correcto', pts: '3 pts', icon: '✅⚽', accent: 'border-teal-100 bg-teal-50', text: 'text-teal-700' },
-                            { label: 'Solo ganador', sub: 'Empate o equipo ganador', pts: '2 pts', icon: '✅', accent: 'border-blue-100 bg-blue-50', text: 'text-blue-700' },
-                            { label: 'Solo gol acertado', sub: 'Al menos un marcador exacto', pts: '1 pt', icon: '⚽', accent: 'border-purple-100 bg-purple-50', text: 'text-purple-700' },
+                            { label: 'Marcador exacto',   sub: 'Ambos goles exactos',                 pts: fmtPts(exactScore),                icon: '🎯', accent: 'border-amber-100 bg-amber-50',   text: 'text-amber-700' },
+                            { label: 'Ganador + gol',     sub: 'Resultado + un marcador correcto',    pts: fmtPts(correctWinner + teamGoals), icon: '✅⚽', accent: 'border-teal-100 bg-teal-50',   text: 'text-teal-700' },
+                            { label: 'Solo ganador',      sub: 'Empate o equipo ganador',             pts: fmtPts(correctWinner),             icon: '✅',  accent: 'border-blue-100 bg-blue-50',    text: 'text-blue-700' },
+                            { label: 'Solo gol acertado', sub: 'Al menos un marcador exacto',        pts: fmtPts(teamGoals),                 icon: '⚽',  accent: 'border-purple-100 bg-purple-50', text: 'text-purple-700' },
                         ].map((rule) => (
                             <div key={rule.label} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${rule.accent}`}>
                                 <span className="text-base leading-none shrink-0" aria-hidden="true">{rule.icon}</span>
@@ -99,7 +127,7 @@ export function ScoringRulesCard({
                             </div>
                         ))}
                         <p className="text-[9px] text-slate-400 pt-1 leading-snug">
-                            El marcador exacto (5 pts) no se suma con otros bonos. El resto es{' '}
+                            El marcador exacto ({fmtPts(exactScore)}) no se suma con otros bonos. El resto es{' '}
                             <span className="font-bold text-slate-500">aditivo</span>.
                         </p>
                     </div>
@@ -119,7 +147,7 @@ export function ScoringRulesCard({
                                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-800 leading-tight">Marcador único en la liga</p>
                                     <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Nadie más predijo ese marcador exacto</p>
                                 </div>
-                                <span className="text-sm font-black text-amber-600 shrink-0">+5 pts</span>
+                                <span className="text-sm font-black text-amber-600 shrink-0">+{fmtPts(uniquePred)}</span>
                             </div>
                         </div>
                         <div>
@@ -130,10 +158,10 @@ export function ScoringRulesCard({
                             </p>
                             <div className="grid grid-cols-2 gap-1.5">
                                 {[
-                                    { label: 'Octavos', pts: '8 pts', icon: '🥈' },
-                                    { label: 'Cuartos', pts: '4 pts', icon: '🥉' },
-                                    { label: 'Semifinal', pts: '2 pts', icon: '🏅' },
-                                    { label: 'Campeón', pts: '5 pts', icon: '🏆' },
+                                    { label: 'Octavos',   pts: bonusR16,   icon: '🥈' },
+                                    { label: 'Cuartos',   pts: bonusQF,    icon: '🥉' },
+                                    { label: 'Semifinal', pts: bonusSF,    icon: '🏅' },
+                                    { label: 'Campeón',   pts: bonusFinal, icon: '🏆' },
                                 ].map((bonus) => (
                                     <div key={bonus.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2">
                                         <div className="flex items-center gap-1.5">
@@ -144,7 +172,7 @@ export function ScoringRulesCard({
                                             className="text-[11px] font-black"
                                             style={{ color: 'var(--color-primary, #f59e0b)' }}
                                         >
-                                            {bonus.pts}
+                                            {fmtPts(bonus.pts)}
                                         </span>
                                     </div>
                                 ))}

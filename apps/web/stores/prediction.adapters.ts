@@ -315,7 +315,10 @@ export function toMatchViewModel(
     prediction?: LeaguePredictionResponse,
 ): MatchViewModel {
     const hasPrediction = Boolean(prediction);
-    const isKnockout = match.phase?.toUpperCase() !== 'GROUP';
+    // THIRD_PLACE excluded: backend skips phase bonuses for it, so showing the
+    // "Clasifica:" picker would let users make a pick that never generates any bonus.
+    const phase = match.phase?.toUpperCase();
+    const isKnockout = phase !== 'GROUP' && phase !== 'THIRD_PLACE';
 
     return {
         id: match.id,

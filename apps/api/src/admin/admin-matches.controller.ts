@@ -39,6 +39,10 @@ export class AdminUpdateMatchDto {
     @IsOptional() @IsString() group?: string;
     @IsOptional() @IsString() externalId?: string;
     @IsOptional() @IsString() linkSource?: 'manual' | 'suggested';
+    /** Equipo clasificado — útil para partidos decididos por penales donde el
+     *  marcador en BD puede quedar empatado (e.g. 1-1) y el sync no puede
+     *  inferir el ganador sin el campo winner de API-Football. */
+    @IsOptional() @IsString() advancingTeamId?: string;
 }
 
 const MAX_MATCHES_PAGE_LIMIT = 100;
@@ -375,8 +379,10 @@ export class AdminMatchesController {
 
         for (const match of finishedMatches) {
             try {
-                await this.predictionsService.calculateMatchPoints(match.id);
-                await this.predictionsService.calculatePhaseBonuses(match.id);
+                // recalculateFinishedMatchScoring actualiza advancingTeamId (cuando los
+                // marcadores difieren) antes de calcular puntos y bonos de fase,
+                // garantizando coherencia para todos los partidos de eliminatoria.
+                await this.matchesService.recalculateFinishedMatchScoring(match.id);
                 processed++;
             } catch (err) {
                 errors.push({ matchId: match.id, error: err instanceof Error ? err.message : String(err) });

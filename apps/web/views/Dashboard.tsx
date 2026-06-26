@@ -510,7 +510,7 @@ const Dashboard: React.FC = () => {
                                     onConfigOpen={() => setConfigOpen(true)}
                                     onInviteOpen={() => setInviteOpen(true)}
                                 />
-                                <ScoringRulesCard />
+                                <ScoringRulesCard scoringRules={activeLeague?.scoringRules} />
                             </motion.div>
                         )}
                     </AnimatePresence>

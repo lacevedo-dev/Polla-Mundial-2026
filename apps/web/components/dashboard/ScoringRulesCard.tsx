@@ -1,10 +1,34 @@
 import React, { useState } from 'react';
 import { ListChecks } from 'lucide-react';
+import type { LeagueScoringRule } from '../../stores/league.adapters';
 
 type ScoringTab = 'resultado' | 'bonos' | 'desempate';
 
-const ScoringRulesCard: React.FC = () => {
+interface ScoringRulesCardProps {
+    scoringRules?: LeagueScoringRule[];
+}
+
+function getPoints(rules: LeagueScoringRule[] | undefined, ruleType: string, fallback: number): number {
+    if (!rules) return fallback;
+    const rule = rules.find((r) => r.ruleType === ruleType && r.active !== false);
+    return rule?.points ?? fallback;
+}
+
+function fmtPts(n: number): string {
+    return `${n} ${n === 1 ? 'pt' : 'pts'}`;
+}
+
+const ScoringRulesCard: React.FC<ScoringRulesCardProps> = ({ scoringRules }) => {
     const [scoringTab, setScoringTab] = useState<ScoringTab>('resultado');
+
+    const exactScore      = getPoints(scoringRules, 'EXACT_SCORE',        5);
+    const correctWinner   = getPoints(scoringRules, 'CORRECT_WINNER',     2);
+    const teamGoals       = getPoints(scoringRules, 'TEAM_GOALS',         1);
+    const uniquePred      = getPoints(scoringRules, 'UNIQUE_PREDICTION',  5);
+    const bonusR16        = getPoints(scoringRules, 'PHASE_BONUS_R16',    8);
+    const bonusQF         = getPoints(scoringRules, 'PHASE_BONUS_QF',     4);
+    const bonusSF         = getPoints(scoringRules, 'PHASE_BONUS_SF',     2);
+    const bonusFinal      = getPoints(scoringRules, 'PHASE_BONUS_FINAL',  5);
 
     return (
         <article className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm" aria-label="Reglas de puntos">
@@ -47,10 +71,10 @@ const ScoringRulesCard: React.FC = () => {
                 className="space-y-1.5"
             >
                 {[
-                    { label: 'Marcador exacto', sub: 'Ambos goles exactos', pts: '5 pts', icon: '🎯', accent: 'border-lime-100 bg-lime-50', text: 'text-lime-700' },
-                    { label: 'Ganador + gol', sub: 'Resultado + un marcador correcto', pts: '3 pts', icon: '✅⚽', accent: 'border-teal-100 bg-teal-50', text: 'text-teal-700' },
-                    { label: 'Solo ganador', sub: 'Empate o equipo ganador', pts: '2 pts', icon: '✅', accent: 'border-blue-100 bg-blue-50', text: 'text-blue-700' },
-                    { label: 'Solo gol acertado', sub: 'Al menos un marcador exacto', pts: '1 pt', icon: '⚽', accent: 'border-purple-100 bg-purple-50', text: 'text-purple-700' },
+                    { label: 'Marcador exacto',  sub: 'Ambos goles exactos',                   pts: fmtPts(exactScore),                   icon: '🎯', accent: 'border-lime-100 bg-lime-50',   text: 'text-lime-700' },
+                    { label: 'Ganador + gol',    sub: 'Resultado + un marcador correcto',       pts: fmtPts(correctWinner + teamGoals),    icon: '✅⚽', accent: 'border-teal-100 bg-teal-50', text: 'text-teal-700' },
+                    { label: 'Solo ganador',     sub: 'Empate o equipo ganador',                pts: fmtPts(correctWinner),                icon: '✅',  accent: 'border-blue-100 bg-blue-50',   text: 'text-blue-700' },
+                    { label: 'Solo gol acertado',sub: 'Al menos un marcador exacto',           pts: fmtPts(teamGoals),                    icon: '⚽',  accent: 'border-purple-100 bg-purple-50', text: 'text-purple-700' },
                 ].map((r) => (
                     <div key={r.label} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${r.accent}`}>
                         <span className="text-base leading-none shrink-0" aria-hidden="true">{r.icon}</span>
@@ -62,7 +86,7 @@ const ScoringRulesCard: React.FC = () => {
                     </div>
                 ))}
                 <p className="text-[9px] text-slate-400 pt-1 leading-snug">
-                    El marcador exacto (5 pts) no se suma con otros bonos. El resto es <span className="font-bold text-slate-500">aditivo</span>.
+                    El marcador exacto ({fmtPts(exactScore)}) no se suma con otros bonos. El resto es <span className="font-bold text-slate-500">aditivo</span>.
                 </p>
             </div>
 
@@ -82,7 +106,7 @@ const ScoringRulesCard: React.FC = () => {
                             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-800 leading-tight">Marcador único en la liga</p>
                             <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Nadie más predijo ese marcador exacto</p>
                         </div>
-                        <span className="text-sm font-black text-amber-600 shrink-0">+5 pts</span>
+                        <span className="text-sm font-black text-amber-600 shrink-0">+{fmtPts(uniquePred)}</span>
                     </div>
                 </div>
                 <div>
@@ -93,17 +117,17 @@ const ScoringRulesCard: React.FC = () => {
                     </p>
                     <div className="grid grid-cols-2 gap-1.5">
                         {[
-                            { label: 'Octavos', pts: '8 pts', icon: '🥈' },
-                            { label: 'Cuartos', pts: '4 pts', icon: '🥉' },
-                            { label: 'Semifinal', pts: '2 pts', icon: '🏅' },
-                            { label: 'Campeón', pts: '5 pts', icon: '🏆' },
+                            { label: 'Octavos',   pts: bonusR16,  icon: '🥈' },
+                            { label: 'Cuartos',   pts: bonusQF,   icon: '🥉' },
+                            { label: 'Semifinal', pts: bonusSF,   icon: '🏅' },
+                            { label: 'Campeón',   pts: bonusFinal, icon: '🏆' },
                         ].map((b) => (
                             <div key={b.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2">
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-xs leading-none" aria-hidden="true">{b.icon}</span>
                                     <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-600">{b.label}</span>
                                 </div>
-                                <span className="text-[11px] font-black text-lime-600">{b.pts}</span>
+                                <span className="text-[11px] font-black text-lime-600">{fmtPts(b.pts)}</span>
                             </div>
                         ))}
                     </div>

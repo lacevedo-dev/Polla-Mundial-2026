@@ -1789,13 +1789,27 @@ export class MatchSyncService {
     await this.predictionsService.calculateMatchPoints(match.id);
 
     if (match.phase !== Phase.GROUP) {
-      const h = fixture.goals.home ?? 0;
-      const a = fixture.goals.away ?? 0;
-      if (h !== a) {
-        const advancingTeamId =
-          h > a
+      let advancingTeamId: string | null = null;
+
+      // Prefer the explicit winner flag from API-Football: it is set correctly for
+      // regular time, extra time (AET) AND penalty shootouts (PEN), whereas
+      // fixture.goals reflects only 90'+ET goals (stays tied for penalty matches).
+      if (fixture.teams.home.winner === true) {
+        advancingTeamId = updatedMatch.homeTeamId ?? match.homeTeamId;
+      } else if (fixture.teams.away.winner === true) {
+        advancingTeamId = updatedMatch.awayTeamId ?? match.awayTeamId;
+      } else {
+        // Fallback: infer from goals when winner flag is null (edge cases / live data)
+        const h = fixture.goals.home ?? 0;
+        const a = fixture.goals.away ?? 0;
+        if (h !== a) {
+          advancingTeamId = h > a
             ? (updatedMatch.homeTeamId ?? match.homeTeamId)
             : (updatedMatch.awayTeamId ?? match.awayTeamId);
+        }
+      }
+
+      if (advancingTeamId) {
         await this.prisma.match.update({
           where: { id: match.id },
           data: { advancingTeamId },

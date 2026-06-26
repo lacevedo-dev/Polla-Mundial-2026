@@ -48,6 +48,13 @@ export interface LeagueApiMember {
     };
 }
 
+export interface LeagueScoringRule {
+    ruleType: string;
+    points: number;
+    active: boolean;
+    description?: string | null;
+}
+
 export interface LeagueApiResponse {
     id: string;
     name: string;
@@ -67,6 +74,7 @@ export interface LeagueApiResponse {
         members?: number;
     };
     members?: LeagueApiMember[];
+    scoringRules?: LeagueScoringRule[];
     stageFees?: Array<{
         id?: string;
         type: string;
@@ -116,6 +124,7 @@ export interface LeagueContext {
     };
     code?: string;
     members?: LeagueContextMember[];
+    scoringRules?: LeagueScoringRule[];
     stageFees?: LeagueApiResponse['stageFees'];
     distributions?: LeagueApiResponse['distributions'];
 }
@@ -296,6 +305,7 @@ export function toLeagueContextDetail(response: LeagueApiResponse): LeagueContex
 
     return {
         ...baseContext,
+        scoringRules: response.scoringRules,
         stageFees: response.stageFees,
         distributions: response.distributions,
         members: response.members?.map((member, index) => ({
