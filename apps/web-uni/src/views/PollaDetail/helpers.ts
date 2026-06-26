@@ -17,7 +17,8 @@ export function formatMatchTime(matchDate: string): string {
 }
 
 export function getDateKey(matchDate: string): string {
-    return new Intl.DateTimeFormat('es-CO', {
+    // sv-SE devuelve YYYY-MM-DD, formato ordenable lexicográficamente
+    return new Intl.DateTimeFormat('sv-SE', {
         year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Bogota',
     }).format(new Date(matchDate));
 }
