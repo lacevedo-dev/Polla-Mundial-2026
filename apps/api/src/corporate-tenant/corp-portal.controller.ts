@@ -543,12 +543,12 @@ export class CorpPortalController {
         });
         if (matches.length === 0) throw new BadRequestException('El torneo no tiene partidos registrados');
 
-        await this.prisma.leagueMatch.deleteMany({ where: { leagueId } });
-        await this.prisma.leagueMatch.createMany({
-            data: matches.map(m => ({ leagueId, matchId: m.id })),
+        // Solo agrega partidos nuevos; no borra ni reactiva los desactivados.
+        const result = await this.prisma.leagueMatch.createMany({
+            data: matches.map(m => ({ leagueId, matchId: m.id, active: false })),
             skipDuplicates: true,
         });
-        return { ok: true, count: matches.length };
+        return { ok: true, count: result.count };
     }
 
     @UseGuards(TenantAdminGuard)
@@ -558,7 +558,7 @@ export class CorpPortalController {
         const league = await this.prisma.league.findFirst({ where: { id: leagueId, tenantId } });
         if (!league) throw new NotFoundException('Polla no encontrada');
         const rows = await this.prisma.leagueMatch.findMany({
-            where: { leagueId },
+            where: { leagueId, active: true },
             select: { matchId: true },
         });
         return { matchIds: rows.map(r => r.matchId) };
@@ -577,20 +577,34 @@ export class CorpPortalController {
         if (!league) throw new NotFoundException('Polla no encontrada');
         if (!Array.isArray(matchIds)) throw new BadRequestException('matchIds debe ser un array');
 
-        await this.prisma.leagueMatch.deleteMany({ where: { leagueId } });
-        if (matchIds.length > 0) {
-            const validMatches = await this.prisma.match.findMany({
+        const validMatches = matchIds.length > 0
+            ? await this.prisma.match.findMany({
                 where: { id: { in: matchIds } },
                 select: { id: true },
+            })
+            : [];
+        const validMatchIds = validMatches.map(m => m.id);
+
+        if (validMatchIds.length > 0) {
+            await this.prisma.leagueMatch.createMany({
+                data: validMatchIds.map(matchId => ({ leagueId, matchId })),
+                skipDuplicates: true,
             });
-            if (validMatches.length > 0) {
-                await this.prisma.leagueMatch.createMany({
-                    data: validMatches.map(m => ({ leagueId, matchId: m.id })),
-                    skipDuplicates: true,
-                });
-            }
+            await this.prisma.leagueMatch.updateMany({
+                where: { leagueId, matchId: { in: validMatchIds } },
+                data: { active: true },
+            });
         }
-        return { ok: true, count: matchIds.length };
+
+        await this.prisma.leagueMatch.updateMany({
+            where: {
+                leagueId,
+                ...(validMatchIds.length > 0 ? { matchId: { notIn: validMatchIds } } : {}),
+            },
+            data: { active: false },
+        });
+
+        return { ok: true, count: validMatchIds.length };
     }
 
     @UseGuards(TenantAdminGuard)
