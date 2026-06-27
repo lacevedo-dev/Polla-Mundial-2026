@@ -143,7 +143,7 @@ export class CorpPortalController {
             this.prisma.match.findMany({
                 where: {
                     matchDate: { gt: new Date() },
-                    leagueMatches: { some: { league: { tenantId } } },
+                    leagueMatches: { some: { active: true, league: { tenantId } } },
                 },
                 select: { id: true },
                 take: 50,
@@ -217,7 +217,7 @@ export class CorpPortalController {
 
         const [leagueMatchRows, predictionRows, rankingSnapshot] = await Promise.all([
             this.prisma.leagueMatch.findMany({
-                where: { leagueId },
+                where: { leagueId, active: true },
                 include: {
                     match: {
                         include: {
