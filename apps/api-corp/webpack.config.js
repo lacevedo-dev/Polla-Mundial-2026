@@ -106,6 +106,10 @@ module.exports = (options) => {
             path.resolve(__dirname, 'src/overrides/corporate-tenant/dto/update-member.dto.ts'),
         ),
         new webpack.NormalModuleReplacementPlugin(
+            /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]corp-portal\.controller/,
+            path.resolve(__dirname, 'src/overrides/corp-portal.controller.ts'),
+        ),
+        new webpack.NormalModuleReplacementPlugin(
             /apps[\\/]api[\\/]src[\\/]corporate-tenant[\\/]branding-storage\.service/,
             path.resolve(__dirname, 'src/overrides/branding-storage.service.ts'),
         ),

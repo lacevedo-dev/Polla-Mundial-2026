@@ -98,6 +98,9 @@ El API corporativo usa versiones personalizadas de algunos módulos:
 - **PrismaModule**: Usa `@prisma/client-corp` con BD independiente
 - **AuthModule**: Stub de `AvatarStorageService` sin dependencias de filesystem
 - **EmailModule**: Sin scheduler de auditoría
+- **CorpPortalController**: Endpoints `/corp/*` en `src/overrides/corp-portal.controller.ts` (fuente de verdad; `apps/api` re-exporta)
+
+> **Deploy:** los cambios de pronósticos/partidos corporativos deben hacerse en `apps/api-corp/src/overrides/corp-portal.controller.ts` para que Dokploy dispare el build de `api-corp`.
 
 ### Módulos Compartidos
 

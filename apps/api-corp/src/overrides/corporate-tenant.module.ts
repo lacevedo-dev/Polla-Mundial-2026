@@ -16,7 +16,7 @@ import { TenantMiddleware } from '@corp-api/corporate-tenant/tenant.middleware';
 import { TenantMemberGuard } from '@corp-api/corporate-tenant/guards/tenant-member.guard';
 import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin.guard';
 import { TenantStaffGuard } from '@corp-api/corporate-tenant/guards/tenant-staff.guard';
-import { CorpPortalController } from '@corp-api/corporate-tenant/corp-portal.controller';
+import { CorpPortalController } from './corp-portal.controller';
 import { BrandingStorageService } from '@corp-api/corporate-tenant/branding-storage.service';
 import { ParticipationService } from '@corp-api/corporate-tenant/participation.service';
 import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operations.service';
