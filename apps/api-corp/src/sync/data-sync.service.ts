@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { PrismaService } from '../overrides/prisma.service';
 import axios, { AxiosError } from 'axios';
@@ -49,102 +50,34 @@ export class DataSyncService implements OnModuleInit {
                     continue;
                 }
 
-                await this.prisma.corporateTenant.upsert({
-                    where: { id: tenant.id },
-                    create: {
-                        id: tenant.id,
-                        slug: tenant.slug,
-                        name: tenant.name,
-                        legalName: tenant.legalName ?? null,
-                        contactEmail: tenant.contactEmail ?? '',
-                        status: tenant.status,
-                        planTier: tenant.planTier,
-                        allowedDomains: stringifyNullable(tenant.allowedDomains),
-                        customDomain: tenant.customDomain ?? null,
-                        ssoEnabled: Boolean(tenant.ssoEnabled),
-                        ssoProvider: tenant.ssoProvider ?? null,
-                        ssoConfig: stringifyNullable(tenant.ssoConfig),
-                        maxUsers: tenant.maxUsers ?? 50,
-                        maxLeagues: tenant.maxLeagues ?? 3,
-                    } as any,
-                    update: {
-                        slug: tenant.slug,
-                        name: tenant.name,
-                        legalName: tenant.legalName ?? null,
-                        contactEmail: tenant.contactEmail ?? '',
-                        status: tenant.status,
-                        planTier: tenant.planTier,
-                        allowedDomains: stringifyNullable(tenant.allowedDomains),
-                        customDomain: tenant.customDomain ?? null,
-                        ssoEnabled: Boolean(tenant.ssoEnabled),
-                        ssoProvider: tenant.ssoProvider ?? null,
-                        ssoConfig: stringifyNullable(tenant.ssoConfig),
-                        maxUsers: tenant.maxUsers ?? 50,
-                        maxLeagues: tenant.maxLeagues ?? 3,
-                    } as any,
-                });
+                await this.upsertCorporateTenant(tenant);
 
-                await this.prisma.user.upsert({
-                    where: { id: user.id },
-                    create: {
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                        username: user.username,
-                        documentNumber: user.documentNumber ?? null,
-                        phone: user.phone ?? null,
-                        countryCode: user.countryCode ?? '+57',
-                        avatar: user.avatar ?? null,
-                        birthDate: user.birthDate ? new Date(user.birthDate) : null,
-                        passwordHash: user.passwordHash,
-                        mustChangePassword: Boolean(user.mustChangePassword),
-                        googleId: user.googleId ?? null,
-                        githubId: user.githubId ?? null,
-                        plan: user.plan ?? 'FREE',
-                        emailVerified: Boolean(user.emailVerified),
-                        systemRole: user.systemRole ?? 'USER',
-                        status: user.status,
-                    } as any,
-                    update: {
-                        name: user.name,
-                        email: user.email,
-                        username: user.username,
-                        documentNumber: user.documentNumber ?? null,
-                        phone: user.phone ?? null,
-                        countryCode: user.countryCode ?? '+57',
-                        avatar: user.avatar ?? null,
-                        birthDate: user.birthDate ? new Date(user.birthDate) : null,
-                        passwordHash: user.passwordHash,
-                        mustChangePassword: Boolean(user.mustChangePassword),
-                        googleId: user.googleId ?? null,
-                        githubId: user.githubId ?? null,
-                        plan: user.plan ?? 'FREE',
-                        emailVerified: Boolean(user.emailVerified),
-                        systemRole: user.systemRole ?? 'USER',
-                        status: user.status,
-                    } as any,
-                });
-
-                await this.prisma.tenantMember.upsert({
-                    where: { id: membership.id },
-                    create: {
-                        id: membership.id,
-                        tenantId: membership.tenantId,
-                        userId: membership.userId,
-                        role: membership.role,
-                        status: membership.status,
-                        invitedAt: membership.invitedAt ? new Date(membership.invitedAt) : null,
-                        joinedAt: membership.joinedAt ? new Date(membership.joinedAt) : null,
-                    } as any,
-                    update: {
-                        role: membership.role,
-                        status: membership.status,
-                        invitedAt: membership.invitedAt ? new Date(membership.invitedAt) : null,
-                        joinedAt: membership.joinedAt ? new Date(membership.joinedAt) : null,
-                    } as any,
-                });
-
-                synced += 1;
+                try {
+                    await this.upsertCorporateUser(user);
+                    await this.prisma.tenantMember.upsert({
+                        where: { id: membership.id },
+                        create: {
+                            id: membership.id,
+                            tenantId: membership.tenantId,
+                            userId: membership.userId,
+                            role: membership.role,
+                            status: membership.status,
+                            invitedAt: membership.invitedAt ? new Date(membership.invitedAt) : null,
+                            joinedAt: membership.joinedAt ? new Date(membership.joinedAt) : null,
+                        } as any,
+                        update: {
+                            role: membership.role,
+                            status: membership.status,
+                            invitedAt: membership.invitedAt ? new Date(membership.invitedAt) : null,
+                            joinedAt: membership.joinedAt ? new Date(membership.joinedAt) : null,
+                        } as any,
+                    });
+                    synced += 1;
+                } catch (memberError) {
+                    this.logger.warn(
+                        `Admin corporativo ${user.id} omitido: ${this.formatError(memberError)}`,
+                    );
+                }
             }
 
             this.logger.log(`${synced} usuarios administrativos corporativos sincronizados`);
@@ -193,28 +126,30 @@ export class DataSyncService implements OnModuleInit {
                     try {
                         await this.upsertCorporateUser(member.user);
                         counts.users += 1;
-                    } catch (userError) {
-                        this.logger.warn(`Usuario ${member.user.id} omitido en bootstrap: ${this.formatError(userError)}`);
+                        await this.prisma.tenantMember.upsert({
+                            where: { id: member.id },
+                            create: {
+                                id: member.id,
+                                tenantId: member.tenantId,
+                                userId: member.userId,
+                                role: member.role,
+                                status: member.status,
+                                invitedAt: member.invitedAt ? new Date(member.invitedAt) : null,
+                                joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
+                            } as any,
+                            update: {
+                                role: member.role,
+                                status: member.status,
+                                invitedAt: member.invitedAt ? new Date(member.invitedAt) : null,
+                                joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
+                            } as any,
+                        });
+                        counts.tenantMembers += 1;
+                    } catch (memberError) {
+                        this.logger.warn(
+                            `Miembro ${member.id} (usuario ${member.user.id}) omitido en bootstrap: ${this.formatError(memberError)}`,
+                        );
                     }
-                    await this.prisma.tenantMember.upsert({
-                        where: { id: member.id },
-                        create: {
-                            id: member.id,
-                            tenantId: member.tenantId,
-                            userId: member.userId,
-                            role: member.role,
-                            status: member.status,
-                            invitedAt: member.invitedAt ? new Date(member.invitedAt) : null,
-                            joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
-                        } as any,
-                        update: {
-                            role: member.role,
-                            status: member.status,
-                            invitedAt: member.invitedAt ? new Date(member.invitedAt) : null,
-                            joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
-                        } as any,
-                    });
-                    counts.tenantMembers += 1;
                 }
 
                 for (const league of tenant.leagues ?? []) {
@@ -268,26 +203,28 @@ export class DataSyncService implements OnModuleInit {
                         if (!leagueMember?.id || !leagueMember?.user?.id) continue;
                         try {
                             await this.upsertCorporateUser(leagueMember.user);
-                        } catch (userError) {
-                            this.logger.warn(`Usuario ${leagueMember.user.id} omitido en bootstrap de polla: ${this.formatError(userError)}`);
+                            await this.prisma.leagueMember.upsert({
+                                where: { id: leagueMember.id },
+                                create: {
+                                    id: leagueMember.id,
+                                    leagueId: leagueMember.leagueId,
+                                    userId: leagueMember.userId,
+                                    role: leagueMember.role ?? 'PLAYER',
+                                    status: leagueMember.status ?? 'ACTIVE',
+                                    joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
+                                } as any,
+                                update: {
+                                    role: leagueMember.role ?? 'PLAYER',
+                                    status: leagueMember.status ?? 'ACTIVE',
+                                    joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
+                                } as any,
+                            });
+                            counts.leagueMembers += 1;
+                        } catch (memberError) {
+                            this.logger.warn(
+                                `LeagueMember ${leagueMember.id} (usuario ${leagueMember.user.id}) omitido: ${this.formatError(memberError)}`,
+                            );
                         }
-                        await this.prisma.leagueMember.upsert({
-                            where: { id: leagueMember.id },
-                            create: {
-                                id: leagueMember.id,
-                                leagueId: leagueMember.leagueId,
-                                userId: leagueMember.userId,
-                                role: leagueMember.role ?? 'PLAYER',
-                                status: leagueMember.status ?? 'ACTIVE',
-                                joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
-                            } as any,
-                            update: {
-                                role: leagueMember.role ?? 'PLAYER',
-                                status: leagueMember.status ?? 'ACTIVE',
-                                joinedAt: leagueMember.joinedAt ? new Date(leagueMember.joinedAt) : new Date(),
-                            } as any,
-                        });
-                        counts.leagueMembers += 1;
                     }
 
                     for (const leagueTournament of league.leagueTournaments ?? []) {
@@ -653,46 +590,183 @@ export class DataSyncService implements OnModuleInit {
         });
     }
 
+    private resolveCorporateDocumentNumber(user: any): string {
+        const raw = typeof user.documentNumber === 'string' ? user.documentNumber.trim() : '';
+        const digits = raw.replace(/\D/g, '');
+        if (digits) return digits.slice(0, 64);
+        if (raw) return raw.slice(0, 64);
+        if (typeof user.username === 'string' && user.username.trim()) {
+            const username = user.username.trim();
+            const usernameDigits = username.replace(/\D/g, '');
+            if (usernameDigits) return usernameDigits.slice(0, 64);
+            return username.slice(0, 64);
+        }
+        return `sync-${user.id}`.slice(0, 64);
+    }
+
+    private resolveCorporateUsername(user: any, documentNumber: string): string {
+        const username = typeof user.username === 'string' ? user.username.trim() : '';
+        if (username) return username.slice(0, 191);
+        return documentNumber.slice(0, 191);
+    }
+
+    private buildCorporateUserPayload(user: any, documentNumber: string, username: string) {
+        return {
+            name: user.name,
+            email: user.email,
+            username,
+            documentNumber,
+            phone: user.phone ?? null,
+            countryCode: user.countryCode ?? '+57',
+            avatar: user.avatar ?? null,
+            birthDate: user.birthDate ? new Date(user.birthDate) : null,
+            passwordHash: user.passwordHash,
+            mustChangePassword: Boolean(user.mustChangePassword),
+            googleId: user.googleId ?? null,
+            githubId: user.githubId ?? null,
+            plan: user.plan ?? 'FREE',
+            emailVerified: Boolean(user.emailVerified),
+            systemRole: user.systemRole ?? 'USER',
+            status: user.status,
+        } as const;
+    }
+
+    private async findStaleCorporateUserIds(
+        canonicalUserId: string,
+        documentNumber: string,
+        username: string,
+    ): Promise<string[]> {
+        const staleIds = new Set<string>();
+
+        const byDocument = await this.prisma.user.findUnique({
+            where: { documentNumber },
+            select: { id: true },
+        });
+        if (byDocument && byDocument.id !== canonicalUserId) {
+            staleIds.add(byDocument.id);
+        }
+
+        const byUsername = await this.prisma.user.findUnique({
+            where: { username },
+            select: { id: true },
+        });
+        if (byUsername && byUsername.id !== canonicalUserId) {
+            staleIds.add(byUsername.id);
+        }
+
+        return [...staleIds];
+    }
+
+    private async mergeCorporateUserReferences(
+        tx: Prisma.TransactionClient,
+        fromUserId: string,
+        toUserId: string,
+    ): Promise<void> {
+        if (fromUserId === toUserId) return;
+
+        const tenantMembers = await tx.tenantMember.findMany({ where: { userId: fromUserId } });
+        for (const member of tenantMembers) {
+            const duplicate = await tx.tenantMember.findFirst({
+                where: { tenantId: member.tenantId, userId: toUserId },
+            });
+            if (duplicate) {
+                await tx.tenantMember.delete({ where: { id: member.id } });
+            } else {
+                await tx.tenantMember.update({
+                    where: { id: member.id },
+                    data: { userId: toUserId },
+                });
+            }
+        }
+
+        const leagueMembers = await tx.leagueMember.findMany({ where: { userId: fromUserId } });
+        for (const member of leagueMembers) {
+            const duplicate = await tx.leagueMember.findFirst({
+                where: { leagueId: member.leagueId, userId: toUserId },
+            });
+            if (duplicate) {
+                await tx.leagueMember.delete({ where: { id: member.id } });
+            } else {
+                await tx.leagueMember.update({
+                    where: { id: member.id },
+                    data: { userId: toUserId },
+                });
+            }
+        }
+
+        const predictions = await tx.prediction.findMany({ where: { userId: fromUserId } });
+        for (const prediction of predictions) {
+            const duplicate = await tx.prediction.findFirst({
+                where: {
+                    userId: toUserId,
+                    matchId: prediction.matchId,
+                    leagueId: prediction.leagueId,
+                },
+            });
+            if (duplicate) {
+                await tx.prediction.delete({ where: { id: prediction.id } });
+            } else {
+                await tx.prediction.update({
+                    where: { id: prediction.id },
+                    data: { userId: toUserId },
+                });
+            }
+        }
+
+        await tx.notification.updateMany({
+            where: { userId: fromUserId },
+            data: { userId: toUserId },
+        });
+    }
+
+    private async evictStaleCorporateUser(
+        tx: Prisma.TransactionClient,
+        staleUserId: string,
+        canonicalUserId: string,
+        canonicalExists: boolean,
+    ): Promise<void> {
+        if (staleUserId === canonicalUserId) return;
+
+        if (canonicalExists) {
+            await this.mergeCorporateUserReferences(tx, staleUserId, canonicalUserId);
+        }
+
+        await tx.user.delete({ where: { id: staleUserId } });
+    }
+
     private async upsertCorporateUser(user: any): Promise<void> {
+        if (!user?.id) {
+            throw new Error('Usuario sin id');
+        }
+
+        const documentNumber = this.resolveCorporateDocumentNumber(user);
+        const username = this.resolveCorporateUsername(user, documentNumber);
+        const payload = this.buildCorporateUserPayload(user, documentNumber, username);
+        const staleUserIds = await this.findStaleCorporateUserIds(user.id, documentNumber, username);
+
+        if (staleUserIds.length > 0) {
+            await this.prisma.$transaction(async (tx) => {
+                const canonicalExists = Boolean(
+                    await tx.user.findUnique({ where: { id: user.id }, select: { id: true } }),
+                );
+
+                for (const staleUserId of staleUserIds) {
+                    await this.evictStaleCorporateUser(tx, staleUserId, user.id, canonicalExists);
+                }
+
+                await tx.user.upsert({
+                    where: { id: user.id },
+                    create: { id: user.id, ...payload } as any,
+                    update: payload as any,
+                });
+            });
+            return;
+        }
+
         await this.prisma.user.upsert({
             where: { id: user.id },
-            create: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                username: user.username,
-                documentNumber: user.documentNumber ?? null,
-                phone: user.phone ?? null,
-                countryCode: user.countryCode ?? '+57',
-                avatar: user.avatar ?? null,
-                birthDate: user.birthDate ? new Date(user.birthDate) : null,
-                passwordHash: user.passwordHash,
-                mustChangePassword: Boolean(user.mustChangePassword),
-                googleId: user.googleId ?? null,
-                githubId: user.githubId ?? null,
-                plan: user.plan ?? 'FREE',
-                emailVerified: Boolean(user.emailVerified),
-                systemRole: user.systemRole ?? 'USER',
-                status: user.status,
-            } as any,
-            update: {
-                name: user.name,
-                email: user.email,
-                username: user.username,
-                documentNumber: user.documentNumber ?? null,
-                phone: user.phone ?? null,
-                countryCode: user.countryCode ?? '+57',
-                avatar: user.avatar ?? null,
-                birthDate: user.birthDate ? new Date(user.birthDate) : null,
-                passwordHash: user.passwordHash,
-                mustChangePassword: Boolean(user.mustChangePassword),
-                googleId: user.googleId ?? null,
-                githubId: user.githubId ?? null,
-                plan: user.plan ?? 'FREE',
-                emailVerified: Boolean(user.emailVerified),
-                systemRole: user.systemRole ?? 'USER',
-                status: user.status,
-            } as any,
+            create: { id: user.id, ...payload } as any,
+            update: payload as any,
         });
     }
 
