@@ -231,16 +231,35 @@ type AdvanceTeamSelectorProps = {
     canEdit: boolean;
     onSelect: (matchId: string, teamId: string) => void;
     className?: string;
+    layout?: 'default' | 'centered';
 };
 
-function AdvanceTeamSelector({ match, draft, canEdit, onSelect, className }: AdvanceTeamSelectorProps) {
+function AdvanceTeamSelector({
+    match,
+    draft,
+    canEdit,
+    onSelect,
+    className,
+    layout = 'default',
+}: AdvanceTeamSelectorProps) {
     if (!match.isKnockout) {
         return null;
     }
 
+    const isCentered = layout === 'centered';
+    const tieRequiresSelection = requiresKnockoutAdvanceSelection(
+        draft.home,
+        draft.away,
+        draft.advanceTeamId,
+    );
+
     if (!canEdit && match.advancingTeamId) {
         return (
-            <div className={`flex items-center gap-1.5 ${className ?? ''}`}>
+            <div
+                className={`flex items-center gap-1.5 ${
+                    isCentered ? 'w-full justify-center' : ''
+                } ${className ?? ''}`}
+            >
                 <span className="text-[9px] font-black uppercase text-slate-400">Clasificó:</span>
                 <span className="text-[11px] font-bold text-lime-600">
                     {match.advancingTeamId === match.homeTeamId ? match.homeTeamCode : match.awayTeamCode}
@@ -262,44 +281,66 @@ function AdvanceTeamSelector({ match, draft, canEdit, onSelect, className }: Adv
         return null;
     }
 
-    const tieRequiresSelection = requiresKnockoutAdvanceSelection(
-        draft.home,
-        draft.away,
-        draft.advanceTeamId,
+    const panelClasses = tieRequiresSelection
+        ? 'border-2 border-amber-300 bg-amber-50/90 ring-1 ring-amber-200/60'
+        : 'border border-slate-200 bg-slate-50/90';
+
+    const content = (
+        <>
+            <div className={`flex flex-wrap items-center gap-2 ${isCentered ? 'justify-center' : ''}`}>
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Clasifica:</span>
+                <button
+                    type="button"
+                    onClick={() => onSelect(match.id, match.homeTeamId)}
+                    className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                        draft.advanceTeamId === match.homeTeamId
+                            ? 'bg-lime-400 text-slate-900 shadow-sm'
+                            : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
+                    }`}
+                >
+                    {match.homeTeamCode}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onSelect(match.id, match.awayTeamId)}
+                    className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                        draft.advanceTeamId === match.awayTeamId
+                            ? 'bg-lime-400 text-slate-900 shadow-sm'
+                            : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
+                    }`}
+                >
+                    {match.awayTeamCode}
+                </button>
+            </div>
+            {tieRequiresSelection ? (
+                <span className={`text-[9px] font-bold text-amber-700 ${isCentered ? 'text-center' : ''}`}>
+                    Selecciona quién pasa en penales
+                </span>
+            ) : (
+                <span className={`text-[9px] font-medium text-slate-400 ${isCentered ? 'text-center' : ''}`}>
+                    {draft.advanceTeamId ? 'Definido por el marcador' : 'Se asigna al ganador del marcador'}
+                </span>
+            )}
+        </>
     );
+
+    if (isCentered) {
+        return (
+            <div className={`flex w-full flex-col items-center ${className ?? ''}`}>
+                <div className={`flex w-full max-w-sm flex-col items-center gap-1.5 rounded-xl px-3 py-2 ${panelClasses}`}>
+                    {content}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div
-            className={`flex flex-wrap items-center gap-2 ${
-                tieRequiresSelection ? 'rounded-lg bg-amber-50/80 px-2 py-1 ring-2 ring-amber-300' : ''
+            className={`flex flex-wrap items-center gap-2 rounded-lg px-2 py-1 ${
+                tieRequiresSelection ? 'bg-amber-50/80 ring-2 ring-amber-300' : ''
             } ${className ?? ''}`}
         >
-            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Clasifica:</span>
-            <button
-                type="button"
-                onClick={() => onSelect(match.id, match.homeTeamId)}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
-                    draft.advanceTeamId === match.homeTeamId
-                        ? 'bg-lime-400 text-slate-900'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-            >
-                {match.homeTeamCode}
-            </button>
-            <button
-                type="button"
-                onClick={() => onSelect(match.id, match.awayTeamId)}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
-                    draft.advanceTeamId === match.awayTeamId
-                        ? 'bg-lime-400 text-slate-900'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-            >
-                {match.awayTeamCode}
-            </button>
-            {tieRequiresSelection ? (
-                <span className="text-[9px] font-bold text-amber-700">Selecciona quién pasa en penales</span>
-            ) : null}
+            {content}
         </div>
     );
 }
@@ -1068,6 +1109,7 @@ function CompactMatchRow({
                         draft={draft}
                         canEdit={canEdit}
                         onSelect={onAdvanceTeamSelect}
+                        layout="centered"
                     />
 
                     {/* Info y botones de acción */}
@@ -1453,6 +1495,7 @@ function CompactMatchRow({
                         draft={draft}
                         canEdit={canEdit}
                         onSelect={onAdvanceTeamSelect}
+                        layout="centered"
                         className="mt-2"
                     />
                 </div>
@@ -3471,62 +3514,65 @@ const Predictions: React.FC = () => {
                                                                 </div>
                                                             </div>
 
-                                                            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
-                                                                <TeamIdentity
-                                                                    name={match.homeTeam}
-                                                                    code={match.homeTeamCode}
-                                                                    flag={match.homeFlag}
-                                                                    align="right"
-                                                                />
+                                                            <div className="space-y-2">
+                                                                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+                                                                    <TeamIdentity
+                                                                        name={match.homeTeam}
+                                                                        code={match.homeTeamCode}
+                                                                        flag={match.homeFlag}
+                                                                        align="right"
+                                                                    />
 
-                                                                {canEdit ? (
-                                                                    <div className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-1.5 py-1 shadow-sm ring-1 ring-slate-200 sm:gap-2 sm:rounded-2xl sm:bg-slate-50 sm:px-2 sm:py-1.5 sm:shadow-none sm:ring-0 sm:border sm:border-slate-200">
-                                                                        <ScoreControl
-                                                                            teamName={match.homeTeam}
-                                                                            side="local"
-                                                                            value={draft.home}
-                                                                            onChange={(value) => handleDraftChange(match.id, 'home', value)}
-                                                                            onAdjust={(delta) => adjustScore('home', delta)}
-                                                                        />
-                                                                        <span className="px-0.5 text-base font-black text-slate-300 sm:px-1 sm:text-sm">-</span>
-                                                                        <ScoreControl
-                                                                            teamName={match.awayTeam}
-                                                                            side="visitante"
-                                                                            value={draft.away}
-                                                                            onChange={(value) => handleDraftChange(match.id, 'away', value)}
-                                                                            onAdjust={(delta) => adjustScore('away', delta)}
-                                                                        />
-                                                                    </div>
-                                                                ) : (match.status === 'finished' || match.status === 'live') && match.result ? (
-                                                                    <div className="flex shrink-0 flex-col items-center gap-0.5">
-                                                                        <span className="rounded-xl border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm font-black text-white sm:rounded-2xl sm:px-3 sm:py-2">
-                                                                            {match.result.home} : {match.result.away}
-                                                                        </span>
-                                                                        {match.status === 'finished' && match.pointsEarned !== undefined && (
-                                                                            <span className={`text-[10px] font-black tabular-nums ${match.pointsEarned > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
-                                                                                {match.pointsEarned > 0 ? `+${match.pointsEarned} pts` : '0 pts'}
+                                                                    {canEdit ? (
+                                                                        <div className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-1.5 py-1 shadow-sm ring-1 ring-slate-200 sm:gap-2 sm:rounded-2xl sm:bg-slate-50 sm:px-2 sm:py-1.5 sm:shadow-none sm:ring-0 sm:border sm:border-slate-200">
+                                                                            <ScoreControl
+                                                                                teamName={match.homeTeam}
+                                                                                side="local"
+                                                                                value={draft.home}
+                                                                                onChange={(value) => handleDraftChange(match.id, 'home', value)}
+                                                                                onAdjust={(delta) => adjustScore('home', delta)}
+                                                                            />
+                                                                            <span className="px-0.5 text-base font-black text-slate-300 sm:px-1 sm:text-sm">-</span>
+                                                                            <ScoreControl
+                                                                                teamName={match.awayTeam}
+                                                                                side="visitante"
+                                                                                value={draft.away}
+                                                                                onChange={(value) => handleDraftChange(match.id, 'away', value)}
+                                                                                onAdjust={(delta) => adjustScore('away', delta)}
+                                                                            />
+                                                                        </div>
+                                                                    ) : (match.status === 'finished' || match.status === 'live') && match.result ? (
+                                                                        <div className="flex shrink-0 flex-col items-center gap-0.5">
+                                                                            <span className="rounded-xl border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm font-black text-white sm:rounded-2xl sm:px-3 sm:py-2">
+                                                                                {match.result.home} : {match.result.away}
                                                                             </span>
-                                                                        )}
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm font-black text-slate-500 sm:rounded-2xl sm:px-3 sm:py-2">
-                                                                        {draft.home || '−'} : {draft.away || '−'}
-                                                                    </span>
-                                                                )}
+                                                                            {match.status === 'finished' && match.pointsEarned !== undefined && (
+                                                                                <span className={`text-[10px] font-black tabular-nums ${match.pointsEarned > 0 ? 'text-lime-600' : 'text-slate-400'}`}>
+                                                                                    {match.pointsEarned > 0 ? `+${match.pointsEarned} pts` : '0 pts'}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm font-black text-slate-500 sm:rounded-2xl sm:px-3 sm:py-2">
+                                                                            {draft.home || '−'} : {draft.away || '−'}
+                                                                        </span>
+                                                                    )}
 
-                                                                <TeamIdentity
-                                                                    name={match.awayTeam}
-                                                                    code={match.awayTeamCode}
-                                                                    flag={match.awayFlag}
+                                                                    <TeamIdentity
+                                                                        name={match.awayTeam}
+                                                                        code={match.awayTeamCode}
+                                                                        flag={match.awayFlag}
+                                                                    />
+                                                                </div>
+
+                                                                <AdvanceTeamSelector
+                                                                    match={match}
+                                                                    draft={draft}
+                                                                    canEdit={canEdit}
+                                                                    onSelect={handleAdvanceTeamSelect}
+                                                                    layout="centered"
                                                                 />
                                                             </div>
-
-                                                            <AdvanceTeamSelector
-                                                                match={match}
-                                                                draft={draft}
-                                                                canEdit={canEdit}
-                                                                onSelect={handleAdvanceTeamSelect}
-                                                            />
 
                                                             {activeParticipationMatchId === match.id ? (
                                                                 <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-2">
