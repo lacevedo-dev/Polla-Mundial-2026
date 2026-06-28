@@ -9,6 +9,7 @@ import {
     requiresKnockoutAdvanceSelection,
     type QuickPredictionDraft,
 } from '../../utils/knockout-advance';
+import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../../utils/score-input';
 
 interface UpcomingMatchesCardProps {
     upcomingMatches: MatchViewModel[];
@@ -105,7 +106,8 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                             onChange={(e) => onDraftChange(match.id, 'home', e.target.value)}
                                             disabled={!canEdit || savingMatchId === match.id}
                                             aria-label="Marcador local"
-                                            className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                            placeholder={SCORE_INPUT_PLACEHOLDER}
+                                            className={`h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 ${scoreInputPlaceholderClass}`}
                                         />
                                         <span className="text-lg font-black text-slate-300 leading-none">:</span>
                                         <input
@@ -117,7 +119,8 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                             onChange={(e) => onDraftChange(match.id, 'away', e.target.value)}
                                             disabled={!canEdit || savingMatchId === match.id}
                                             aria-label="Marcador visitante"
-                                            className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                            placeholder={SCORE_INPUT_PLACEHOLDER}
+                                            className={`h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 ${scoreInputPlaceholderClass}`}
                                         />
                                     </div>
 

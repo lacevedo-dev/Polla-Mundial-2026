@@ -49,6 +49,7 @@ import {
     requiresKnockoutAdvanceSelection,
     resolveAdvanceTeamIdFromScore,
 } from '../utils/knockout-advance';
+import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../utils/score-input';
 
 type DraftMap = Record<string, { home: string; away: string; advanceTeamId?: string }>;
 type PhaseFilter = 'ALL' | 'GROUP' | 'KNOCKOUT';
@@ -599,8 +600,8 @@ function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = fa
                         onEnter();
                     }
                 }}
-                placeholder="0"
-                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden"
+                placeholder={SCORE_INPUT_PLACEHOLDER}
+                className={`h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden ${scoreInputPlaceholderClass}`}
             />
 
             {/* Desktop: original layout with +/- buttons */}
@@ -624,7 +625,8 @@ function ScoreControl({ teamName, side, value, onChange, onAdjust, disabled = fa
                     disabled={disabled}
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
-                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                    placeholder={SCORE_INPUT_PLACEHOLDER}
+                    className={`h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60 ${scoreInputPlaceholderClass}`}
                 />
                 <button
                     type="button"
@@ -926,8 +928,8 @@ function CompactMatchRow({
                                     pattern="[0-9]*"
                                     value={draft.home}
                                     onChange={(e) => onDraftChange('home', e.target.value)}
-                                    placeholder="0"
-                                    className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
+                                    placeholder={SCORE_INPUT_PLACEHOLDER}
+                                    className={`h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 ${scoreInputPlaceholderClass}`}
                                 />
                                 <span className="px-0.5 text-base font-black text-slate-300">-</span>
                                 <input
@@ -937,8 +939,8 @@ function CompactMatchRow({
                                     pattern="[0-9]*"
                                     value={draft.away}
                                     onChange={(e) => onDraftChange('away', e.target.value)}
-                                    placeholder="0"
-                                    className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20"
+                                    placeholder={SCORE_INPUT_PLACEHOLDER}
+                                    className={`h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 ${scoreInputPlaceholderClass}`}
                                 />
                             </div>
                         ) : (match.status === 'finished' || match.status === 'live') && match.result ? (
@@ -1242,7 +1244,8 @@ function CompactMatchRow({
                                     }
                                 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
+                                placeholder={SCORE_INPUT_PLACEHOLDER}
+                                className={`h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20 ${scoreInputPlaceholderClass}`}
                             />
                             <span className="text-xs font-black text-slate-300">-</span>
                             <input
@@ -1258,7 +1261,8 @@ function CompactMatchRow({
                                     }
                                 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20"
+                                placeholder={SCORE_INPUT_PLACEHOLDER}
+                                className={`h-8 w-10 rounded-lg border-2 border-lime-400 bg-white text-center text-sm font-black text-slate-900 outline-none ring-2 ring-lime-400/20 ${scoreInputPlaceholderClass}`}
                             />
                         </div>
                     ) : (
