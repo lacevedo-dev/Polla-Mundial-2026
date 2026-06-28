@@ -131,7 +131,8 @@ export class CorpPortalController {
                 summary:
                     'En octavos, cuartos, semifinal y final debes indicar qué equipo pasa a la siguiente ronda. '
                     + 'Si el marcador tiene ganador, se asigna automáticamente; en empate debes elegirlo manualmente (penales). '
-                    + 'Esta selección solo influye en los bonos por fase, no en los puntos del marcador.',
+                    + 'Esta selección influye en los bonos por fase clasificados. '
+                    + 'Además, en todas las rondas eliminatorias los puntos de marcador, ganador y gol se multiplican ×1.5.',
             },
         };
     }

@@ -21,6 +21,13 @@ import {
   Zap,
 } from 'lucide-react';
 
+const KNOCKOUT_MULTIPLIER = 1.5;
+
+function knockoutPts(base: number): string {
+  const total = base * KNOCKOUT_MULTIPLIER;
+  return Number.isInteger(total) ? `${total}` : `${total}`;
+}
+
 const Help: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<'rules' | 'points' | 'groups'>('rules');
 
@@ -141,7 +148,8 @@ const Help: React.FC = () => {
             <div className="text-center space-y-3">
               <h3 className="text-3xl font-black font-brand uppercase tracking-tighter text-slate-900">Sistema de Puntuación</h3>
               <p className="text-slate-500 text-base leading-relaxed max-w-xl mx-auto">
-                Cada partido vale hasta <strong className="text-slate-800">5 puntos base</strong> más bonos adicionales.
+                Cada partido vale hasta <strong className="text-slate-800">5 puntos base</strong> en fase de grupos
+                (o <strong className="text-slate-800">7.5</strong> en eliminatorias con el multiplicador ×{KNOCKOUT_MULTIPLIER}) más bonos adicionales.
                 Los puntos de ganador y gol se <strong className="text-slate-800">suman entre sí</strong>; el marcador exacto es una categoría independiente.
               </p>
             </div>
@@ -249,6 +257,30 @@ const Help: React.FC = () => {
                 <h4 id="sec-bonos" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">Bonos adicionales</h4>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                {/* Multiplicador eliminatorias */}
+                <div className="rounded-[2rem] border-2 border-sky-200 bg-sky-50 p-6 space-y-3 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl" aria-hidden="true">🔥</span>
+                      <span className="text-sm font-black uppercase tracking-wide text-sky-800">Multiplicador eliminatorias</span>
+                    </div>
+                    <span className="text-3xl font-black text-sky-700 tabular-nums">×{KNOCKOUT_MULTIPLIER}</span>
+                  </div>
+                  <p className="text-sm text-sky-700 leading-relaxed">
+                    En todas las fases eliminatorias (dieciseisavos, octavos, cuartos, semifinal, final y tercer lugar),
+                    los puntos obtenidos por <strong>marcador exacto, ganador o gol</strong> se multiplican por{' '}
+                    <strong>{KNOCKOUT_MULTIPLIER}</strong>. No aplica en fase de grupos.
+                  </p>
+                  <div className="rounded-xl bg-sky-100 px-3 py-2">
+                    <p className="text-xs text-sky-800 font-medium italic">
+                      Predijiste <strong>0‑1</strong> en dieciseisavos y terminó <strong>0‑1</strong> → Marcador exacto: 5 pts × {KNOCKOUT_MULTIPLIER} (eliminatoria) = <strong>7.5 pts</strong>
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-sky-600 leading-snug">
+                    El bono de predicción única (+5) se suma después, sin multiplicar. Los bonos por clasificados de fase son independientes.
+                  </p>
+                </div>
 
                 {/* Predicción única */}
                 <div className="rounded-[2rem] border-2 border-amber-200 bg-amber-50 p-6 space-y-3">

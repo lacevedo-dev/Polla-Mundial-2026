@@ -28,6 +28,12 @@ function fmtPts(n: number): string {
     return `${n} ${n === 1 ? 'pt' : 'pts'}`;
 }
 
+const KNOCKOUT_MULTIPLIER = 1.5;
+
+function fmtKnockoutPts(base: number): string {
+    return fmtPts(base * KNOCKOUT_MULTIPLIER);
+}
+
 export function ScoringRulesCard({
     defaultExpanded = false,
     defaultTab = 'desempate',
@@ -129,6 +135,7 @@ export function ScoringRulesCard({
                         <p className="text-[9px] text-slate-400 pt-1 leading-snug">
                             El marcador exacto ({fmtPts(exactScore)}) no se suma con otros bonos. El resto es{' '}
                             <span className="font-bold text-slate-500">aditivo</span>.
+                            En eliminatorias, marcador, ganador y gol ×{KNOCKOUT_MULTIPLIER} (ej. exacto = {fmtKnockoutPts(exactScore)}).
                         </p>
                     </div>
 
@@ -139,6 +146,17 @@ export function ScoringRulesCard({
                         hidden={scoringTab !== 'bonos'}
                         className="space-y-3"
                     >
+                        <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-1.5">Multiplicador eliminatorias</p>
+                            <div className="flex items-center gap-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2.5">
+                                <span className="text-base leading-none shrink-0" aria-hidden="true">🔥</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-800 leading-tight">Puntos ×{KNOCKOUT_MULTIPLIER} en rondas finales</p>
+                                    <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Marcador, ganador y gol. No aplica en grupos ni al bono único.</p>
+                                </div>
+                                <span className="text-sm font-black text-sky-600 shrink-0">×{KNOCKOUT_MULTIPLIER}</span>
+                            </div>
+                        </div>
                         <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-1.5">Predicción única</p>
                             <div className="flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">

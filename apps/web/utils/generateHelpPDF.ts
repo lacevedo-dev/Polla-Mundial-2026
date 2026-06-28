@@ -551,6 +551,11 @@ export function generateHelpPDF(): void {
           <td class="pts-amber">+5</td>
         </tr>
         <tr>
+          <td><strong>🔥 Multiplicador Eliminatorias</strong></td>
+          <td>En rondas finales, los puntos de marcador, ganador y gol se multiplican ×1.5 (no aplica en grupos ni al bono único)</td>
+          <td class="pts-slate">×1.5</td>
+        </tr>
+        <tr>
           <td><strong>🥈 Bono Octavos</strong></td>
           <td>Aciertas todos los equipos clasificados a cuartos</td>
           <td class="pts-slate">8</td>
@@ -650,6 +655,20 @@ export function generateHelpPDF(): void {
           <div class="combo-right"><span class="combo-detail">—</span><span class="combo-total" style="color:#94a3b8">0 pts</span></div>
         </li>
       </ul>
+    </div>
+
+    <!-- Multiplicador eliminatorias -->
+    <div class="point-card" style="margin-bottom:12px;border-color:#bae6fd;background:#f0f9ff">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16pt">🔥</span>
+          <span class="point-card-title" style="color:#0c4a6e">Multiplicador Eliminatorias</span>
+        </div>
+        <span class="point-card-pts" style="color:#0369a1">×1.5</span>
+      </div>
+      <p style="color:#0369a1">En dieciseisavos, octavos, cuartos, semifinal, final y tercer lugar, los puntos de <strong>marcador exacto, ganador y gol</strong> se multiplican por <strong>1.5</strong>. No aplica en fase de grupos.</p>
+      <div class="point-card-example" style="background:#e0f2fe;color:#0369a1">Predijiste <strong>0-1</strong> en dieciseisavos y terminó <strong>0-1</strong> → 5 pts × 1.5 (eliminatoria) = <strong>7.5 pts</strong></div>
+      <p class="point-card-warning" style="color:#0284c7">El bono de predicción única (+5) se suma después, sin multiplicar. Los bonos por clasificados de fase son independientes.</p>
     </div>
 
     <!-- Bonos clasificados -->
@@ -831,36 +850,36 @@ export function generateHelpPDF(): void {
             <td>Valderrama</td>
             <td class="pred-cell">1-1</td>
             <td>México</td>
-            <td class="pts-cell pts-blue">2</td>
-            <td>Acertó el empate (Ganador Acertado). No acierta clasificado</td>
+            <td class="pts-cell pts-blue">3</td>
+            <td>Acertó el empate (2 pts × 1.5 eliminatoria). No acierta clasificado</td>
           </tr>
           <tr class="highlight">
             <td>Zidane</td>
             <td class="pred-cell">0-0</td>
             <td>México</td>
-            <td class="pts-cell pts-amber">10</td>
-            <td>Acertó marcador exacto y fue predicción única. No acierta clasificado</td>
+            <td class="pts-cell pts-amber">12.5</td>
+            <td>Marcador exacto (5×1.5) + predicción única (+5). No acierta clasificado</td>
           </tr>
           <tr>
             <td>Pelé</td>
             <td class="pred-cell">1-0</td>
             <td>Costa Rica</td>
-            <td class="pts-cell pts-purple">1</td>
-            <td>Acertó el número de goles de un equipo. Acierta clasificado</td>
+            <td class="pts-cell pts-purple">1.5</td>
+            <td>Gol acertado (1 pt × 1.5). Acierta clasificado</td>
           </tr>
           <tr>
             <td>Baggio</td>
             <td class="pred-cell">1-1</td>
             <td>Costa Rica</td>
-            <td class="pts-cell pts-blue">2</td>
-            <td>Acertó el empate (Ganador Acertado). Acierta clasificado</td>
+            <td class="pts-cell pts-blue">3</td>
+            <td>Acertó el empate (2×1.5). Acierta clasificado</td>
           </tr>
           <tr>
             <td>Francescoli</td>
             <td class="pred-cell">0-2</td>
             <td>México</td>
-            <td class="pts-cell pts-purple">1</td>
-            <td>Acertó el número de goles de un equipo. No acierta clasificado</td>
+            <td class="pts-cell pts-purple">1.5</td>
+            <td>Gol acertado (1×1.5). No acierta clasificado</td>
           </tr>
           <tr>
             <td>Batistuta</td>

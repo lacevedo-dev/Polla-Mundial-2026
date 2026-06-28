@@ -268,6 +268,7 @@ export function generateHelpPDF(orgName = 'Portal Corporativo', primaryColor = '
         <tr><td><strong>✅ Ganador Acertado</strong></td><td>Aciertas el ganador o el empate (sin marcador exacto)</td><td class="pts-blue">2</td></tr>
         <tr><td><strong>⚽ Gol Acertado</strong></td><td>Aciertas el número de goles de uno de los equipos</td><td class="pts-purple">1</td></tr>
         <tr><td><strong>⭐ Predicción Única</strong></td><td>Fuiste el único que acertó el marcador exacto en el grupo</td><td class="pts-amber">+5</td></tr>
+        <tr><td><strong>🔥 Multiplicador Eliminatorias</strong></td><td>En rondas finales, marcador, ganador y gol ×1.5 (no en grupos ni al bono único)</td><td class="pts-slate">×1.5</td></tr>
         <tr><td><strong>🥈 Bono Octavos</strong></td><td>Aciertas todos los equipos clasificados a cuartos</td><td class="pts-slate">8</td></tr>
         <tr><td><strong>🥉 Bono Cuartos</strong></td><td>Aciertas todos los equipos clasificados a semifinal</td><td class="pts-slate">4</td></tr>
         <tr><td><strong>🏅 Bono Semifinal</strong></td><td>Aciertas todos los equipos clasificados a la final</td><td class="pts-slate">2</td></tr>
@@ -323,6 +324,19 @@ export function generateHelpPDF(orgName = 'Portal Corporativo', primaryColor = '
         <li class="combo-row"><span>Solo gol acertado</span><div class="combo-right"><span class="combo-detail">0 + 1</span><span class="combo-total" style="color:#7c3aed">1 pt</span></div></li>
         <li class="combo-row"><span>Ninguno acertado</span><div class="combo-right"><span class="combo-detail">—</span><span class="combo-total" style="color:#94a3b8">0 pts</span></div></li>
       </ul>
+    </div>
+
+    <div class="point-card" style="margin-bottom:12px;border-color:#bae6fd;background:#f0f9ff">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16pt">🔥</span>
+          <span class="point-card-title" style="color:#0c4a6e">Multiplicador Eliminatorias</span>
+        </div>
+        <span class="point-card-pts" style="color:#0369a1">×1.5</span>
+      </div>
+      <p style="color:#0369a1">En rondas finales, los puntos de marcador, ganador y gol se multiplican por <strong>1.5</strong>. No aplica en fase de grupos.</p>
+      <div class="point-card-example" style="background:#e0f2fe;color:#0369a1">Predijiste <strong>0-1</strong> en dieciseisavos y terminó <strong>0-1</strong> → 5 pts × 1.5 = <strong>7.5 pts</strong></div>
+      <p class="point-card-warning" style="color:#0284c7">El bono de predicción única (+5) se suma después, sin multiplicar.</p>
     </div>
 
     <div class="point-card slate">

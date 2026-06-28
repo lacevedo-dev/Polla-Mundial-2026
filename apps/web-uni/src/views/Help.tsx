@@ -43,6 +43,12 @@ function fmtPts(n: number): string {
     return `${n} ${n === 1 ? 'pt' : 'pts'}`;
 }
 
+const KNOCKOUT_MULTIPLIER = 1.5;
+
+function fmtKnockoutPts(base: number): string {
+    return fmtPts(base * KNOCKOUT_MULTIPLIER);
+}
+
 const Help: React.FC = () => {
     const [activeTab, setActiveTab] = React.useState<Tab>('points');
     const [scoringGuide, setScoringGuide] = React.useState<ScoringGuide | null>(null);
@@ -150,7 +156,8 @@ const Help: React.FC = () => {
                             Sistema de Puntuación
                         </h2>
                         <p className="text-slate-500 text-sm leading-relaxed">
-                            Cada partido vale hasta <strong className="text-slate-800">{fmtPts(exactScore)} base</strong> más bonos adicionales.
+                            Cada partido vale hasta <strong className="text-slate-800">{fmtPts(exactScore)} base</strong> en grupos
+                            (o <strong className="text-slate-800">{fmtKnockoutPts(exactScore)}</strong> en eliminatorias con ×{KNOCKOUT_MULTIPLIER}) más bonos adicionales.
                             Los puntos por ganador y gol se suman entre sí; el marcador exacto es independiente.
                         </p>
                     </div>
@@ -244,6 +251,26 @@ const Help: React.FC = () => {
                             </h3>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="rounded-2xl border-2 border-sky-200 bg-sky-50 p-6 space-y-3 sm:col-span-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">🔥</span>
+                                        <span className="text-sm font-black uppercase tracking-wide text-sky-800">Multiplicador eliminatorias</span>
+                                    </div>
+                                    <span className="text-3xl font-black text-sky-700">×{KNOCKOUT_MULTIPLIER}</span>
+                                </div>
+                                <p className="text-sm text-sky-700 leading-relaxed">
+                                    En rondas finales, los puntos de marcador, ganador y gol se multiplican por{' '}
+                                    <strong>{KNOCKOUT_MULTIPLIER}</strong>. No aplica en fase de grupos.
+                                </p>
+                                <div className="rounded-xl bg-sky-100 px-3 py-2 text-xs text-sky-800 italic">
+                                    Predijiste <strong>0‑1</strong> en dieciseisavos y terminó <strong>0‑1</strong> → {exactScore} pts × {KNOCKOUT_MULTIPLIER} = <strong>{fmtKnockoutPts(exactScore)}</strong>
+                                </div>
+                                <p className="text-[10px] text-sky-600 leading-snug">
+                                    El bono de predicción única (+{uniquePred}) se suma después, sin multiplicar.
+                                </p>
+                            </div>
+
                             <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-6 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
