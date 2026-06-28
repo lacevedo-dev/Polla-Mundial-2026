@@ -11,6 +11,7 @@ import { useAdminMatchesStore } from '../../stores/admin.matches.store';
 import type { AdminMatch, AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournament, ApiCallLog } from '../../stores/admin.matches.store';
 import { useAdminWhatsappStore } from '../../stores/admin.whatsapp.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
+import { formatMatchPhaseLabel, isKnockoutPhase } from '../../utils/match-phase';
 
 const PHASES = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
 const STATUSES_MATCH = ['SCHEDULED', 'LIVE', 'FINISHED', 'POSTPONED', 'CANCELLED'];
@@ -1317,6 +1318,18 @@ const AdminMatches: React.FC = () => {
                 <DialogPrimitive.Title className="text-base font-black text-slate-900">
                   {previewMatch?.match.homeTeam.name} vs {previewMatch?.match.awayTeam.name}
                 </DialogPrimitive.Title>
+                {previewMatch && isKnockoutPhase(previewMatch.match.phase) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">
+                      {formatMatchPhaseLabel(previewMatch.match.phase)}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {previewMatch.type === 'start'
+                        ? 'Incluye columna Clasifica en email y PDF'
+                        : 'Incluye pick de clasificación y resultado real'}
+                    </span>
+                  </div>
+                )}
                 {previewLeagues.length > 0 && (
                   <div className="mt-2 flex items-center gap-2">
                     <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 shrink-0">Polla</label>

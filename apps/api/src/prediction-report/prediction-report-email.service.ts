@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EmailJobPriority, EmailJobType } from '@prisma/client';
 import { EmailQueueService } from '../email/email-queue.service';
 import { PdfReportService } from './pdf-report.service';
+import { formatAdvanceCorrectLabel } from './prediction-report.util';
 
 export interface PredictorEntry {
   userId: string;
@@ -11,6 +12,8 @@ export interface PredictorEntry {
   homeScore: number;
   awayScore: number;
   submittedAt: Date;
+  /** Equipo elegido para clasificar (eliminatorias). */
+  advanceTeamName?: string | null;
 }
 
 export interface ReportMatchInfo {
@@ -19,6 +22,10 @@ export interface ReportMatchInfo {
   matchDate: Date;
   venue?: string;
   round?: string;
+  phase?: string;
+  isKnockout?: boolean;
+  /** Equipo que clasificó realmente (reporte de resultados). */
+  advancingTeamName?: string;
 }
 
 export interface SendReportParams {
@@ -41,6 +48,8 @@ export interface ResultEntry extends PredictorEntry {
   totalPoints: number;
   newPosition: number;
   prevPosition: number;
+  /** Si acertó el pick de clasificación (eliminatorias). */
+  advanceCorrect?: boolean | null;
 }
 
 export interface SendResultParams {
@@ -325,8 +334,16 @@ export class PredictionReportEmailService {
 
     const top3Rows = top3.map((p, i) => {
       const standing = standings.get(p.userId);
-      return podiumRow(p.name, p.homeScore, p.awayScore, standing?.points, i);
+      return podiumRow(p.name, p.homeScore, p.awayScore, standing?.points, i, p.advanceTeamName, match.isKnockout);
     }).join('');
+
+    const knockoutNote = match.isKnockout ? `
+    <div style="margin:0 24px 12px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px">
+      <p style="margin:0;font-size:12px;color:#92400e;line-height:1.5">
+        <strong>Bono clasificados:</strong> en eliminatorias cada participante elige qué equipo avanza.
+        El reporte PDF incluye la columna <em>Clasifica</em> con ese pick.
+      </p>
+    </div>` : '';
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -341,6 +358,8 @@ export class PredictionReportEmailService {
   ${headerBlock(match, leagueName, leagueCode, '🔒 Ventana de Pronósticos Cerrada', '#020617', '#0f172a', '#1e1b4b')}
 
   ${matchCard(match)}
+
+  ${knockoutNote}
 
   ${statsBar([
     { label: '🏠 Local gana',    value: `${pct(homeWinVotes)}%` },
@@ -426,10 +445,17 @@ export class PredictionReportEmailService {
             <span style="background:#1e293b;color:#94a3b8;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px">${ld.predictors.length} pronósticos</span>
           </div>
         </div>
-        ${top3.map((p, i) => podiumRow(p.name, p.homeScore, p.awayScore, ld.standings.get(p.userId)?.points, i)).join('')}
+        ${top3.map((p, i) => podiumRow(p.name, p.homeScore, p.awayScore, ld.standings.get(p.userId)?.points, i, p.advanceTeamName, match.isKnockout)).join('')}
         ${extra > 0 ? `<p style="margin:8px 0 0;font-size:11px;color:#94a3b8;text-align:center">+ ${extra} más en el PDF adjunto</p>` : ''}
       </div>`;
     }).join('');
+
+    const multiKnockoutNote = match.isKnockout ? `
+    <div style="margin:0 24px 12px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px">
+      <p style="margin:0;font-size:12px;color:#92400e;line-height:1.5">
+        <strong>Bono clasificados:</strong> el PDF adjunto incluye la columna <em>Clasifica</em> con el pick de cada participante.
+      </p>
+    </div>` : '';
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -444,6 +470,8 @@ export class PredictionReportEmailService {
   ${headerBlock(match, undefined, undefined, '🔒 Ventana de Pronósticos Cerrada', '#020617', '#0f172a', '#1e1b4b')}
 
   ${matchCard(match)}
+
+  ${multiKnockoutNote}
 
   ${statsBar([
     { label: '🏠 Local gana',    value: `${pct(homeWinVotes)}%` },
@@ -510,16 +538,31 @@ export class PredictionReportEmailService {
       const cfg = OUTCOME_ICON[r.outcome];
       const pts = r.pointsEarned > 0 ? `+${r.pointsEarned} pts` : '0 pts';
       const medal = ['🥇', '🥈', '🥉'][i];
+      const advanceCell = match.isKnockout ? `
+        <div style="display:table-cell;width:96px;text-align:center;vertical-align:middle">
+          <div style="font-size:11px;font-weight:700;color:${r.advanceCorrect === true ? '#16a34a' : r.advanceCorrect === false ? '#dc2626' : '#64748b'}">
+            ${r.advanceTeamName ? escHtml(r.advanceTeamName) : '—'} ${formatAdvanceCorrectLabel(r.advanceCorrect)}
+          </div>
+        </div>` : '';
       return `
       <div style="display:table;width:100%;margin-bottom:6px;background:${i % 2 === 0 ? '#f8fafc' : '#fff'};border-radius:10px;padding:2px 0">
         <div style="display:table-cell;width:28px;vertical-align:middle;text-align:center;font-size:16px">${medal}</div>
         <div style="display:table-cell;vertical-align:middle;font-size:13px;font-weight:600;color:#0f172a;padding-left:4px">${escHtml(r.name)}</div>
+        <div style="display:table-cell;width:52px;text-align:center;vertical-align:middle">
+          <span style="display:inline-block;background:#0f172a;color:#94a3b8;font-size:12px;font-weight:800;padding:2px 8px;border-radius:6px;font-family:monospace">${r.homeScore}-${r.awayScore}</span>
+        </div>
+        ${advanceCell}
         <div style="display:table-cell;width:38px;text-align:center;vertical-align:middle;font-size:13px">${cfg}</div>
         <div style="display:table-cell;width:70px;text-align:right;vertical-align:middle">
           <span style="font-size:13px;font-weight:800;color:#a3e635">${pts}</span>
         </div>
       </div>`;
     }).join('');
+
+    const advancingBanner = match.isKnockout && match.advancingTeamName ? `
+  <div style="background:#422006;padding:10px 28px;text-align:center;border-top:1px solid #78350f">
+    <span style="color:#fbbf24;font-size:13px;font-weight:800">🏆 Clasifica: ${escHtml(match.advancingTeamName)}</span>
+  </div>` : '';
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -563,6 +606,8 @@ export class PredictionReportEmailService {
       ${isDraw ? '🤝' : '🏆'} ${resultLabel}
     </span>
   </div>
+
+  ${advancingBanner}
 
   <!-- STATS STRIP -->
   <div style="background:#1e293b;padding:14px 28px;display:table;width:100%;box-sizing:border-box">
@@ -671,6 +716,10 @@ export class PredictionReportEmailService {
     const wrongCount      = allResults.filter(r => r.outcome === 'WRONG').length;
     const topScorer       = [...allResults].sort((a, b) => b.pointsEarned - a.pointsEarned)[0];
     const totalParticipants = allResults.length;
+    const advancingBanner = match.isKnockout && match.advancingTeamName ? `
+  <div style="background:#422006;padding:10px 28px;text-align:center;border-top:1px solid #78350f">
+    <span style="color:#fbbf24;font-size:13px;font-weight:800">🏆 Clasifica: ${escHtml(match.advancingTeamName)}</span>
+  </div>` : '';
 
     const leagueSummaries = leaguesData.map(ld => {
       const sorted = [...ld.results].sort((a, b) => b.pointsEarned - a.pointsEarned || a.prevPosition - b.prevPosition);
@@ -685,6 +734,12 @@ export class PredictionReportEmailService {
         const pts     = r.pointsEarned > 0 ? `+${r.pointsEarned} pts` : '0 pts';
         const arrow   = r.newPosition < r.prevPosition ? `↑${r.prevPosition - r.newPosition}`
                       : r.newPosition > r.prevPosition ? `↓${r.newPosition - r.prevPosition}` : '';
+        const advanceCell = match.isKnockout ? `
+          <div style="display:table-cell;width:88px;vertical-align:middle;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:${r.advanceCorrect === true ? '#16a34a' : r.advanceCorrect === false ? '#dc2626' : '#64748b'}">
+              ${r.advanceTeamName ? escHtml(r.advanceTeamName) : '—'} ${formatAdvanceCorrectLabel(r.advanceCorrect)}
+            </div>
+          </div>` : '';
         return `
         <div style="display:table;width:100%;margin-bottom:6px;background:${i % 2 === 0 ? '#f8fafc' : '#fff'};border-radius:10px;padding:4px 0">
           <div style="display:table-cell;width:28px;vertical-align:middle;text-align:center;font-size:16px">${medal}</div>
@@ -695,6 +750,7 @@ export class PredictionReportEmailService {
           <div style="display:table-cell;width:52px;vertical-align:middle;text-align:center">
             <span style="display:inline-block;background:#0f172a;color:#94a3b8;font-size:12px;font-weight:800;padding:2px 8px;border-radius:6px;font-family:monospace">${r.homeScore}-${r.awayScore}</span>
           </div>
+          ${advanceCell}
           <div style="display:table-cell;width:46px;vertical-align:middle;text-align:center">
             <span style="display:inline-block;background:${bg};color:${color};font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px">${icon}</span>
           </div>
@@ -762,6 +818,8 @@ export class PredictionReportEmailService {
       ${isDraw ? '🤝' : '🏆'} ${resultLabel}
     </span>
   </div>
+
+  ${advancingBanner}
 
   <!-- STATS STRIP -->
   <div style="background:#1e293b;padding:14px 28px;display:table;width:100%;box-sizing:border-box">
@@ -981,9 +1039,21 @@ function statsBar(items: Array<{ label: string; value: string }>): string {
   return `<div style="background:#1e293b;padding:16px 28px;display:table;width:100%;box-sizing:border-box">${cells}</div>`;
 }
 
-function podiumRow(name: string, homeScore: number, awayScore: number, pts: number | undefined, idx: number): string {
+function podiumRow(
+  name: string,
+  homeScore: number,
+  awayScore: number,
+  pts: number | undefined,
+  idx: number,
+  advanceTeamName?: string | null,
+  isKnockout?: boolean,
+): string {
   const medals = ['🥇', '🥈', '🥉'];
   const medal  = medals[idx] ?? `${idx + 1}.`;
+  const advanceCell = isKnockout ? `
+    <div style="display:table-cell;width:96px;text-align:center;vertical-align:middle">
+      <span style="display:inline-block;background:#fffbeb;color:#92400e;font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;border:1px solid #fde68a">${advanceTeamName ? escHtml(advanceTeamName) : '—'}</span>
+    </div>` : '';
   return `
   <div style="display:table;width:100%;margin-bottom:6px;background:${idx % 2 === 0 ? '#f8fafc' : '#fff'};border-radius:10px;padding:2px 0">
     <div style="display:table-cell;width:28px;vertical-align:middle;text-align:center;font-size:18px">${medal}</div>
@@ -991,6 +1061,7 @@ function podiumRow(name: string, homeScore: number, awayScore: number, pts: numb
     <div style="display:table-cell;width:72px;text-align:center;vertical-align:middle">
       <span style="display:inline-block;background:#0f172a;color:#a3e635;font-size:15px;font-weight:900;padding:3px 10px;border-radius:8px;font-family:monospace">${homeScore}–${awayScore}</span>
     </div>
+    ${advanceCell}
     ${pts !== undefined ? `<div style="display:table-cell;width:52px;text-align:right;vertical-align:middle;font-size:12px;color:#94a3b8;padding-right:4px">${pts} pts</div>` : ''}
   </div>`;
 }

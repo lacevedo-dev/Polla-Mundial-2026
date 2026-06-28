@@ -15,7 +15,14 @@ import {
 import { getPredictionReportDueAt } from '../automation/config/automation-timing.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfReportService } from './pdf-report.service';
-import { PredictionReportEmailService, ResultOutcome } from './prediction-report-email.service';
+import { PredictionReportEmailService, PredictorEntry, ResultEntry, ResultOutcome } from './prediction-report-email.service';
+import {
+  buildReportMatchInfo,
+  mapPredictorEntry,
+  mapResultEntry,
+  type AdvancePickByUser,
+  type ReportMatchSource,
+} from './prediction-report.mapper';
 
 export const WA_RESULT_REPORT_EVENT = 'whatsapp.result_report';
 export const WA_PREDICTION_REPORT_EVENT = 'whatsapp.prediction_report';
@@ -118,7 +125,7 @@ async sendPendingReports(
         });
 
     const matchesData = new Map<string, {
-      match: any;
+      match: import('./prediction-report-email.service').ReportMatchInfo;
       leaguesData: Array<{
         leagueId: string;
         leagueName: string;
@@ -127,6 +134,7 @@ async sendPendingReports(
         standings: Map<string, { points: number; position: number }>;
       }>;
     }>();
+    const matchSourcesCache = new Map<string, ReportMatchSource>();
 
     for (const league of leagues) {
       const matches = context
@@ -157,10 +165,12 @@ async sendPendingReports(
             include: {
               homeTeam: true,
               awayTeam: true,
+              advancingTeam: { select: { name: true } },
               predictions: {
                 where: { leagueId: league.id },
                 include: {
                   user: { select: { id: true, name: true, email: true } },
+                  advanceTeam: { select: { name: true } },
                 },
                 orderBy: { submittedAt: 'asc' },
               },
@@ -194,33 +204,31 @@ async sendPendingReports(
         );
         if (recipients.length === 0) continue;
 
+        const advanceByUser = context
+          ? await this.loadAdvancePicksByUser(match.id, league.id)
+          : undefined;
+        const matchSource = await this.ensureReportMatchSource(match.id, matchSourcesCache);
+        if (!matchSource) continue;
+
         const predictors = leaguePredictions.filter(this.hasCompletePredictionScores).map((prediction) => {
           const member = members.find(
             (leagueMember) => leagueMember.userId === prediction.userId,
           );
-          return {
-            userId: prediction.userId,
-            name: this.resolvePredictorName(prediction.user, prediction.userId),
-            email: prediction.user.email ?? undefined,
-            isAdmin: member?.role === 'ADMIN',
-            homeScore: prediction.homeScore,
-            awayScore: prediction.awayScore,
-            submittedAt: prediction.submittedAt,
-          };
+          return mapPredictorEntry(
+            prediction,
+            member,
+            matchSource,
+            (user, userId) => this.resolvePredictorName(user, userId),
+            advanceByUser?.get(prediction.userId),
+          );
         });
 
         const standings = await this.getStandings(league.id);
+        const reportMatch = buildReportMatchInfo(matchSource);
 
         if (!matchesData.has(match.id)) {
           matchesData.set(match.id, {
-            match: {
-              id: match.id,
-              homeTeam: match.homeTeam.name,
-              awayTeam: match.awayTeam.name,
-              matchDate: match.matchDate,
-              venue: match.venue ?? undefined,
-              round: match.round ?? undefined,
-            },
+            match: reportMatch,
             leaguesData: [],
           });
         }
@@ -260,13 +268,7 @@ async sendPendingReports(
         if (emailEnabled) {
           await this.emailService.sendMultiLeaguePredictionsReport({
             matchId,
-            match: {
-              homeTeam: data.match.homeTeam,
-              awayTeam: data.match.awayTeam,
-              matchDate: data.match.matchDate,
-              venue: data.match.venue,
-              round: data.match.round,
-            },
+            match: data.match,
             leaguesData: data.leaguesData,
             sentAt: now,
           });
@@ -351,9 +353,13 @@ async sendPendingReports(
       include: {
         homeTeam: true,
         awayTeam: true,
+        advancingTeam: { select: { name: true } },
         predictions: {
           where: { leagueId },
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            advanceTeam: { select: { name: true } },
+          },
           orderBy: { submittedAt: 'asc' },
         },
       },
@@ -365,21 +371,19 @@ async sendPendingReports(
     });
 
     const { members, recipients: allRecipients } = await this.getLeagueReportAudience(leagueId);
+    const matchSource = this.toReportMatchSource(match);
 
     const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:    p.userId,
-        name:      this.resolvePredictorName(p.user, p.userId),
-        isAdmin:   member?.role === 'ADMIN',
-        homeScore: p.homeScore,
-        awayScore: p.awayScore,
-        submittedAt: p.submittedAt,
-      };
+      return mapPredictorEntry(
+        p,
+        member,
+        matchSource,
+        (user, userId) => this.resolvePredictorName(user, userId),
+      );
     });
 
     const standings = await this.getStandings(leagueId);
-
     const recipients = testEmail ? [testEmail] : allRecipients;
 
     await this.emailService.sendPredictionsReport({
@@ -388,13 +392,7 @@ async sendPendingReports(
       leagueCode: league.code,
       leagueId,
       matchId,
-      match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
-      },
+      match: buildReportMatchInfo(matchSource),
       predictors,
       standings,
       sentAt: new Date(),
@@ -407,9 +405,13 @@ async sendPendingReports(
       include: {
         homeTeam: true,
         awayTeam: true,
+        advancingTeam: { select: { name: true } },
         predictions: {
           where: { leagueId },
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            advanceTeam: { select: { name: true } },
+          },
           orderBy: { submittedAt: 'asc' },
         },
       },
@@ -421,17 +423,16 @@ async sendPendingReports(
     });
 
     const { members } = await this.getLeagueReportAudience(leagueId);
+    const matchSource = this.toReportMatchSource(match);
 
     const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:    p.userId,
-        name:      this.resolvePredictorName(p.user, p.userId),
-        isAdmin:   member?.role === 'ADMIN',
-        homeScore: p.homeScore,
-        awayScore: p.awayScore,
-        submittedAt: p.submittedAt,
-      };
+      return mapPredictorEntry(
+        p,
+        member,
+        matchSource,
+        (user, userId) => this.resolvePredictorName(user, userId),
+      );
     });
 
     const standings = await this.getStandings(leagueId);
@@ -439,13 +440,7 @@ async sendPendingReports(
     return this.emailService.buildHtml({
       leagueName: league.name,
       leagueCode: league.code,
-      match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
-      },
+      match: buildReportMatchInfo(matchSource),
       predictors,
       standings,
       sentAt: new Date(),
@@ -476,12 +471,22 @@ async sendPendingReports(
 
     const match = await this.prisma.match.findUnique({
       where: { id: matchId },
-      include: { homeTeam: true, awayTeam: true },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        advancingTeam: { select: { name: true } },
+      },
     });
     if (!match || match.homeScore === null || match.awayScore === null) return;
 
     const realHome = match.homeScore;
     const realAway = match.awayScore;
+    const matchSource = this.toReportMatchSource(match);
+    const reportMatch = {
+      ...buildReportMatchInfo(matchSource, { includeResult: true }),
+      homeScore: realHome,
+      awayScore: realAway,
+    };
 
     // Recopilar todas las ligas con predicciones para este partido
     const leagueRows = await this.prisma.prediction.findMany({
@@ -509,7 +514,10 @@ async sendPendingReports(
 
       const predictions = await this.prisma.prediction.findMany({
         where: { matchId, leagueId, points: { not: null } },
-        include: { user: { select: { id: true, name: true, email: true } } },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          advanceTeam: { select: { name: true } },
+        },
         orderBy: { submittedAt: 'asc' },
       });
       if (predictions.length === 0) continue;
@@ -529,20 +537,19 @@ async sendPendingReports(
 
       const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
         const member  = members.find(m => m.userId === p.userId);
-        return {
-          userId:       p.userId,
-          name:         this.resolvePredictorName(p.user, p.userId),
-          email:        p.user.email ?? undefined,
-          isAdmin:      member?.role === 'ADMIN',
-          homeScore:    p.homeScore,
-          awayScore:    p.awayScore,
-          submittedAt:  p.submittedAt,
-          outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
-          pointsEarned: p.points ?? 0,
-          totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
-          prevPosition: prevStandings.get(p.userId)?.position ?? 99,
-          newPosition:  afterStandings.get(p.userId)?.position ?? 99,
-        };
+        return mapResultEntry(
+          p,
+          member,
+          matchSource,
+          (user, userId) => this.resolvePredictorName(user, userId),
+          (pointDetail, points) => this.parseOutcomeFromDetail(pointDetail, points),
+          {
+            pointsEarned: p.points ?? 0,
+            totalPoints: afterStandings.get(p.userId)?.points ?? 0,
+            prevPosition: prevStandings.get(p.userId)?.position ?? 99,
+            newPosition: afterStandings.get(p.userId)?.position ?? 99,
+          },
+        );
       });
 
       leaguesData.push({ leagueId, leagueName: league.name, leagueCode: league.code, results });
@@ -571,15 +578,7 @@ async sendPendingReports(
       if (emailEnabled) {
         await this.emailService.sendMultiLeagueResultsReport({
           matchId,
-          match: {
-            homeTeam:  match.homeTeam.name,
-            awayTeam:  match.awayTeam.name,
-            matchDate: match.matchDate,
-            homeScore: realHome,
-            awayScore: realAway,
-            venue:     match.venue ?? undefined,
-            round:     match.round ?? undefined,
-          },
+          match: reportMatch,
           leaguesData,
           sentAt: new Date(),
         });
@@ -641,7 +640,11 @@ async sendPendingReports(
   async getPreviewResultsHtml(matchId: string): Promise<string> {
     const match = await this.prisma.match.findUniqueOrThrow({
       where: { id: matchId },
-      include: { homeTeam: true, awayTeam: true },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        advancingTeam: { select: { name: true } },
+      },
     });
     if (match.homeScore === null || match.awayScore === null) {
       return '<p style="font-family:sans-serif;padding:2rem">Este partido no tiene resultado registrado.</p>';
@@ -655,73 +658,17 @@ async sendPendingReports(
       return '<p style="font-family:sans-serif;padding:2rem">No hay predicciones con puntos calculados para este partido.</p>';
     }
 
-    const { leagueId } = firstPrediction;
-    const league = await this.prisma.league.findUniqueOrThrow({
-      where: { id: leagueId },
-      select: { name: true, code: true },
-    });
-
-    const { members } = await this.getLeagueReportAudience(leagueId);
-
-    const predictions = await this.prisma.prediction.findMany({
-      where: { matchId, leagueId, points: { not: null } },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { submittedAt: 'asc' },
-    });
-
-    const prevPreds = await this.prisma.prediction.findMany({
-      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
-      select: { userId: true, points: true },
-    });
-    const prevTotals = new Map<string, number>();
-    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const afterTotals = new Map<string, number>(prevTotals);
-    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
-    const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
-    const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
-    const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
-
-    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
-      const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:       p.userId,
-        name:         this.resolvePredictorName(p.user, p.userId),
-        isAdmin:      member?.role === 'ADMIN',
-        homeScore:    p.homeScore,
-        awayScore:    p.awayScore,
-        submittedAt:  p.submittedAt,
-        outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
-        pointsEarned: p.points ?? 0,
-        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
-        prevPosition: prevStandings.get(p.userId)?.position ?? 99,
-        newPosition:  afterStandings.get(p.userId)?.position ?? 99,
-      };
-    });
-
-    return this.emailService.buildResultHtml({
-      leagueName: league.name,
-      leagueCode: league.code,
-      match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
-        homeScore: match.homeScore,
-        awayScore: match.awayScore,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
-      },
-      results,
-      sentAt: new Date(),
-    });
+    return this.getPreviewResultsHtmlForLeague(matchId, firstPrediction.leagueId);
   }
 
   async getPreviewResultsHtmlForLeague(matchId: string, leagueId: string): Promise<string> {
     const match = await this.prisma.match.findUniqueOrThrow({
       where: { id: matchId },
-      include: { homeTeam: true, awayTeam: true },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        advancingTeam: { select: { name: true } },
+      },
     });
     if (match.homeScore === null || match.awayScore === null) {
       return '<p style="font-family:sans-serif;padding:2rem">Este partido no tiene resultado registrado.</p>';
@@ -732,60 +679,19 @@ async sendPendingReports(
       select: { name: true, code: true },
     });
 
-    const { members } = await this.getLeagueReportAudience(leagueId);
-
-    const predictions = await this.prisma.prediction.findMany({
-      where: { matchId, leagueId, points: { not: null } },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { submittedAt: 'asc' },
-    });
-    if (predictions.length === 0) {
+    const matchSource = this.toReportMatchSource(match);
+    const results = await this.buildLeagueResultEntries(matchId, leagueId, matchSource);
+    if (results.length === 0) {
       return '<p style="font-family:sans-serif;padding:2rem">No hay predicciones con puntos calculados para esta polla.</p>';
     }
-
-    const prevPreds = await this.prisma.prediction.findMany({
-      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
-      select: { userId: true, points: true },
-    });
-    const prevTotals = new Map<string, number>();
-    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const afterTotals = new Map<string, number>(prevTotals);
-    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
-    const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
-    const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
-    const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
-
-    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
-      const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:       p.userId,
-        name:         this.resolvePredictorName(p.user, p.userId),
-        isAdmin:      member?.role === 'ADMIN',
-        homeScore:    p.homeScore,
-        awayScore:    p.awayScore,
-        submittedAt:  p.submittedAt,
-        outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
-        pointsEarned: p.points ?? 0,
-        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
-        prevPosition: prevStandings.get(p.userId)?.position ?? 99,
-        newPosition:  afterStandings.get(p.userId)?.position ?? 99,
-      };
-    });
 
     return this.emailService.buildResultHtml({
       leagueName: league.name,
       leagueCode: league.code,
       match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
+        ...buildReportMatchInfo(matchSource, { includeResult: true }),
         homeScore: match.homeScore,
         awayScore: match.awayScore,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
       },
       results,
       sentAt: new Date(),
@@ -856,6 +762,138 @@ async sendPendingReports(
     return user.name ?? user.email ?? userId;
   }
 
+  private toReportMatchSource(match: {
+    homeTeamId: string;
+    awayTeamId: string;
+    homeTeam: { name: string };
+    awayTeam: { name: string };
+    matchDate: Date;
+    venue?: string | null;
+    round?: string | null;
+    phase: string;
+    homeScore?: number | null;
+    awayScore?: number | null;
+    advancingTeamId?: string | null;
+    advancingTeam?: { name: string } | null;
+  }): ReportMatchSource {
+    return {
+      homeTeamId: match.homeTeamId,
+      awayTeamId: match.awayTeamId,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      matchDate: match.matchDate,
+      venue: match.venue,
+      round: match.round,
+      phase: match.phase,
+      homeScore: match.homeScore,
+      awayScore: match.awayScore,
+      advancingTeamId: match.advancingTeamId,
+      advancingTeam: match.advancingTeam,
+    };
+  }
+
+  private async loadReportMatchSource(matchId: string): Promise<ReportMatchSource | null> {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        homeTeamId: true,
+        awayTeamId: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+        matchDate: true,
+        venue: true,
+        round: true,
+        phase: true,
+        homeScore: true,
+        awayScore: true,
+        advancingTeamId: true,
+        advancingTeam: { select: { name: true } },
+      },
+    });
+    return match ? this.toReportMatchSource(match) : null;
+  }
+
+  private async ensureReportMatchSource(
+    matchId: string,
+    cache: Map<string, ReportMatchSource>,
+  ): Promise<ReportMatchSource | null> {
+    if (cache.has(matchId)) return cache.get(matchId)!;
+    const loaded = await this.loadReportMatchSource(matchId);
+    if (loaded) cache.set(matchId, loaded);
+    return loaded;
+  }
+
+  private async loadAdvancePicksByUser(
+    matchId: string,
+    leagueId: string,
+  ): Promise<AdvancePickByUser> {
+    const rows = await this.prisma.prediction.findMany({
+      where: { matchId, leagueId },
+      select: {
+        userId: true,
+        advanceTeamId: true,
+        advanceTeam: { select: { name: true } },
+      },
+    });
+    return new Map(
+      rows.map((row) => [
+        row.userId,
+        {
+          advanceTeamId: row.advanceTeamId,
+          advanceTeamName: row.advanceTeam?.name ?? null,
+        },
+      ]),
+    );
+  }
+
+  private async buildLeagueResultEntries(
+    matchId: string,
+    leagueId: string,
+    matchSource: ReportMatchSource,
+  ): Promise<ResultEntry[]> {
+    const { members } = await this.getLeagueReportAudience(leagueId);
+    const predictions = await this.prisma.prediction.findMany({
+      where: { matchId, leagueId, points: { not: null } },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        advanceTeam: { select: { name: true } },
+      },
+      orderBy: { submittedAt: 'asc' },
+    });
+
+    const prevPreds = await this.prisma.prediction.findMany({
+      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
+      select: { userId: true, points: true },
+    });
+    const prevTotals = new Map<string, number>();
+    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+    const afterTotals = new Map<string, number>(prevTotals);
+    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
+
+    const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
+    const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
+    const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
+    const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
+
+    return predictions.filter(this.hasCompletePredictionScores).map((p) => {
+      const member = members.find((m) => m.userId === p.userId);
+      return mapResultEntry(
+        p,
+        member,
+        matchSource,
+        (user, userId) => this.resolvePredictorName(user, userId),
+        (pointDetail, points) => this.parseOutcomeFromDetail(pointDetail, points),
+        {
+          pointsEarned: p.points ?? 0,
+          totalPoints: afterStandings.get(p.userId)?.points ?? 0,
+          prevPosition: prevStandings.get(p.userId)?.position ?? 99,
+          newPosition: afterStandings.get(p.userId)?.position ?? 99,
+        },
+      );
+    });
+  }
+
   private async getStandings(leagueId: string): Promise<Map<string, { points: number; position: number }>> {
     const predictions = await this.prisma.prediction.findMany({
       where: { leagueId, points: { not: null } },
@@ -881,9 +919,13 @@ async sendPendingReports(
       include: {
         homeTeam: true,
         awayTeam: true,
+        advancingTeam: { select: { name: true } },
         predictions: {
           where: { leagueId },
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            advanceTeam: { select: { name: true } },
+          },
           orderBy: { submittedAt: 'asc' },
         },
       },
@@ -895,29 +937,22 @@ async sendPendingReports(
     });
 
     const { members } = await this.getLeagueReportAudience(leagueId);
+    const matchSource = this.toReportMatchSource(match);
 
     const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:      p.userId,
-        name:        this.resolvePredictorName(p.user, p.userId),
-        isAdmin:     member?.role === 'ADMIN',
-        homeScore:   p.homeScore,
-        awayScore:   p.awayScore,
-        submittedAt: p.submittedAt,
-      };
+      return mapPredictorEntry(
+        p,
+        member,
+        matchSource,
+        (user, userId) => this.resolvePredictorName(user, userId),
+      );
     });
 
     const standings = await this.getStandings(leagueId);
 
     return this.pdfReport.buildPredictionsReportPdf({
-      match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
-      },
+      match: buildReportMatchInfo(matchSource),
       leaguesData: [{ leagueName: league.name, leagueCode: league.code, predictors, standings }],
       sentAt: new Date(),
     });
@@ -926,7 +961,11 @@ async sendPendingReports(
   async getResultsPdfBuffer(matchId: string, leagueId: string): Promise<Buffer> {
     const match = await this.prisma.match.findUniqueOrThrow({
       where: { id: matchId },
-      include: { homeTeam: true, awayTeam: true },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        advancingTeam: { select: { name: true } },
+      },
     });
     if (match.homeScore === null || match.awayScore === null) {
       throw new Error('Este partido no tiene resultado registrado.');
@@ -937,58 +976,17 @@ async sendPendingReports(
       select: { name: true, code: true },
     });
 
-    const { members } = await this.getLeagueReportAudience(leagueId);
-
-    const predictions = await this.prisma.prediction.findMany({
-      where: { matchId, leagueId, points: { not: null } },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { submittedAt: 'asc' },
-    });
-    if (predictions.length === 0) {
+    const matchSource = this.toReportMatchSource(match);
+    const results = await this.buildLeagueResultEntries(matchId, leagueId, matchSource);
+    if (results.length === 0) {
       throw new Error('No hay predicciones con puntos calculados para esta polla.');
     }
 
-    const prevPreds = await this.prisma.prediction.findMany({
-      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
-      select: { userId: true, points: true },
-    });
-    const prevTotals = new Map<string, number>();
-    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const afterTotals = new Map<string, number>(prevTotals);
-    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const sortedPrev  = [...prevTotals.entries()].sort((a, b) => b[1] - a[1]);
-    const sortedAfter = [...afterTotals.entries()].sort((a, b) => b[1] - a[1]);
-    const prevStandings  = new Map(sortedPrev.map(([uid, pts], i)  => [uid, { points: pts, position: i + 1 }]));
-    const afterStandings = new Map(sortedAfter.map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
-
-    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
-      const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:       p.userId,
-        name:         this.resolvePredictorName(p.user, p.userId),
-        isAdmin:      member?.role === 'ADMIN',
-        homeScore:    p.homeScore,
-        awayScore:    p.awayScore,
-        submittedAt:  p.submittedAt,
-        outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
-        pointsEarned: p.points ?? 0,
-        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
-        prevPosition: prevStandings.get(p.userId)?.position ?? 99,
-        newPosition:  afterStandings.get(p.userId)?.position ?? 99,
-      };
-    });
-
     return this.pdfReport.buildResultsReportPdf({
       match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
+        ...buildReportMatchInfo(matchSource, { includeResult: true }),
         homeScore: match.homeScore,
         awayScore: match.awayScore,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
       },
       leagueName: league.name,
       leagueCode: league.code,
@@ -1005,65 +1003,32 @@ async sendPendingReports(
    * Returns structured results data for a league+match (used by WhatsApp group publisher).
    */
   async getResultsDataForLeague(matchId: string, leagueId: string): Promise<{
-    match: { homeTeam: string; awayTeam: string; matchDate: Date; homeScore: number; awayScore: number; venue?: string; round?: string };
-    results: import('./prediction-report-email.service').ResultEntry[];
+    match: import('./prediction-report-email.service').ReportMatchInfo & {
+      homeScore: number;
+      awayScore: number;
+    };
+    results: ResultEntry[];
   }> {
     const match = await this.prisma.match.findUniqueOrThrow({
       where: { id: matchId },
-      include: { homeTeam: true, awayTeam: true },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        advancingTeam: { select: { name: true } },
+      },
     });
     if (match.homeScore === null || match.awayScore === null) {
       throw new Error('Este partido no tiene resultado registrado.');
     }
 
-    const { members } = await this.getLeagueReportAudience(leagueId);
-
-    const predictions = await this.prisma.prediction.findMany({
-      where: { matchId, leagueId, points: { not: null } },
-      include: { user: { select: { id: true, name: true, email: true } } },
-      orderBy: { submittedAt: 'asc' },
-    });
-
-    const prevPreds = await this.prisma.prediction.findMany({
-      where: { leagueId, points: { not: null }, matchId: { not: matchId } },
-      select: { userId: true, points: true },
-    });
-    const prevTotals = new Map<string, number>();
-    for (const p of prevPreds) prevTotals.set(p.userId, (prevTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const afterTotals = new Map<string, number>(prevTotals);
-    for (const p of predictions) afterTotals.set(p.userId, (afterTotals.get(p.userId) ?? 0) + (p.points ?? 0));
-
-    const prevStandings  = new Map([...prevTotals.entries()].sort((a, b) => b[1] - a[1]).map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
-    const afterStandings = new Map([...afterTotals.entries()].sort((a, b) => b[1] - a[1]).map(([uid, pts], i) => [uid, { points: pts, position: i + 1 }]));
-
-    const results = predictions.filter(this.hasCompletePredictionScores).map(p => {
-      const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:       p.userId,
-        name:         this.resolvePredictorName(p.user, p.userId),
-        email:        p.user.email ?? undefined,
-        isAdmin:      member?.role === 'ADMIN',
-        homeScore:    p.homeScore,
-        awayScore:    p.awayScore,
-        submittedAt:  p.submittedAt,
-        outcome:      this.parseOutcomeFromDetail(p.pointDetail, p.points),
-        pointsEarned: p.points ?? 0,
-        totalPoints:  afterStandings.get(p.userId)?.points ?? 0,
-        prevPosition: prevStandings.get(p.userId)?.position ?? 99,
-        newPosition:  afterStandings.get(p.userId)?.position ?? 99,
-      };
-    });
+    const matchSource = this.toReportMatchSource(match);
+    const results = await this.buildLeagueResultEntries(matchId, leagueId, matchSource);
 
     return {
       match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
+        ...buildReportMatchInfo(matchSource, { includeResult: true }),
         homeScore: match.homeScore,
         awayScore: match.awayScore,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
       },
       results,
     };
@@ -1073,45 +1038,41 @@ async sendPendingReports(
    * Returns structured predictors data for a league+match (used by WhatsApp group publisher).
    */
   async getPredictionsDataForLeague(matchId: string, leagueId: string): Promise<{
-    match: { homeTeam: string; awayTeam: string; matchDate: Date; venue?: string; round?: string };
-    predictors: Array<{ userId: string; name: string; email?: string; isAdmin: boolean; homeScore: number; awayScore: number; submittedAt: Date }>;
+    match: import('./prediction-report-email.service').ReportMatchInfo;
+    predictors: PredictorEntry[];
   }> {
     const match = await this.prisma.match.findUniqueOrThrow({
       where: { id: matchId },
       include: {
         homeTeam: true,
         awayTeam: true,
+        advancingTeam: { select: { name: true } },
         predictions: {
           where: { leagueId },
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            advanceTeam: { select: { name: true } },
+          },
           orderBy: { submittedAt: 'asc' },
         },
       },
     });
 
     const { members } = await this.getLeagueReportAudience(leagueId);
+    const matchSource = this.toReportMatchSource(match);
 
     const predictors = match.predictions.filter(this.hasCompletePredictionScores).map(p => {
       const member = members.find(m => m.userId === p.userId);
-      return {
-        userId:      p.userId,
-        name:        this.resolvePredictorName(p.user, p.userId),
-        email:       p.user.email ?? undefined,
-        isAdmin:     member?.role === 'ADMIN',
-        homeScore:   p.homeScore,
-        awayScore:   p.awayScore,
-        submittedAt: p.submittedAt,
-      };
+      return mapPredictorEntry(
+        p,
+        member,
+        matchSource,
+        (user, userId) => this.resolvePredictorName(user, userId),
+      );
     });
 
     return {
-      match: {
-        homeTeam:  match.homeTeam.name,
-        awayTeam:  match.awayTeam.name,
-        matchDate: match.matchDate,
-        venue:     match.venue ?? undefined,
-        round:     match.round ?? undefined,
-      },
+      match: buildReportMatchInfo(matchSource),
       predictors,
     };
   }

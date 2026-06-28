@@ -15,7 +15,7 @@ export interface MatchInfo {
 }
 
 export interface ResultsCardParams {
-  match: MatchInfo & { homeScore: number; awayScore: number };
+  match: MatchInfo & { homeScore: number; awayScore: number; isKnockout?: boolean; advancingTeamName?: string };
   leagueName: string;
   leagueCode: string;
   results: ResultEntry[];
@@ -23,7 +23,7 @@ export interface ResultsCardParams {
 }
 
 export interface PredictionsCardParams {
-  match: MatchInfo;
+  match: MatchInfo & { isKnockout?: boolean };
   leagueName: string;
   leagueCode: string;
   predictors: Array<{
@@ -31,6 +31,7 @@ export interface PredictionsCardParams {
     homeScore: number;
     awayScore: number;
     isAdmin: boolean;
+    advanceTeamName?: string | null;
   }>;
   sentAt: Date;
 }
@@ -141,6 +142,7 @@ export class WhatsappImageService {
           <td class="pos">${r.newPosition}</td>
           <td class="name">${esc(r.name)}${r.isAdmin ? ' <span class="badge">Admin</span>' : ''}</td>
           <td class="pred">${r.homeScore}–${r.awayScore}</td>
+          ${params.match.isKnockout ? `<td class="advance">${esc(r.advanceTeamName ?? '—')}${r.advanceCorrect === true ? ' ✓' : r.advanceCorrect === false ? ' ✗' : ''}</td>` : ''}
           <td class="pts">${OUTCOME_ICON[r.outcome] ?? ''} +${r.pointsEarned}pts</td>
         </tr>`,
       )
@@ -157,6 +159,7 @@ export class WhatsappImageService {
     border-radius: 20px; display: inline-block; margin-bottom: 10px; }
   .score { font-size: 48px; font-weight: 900; letter-spacing: -2px; color: #fbbf24; }
   .teams { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+  .advance-banner { font-size: 12px; color: #fbbf24; font-weight: 800; margin-top: 8px; }
   .league { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
     color: #64748b; margin-top: 8px; }
   .divider { border: none; border-top: 1px solid #1e293b; margin: 16px 0; }
@@ -167,6 +170,7 @@ export class WhatsappImageService {
   td.pos { width: 28px; font-weight: 900; color: #fbbf24; }
   td.name { font-weight: 600; }
   td.pred { color: #94a3b8; font-size: 12px; }
+  td.advance { color: #fbbf24; font-size: 11px; font-weight: 700; }
   td.pts { text-align: right; font-weight: 700; white-space: nowrap; }
   .badge { background: #1e293b; color: #64748b; font-size: 9px; padding: 1px 5px;
     border-radius: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -178,12 +182,13 @@ export class WhatsappImageService {
     <div class="badge-done">Partido Finalizado</div>
     <div class="score">${params.match.homeScore} – ${params.match.awayScore}</div>
     <div class="teams">${esc(params.match.homeTeam)} vs ${esc(params.match.awayTeam)}</div>
+    ${params.match.isKnockout && params.match.advancingTeamName ? `<div class="advance-banner">Clasifica: ${esc(params.match.advancingTeamName)}</div>` : ''}
     <div class="league">${esc(params.leagueName)} · ${esc(params.leagueCode)}</div>
   </div>
   <hr class="divider">
   <table>
     <thead><tr>
-      <th>#</th><th>Participante</th><th>Pronóstico</th><th>Pts</th>
+      <th>#</th><th>Participante</th><th>Pronóstico</th>${params.match.isKnockout ? '<th>Clasifica</th>' : ''}<th>Pts</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>
@@ -203,6 +208,7 @@ export class WhatsappImageService {
         <tr>
           <td class="name">${esc(p.name)}${p.isAdmin ? ' <span class="badge">Admin</span>' : ''}</td>
           <td class="pred">${p.homeScore}–${p.awayScore}</td>
+          ${params.match.isKnockout ? `<td class="advance">${esc(p.advanceTeamName ?? '—')}</td>` : ''}
         </tr>`,
       )
       .join('');
@@ -235,6 +241,7 @@ export class WhatsappImageService {
   td { padding: 5px 4px; border-bottom: 1px solid #1e293b; }
   td.name { font-weight: 600; }
   td.pred { color: #fbbf24; font-weight: 700; font-size: 14px; text-align: right; }
+  td.advance { color: #fde68a; font-weight: 700; font-size: 12px; text-align: right; }
   .badge { background: #1e293b; color: #64748b; font-size: 9px; padding: 1px 5px;
     border-radius: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
   .footer { text-align: center; font-size: 10px; color: #334155; margin-top: 14px; }
@@ -251,7 +258,7 @@ export class WhatsappImageService {
   <hr class="divider">
   <div class="count">${params.predictors.length} pronóstico${params.predictors.length !== 1 ? 's' : ''}</div>
   <table>
-    <thead><tr><th>Participante</th><th style="text-align:right">Pronóstico</th></tr></thead>
+    <thead><tr><th>Participante</th><th style="text-align:right">Pronóstico</th>${params.match.isKnockout ? '<th style="text-align:right">Clasifica</th>' : ''}</tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <div class="footer">Reporte completo en PDF adjunto · ${params.sentAt.toLocaleDateString('es-CO')}</div>

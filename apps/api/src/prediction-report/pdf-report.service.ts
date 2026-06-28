@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { PredictorEntry, ReportMatchInfo, ResultEntry, ResultOutcome } from './prediction-report-email.service';
+import { formatAdvanceCorrectLabel } from './prediction-report.util';
 
 // Portal color palette
 const C = {
@@ -203,7 +204,7 @@ export class PdfReportService {
 
     for (const league of params.leaguesData) {
       y = this.drawLeagueHeader(doc, league.leagueName, league.leagueCode, league.predictors.length, y);
-      y = this.drawPredictionCols(doc, y);
+      y = this.drawPredictionCols(doc, y, params.match.isKnockout);
 
       const sorted = [...league.predictors].sort((a, b) => {
         const aPos = league.standings.get(a.userId)?.position ?? 9999;
@@ -215,9 +216,9 @@ export class PdfReportService {
         if (y + ROW_H > PH - FOOTER_H - M) {
           doc.addPage();
           y = M;
-          y = this.drawPredictionCols(doc, y);
+          y = this.drawPredictionCols(doc, y, params.match.isKnockout);
         }
-        y = this.drawPredictionRow(doc, sorted[i], i, league.standings, y);
+        y = this.drawPredictionRow(doc, sorted[i], i, league.standings, y, params.match.isKnockout);
       }
 
       y += 14;
@@ -248,7 +249,7 @@ export class PdfReportService {
     y += 10;
 
     y = this.drawLeagueHeader(doc, params.leagueName, params.leagueCode, params.results.length, y);
-    y = this.drawResultCols(doc, y);
+    y = this.drawResultCols(doc, y, params.match.isKnockout);
 
     const sorted = [...params.results].sort((a, b) => a.newPosition - b.newPosition);
 
@@ -256,9 +257,9 @@ export class PdfReportService {
       if (y + ROW_H > PH - FOOTER_H - M) {
         doc.addPage();
         y = M;
-        y = this.drawResultCols(doc, y);
+        y = this.drawResultCols(doc, y, params.match.isKnockout);
       }
-      y = this.drawResultRow(doc, sorted[i], i, y);
+      y = this.drawResultRow(doc, sorted[i], i, y, params.match.isKnockout);
     }
 
     this.addFooters(doc, `Resultado final · Reporte generado: ${formatShort(params.sentAt)}`);
@@ -290,7 +291,7 @@ export class PdfReportService {
 
     for (const league of params.leaguesData) {
       y = this.drawLeagueHeader(doc, league.leagueName, league.leagueCode, league.results.length, y);
-      y = this.drawResultCols(doc, y);
+      y = this.drawResultCols(doc, y, params.match.isKnockout);
 
       const sorted = [...league.results].sort((a, b) => a.newPosition - b.newPosition);
 
@@ -298,9 +299,9 @@ export class PdfReportService {
         if (y + ROW_H > PH - FOOTER_H - M) {
           doc.addPage();
           y = M;
-          y = this.drawResultCols(doc, y);
+          y = this.drawResultCols(doc, y, params.match.isKnockout);
         }
-        y = this.drawResultRow(doc, sorted[i], i, y);
+        y = this.drawResultRow(doc, sorted[i], i, y, params.match.isKnockout);
       }
 
       y += 14;
@@ -356,7 +357,7 @@ export class PdfReportService {
     const isDraw  = match.homeScore === match.awayScore;
     const awayWon = match.awayScore > match.homeScore;
 
-    const FULL_H = HEADER_H + 22; // extra strip for result banner
+    const FULL_H = HEADER_H + 22 + (match.isKnockout && match.advancingTeamName ? 18 : 0);
     rect(doc, 0, y, PW, FULL_H, C.bg);
 
     // "PARTIDO FINALIZADO" badge
@@ -399,6 +400,20 @@ export class PdfReportService {
       : `Gano ${match.awayTeam}`;
     rect(doc, 0, bannerY, PW, 22, bannerColor);
     cell(doc, resultLabel, 0, bannerY, PW, 22, { size: 9, bold: true, color: bannerTextColor, align: 'center', pad: 0 });
+
+    if (match.isKnockout && match.advancingTeamName) {
+      const advanceY = bannerY + 22;
+      rect(doc, 0, advanceY, PW, 18, '#422006');
+      cell(
+        doc,
+        `Clasifica: ${match.advancingTeamName}`,
+        0,
+        advanceY,
+        PW,
+        18,
+        { size: 8, bold: true, color: '#fbbf24', align: 'center', pad: 0 },
+      );
+    }
 
     // Bottom separator line
     const sepColor = isDraw ? C.blue : homeWon ? C.green : C.orange;
@@ -507,10 +522,24 @@ export class PdfReportService {
     { label: 'HORA',          w: 117, align: 'right'  as const },
   ];
 
-  private drawPredictionCols(doc: Doc, y: number): number {
+  private readonly PRED_KO_COLS = [
+    { label: 'POS.',          w: 36,  align: 'center' as const },
+    { label: 'PARTICIPANTE',  w: 130, align: 'left'   as const },
+    { label: 'PRONOSTICO',    w: 58,  align: 'center' as const },
+    { label: 'CLASIFICA',     w: 100, align: 'center' as const },
+    { label: 'PTS. ACUM.',    w: 54,  align: 'center' as const },
+    { label: 'HORA',          w: 87,  align: 'right'  as const },
+  ];
+
+  private getPredictionCols(isKnockout?: boolean) {
+    return isKnockout ? this.PRED_KO_COLS : this.PRED_COLS;
+  }
+
+  private drawPredictionCols(doc: Doc, y: number, isKnockout?: boolean): number {
+    const cols = this.getPredictionCols(isKnockout);
     rect(doc, M, y, CW, TBL_HDR_H, C.bgLight);
     let x = M;
-    for (const col of this.PRED_COLS) {
+    for (const col of cols) {
       cell(doc, col.label, x, y, col.w, TBL_HDR_H, {
         size: 7, bold: true, color: C.muted, align: col.align,
       });
@@ -525,6 +554,7 @@ export class PdfReportService {
     idx: number,
     standings: Map<string, { points: number; position: number }>,
     y: number,
+    isKnockout?: boolean,
   ): number {
     const standing = standings.get(p.userId);
     const posLabel = standing ? `#${standing.position}` : '-';
@@ -535,28 +565,40 @@ export class PdfReportService {
 
     rect(doc, M, y, CW, ROW_H, idx % 2 === 0 ? C.bgWhite : C.bgLight);
 
-    const [w0, w1, w2, w3, w4] = this.PRED_COLS.map(c => c.w);
+    const cols = this.getPredictionCols(isKnockout);
     let x = M;
 
-    cell(doc, posLabel, x, y, w0, ROW_H, { color: C.subtle, bold: true, align: 'center' });
-    x += w0;
+    cell(doc, posLabel, x, y, cols[0].w, ROW_H, { color: C.subtle, bold: true, align: 'center' });
+    x += cols[0].w;
 
     const nameText = p.isAdmin ? `${p.name} [A]` : p.name;
-    cell(doc, nameText, x, y, w1, ROW_H, { bold: true });
-    x += w1;
+    cell(doc, nameText, x, y, cols[1].w, ROW_H, { bold: true, size: 8 });
+    x += cols[1].w;
 
-    // Prediction chip (dark bg)
-    const chipW = 70; const chipH = ROW_H - 8; const chipX = x + (w2 - chipW) / 2; const chipY = y + 4;
+    const chipW = Math.min(cols[2].w - 8, 70);
+    const chipH = ROW_H - 8;
+    const chipX = x + (cols[2].w - chipW) / 2;
+    const chipY = y + 4;
     rect(doc, chipX, chipY, chipW, chipH, C.bg);
     cell(doc, `${p.homeScore}  -  ${p.awayScore}`, chipX, chipY, chipW, chipH, {
-      size: 10, bold: true, color: C.lime, align: 'center', pad: 2,
+      size: isKnockout ? 9 : 10, bold: true, color: C.lime, align: 'center', pad: 2,
     });
-    x += w2;
+    x += cols[2].w;
 
-    cell(doc, ptsLabel, x, y, w3, ROW_H, { color: C.muted, align: 'center' });
-    x += w3;
+    if (isKnockout) {
+      const advanceLabel = p.advanceTeamName ?? '—';
+      cell(doc, advanceLabel, x, y, cols[3].w, ROW_H, {
+        size: 7, bold: true, color: '#92400e', align: 'center',
+      });
+      x += cols[3].w;
+    }
 
-    cell(doc, hora, x, y, w4, ROW_H, { color: C.muted, align: 'right' });
+    const ptsCol = isKnockout ? cols[4] : cols[3];
+    cell(doc, ptsLabel, x, y, ptsCol.w, ROW_H, { color: C.muted, align: 'center' });
+    x += ptsCol.w;
+
+    const horaCol = isKnockout ? cols[5] : cols[4];
+    cell(doc, hora, x, y, horaCol.w, ROW_H, { color: C.muted, align: 'right' });
 
     return y + ROW_H;
   }
@@ -570,10 +612,24 @@ export class PdfReportService {
     { label: 'PTS. PARTIDO',   w: 116, align: 'center' as const },
   ];
 
-  private drawResultCols(doc: Doc, y: number): number {
+  private readonly RESULT_KO_COLS = [
+    { label: 'POS.',           w: 52,  align: 'center' as const },
+    { label: 'PARTICIPANTE',   w: 110, align: 'left'   as const },
+    { label: 'PRONOSTICO',     w: 58,  align: 'center' as const },
+    { label: 'CLASIFICA',      w: 88,  align: 'center' as const },
+    { label: 'RESULTADO',      w: 100, align: 'center' as const },
+    { label: 'PTS. PARTIDO',   w: 83,  align: 'center' as const },
+  ];
+
+  private getResultCols(isKnockout?: boolean) {
+    return isKnockout ? this.RESULT_KO_COLS : this.RESULT_COLS;
+  }
+
+  private drawResultCols(doc: Doc, y: number, isKnockout?: boolean): number {
+    const cols = this.getResultCols(isKnockout);
     rect(doc, M, y, CW, TBL_HDR_H, C.bgLight);
     let x = M;
-    for (const col of this.RESULT_COLS) {
+    for (const col of cols) {
       cell(doc, col.label, x, y, col.w, TBL_HDR_H, {
         size: 7, bold: true, color: C.muted, align: col.align,
       });
@@ -582,7 +638,7 @@ export class PdfReportService {
     return y + TBL_HDR_H;
   }
 
-  private drawResultRow(doc: Doc, r: ResultEntry, idx: number, y: number): number {
+  private drawResultRow(doc: Doc, r: ResultEntry, idx: number, y: number, isKnockout?: boolean): number {
     rect(doc, M, y, CW, ROW_H, idx % 2 === 0 ? C.bgWhite : C.bgLight);
 
     const cfg = OUTCOME_CFG[r.outcome];
@@ -594,38 +650,55 @@ export class PdfReportService {
       : r.newPosition > r.prevPosition ? '#f87171'
       : C.subtle;
 
-    const [w0, w1, w2, w3, w4] = this.RESULT_COLS.map(c => c.w);
+    const cols = this.getResultCols(isKnockout);
     let x = M;
 
-    // POS column: shape indicator on left edge + text
     outcomeShape(doc, r.outcome, x + 8, cy, movColor);
-    cell(doc, posLabel, x + 12, y, w0 - 12, ROW_H, { color: movColor, bold: true, align: 'center', size: 8 });
-    x += w0;
+    cell(doc, posLabel, x + 12, y, cols[0].w - 12, ROW_H, { color: movColor, bold: true, align: 'center', size: 7 });
+    x += cols[0].w;
 
     const nameText = r.isAdmin ? `${r.name} [A]` : r.name;
-    cell(doc, nameText, x, y, w1, ROW_H, { bold: true });
-    x += w1;
+    cell(doc, nameText, x, y, cols[1].w, ROW_H, { bold: true, size: 8 });
+    x += cols[1].w;
 
-    // Prediction chip (dark bg)
-    const chipW = 58; const chipH = ROW_H - 8; const chipX = x + (w2 - chipW) / 2; const chipY = y + 4;
+    const chipW = Math.min(cols[2].w - 6, 58);
+    const chipH = ROW_H - 8;
+    const chipX = x + (cols[2].w - chipW) / 2;
+    const chipY = y + 4;
     rect(doc, chipX, chipY, chipW, chipH, C.bgMid);
     cell(doc, `${r.homeScore}-${r.awayScore}`, chipX, chipY, chipW, chipH, {
-      size: 9, bold: true, color: C.lime, align: 'center', pad: 2,
+      size: 8, bold: true, color: C.lime, align: 'center', pad: 2,
     });
-    x += w2;
+    x += cols[2].w;
 
-    // Outcome badge: colored bg + small shape icon + label
-    const bdgW = 118; const bdgH = ROW_H - 8; const bdgX = x + (w3 - bdgW) / 2; const bdgY = y + 4;
+    if (isKnockout) {
+      const advanceColor =
+        r.advanceCorrect === true ? '#16a34a'
+        : r.advanceCorrect === false ? '#dc2626'
+        : C.muted;
+      const advanceLabel = `${r.advanceTeamName ?? '—'} ${formatAdvanceCorrectLabel(r.advanceCorrect)}`;
+      cell(doc, advanceLabel, x, y, cols[3].w, ROW_H, {
+        size: 7, bold: true, color: advanceColor, align: 'center',
+      });
+      x += cols[3].w;
+    }
+
+    const outcomeCol = isKnockout ? cols[4] : cols[3];
+    const bdgW = Math.min(outcomeCol.w - 4, 118);
+    const bdgH = ROW_H - 8;
+    const bdgX = x + (outcomeCol.w - bdgW) / 2;
+    const bdgY = y + 4;
     rect(doc, bdgX, bdgY, bdgW, bdgH, cfg.bg);
     outcomeShape(doc, r.outcome, bdgX + 10, bdgY + bdgH / 2, cfg.color);
     cell(doc, cfg.label, bdgX + 14, bdgY, bdgW - 14, bdgH, {
-      size: 8, bold: true, color: cfg.color, align: 'center', pad: 2,
+      size: 7, bold: true, color: cfg.color, align: 'center', pad: 2,
     });
-    x += w3;
+    x += outcomeCol.w;
 
+    const ptsCol = isKnockout ? cols[5] : cols[4];
     const ptsText = r.pointsEarned > 0 ? `+${r.pointsEarned} pts` : '0 pts';
-    cell(doc, ptsText, x, y, w4, ROW_H, {
-      size: 10, bold: true, color: r.pointsEarned > 0 ? C.lime : C.muted, align: 'center',
+    cell(doc, ptsText, x, y, ptsCol.w, ROW_H, {
+      size: 9, bold: true, color: r.pointsEarned > 0 ? C.lime : C.muted, align: 'center',
     });
 
     return y + ROW_H;
