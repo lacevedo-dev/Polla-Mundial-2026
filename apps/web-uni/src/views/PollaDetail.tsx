@@ -31,9 +31,11 @@ export default function PollaDetail() {
             .finally(() => setLoading(false));
     }, [id]);
 
-    function handlePredictionSaved(matchId: string, home: number, away: number) {
+    function handlePredictionSaved(matchId: string, home: number, away: number, advanceTeamId?: string | null) {
         setMatches(prev => prev.map(m =>
-            m.id === matchId ? { ...m, myPrediction: { homeScore: home, awayScore: away, points: null } } : m
+            m.id === matchId
+                ? { ...m, myPrediction: { homeScore: home, awayScore: away, points: null, advanceTeamId: advanceTeamId ?? null } }
+                : m
         ));
     }
 

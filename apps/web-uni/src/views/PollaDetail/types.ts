@@ -17,7 +17,8 @@ export interface UpcomingMatch {
     phase?: string | null;
     group?: string | null;
     venue?: string | null;
-    myPrediction: { homeScore: number; awayScore: number; points: number | null } | null;
+    advancingTeamId?: string | null;
+    myPrediction: { homeScore: number; awayScore: number; points: number | null; advanceTeamId?: string | null } | null;
 }
 
 export interface RecentPrediction {

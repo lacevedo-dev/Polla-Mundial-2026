@@ -14,6 +14,7 @@ import { BrandingStorageService, BrandingUploadFile } from '@corp-api/corporate-
 import { ParticipationService, ParticipationMemberFilter } from '@corp-api/corporate-tenant/participation.service';
 import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operations.service';
 import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.service';
+import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
@@ -69,6 +70,7 @@ class CorpPredictionDto {
     @IsString() @IsNotEmpty() leagueId: string;
     @IsInt() @Min(0) @Max(99) homeScore: number;
     @IsInt() @Min(0) @Max(99) awayScore: number;
+    @IsOptional() @IsString() advanceTeamId?: string;
 }
 
 @Controller('corp')
@@ -82,6 +84,7 @@ export class CorpPortalController {
         private readonly participationService: ParticipationService,
         private readonly matchOperations: MatchOperationsService,
         private readonly corpRanking: CorpRankingService,
+        private readonly predictionsService: PredictionsService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -225,7 +228,7 @@ export class CorpPortalController {
                             awayTeam: { select: teamSelect },
                             predictions: {
                                 where: { userId, leagueId },
-                                select: { homeScore: true, awayScore: true, points: true },
+                                select: { homeScore: true, awayScore: true, points: true, advanceTeamId: true },
                                 take: 1,
                             },
                         },
@@ -273,6 +276,7 @@ export class CorpPortalController {
                 status: lm.match.status,
                 homeScore: lm.match.homeScore,
                 awayScore: lm.match.awayScore,
+                advancingTeamId: lm.match.advancingTeamId,
                 venue: lm.match.venue,
                 phase: lm.match.phase,
                 group: lm.match.group,
@@ -901,7 +905,7 @@ export class CorpPortalController {
     async upsertPrediction(@Req() req: any, @Body() dto: CorpPredictionDto) {
         const tenantId: string = req.tenantId;
         const userId: string = req.user.userId;
-        const { matchId, leagueId, homeScore, awayScore } = dto;
+        const { matchId, leagueId, homeScore, awayScore, advanceTeamId } = dto;
 
         // Verificar que la polla pertenece al tenant
         const league = await this.prisma.league.findFirst({
@@ -933,11 +937,12 @@ export class CorpPortalController {
             update: { status: 'ACTIVE' },
         });
 
-        // Guardar pronÃ³stico
-        const prediction = await this.prisma.prediction.upsert({
-            where: { userId_matchId_leagueId: { userId, matchId, leagueId } },
-            update: { homeScore, awayScore, submittedAt: now },
-            create: { userId, matchId, leagueId, homeScore, awayScore, submittedAt: now },
+        const prediction = await this.predictionsService.upsertPrediction(userId, {
+            matchId,
+            leagueId,
+            homeScore,
+            awayScore,
+            advanceTeamId,
         });
 
         this.participationService.invalidateOverviewCache(tenantId);

@@ -10,6 +10,13 @@ import { ScoringRulesCard } from '../components/ScoringRulesCard';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
 import { request, resolveApiAssetUrl } from '../api';
+import { AdvanceTeamSelector } from '../components/predictions/AdvanceTeamSelector';
+import {
+    isKnockoutPhase,
+    requiresKnockoutAdvanceSelection,
+    resolveAdvanceTeamIdFromScore,
+} from '../utils/knockout-advance';
+import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../utils/score-input';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 
@@ -17,8 +24,10 @@ interface Team { id: string; name: string; shortCode: string | null; flagUrl: st
 interface UpcomingMatch {
     id: string; matchDate: string; status: string;
     homeScore: number | null; awayScore: number | null;
+    phase?: string | null;
+    advancingTeamId?: string | null;
     homeTeam: Team; awayTeam: Team;
-    myPrediction: { homeScore: number; awayScore: number; points: number | null } | null;
+    myPrediction: { homeScore: number; awayScore: number; points: number | null; advanceTeamId?: string | null } | null;
 }
 interface RecentPrediction {
     matchDate: string; status: string;
@@ -81,31 +90,75 @@ function Flag({ team, size = 'sm' }: { team: Pick<Team, 'name' | 'shortCode' | '
 
 function PredRow({ match, leagueId, closeMin, onSaved }: {
     match: UpcomingMatch; leagueId: string; closeMin: number; compact?: boolean;
-    onSaved: (matchId: string, h: number, a: number) => void;
+    onSaved: (matchId: string, h: number, a: number, advanceTeamId?: string | null) => void;
 }) {
     const closed = isPredictionClosed(match.matchDate, closeMin);
     const live = isLive(match.status);
     const finished = isFinished(match.status);
     const canPredict = !closed && !finished && !live;
+    const isKnockout = isKnockoutPhase(match.phase);
 
     const [home, setHome] = useState(match.myPrediction?.homeScore?.toString() ?? '');
     const [away, setAway] = useState(match.myPrediction?.awayScore?.toString() ?? '');
+    const [advanceTeamId, setAdvanceTeamId] = useState<string | undefined>(
+        match.myPrediction?.advanceTeamId ?? undefined,
+    );
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const initHome = match.myPrediction?.homeScore?.toString() ?? '';
     const initAway = match.myPrediction?.awayScore?.toString() ?? '';
-    const isDirty = home !== initHome || away !== initAway;
+    const initAdvanceTeamId = match.myPrediction?.advanceTeamId ?? undefined;
+    const isDirty = home !== initHome || away !== initAway || advanceTeamId !== initAdvanceTeamId;
     const homeCode = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
     const awayCode = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
+
+    const knockoutMatch = {
+        id: match.id,
+        homeTeamId: match.homeTeam.id,
+        awayTeamId: match.awayTeam.id,
+        homeTeamCode: homeCode,
+        awayTeamCode: awayCode,
+        advancingTeamId: match.advancingTeamId,
+        isKnockout,
+    };
+
+    function handleHomeChange(v: string) {
+        setHome(v);
+        if (isKnockout) {
+            setAdvanceTeamId(resolveAdvanceTeamIdFromScore(v, away, match.homeTeam.id, match.awayTeam.id));
+        }
+    }
+    function handleAwayChange(v: string) {
+        setAway(v);
+        if (isKnockout) {
+            setAdvanceTeamId(resolveAdvanceTeamIdFromScore(home, v, match.homeTeam.id, match.awayTeam.id));
+        }
+    }
 
     async function submit() {
         const h = parseInt(home), a = parseInt(away);
         if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Marcadores inválidos'); return; }
+        if (isKnockout && requiresKnockoutAdvanceSelection(home, away, advanceTeamId)) {
+            setErr('En eliminatorias con empate debes indicar qué equipo clasifica.');
+            return;
+        }
+        const resolvedAdvanceTeamId = isKnockout
+            ? (advanceTeamId ?? resolveAdvanceTeamIdFromScore(home, away, match.homeTeam.id, match.awayTeam.id))
+            : advanceTeamId;
         setSaving(true); setErr(null);
         try {
-            await request('/corp/predictions', { method: 'POST', body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }) });
-            setSaved(true); onSaved(match.id, h, a);
+            await request('/corp/predictions', {
+                method: 'POST',
+                body: JSON.stringify({
+                    matchId: match.id,
+                    leagueId,
+                    homeScore: h,
+                    awayScore: a,
+                    advanceTeamId: resolvedAdvanceTeamId,
+                }),
+            });
+            setSaved(true); onSaved(match.id, h, a, resolvedAdvanceTeamId ?? null);
             setTimeout(() => setSaved(false), 2000);
         } catch (e: any) { setErr(e?.message ?? 'Error'); }
         finally { setSaving(false); }
@@ -132,14 +185,14 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
                         </>
                     ) : canPredict ? (
                         <>
-                            <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
-                                onChange={e => setHome(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none transition-colors appearance-none"
+                            <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder={SCORE_INPUT_PLACEHOLDER}
+                                onChange={e => handleHomeChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                className={`w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none transition-colors appearance-none ${scoreInputPlaceholderClass}`}
                                 style={{ borderColor: home !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
                             <span className="text-xs font-black text-slate-300">–</span>
-                            <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
-                                onChange={e => setAway(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none transition-colors appearance-none"
+                            <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder={SCORE_INPUT_PLACEHOLDER}
+                                onChange={e => handleAwayChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
+                                className={`w-9 h-8 text-center font-black text-sm rounded-lg border-2 focus:outline-none transition-colors appearance-none ${scoreInputPlaceholderClass}`}
                                 style={{ borderColor: away !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
                         </>
                     ) : (
@@ -172,6 +225,15 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
                     {canPredict && match.myPrediction && !isDirty && <CheckCircle2 size={13} className="text-emerald-400" />}
                 </div>
             </div>
+            {isKnockout && (
+                <AdvanceTeamSelector
+                    match={knockoutMatch}
+                    draft={{ home, away, advanceTeamId }}
+                    canEdit={canPredict}
+                    onSelect={(_id, teamId) => setAdvanceTeamId(teamId)}
+                    className="mt-1.5 pl-14"
+                />
+            )}
             {err && <p className="text-[9px] text-rose-500 mt-1 pl-14 flex items-center gap-1"><AlertTriangle size={9} />{err}</p>}
         </div>
     );
@@ -180,8 +242,8 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
 /* ─── MatchCard: tarjeta tipo "próximo reto" con inputs centrados ─── */
 function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSave, resetTick }: {
     match: UpcomingMatch; leagueId: string; closeMin: number;
-    onSaved: (matchId: string, h: number, a: number) => void;
-    onDirtyChange?: (matchId: string, dirty: boolean, home: string, away: string) => void;
+    onSaved: (matchId: string, h: number, a: number, advanceTeamId?: string | null) => void;
+    onDirtyChange?: (matchId: string, dirty: boolean, home: string, away: string, advanceTeamId?: string) => void;
     forceSave?: number;
     resetTick?: number;
 }) {
@@ -189,24 +251,39 @@ function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSav
     const live = isLive(match.status);
     const finished = isFinished(match.status);
     const canPredict = !closed && !finished && !live;
+    const isKnockout = isKnockoutPhase(match.phase);
 
     const [home, setHome] = useState(match.myPrediction?.homeScore?.toString() ?? '');
     const [away, setAway] = useState(match.myPrediction?.awayScore?.toString() ?? '');
+    const [advanceTeamId, setAdvanceTeamId] = useState<string | undefined>(
+        match.myPrediction?.advanceTeamId ?? undefined,
+    );
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const initHome = match.myPrediction?.homeScore?.toString() ?? '';
     const initAway = match.myPrediction?.awayScore?.toString() ?? '';
-    const isDirty = home !== initHome || away !== initAway;
+    const initAdvanceTeamId = match.myPrediction?.advanceTeamId ?? undefined;
+    const isDirty = home !== initHome || away !== initAway || advanceTeamId !== initAdvanceTeamId;
     const homeCode = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
     const awayCode = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
     const hasPred = !!match.myPrediction;
     const prevForceSave = useRef(forceSave);
     const prevResetTick = useRef(resetTick);
 
+    const knockoutMatch = {
+        id: match.id,
+        homeTeamId: match.homeTeam.id,
+        awayTeamId: match.awayTeam.id,
+        homeTeamCode: homeCode,
+        awayTeamCode: awayCode,
+        advancingTeamId: match.advancingTeamId,
+        isKnockout,
+    };
+
     useEffect(() => {
-        onDirtyChange?.(match.id, isDirty, home, away);
-    }, [isDirty, home, away]);
+        onDirtyChange?.(match.id, isDirty, home, away, advanceTeamId);
+    }, [isDirty, home, away, advanceTeamId]);
 
     useEffect(() => {
         if (forceSave !== prevForceSave.current && forceSave !== undefined) {
@@ -220,28 +297,53 @@ function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSav
             prevResetTick.current = resetTick;
             setHome(initHome);
             setAway(initAway);
+            setAdvanceTeamId(initAdvanceTeamId);
             setErr(null);
-            onDirtyChange?.(match.id, false, initHome, initAway);
+            onDirtyChange?.(match.id, false, initHome, initAway, initAdvanceTeamId);
         }
     }, [resetTick]);
 
     function handleHomeChange(v: string) {
+        const nextAdvance = isKnockout
+            ? resolveAdvanceTeamIdFromScore(v, away, match.homeTeam.id, match.awayTeam.id)
+            : advanceTeamId;
         setHome(v);
-        onDirtyChange?.(match.id, v !== initHome || away !== initAway, v, away);
+        if (isKnockout) setAdvanceTeamId(nextAdvance);
+        onDirtyChange?.(match.id, v !== initHome || away !== initAway || nextAdvance !== initAdvanceTeamId, v, away, nextAdvance);
     }
     function handleAwayChange(v: string) {
+        const nextAdvance = isKnockout
+            ? resolveAdvanceTeamIdFromScore(home, v, match.homeTeam.id, match.awayTeam.id)
+            : advanceTeamId;
         setAway(v);
-        onDirtyChange?.(match.id, home !== initHome || v !== initAway, home, v);
+        if (isKnockout) setAdvanceTeamId(nextAdvance);
+        onDirtyChange?.(match.id, home !== initHome || v !== initAway || nextAdvance !== initAdvanceTeamId, home, v, nextAdvance);
     }
 
     async function submit() {
         const h = parseInt(home), a = parseInt(away);
         if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Marcadores inválidos'); return; }
+        if (isKnockout && requiresKnockoutAdvanceSelection(home, away, advanceTeamId)) {
+            setErr('En eliminatorias con empate debes indicar qué equipo clasifica.');
+            return;
+        }
+        const resolvedAdvanceTeamId = isKnockout
+            ? (advanceTeamId ?? resolveAdvanceTeamIdFromScore(home, away, match.homeTeam.id, match.awayTeam.id))
+            : advanceTeamId;
         setSaving(true); setErr(null);
         try {
-            await request('/corp/predictions', { method: 'POST', body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }) });
-            setSaved(true); onSaved(match.id, h, a);
-            onDirtyChange?.(match.id, false, home, away);
+            await request('/corp/predictions', {
+                method: 'POST',
+                body: JSON.stringify({
+                    matchId: match.id,
+                    leagueId,
+                    homeScore: h,
+                    awayScore: a,
+                    advanceTeamId: resolvedAdvanceTeamId,
+                }),
+            });
+            setSaved(true); onSaved(match.id, h, a, resolvedAdvanceTeamId ?? null);
+            onDirtyChange?.(match.id, false, home, away, resolvedAdvanceTeamId);
             setTimeout(() => setSaved(false), 2000);
         } catch (e: any) { setErr(e?.message ?? 'Error'); }
         finally { setSaving(false); }
@@ -285,14 +387,14 @@ function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSav
                         </div>
                     ) : canPredict ? (
                         <div className="flex items-center gap-1.5">
-                            <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder="0"
+                            <input type="number" min={0} max={99} inputMode="numeric" value={home} placeholder={SCORE_INPUT_PLACEHOLDER}
                                 onChange={e => handleHomeChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="w-11 h-11 text-center font-black text-lg rounded-xl border-2 focus:outline-none transition-colors appearance-none"
+                                className={`w-11 h-11 text-center font-black text-lg rounded-xl border-2 focus:outline-none transition-colors appearance-none ${scoreInputPlaceholderClass}`}
                                 style={{ borderColor: isDirty || home !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
                             <span className="text-slate-300 font-black text-lg">:</span>
-                            <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder="0"
+                            <input type="number" min={0} max={99} inputMode="numeric" value={away} placeholder={SCORE_INPUT_PLACEHOLDER}
                                 onChange={e => handleAwayChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()}
-                                className="w-11 h-11 text-center font-black text-lg rounded-xl border-2 focus:outline-none transition-colors appearance-none"
+                                className={`w-11 h-11 text-center font-black text-lg rounded-xl border-2 focus:outline-none transition-colors appearance-none ${scoreInputPlaceholderClass}`}
                                 style={{ borderColor: isDirty || away !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }} />
                         </div>
                     ) : (
@@ -318,6 +420,17 @@ function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSav
                     <p className="text-[9px] text-slate-400 truncate w-full text-center">{match.awayTeam.name}</p>
                 </div>
             </div>
+
+            <AdvanceTeamSelector
+                match={knockoutMatch}
+                draft={{ home, away, advanceTeamId }}
+                canEdit={canPredict}
+                onSelect={(_id, teamId) => {
+                    setAdvanceTeamId(teamId);
+                    onDirtyChange?.(match.id, home !== initHome || away !== initAway || teamId !== initAdvanceTeamId, home, away, teamId);
+                }}
+                layout="centered"
+            />
 
             {/* Botón guardar */}
             {canPredict && (
@@ -347,7 +460,7 @@ export default function Dashboard() {
     const [matches, setMatches] = useState<UpcomingMatch[]>([]);
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [allLeagues, setAllLeagues] = useState<LeagueSummary[]>([]);
-    const [pendingDrafts, setPendingDrafts] = useState<Map<string, { home: string; away: string }>>(new Map());
+    const [pendingDrafts, setPendingDrafts] = useState<Map<string, { home: string; away: string; advanceTeamId?: string }>>(new Map());
     const [isSavingAll, setIsSavingAll] = useState(false);
     const [forceSaveTick, setForceSaveTick] = useState(0);
     const [resetTick, setResetTick] = useState(0);
@@ -385,18 +498,19 @@ export default function Dashboard() {
             .finally(() => setLoadingDetail(false));
     }, [selectedLeagueId]);
 
-    function onSaved(matchId: string, h: number, a: number) {
+    function onSaved(matchId: string, h: number, a: number, advanceTeamId?: string | null) {
         setMatches(prev => prev.map(m => m.id === matchId
-            ? { ...m, myPrediction: { homeScore: h, awayScore: a, points: null } }
+            ? { ...m, myPrediction: { homeScore: h, awayScore: a, points: null, advanceTeamId: advanceTeamId ?? null } }
             : m
         ));
         setPendingDrafts(prev => { const next = new Map(prev); next.delete(matchId); return next; });
     }
 
-    const onDirtyChange = useCallback((matchId: string, dirty: boolean, home: string, away: string) => {
+    const onDirtyChange = useCallback((matchId: string, dirty: boolean, home: string, away: string, advanceTeamId?: string) => {
         setPendingDrafts(prev => {
             const next = new Map(prev);
-            if (dirty) next.set(matchId, { home, away }); else next.delete(matchId);
+            if (dirty) next.set(matchId, { home, away, advanceTeamId });
+            else next.delete(matchId);
             return next;
         });
     }, []);
@@ -408,13 +522,28 @@ export default function Dashboard() {
         setIsSavingAll(true);
         try {
             await Promise.all(
-                Array.from(pendingDrafts.entries()).map(([matchId, { home, away }]) => {
+                Array.from(pendingDrafts.entries()).map(([matchId, draft]) => {
+                    const { home, away, advanceTeamId } = draft;
                     const h = parseInt(home), a = parseInt(away);
                     if (isNaN(h) || isNaN(a)) return Promise.resolve();
+                    const match = matches.find(m => m.id === matchId);
+                    const isKnockout = match ? isKnockoutPhase(match.phase) : false;
+                    if (isKnockout && requiresKnockoutAdvanceSelection(home, away, advanceTeamId)) {
+                        return Promise.reject(new Error('En eliminatorias con empate debes indicar qué equipo clasifica.'));
+                    }
+                    const resolvedAdvanceTeamId = match && isKnockout
+                        ? (advanceTeamId ?? resolveAdvanceTeamIdFromScore(home, away, match.homeTeam.id, match.awayTeam.id))
+                        : advanceTeamId;
                     return request('/corp/predictions', {
                         method: 'POST',
-                        body: JSON.stringify({ matchId, leagueId: leagueDetail.id, homeScore: h, awayScore: a }),
-                    }).then(() => onSaved(matchId, h, a));
+                        body: JSON.stringify({
+                            matchId,
+                            leagueId: leagueDetail.id,
+                            homeScore: h,
+                            awayScore: a,
+                            advanceTeamId: resolvedAdvanceTeamId,
+                        }),
+                    }).then(() => onSaved(matchId, h, a, resolvedAdvanceTeamId ?? null));
                 })
             );
         } finally {

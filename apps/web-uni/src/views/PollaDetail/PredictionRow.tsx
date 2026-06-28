@@ -7,6 +7,13 @@ import {
     formatMatchTime, getDaysUntil, formatPhaseLabel,
 } from './helpers';
 import { request } from '../../api';
+import { AdvanceTeamSelector } from '../../components/predictions/AdvanceTeamSelector';
+import {
+    isKnockoutPhase,
+    requiresKnockoutAdvanceSelection,
+    resolveAdvanceTeamIdFromScore,
+} from '../../utils/knockout-advance';
+import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../../utils/score-input';
 
 interface Props {
     match: UpcomingMatch;
@@ -14,7 +21,7 @@ interface Props {
     closeMin: number;
     isNext?: boolean;
     isWithoutPrediction?: boolean;
-    onSaved: (matchId: string, home: number, away: number) => void;
+    onSaved: (matchId: string, home: number, away: number, advanceTeamId?: string | null) => void;
     onHomeEnter?: () => void;
     onAwayEnter?: () => void;
     homeInputRef?: (el: HTMLInputElement | null) => void;
@@ -30,59 +37,117 @@ export function PredictionRow({
     const live = isLiveStatus(match.status);
     const finished = isFinishedStatus(match.status);
     const canPredict = !closed && !finished && !live;
+    const isKnockout = isKnockoutPhase(match.phase);
 
     const [home, setHome] = useState(match.myPrediction?.homeScore?.toString() ?? '');
     const [away, setAway] = useState(match.myPrediction?.awayScore?.toString() ?? '');
+    const [advanceTeamId, setAdvanceTeamId] = useState<string | undefined>(
+        match.myPrediction?.advanceTeamId ?? undefined,
+    );
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
     const initHome = match.myPrediction?.homeScore?.toString() ?? '';
     const initAway = match.myPrediction?.awayScore?.toString() ?? '';
-    const isDirty = home !== initHome || away !== initAway;
+    const initAdvanceTeamId = match.myPrediction?.advanceTeamId ?? undefined;
+    const isDirty = home !== initHome || away !== initAway || advanceTeamId !== initAdvanceTeamId;
     const homeCode = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
     const awayCode = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
 
     const timeFmt = formatMatchTime(match.matchDate);
     const daysUntil = getDaysUntil(match.matchDate);
 
+    const knockoutMatch = {
+        id: match.id,
+        homeTeamId: match.homeTeam.id,
+        awayTeamId: match.awayTeam.id,
+        homeTeamCode: homeCode,
+        awayTeamCode: awayCode,
+        advancingTeamId: match.advancingTeamId,
+        isKnockout,
+    };
+
     const adjust = useCallback((side: 'home' | 'away', delta: number) => {
         if (!canPredict) return;
-        if (side === 'home') setHome(v => String(Math.max(0, Math.min(99, (parseInt(v) || 0) + delta))));
-        else setAway(v => String(Math.max(0, Math.min(99, (parseInt(v) || 0) + delta))));
-    }, [canPredict]);
+        if (side === 'home') {
+            setHome((v) => {
+                const next = String(Math.max(0, Math.min(99, (parseInt(v) || 0) + delta)));
+                if (isKnockout) {
+                    setAdvanceTeamId(resolveAdvanceTeamIdFromScore(next, away, match.homeTeam.id, match.awayTeam.id));
+                }
+                return next;
+            });
+        } else {
+            setAway((v) => {
+                const next = String(Math.max(0, Math.min(99, (parseInt(v) || 0) + delta)));
+                if (isKnockout) {
+                    setAdvanceTeamId(resolveAdvanceTeamIdFromScore(home, next, match.homeTeam.id, match.awayTeam.id));
+                }
+                return next;
+            });
+        }
+    }, [canPredict, isKnockout, away, home, match.homeTeam.id, match.awayTeam.id]);
 
     const submit = useCallback(async () => {
         const h = parseInt(home);
         const a = parseInt(away);
         if (isNaN(h) || isNaN(a) || h < 0 || a < 0) { setErr('Marcadores inválidos'); return; }
+
+        if (isKnockout && requiresKnockoutAdvanceSelection(home, away, advanceTeamId)) {
+            setErr('En eliminatorias con empate debes indicar qué equipo clasifica.');
+            return;
+        }
+
+        const resolvedAdvanceTeamId = isKnockout
+            ? (advanceTeamId ??
+              resolveAdvanceTeamIdFromScore(home, away, match.homeTeam.id, match.awayTeam.id))
+            : advanceTeamId;
+
         setSaving(true); setErr(null);
         try {
             await request('/corp/predictions', {
                 method: 'POST',
-                body: JSON.stringify({ matchId: match.id, leagueId, homeScore: h, awayScore: a }),
+                body: JSON.stringify({
+                    matchId: match.id,
+                    leagueId,
+                    homeScore: h,
+                    awayScore: a,
+                    advanceTeamId: resolvedAdvanceTeamId,
+                }),
             });
             setSaved(true);
-            onSaved(match.id, h, a);
+            onSaved(match.id, h, a, resolvedAdvanceTeamId ?? null);
             setTimeout(() => setSaved(false), 2500);
         } catch (e: any) {
             setErr(e?.message ?? 'Error al guardar');
         } finally {
             setSaving(false);
         }
-    }, [home, away, leagueId, match.id, onSaved]);
+    }, [home, away, leagueId, match.id, match.homeTeam.id, match.awayTeam.id, onSaved, isKnockout, advanceTeamId]);
 
     const handleHomeChange = useCallback((value: string) => {
         if (value && !/^\d*$/.test(value)) return;
         if (value.length > 2) return;
         setHome(value);
+        if (isKnockout) {
+            setAdvanceTeamId(resolveAdvanceTeamIdFromScore(value, away, match.homeTeam.id, match.awayTeam.id));
+        }
         if (err) setErr(null);
-    }, [err]);
+    }, [err, isKnockout, away, match.homeTeam.id, match.awayTeam.id]);
 
     const handleAwayChange = useCallback((value: string) => {
         if (value && !/^\d*$/.test(value)) return;
         if (value.length > 2) return;
         setAway(value);
+        if (isKnockout) {
+            setAdvanceTeamId(resolveAdvanceTeamIdFromScore(home, value, match.homeTeam.id, match.awayTeam.id));
+        }
+        if (err) setErr(null);
+    }, [err, isKnockout, home, match.homeTeam.id, match.awayTeam.id]);
+
+    const handleAdvanceSelect = useCallback((_matchId: string, teamId: string) => {
+        setAdvanceTeamId(teamId);
         if (err) setErr(null);
     }, [err]);
 
@@ -106,8 +171,8 @@ export function PredictionRow({
                 value={value}
                 onChange={e => onChange(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-                placeholder="—"
-                className="h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden"
+                placeholder={SCORE_INPUT_PLACEHOLDER}
+                className={`h-12 w-14 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60 sm:hidden ${scoreInputPlaceholderClass}`}
                 style={{ borderColor: canPredict && value !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }}
             />
             <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm sm:flex">
@@ -115,10 +180,10 @@ export function PredictionRow({
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-slate-400 transition hover:bg-slate-100 disabled:opacity-40">−</button>
                 <input ref={inputRef} type="number" min={0} max={99} inputMode="numeric" pattern="[0-9]*"
                     disabled={!canPredict} value={value}
-                    placeholder="—"
+                    placeholder={SCORE_INPUT_PLACEHOLDER}
                     onChange={e => onChange(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-                    className="h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-slate-300 focus:bg-white disabled:opacity-60"
+                    className={`h-8 w-10 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-black text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white disabled:opacity-60 ${scoreInputPlaceholderClass}`}
                     style={{ borderColor: canPredict && value !== '' ? 'var(--color-primary,#f59e0b)' : '#e2e8f0' }}
                 />
                 <button type="button" onClick={() => onAdjust(1)} disabled={!canPredict}
@@ -174,11 +239,18 @@ export function PredictionRow({
             <div className="flex items-center gap-1.5">
                 {/* Home */}
                 <div className="flex flex-1 items-center gap-2 justify-end min-w-0">
-                    <div className="text-right min-w-0">
-                        <span className="hidden sm:block text-[10px] font-black uppercase text-slate-900 truncate">{match.homeTeam.name}</span>
+                    <div className="text-right min-w-0 sm:hidden">
+                        <Flag team={match.homeTeam} size="lg" />
+                        <span className="mt-1 block text-xs font-black uppercase tracking-wide text-slate-900 leading-none">{homeCode}</span>
+                        <span className="block w-full truncate text-[9px] leading-none text-slate-400">{match.homeTeam.name}</span>
+                    </div>
+                    <div className="hidden sm:block text-right min-w-0">
+                        <span className="block text-[10px] font-black uppercase text-slate-900 truncate">{match.homeTeam.name}</span>
                         <span className="block text-[9px] font-black uppercase tracking-widest text-slate-400">{homeCode}</span>
                     </div>
-                    <Flag team={match.homeTeam} size="lg" />
+                    <div className="hidden sm:block">
+                        <Flag team={match.homeTeam} size="lg" />
+                    </div>
                 </div>
 
                 {finished || live ? (
@@ -197,13 +269,29 @@ export function PredictionRow({
 
                 {/* Away */}
                 <div className="flex flex-1 items-center gap-2 min-w-0">
-                    <Flag team={match.awayTeam} size="lg" />
-                    <div className="min-w-0">
-                        <span className="hidden sm:block text-[10px] font-black uppercase text-slate-900 truncate">{match.awayTeam.name}</span>
+                    <div className="sm:hidden min-w-0">
+                        <Flag team={match.awayTeam} size="lg" />
+                        <span className="mt-1 block text-xs font-black uppercase tracking-wide text-slate-900 leading-none">{awayCode}</span>
+                        <span className="block w-full truncate text-[9px] leading-none text-slate-400">{match.awayTeam.name}</span>
+                    </div>
+                    <div className="hidden sm:block">
+                        <Flag team={match.awayTeam} size="lg" />
+                    </div>
+                    <div className="hidden sm:block min-w-0">
+                        <span className="block text-[10px] font-black uppercase text-slate-900 truncate">{match.awayTeam.name}</span>
                         <span className="block text-[9px] font-black uppercase tracking-widest text-slate-400">{awayCode}</span>
                     </div>
                 </div>
             </div>
+
+            <AdvanceTeamSelector
+                match={knockoutMatch}
+                draft={{ home, away, advanceTeamId }}
+                canEdit={canPredict}
+                onSelect={handleAdvanceSelect}
+                layout="centered"
+                className="mt-2"
+            />
 
             {/* Footer */}
             <div className="mt-2 flex items-center justify-between flex-wrap gap-1">

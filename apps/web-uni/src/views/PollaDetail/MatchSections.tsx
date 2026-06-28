@@ -13,7 +13,7 @@ interface Props {
     closeMin: number;
     groupBy: 'smart' | 'date';
     search: string;
-    onSaved: (matchId: string, home: number, away: number) => void;
+    onSaved: (matchId: string, home: number, away: number, advanceTeamId?: string | null) => void;
 }
 
 export function MatchSections({
