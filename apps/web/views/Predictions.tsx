@@ -487,14 +487,13 @@ function TeamIdentity({ name, code, flag, align = 'left' }: TeamIdentityProps) {
     return (
         <div className={`flex min-w-0 flex-1 items-center gap-2 ${isRight ? 'justify-end text-right' : 'justify-start text-left'}`}>
             {/* Mobile: vertical layout (flag on top, code below) */}
-            <div className="flex flex-col items-center gap-1 sm:hidden" title={name}>
-                <img
-                    src={flag}
-                    alt={name}
-                    className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm"
-                />
-                <span className="text-xs font-black uppercase tracking-tight text-slate-900">{code}</span>
-            </div>
+            <MobileTeamColumn
+                name={name}
+                code={code}
+                flag={flag}
+                align={isRight ? 'end' : 'start'}
+                className="sm:hidden"
+            />
 
             {/* Desktop: horizontal layout (original) */}
             {isRight ? (
@@ -522,6 +521,39 @@ function TeamIdentity({ name, code, flag, align = 'left' }: TeamIdentityProps) {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function MobileTeamColumn({
+    name,
+    code,
+    flag,
+    align = 'center',
+    className = '',
+}: {
+    name: string;
+    code: string;
+    flag: string;
+    align?: 'center' | 'start' | 'end';
+    className?: string;
+}) {
+    const alignClass =
+        align === 'end'
+            ? 'items-end text-right'
+            : align === 'start'
+            ? 'items-start text-left'
+            : 'items-center text-center';
+
+    return (
+        <div className={`flex min-w-0 flex-col gap-0.5 overflow-hidden ${alignClass} ${className}`} title={name}>
+            <img
+                src={flag}
+                alt={code}
+                className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm"
+            />
+            <span className="text-xs font-black uppercase tracking-wide text-slate-900 leading-none">{code}</span>
+            <span className="w-full truncate text-[9px] leading-none text-slate-400">{name}</span>
         </div>
     );
 }
@@ -877,10 +909,12 @@ function CompactMatchRow({
                     {/* Equipos y marcadores (layout vertical mejorado) */}
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                         {/* Home team - vertical */}
-                        <div className="flex flex-col items-center gap-1">
-                            <img src={match.homeFlag} alt={match.homeTeamCode} className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm" />
-                            <span className="text-xs font-black uppercase text-slate-900">{match.homeTeamCode}</span>
-                        </div>
+                        <MobileTeamColumn
+                            name={match.homeTeam}
+                            code={match.homeTeamCode}
+                            flag={match.homeFlag}
+                            align="center"
+                        />
 
                         {/* Score inputs */}
                         {canEdit ? (
@@ -937,10 +971,12 @@ function CompactMatchRow({
                         )}
 
                         {/* Away team - vertical */}
-                        <div className="flex flex-col items-center gap-1">
-                            <img src={match.awayFlag} alt={match.awayTeamCode} className="h-8 w-11 rounded-md border border-slate-200 object-cover shadow-sm" />
-                            <span className="text-xs font-black uppercase text-slate-900">{match.awayTeamCode}</span>
-                        </div>
+                        <MobileTeamColumn
+                            name={match.awayTeam}
+                            code={match.awayTeamCode}
+                            flag={match.awayFlag}
+                            align="center"
+                        />
                     </div>
 
                     <AdvanceTeamSelector
