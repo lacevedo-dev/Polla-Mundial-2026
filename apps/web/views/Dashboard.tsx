@@ -16,6 +16,12 @@ import { useDraggable } from '../hooks/useDraggable';
 import { GoalToastContainer } from '../components/live/GoalToast';
 import { PushNotificationCard } from '../components/PushNotificationPrompt';
 import { calcPrizes, isPredictionWindowClosed, fade } from '../utils/dashboard';
+import {
+    requiresKnockoutAdvanceSelection,
+    resolveAdvanceTeamIdFromScore,
+    resolveQuickDraftAdvanceTeamId,
+    type QuickPredictionDraft,
+} from '../utils/knockout-advance';
 import SpectatorBanner from '../components/dashboard/SpectatorBanner';
 import OnboardingBanner from '../components/dashboard/OnboardingBanner';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
@@ -68,7 +74,7 @@ const Dashboard: React.FC = () => {
     const [configOpen, setConfigOpen] = useState(false);
     const [spectatorMode, setSpectatorMode] = useState(false);
     const [leagueDropOpen, setLeagueDropOpen] = useState(false);
-    const [quickPreds, setQuickPreds] = useState<Record<string, { home: string; away: string }>>({});
+    const [quickPreds, setQuickPreds] = useState<Record<string, QuickPredictionDraft>>({});
     const [savingMatchId, setSavingMatchId] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(() => Date.now());
 
@@ -199,13 +205,66 @@ const Dashboard: React.FC = () => {
         return meta;
     }, []);
 
-    const getQuickDraft = useCallback((match: MatchViewModel) => {
+    const getQuickDraft = useCallback((match: MatchViewModel): QuickPredictionDraft => {
         const draft = quickPreds[match.id];
-        return {
-            home: draft?.home ?? match.prediction.home ?? '',
-            away: draft?.away ?? match.prediction.away ?? '',
-        };
+        const home = draft?.home ?? match.prediction.home ?? '';
+        const away = draft?.away ?? match.prediction.away ?? '';
+        const advanceTeamId = resolveQuickDraftAdvanceTeamId(match, draft);
+
+        return { home, away, advanceTeamId };
     }, [quickPreds]);
+
+    const handleQuickDraftChange = useCallback((match: MatchViewModel, side: 'home' | 'away', value: string) => {
+        if (value && !/^\d+$/.test(value)) {
+            return;
+        }
+
+        if (value.length > 2) {
+            return;
+        }
+
+        setQuickPreds((prev) => {
+            const current = prev[match.id] ?? {
+                home: match.prediction.home ?? '',
+                away: match.prediction.away ?? '',
+                advanceTeamId: match.prediction.advanceTeamId,
+            };
+            const nextHome = side === 'home' ? value : current.home;
+            const nextAway = side === 'away' ? value : current.away;
+            const advanceTeamId = match.isKnockout
+                ? resolveAdvanceTeamIdFromScore(nextHome, nextAway, match.homeTeamId, match.awayTeamId)
+                : current.advanceTeamId;
+
+            return {
+                ...prev,
+                [match.id]: {
+                    ...current,
+                    home: nextHome,
+                    away: nextAway,
+                    advanceTeamId,
+                },
+            };
+        });
+    }, []);
+
+    const handleQuickAdvanceTeamSelect = useCallback((matchId: string, teamId: string) => {
+        setQuickPreds((prev) => {
+            const match = matches.find((candidate) => candidate.id === matchId);
+            const current = prev[matchId] ?? {
+                home: match?.prediction.home ?? '',
+                away: match?.prediction.away ?? '',
+                advanceTeamId: match?.prediction.advanceTeamId,
+            };
+
+            return {
+                ...prev,
+                [matchId]: {
+                    ...current,
+                    advanceTeamId: teamId,
+                },
+            };
+        });
+    }, [matches]);
 
     const handleDashboardRetry = useCallback(() => {
         void fetchDashboardData(true, activeLeague?.id ?? null);
@@ -258,9 +317,24 @@ const Dashboard: React.FC = () => {
             return;
         }
 
+        if (match.isKnockout && requiresKnockoutAdvanceSelection(pred.home, pred.away, pred.advanceTeamId)) {
+            setError('En eliminatorias con empate debes indicar qué equipo clasifica.');
+            return;
+        }
+
+        const resolvedAdvanceTeamId = match.isKnockout
+            ? (pred.advanceTeamId ??
+              resolveAdvanceTeamIdFromScore(
+                  pred.home,
+                  pred.away,
+                  match.homeTeamId,
+                  match.awayTeamId,
+              ))
+            : pred.advanceTeamId;
+
         setSavingMatchId(match.id);
         try {
-            await savePrediction(activeLeague.id, match.id, home, away);
+            await savePrediction(activeLeague.id, match.id, home, away, resolvedAdvanceTeamId);
             await fetchLeagueMatches(activeLeague.id);
             setQuickPreds((p) => { const n = { ...p }; delete n[match.id]; return n; });
             setError(null);
@@ -531,18 +605,15 @@ const Dashboard: React.FC = () => {
                         upcomingMatches={upcomingMatches}
                         closePredictionMinutes={activeLeague?.settings?.closePredictionMinutes}
                         currentTime={currentTime}
-                        quickPreds={quickPreds}
                         savingMatchId={savingMatchId}
                         isAdmin={isAdmin}
-                        onDraftChange={(matchId, side, value) =>
-                            setQuickPreds((prev) => ({
-                                ...prev,
-                                [matchId]: {
-                                    home: side === 'home' ? value : (prev[matchId]?.home ?? ''),
-                                    away: side === 'away' ? value : (prev[matchId]?.away ?? ''),
-                                },
-                            }))
-                        }
+                        onDraftChange={(matchId, side, value) => {
+                            const match = upcomingMatches.find((candidate) => candidate.id === matchId);
+                            if (match) {
+                                handleQuickDraftChange(match, side, value);
+                            }
+                        }}
+                        onAdvanceTeamSelect={handleQuickAdvanceTeamSelect}
                         onSave={(match) => void handleQuickSave(match)}
                         getQuickDraft={getQuickDraft}
                     />

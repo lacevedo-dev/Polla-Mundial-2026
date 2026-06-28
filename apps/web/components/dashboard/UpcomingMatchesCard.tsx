@@ -4,22 +4,22 @@ import { Clock, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fade, formatMatchTime, safeText, summarizeCloseTime, isPredictionWindowClosed } from '../../utils/dashboard';
 import type { MatchViewModel } from '../../stores/prediction.store';
-
-interface QuickDraft {
-    home: string;
-    away: string;
-}
+import { AdvanceTeamSelector } from '../predictions/AdvanceTeamSelector';
+import {
+    requiresKnockoutAdvanceSelection,
+    type QuickPredictionDraft,
+} from '../../utils/knockout-advance';
 
 interface UpcomingMatchesCardProps {
     upcomingMatches: MatchViewModel[];
     closePredictionMinutes?: number | null;
     currentTime: number;
-    quickPreds: Record<string, QuickDraft>;
     savingMatchId: string | null;
     isAdmin: boolean;
     onDraftChange: (matchId: string, side: 'home' | 'away', value: string) => void;
+    onAdvanceTeamSelect: (matchId: string, teamId: string) => void;
     onSave: (match: MatchViewModel) => void;
-    getQuickDraft: (match: MatchViewModel) => QuickDraft;
+    getQuickDraft: (match: MatchViewModel) => QuickPredictionDraft;
 }
 
 const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
@@ -29,6 +29,7 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
     savingMatchId,
     isAdmin,
     onDraftChange,
+    onAdvanceTeamSelect,
     onSave,
     getQuickDraft,
 }) => (
@@ -43,10 +44,14 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                 {upcomingMatches.map((match, i) => {
                     const draft = getQuickDraft(match);
                     const canEdit = !isPredictionWindowClosed(match.date, closePredictionMinutes, currentTime);
+                    const savedAdvanceTeamId = match.prediction.advanceTeamId ?? undefined;
                     const isDirty =
                         draft.home !== (match.prediction.home ?? '') ||
-                        draft.away !== (match.prediction.away ?? '');
+                        draft.away !== (match.prediction.away ?? '') ||
+                        (match.isKnockout && draft.advanceTeamId !== savedAdvanceTeamId);
                     const hasDraftValues = draft.home !== '' && draft.away !== '';
+                    const needsAdvanceSelection = match.isKnockout &&
+                        requiresKnockoutAdvanceSelection(draft.home, draft.away, draft.advanceTeamId);
 
                     return (
                         <motion.div
@@ -73,72 +78,79 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                 </span>
                             </div>
 
-                            {/* ── Equipos + marcador ── */}
-                            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-x-2">
+                            <div className="mt-3 space-y-2">
+                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2">
+                                    <div className="flex flex-col items-start gap-0.5 min-w-0 overflow-hidden">
+                                        <img
+                                            src={match.homeFlag}
+                                            alt=""
+                                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                            className="h-8 w-12 rounded-md object-cover shadow-sm"
+                                        />
+                                        <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">
+                                            {match.homeTeamCode || match.homeTeam.slice(0, 3).toUpperCase()}
+                                        </p>
+                                        <p className="text-[9px] text-slate-400 leading-none truncate w-full">
+                                            {match.homeTeam}
+                                        </p>
+                                    </div>
 
-                                {/* Local */}
-                                <div className="flex flex-col items-start gap-0.5 min-w-0 overflow-hidden">
-                                    <img
-                                        src={match.homeFlag}
-                                        alt=""
-                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                        className="h-8 w-12 rounded-md object-cover shadow-sm"
-                                    />
-                                    <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">
-                                        {match.homeTeamCode || match.homeTeam.slice(0, 3).toUpperCase()}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400 leading-none truncate w-full">
-                                        {match.homeTeam}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={99}
+                                            inputMode="numeric"
+                                            value={draft.home}
+                                            onChange={(e) => onDraftChange(match.id, 'home', e.target.value)}
+                                            disabled={!canEdit || savingMatchId === match.id}
+                                            aria-label="Marcador local"
+                                            className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                        />
+                                        <span className="text-lg font-black text-slate-300 leading-none">:</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={99}
+                                            inputMode="numeric"
+                                            value={draft.away}
+                                            onChange={(e) => onDraftChange(match.id, 'away', e.target.value)}
+                                            disabled={!canEdit || savingMatchId === match.id}
+                                            aria-label="Marcador visitante"
+                                            className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col items-end gap-0.5 min-w-0 overflow-hidden">
+                                        <img
+                                            src={match.awayFlag}
+                                            alt=""
+                                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                            className="h-8 w-12 rounded-md object-cover shadow-sm"
+                                        />
+                                        <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">
+                                            {match.awayTeamCode || match.awayTeam.slice(0, 3).toUpperCase()}
+                                        </p>
+                                        <p className="text-[9px] text-slate-400 leading-none truncate w-full text-right">
+                                            {match.awayTeam}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                {/* Inputs — centro compacto */}
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={99}
-                                        inputMode="numeric"
-                                        value={draft.home}
-                                        onChange={(e) => onDraftChange(match.id, 'home', e.target.value)}
-                                        disabled={!canEdit || savingMatchId === match.id}
-                                        aria-label="Marcador local"
-                                        className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
-                                    />
-                                    <span className="text-lg font-black text-slate-300 leading-none">:</span>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={99}
-                                        inputMode="numeric"
-                                        value={draft.away}
-                                        onChange={(e) => onDraftChange(match.id, 'away', e.target.value)}
-                                        disabled={!canEdit || savingMatchId === match.id}
-                                        aria-label="Marcador visitante"
-                                        className="h-10 w-10 rounded-xl border-2 border-slate-200 bg-white text-center text-lg font-black text-slate-900 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 disabled:opacity-60"
-                                    />
-                                </div>
-
-                                {/* Visitante */}
-                                <div className="flex flex-col items-end gap-0.5 min-w-0 overflow-hidden">
-                                    <img
-                                        src={match.awayFlag}
-                                        alt=""
-                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                        className="h-8 w-12 rounded-md object-cover shadow-sm"
-                                    />
-                                    <p className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">
-                                        {match.awayTeamCode || match.awayTeam.slice(0, 3).toUpperCase()}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400 leading-none truncate w-full text-right">
-                                        {match.awayTeam}
-                                    </p>
-                                </div>
+                                <AdvanceTeamSelector
+                                    match={match}
+                                    draft={draft}
+                                    canEdit={canEdit}
+                                    onSelect={onAdvanceTeamSelect}
+                                    layout="centered"
+                                />
                             </div>
 
                             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
                                 <div className="min-w-0 flex-1 text-[10px] font-bold text-slate-500">
-                                    {isDirty ? (
+                                    {needsAdvanceSelection ? (
+                                        <span className="text-amber-600">Indica quién clasifica en penales</span>
+                                    ) : isDirty ? (
                                         <span className="text-amber-600">Cambios listos para guardar</span>
                                     ) : match.saved ? (
                                         <span className="text-lime-600">✓ Pronóstico actual {match.prediction.home}-{match.prediction.away}</span>
@@ -152,7 +164,12 @@ const UpcomingMatchesCard: React.FC<UpcomingMatchesCardProps> = ({
                                     {canEdit && (
                                         <button
                                             onClick={() => onSave(match)}
-                                            disabled={savingMatchId === match.id || !hasDraftValues || (!isDirty && match.saved)}
+                                            disabled={
+                                                savingMatchId === match.id ||
+                                                !hasDraftValues ||
+                                                needsAdvanceSelection ||
+                                                (!isDirty && match.saved)
+                                            }
                                             className="rounded-xl bg-lime-400 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-950 transition-colors hover:bg-lime-500 disabled:opacity-60"
                                         >
                                             {savingMatchId === match.id ? 'Guardando...' : match.saved ? 'Actualizar' : 'Guardar'}
