@@ -137,7 +137,14 @@ export class PredictionsService {
             throw new BadRequestException('El tiempo para realizar predicciones ha expirado para este partido');
         }
 
-        // 4. Crear o actualizar la predicción
+        const advanceTeamId = this.resolveKnockoutAdvanceTeamId(
+            match,
+            homeScore,
+            awayScore,
+            createPredictionDto.advanceTeamId,
+        );
+
+        // 5. Crear o actualizar la predicción
         return this.prisma.prediction.upsert({
             where: {
                 userId_matchId_leagueId: { userId, matchId, leagueId },
@@ -145,7 +152,7 @@ export class PredictionsService {
             update: {
                 homeScore,
                 awayScore,
-                advanceTeamId: createPredictionDto.advanceTeamId ?? null,
+                advanceTeamId,
                 submittedAt: now,
             },
             create: {
@@ -154,10 +161,39 @@ export class PredictionsService {
                 leagueId,
                 homeScore,
                 awayScore,
-                advanceTeamId: createPredictionDto.advanceTeamId ?? null,
+                advanceTeamId,
                 submittedAt: now,
             },
         });
+    }
+
+    private resolveKnockoutAdvanceTeamId(
+        match: { phase: Phase; homeTeamId: string; awayTeamId: string },
+        homeScore: number,
+        awayScore: number,
+        requestedAdvanceTeamId?: string | null,
+    ): string | null {
+        const isKnockout = match.phase !== Phase.GROUP && match.phase !== Phase.THIRD_PLACE;
+        if (!isKnockout) {
+            return null;
+        }
+
+        if (homeScore === awayScore) {
+            if (!requestedAdvanceTeamId) {
+                throw new BadRequestException('En eliminatorias con empate debes indicar qué equipo clasifica.');
+            }
+
+            if (
+                requestedAdvanceTeamId !== match.homeTeamId &&
+                requestedAdvanceTeamId !== match.awayTeamId
+            ) {
+                throw new BadRequestException('El equipo clasificado debe ser el local o el visitante.');
+            }
+
+            return requestedAdvanceTeamId;
+        }
+
+        return homeScore > awayScore ? match.homeTeamId : match.awayTeamId;
     }
 
     async findByLeagueAndUser(leagueId: string, userId: string) {

@@ -420,4 +420,41 @@ describe('PredictionsService', () => {
             expect(breakdown.bonuses).toEqual([]);
         });
     });
+
+    describe('resolveKnockoutAdvanceTeamId', () => {
+        const match = {
+            phase: Phase.ROUND_OF_16,
+            homeTeamId: 'home-id',
+            awayTeamId: 'away-id',
+        };
+
+        it('devuelve null en fase de grupos', () => {
+            const service = createService();
+            const result = (service as any).resolveKnockoutAdvanceTeamId(
+                { ...match, phase: Phase.GROUP },
+                1,
+                0,
+                'home-id',
+            );
+            expect(result).toBeNull();
+        });
+
+        it('auto-asigna al ganador cuando no hay empate', () => {
+            const service = createService();
+            expect((service as any).resolveKnockoutAdvanceTeamId(match, 2, 1, undefined)).toBe('home-id');
+            expect((service as any).resolveKnockoutAdvanceTeamId(match, 0, 1, undefined)).toBe('away-id');
+        });
+
+        it('exige selección manual en empate', () => {
+            const service = createService();
+            expect(() =>
+                (service as any).resolveKnockoutAdvanceTeamId(match, 0, 0, undefined),
+            ).toThrow('En eliminatorias con empate debes indicar qué equipo clasifica.');
+        });
+
+        it('acepta selección manual válida en empate', () => {
+            const service = createService();
+            expect((service as any).resolveKnockoutAdvanceTeamId(match, 1, 1, 'away-id')).toBe('away-id');
+        });
+    });
 });
