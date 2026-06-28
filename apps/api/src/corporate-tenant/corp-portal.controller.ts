@@ -19,6 +19,7 @@ import { ParticipationService, ParticipationMemberFilter } from './participation
 import { MatchOperationsService } from './match-operations.service';
 import { CorpRankingService } from './corp-ranking.service';
 import { PredictionsService } from '../predictions/predictions.service';
+import { CORP_DEFAULT_SCORING_RULES, CORP_PHASE_BONUS_HELP } from './corp-scoring-defaults';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
@@ -122,6 +123,21 @@ export class CorpPortalController {
         }
         const url = await this.brandingStorage.save(file);
         return { url };
+    }
+
+    @Get('help/scoring-guide')
+    getScoringGuide() {
+        return {
+            scoringRules: [...CORP_DEFAULT_SCORING_RULES],
+            phaseBonuses: [...CORP_PHASE_BONUS_HELP],
+            knockoutAdvance: {
+                title: 'Clasifica en eliminatorias',
+                summary:
+                    'En octavos, cuartos, semifinal y final debes indicar qué equipo pasa a la siguiente ronda. '
+                    + 'Si el marcador tiene ganador, se asigna automáticamente; en empate debes elegirlo manualmente (penales). '
+                    + 'Esta selección solo influye en los bonos por fase, no en los puntos del marcador.',
+            },
+        };
     }
 
     @Get('dashboard')
@@ -407,17 +423,11 @@ export class CorpPortalController {
             code = randomBytes(3).toString('hex').toUpperCase();
         }
 
-        const DEFAULT_SCORING_RULES = [
-            { ruleType: ScoringType.EXACT_SCORE,       points: 5, description: 'Marcador exacto' },
-            { ruleType: ScoringType.CORRECT_WINNER,    points: 2, description: 'Ganador / empate correcto' },
-            { ruleType: ScoringType.TEAM_GOALS,        points: 1, description: 'Gol acertado (al menos un equipo)' },
-            { ruleType: ScoringType.UNIQUE_PREDICTION, points: 5, description: 'PredicciÃ³n Ãºnica en la liga' },
-            { ruleType: ScoringType.PHASE_BONUS_R32,   points: 0, description: 'Bono clasificados Fase 32' },
-            { ruleType: ScoringType.PHASE_BONUS_R16,   points: 8, description: 'Bono clasificados Octavos' },
-            { ruleType: ScoringType.PHASE_BONUS_QF,    points: 4, description: 'Bono clasificados Cuartos' },
-            { ruleType: ScoringType.PHASE_BONUS_SF,    points: 2, description: 'Bono clasificados Semifinal' },
-            { ruleType: ScoringType.PHASE_BONUS_FINAL, points: 5, description: 'Bono CampeÃ³n (Final)' },
-        ];
+        const DEFAULT_SCORING_RULES = CORP_DEFAULT_SCORING_RULES.map(({ ruleType, points, description }) => ({
+            ruleType,
+            points,
+            description,
+        }));
 
         const { primaryTournamentId, ...scalars } = dto;
 

@@ -177,6 +177,9 @@ export function ScoringRulesCard({
                                     </div>
                                 ))}
                             </div>
+                            <p className="text-[9px] text-slate-500 leading-snug pt-1">
+                                Si fallas aunque sea uno de los picks de la fase, no obtienes el bono de esa ronda.
+                            </p>
                         </div>
                     </div>
 

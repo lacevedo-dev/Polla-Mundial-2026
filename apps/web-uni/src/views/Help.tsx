@@ -1,19 +1,81 @@
 import React from 'react';
 import {
     Trophy, TrendingUp, CheckCircle2, Calendar, Zap,
-    Bell, BellOff, Shield, Target, HelpCircle, Download,
+    Bell, BellOff, Shield, Target, HelpCircle, Download, Star,
 } from 'lucide-react';
+import { TIEBREAK_CRITERIA } from '@polla-2026/shared';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useTenantStore } from '../stores/tenant.store';
 import { CorpLayout } from '../layouts/CorpLayout';
+import { ScoringRulesCard } from '../components/ScoringRulesCard';
 import { generateHelpPDF } from '../utils/generateHelpPDF';
+import { request } from '../api';
 
 type Tab = 'points' | 'rules' | 'notifications';
 
+interface ScoringRule {
+    ruleType: string;
+    points: number;
+    description?: string | null;
+    active?: boolean;
+}
+
+interface PhaseBonusHelp {
+    label: string;
+    sub: string;
+    ruleType: string;
+    icon: string;
+}
+
+interface ScoringGuide {
+    scoringRules: ScoringRule[];
+    phaseBonuses: PhaseBonusHelp[];
+    knockoutAdvance: { title: string; summary: string };
+}
+
+function getPoints(rules: ScoringRule[] | undefined, ruleType: string, fallback: number): number {
+    if (!rules?.length) return fallback;
+    const rule = rules.find((r) => r.ruleType === ruleType && r.active !== false);
+    return rule?.points ?? fallback;
+}
+
+function fmtPts(n: number): string {
+    return `${n} ${n === 1 ? 'pt' : 'pts'}`;
+}
+
 const Help: React.FC = () => {
     const [activeTab, setActiveTab] = React.useState<Tab>('points');
+    const [scoringGuide, setScoringGuide] = React.useState<ScoringGuide | null>(null);
     const tenant = useTenantStore((s) => s.tenant);
     const { supported, permission, subscribed, loading, error, subscribe, unsubscribe } = usePushNotifications();
+
+    React.useEffect(() => {
+        request<ScoringGuide>('/corp/help/scoring-guide')
+            .then(setScoringGuide)
+            .catch(() => setScoringGuide(null));
+    }, []);
+
+    const rules = scoringGuide?.scoringRules;
+    const exactScore = getPoints(rules, 'EXACT_SCORE', 5);
+    const correctWinner = getPoints(rules, 'CORRECT_WINNER', 2);
+    const teamGoals = getPoints(rules, 'TEAM_GOALS', 1);
+    const uniquePred = getPoints(rules, 'UNIQUE_PREDICTION', 5);
+    const bonusR16 = getPoints(rules, 'PHASE_BONUS_R16', 8);
+    const bonusQF = getPoints(rules, 'PHASE_BONUS_QF', 4);
+    const bonusSF = getPoints(rules, 'PHASE_BONUS_SF', 2);
+    const bonusFinal = getPoints(rules, 'PHASE_BONUS_FINAL', 5);
+    const phaseBonuses = scoringGuide?.phaseBonuses ?? [
+        { label: 'Octavos', sub: '16 → 8', ruleType: 'PHASE_BONUS_R16', icon: '🥈' },
+        { label: 'Cuartos', sub: '8 → 4', ruleType: 'PHASE_BONUS_QF', icon: '🥉' },
+        { label: 'Semifinal', sub: '4 → 2', ruleType: 'PHASE_BONUS_SF', icon: '🏅' },
+        { label: 'Campeón', sub: 'El ganador', ruleType: 'PHASE_BONUS_FINAL', icon: '🏆' },
+    ];
+    const phaseBonusPoints: Record<string, number> = {
+        PHASE_BONUS_R16: bonusR16,
+        PHASE_BONUS_QF: bonusQF,
+        PHASE_BONUS_SF: bonusSF,
+        PHASE_BONUS_FINAL: bonusFinal,
+    };
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
     const primaryColor = 'var(--color-primary, #f59e0b)';
@@ -88,7 +150,7 @@ const Help: React.FC = () => {
                             Sistema de Puntuación
                         </h2>
                         <p className="text-slate-500 text-sm leading-relaxed">
-                            Cada partido vale hasta <strong className="text-slate-800">5 puntos base</strong>.
+                            Cada partido vale hasta <strong className="text-slate-800">{fmtPts(exactScore)} base</strong> más bonos adicionales.
                             Los puntos por ganador y gol se suman entre sí; el marcador exacto es independiente.
                         </p>
                     </div>
@@ -101,7 +163,7 @@ const Help: React.FC = () => {
                                     <span className="text-2xl">🎯</span>
                                     <span className="text-sm font-black uppercase tracking-wide text-lime-800">Marcador exacto</span>
                                 </div>
-                                <span className="text-3xl font-black text-lime-700">5</span>
+                                <span className="text-3xl font-black text-lime-700">{exactScore}</span>
                             </div>
                             <p className="text-sm text-lime-700 leading-relaxed">
                                 Predijiste los goles de ambos equipos con exactitud.
@@ -121,7 +183,7 @@ const Help: React.FC = () => {
                                     <span className="text-2xl">✅</span>
                                     <span className="text-sm font-black uppercase tracking-wide text-blue-800">Ganador acertado</span>
                                 </div>
-                                <span className="text-3xl font-black text-blue-700">2</span>
+                                <span className="text-3xl font-black text-blue-700">{correctWinner}</span>
                             </div>
                             <p className="text-sm text-blue-700 leading-relaxed">
                                 Acertaste quién ganó el partido (o que terminaría en empate).
@@ -138,7 +200,7 @@ const Help: React.FC = () => {
                                     <span className="text-2xl">⚽</span>
                                     <span className="text-sm font-black uppercase tracking-wide text-purple-800">Gol acertado</span>
                                 </div>
-                                <span className="text-3xl font-black text-purple-700">1</span>
+                                <span className="text-3xl font-black text-purple-700">{teamGoals}</span>
                             </div>
                             <p className="text-sm text-purple-700 leading-relaxed">
                                 Al menos uno de los dos marcadores coincide exactamente.
@@ -155,13 +217,13 @@ const Help: React.FC = () => {
                                 <span className="text-sm font-black uppercase tracking-wide text-teal-800">Combinaciones</span>
                             </div>
                             <p className="text-xs text-teal-700 leading-relaxed">
-                                Ganador y gol se <strong>suman</strong>. Hasta 3 pts combinados por partido.
+                                Ganador y gol se <strong>suman</strong>. Hasta {fmtPts(correctWinner + teamGoals)} combinados por partido.
                             </p>
                             <div className="space-y-2 pt-1">
                                 {[
-                                    { combo: 'Ganador + gol acertado', total: '3 pts', color: 'text-teal-700' },
-                                    { combo: 'Solo ganador',           total: '2 pts', color: 'text-blue-700' },
-                                    { combo: 'Solo gol acertado',      total: '1 pt',  color: 'text-purple-700' },
+                                    { combo: 'Ganador + gol acertado', total: fmtPts(correctWinner + teamGoals), color: 'text-teal-700' },
+                                    { combo: 'Solo ganador',           total: fmtPts(correctWinner), color: 'text-blue-700' },
+                                    { combo: 'Solo gol acertado',      total: fmtPts(teamGoals),  color: 'text-purple-700' },
                                     { combo: 'Ninguno acertado',       total: '0 pts', color: 'text-slate-400' },
                                 ].map((c) => (
                                     <div key={c.combo} className="flex items-center justify-between">
@@ -173,6 +235,61 @@ const Help: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Bonos adicionales */}
+                    <section className="space-y-4" aria-labelledby="help-bonos">
+                        <div className="flex items-center gap-3">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">2</span>
+                            <h3 id="help-bonos" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">
+                                Bonos adicionales
+                            </h3>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-6 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">⭐</span>
+                                        <span className="text-sm font-black uppercase tracking-wide text-amber-800">Predicción única</span>
+                                    </div>
+                                    <span className="text-3xl font-black text-amber-700">+{uniquePred}</span>
+                                </div>
+                                <p className="text-sm text-amber-700 leading-relaxed">
+                                    Si acertaste el marcador exacto <strong>y eres el único jugador de la liga</strong> que predijo ese marcador, recibes {fmtPts(uniquePred)} extra.
+                                </p>
+                                <div className="rounded-xl bg-amber-100 px-3 py-2 text-xs text-amber-700 italic">
+                                    Solo tú predijiste <strong>2‑1</strong> y terminó <strong>2‑1</strong> → {exactScore} base + {uniquePred} único = <strong>{exactScore + uniquePred} pts</strong>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 p-6 space-y-3">
+                                <div className="flex items-center gap-3 mb-1">
+                                    <span className="text-2xl">🏆</span>
+                                    <span className="text-sm font-black uppercase tracking-wide text-slate-800">Bono clasificados</span>
+                                </div>
+                                <p className="text-sm text-slate-600 leading-relaxed">
+                                    En cada partido de eliminatoria, elige qué equipo clasifica a la siguiente ronda con el selector <strong className="text-slate-800">Clasifica</strong>.
+                                    Si <strong className="text-slate-800">aciertas todos los picks de una fase completa</strong>, recibes el bono de esa fase.
+                                </p>
+                                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                    {phaseBonuses.map((b) => (
+                                        <div key={b.label} className="flex flex-col rounded-xl bg-white border border-slate-200 px-3 py-2.5 shadow-sm">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm">{b.icon}</span>
+                                                <span className="text-sm font-black" style={{ color: primaryColor }}>
+                                                    {fmtPts(phaseBonusPoints[b.ruleType] ?? 0)}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] font-black text-slate-700 mt-1">{b.label}</p>
+                                            <p className="text-[10px] text-slate-400">{b.sub}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-slate-500 leading-snug pt-1">
+                                    Si fallas aunque sea uno de los picks de la fase, no obtienes el bono de esa ronda. En empates debes elegir manualmente quién pasa en penales.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Tabla resumen */}
                     <div className="bg-slate-900 text-white p-8 rounded-2xl relative overflow-hidden shadow-xl">
                         <Target size={120} className="absolute -bottom-6 -right-6 opacity-10" />
@@ -180,10 +297,10 @@ const Help: React.FC = () => {
                             <h3 className="text-xl font-black uppercase tracking-tight">Resumen rápido</h3>
                             <div className="grid grid-cols-2 gap-3">
                                 {[
-                                    { label: 'Marcador exacto', pts: '5 pts', icon: '🎯' },
-                                    { label: 'Ganador correcto', pts: '2 pts', icon: '✅' },
-                                    { label: 'Gol acertado', pts: '1 pt', icon: '⚽' },
-                                    { label: 'Máximo sin exacto', pts: '3 pts', icon: '⚡' },
+                                    { label: 'Marcador exacto', pts: fmtPts(exactScore), icon: '🎯' },
+                                    { label: 'Ganador correcto', pts: fmtPts(correctWinner), icon: '✅' },
+                                    { label: 'Gol acertado', pts: fmtPts(teamGoals), icon: '⚽' },
+                                    { label: 'Máximo sin exacto', pts: fmtPts(correctWinner + teamGoals), icon: '⚡' },
                                 ].map((r) => (
                                     <div key={r.label} className="flex items-center gap-3 bg-slate-800 rounded-xl px-4 py-3">
                                         <span className="text-xl">{r.icon}</span>
@@ -196,6 +313,44 @@ const Help: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Desempate */}
+                    <section className="space-y-4" aria-labelledby="help-desempate">
+                        <div className="flex items-center gap-3">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">3</span>
+                            <h3 id="help-desempate" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">
+                                Criterio de desempate
+                            </h3>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
+                            <p className="text-sm text-slate-500 leading-relaxed">
+                                Cuando dos jugadores tienen los mismos puntos, el ranking se decide con estos criterios <strong className="text-slate-700">en orden</strong>.
+                            </p>
+                            <ol className="space-y-2">
+                                {TIEBREAK_CRITERIA.map((criterion, index) => (
+                                    <li key={criterion.id} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-black text-slate-600">
+                                            {index + 1}
+                                        </span>
+                                        <span className="text-base leading-none shrink-0">{criterion.icon}</span>
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-wide text-slate-800">{criterion.label}</p>
+                                            {criterion.id === 'champion' && (
+                                                <p className="text-xs text-slate-500 mt-0.5">Predijiste correctamente al campeón (bono clasificados, fase Final).</p>
+                                            )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    </section>
+
+                    <ScoringRulesCard
+                        defaultExpanded
+                        defaultTab="bonos"
+                        scoringRules={rules}
+                        className="mt-2"
+                    />
                 </div>
             )}
 
@@ -228,7 +383,7 @@ const Help: React.FC = () => {
                             </div>
                             <h3 className="font-black text-slate-900">Resultados Oficiales</h3>
                             <p className="text-sm text-slate-500 leading-relaxed">
-                                Se consideran los goles a los <strong className="text-slate-700">90 minutos + tiempo adicional</strong>. En rondas eliminatorias se incluye prórroga pero no penales.
+                                Se consideran los goles a los <strong className="text-slate-700">90 minutos + tiempo adicional</strong>. En rondas eliminatorias se incluye prórroga pero no penales. Usa <strong className="text-slate-700">Clasifica</strong> para indicar quién pasa cuando hay empate.
                             </p>
                         </div>
 
@@ -238,7 +393,23 @@ const Help: React.FC = () => {
                             </div>
                             <h3 className="font-black text-slate-900">Ranking</h3>
                             <p className="text-sm text-slate-500 leading-relaxed">
-                                La clasificación se actualiza automáticamente después de cada partido. En caso de empate en puntos, se ordena por mayor cantidad de predicciones exactas.
+                                La clasificación se actualiza automáticamente después de cada partido. En empate de puntos se aplican criterios de desempate (campeón acertado, marcadores exactos, etc.).
+                            </p>
+                        </div>
+
+                        <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary, #f59e0b) 15%, white)' }}>
+                                <Star size={20} style={{ color: primaryColor }} />
+                            </div>
+                            <h3 className="font-black text-slate-900">Clasifica en eliminatorias</h3>
+                            <p className="text-sm text-slate-500 leading-relaxed">
+                                {scoringGuide?.knockoutAdvance.summary ?? (
+                                    <>
+                                        En octavos, cuartos, semifinal y final debes indicar qué equipo pasa a la siguiente ronda.
+                                        Si el marcador tiene ganador, se asigna automáticamente; en empate debes elegirlo manualmente (penales).
+                                        Esta selección solo influye en los <strong className="text-slate-700">bonos por fase</strong>, no en los puntos del marcador.
+                                    </>
+                                )}
                             </p>
                         </div>
 
