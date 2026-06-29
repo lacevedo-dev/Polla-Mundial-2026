@@ -9,6 +9,7 @@ import {
     TRACKED_PHASE_BONUS_PHASES,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
+import { loadLeaguePhaseMatches } from './league-phase-matches.util';
 
 type ScoringRuleLike = {
     ruleType: ScoringType | string;
@@ -604,33 +605,8 @@ export class PredictionsService {
         return progress;
     }
 
-    /** Partidos de una fase que pertenecen a la liga (vía LeagueMatch), no solo los que ya tienen predicción. */
-    private async loadLeaguePhaseMatches(
-        leagueId: string,
-        phase: Phase,
-    ): Promise<
-        Array<{
-            id: string;
-            status: string;
-            homeTeamId?: string;
-            awayTeamId?: string;
-            advancingTeamId: string | null;
-        }>
-    > {
-        return this.prisma.match.findMany({
-            where: {
-                phase,
-                leagueMatches: { some: { leagueId } },
-            },
-            select: {
-                id: true,
-                status: true,
-                homeTeamId: true,
-                awayTeamId: true,
-                advancingTeamId: true,
-            },
-            orderBy: { matchDate: 'asc' },
-        });
+    private loadLeaguePhaseMatches(leagueId: string, phase: Phase) {
+        return loadLeaguePhaseMatches(this.prisma, leagueId, phase);
     }
 
     /** Compatible con api-corp: PhaseBonus no está en el cliente Prisma corporativo. */

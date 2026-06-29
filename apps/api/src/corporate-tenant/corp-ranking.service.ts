@@ -9,6 +9,7 @@ import {
 } from '@polla-2026/shared';
 import { Phase, ScoringType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { loadLeaguePhaseMatches } from '../predictions/league-phase-matches.util';
 
 export const CORP_RANKING_LIMIT = 50;
 
@@ -262,14 +263,8 @@ export class CorpRankingService {
         leagueId: string,
         phase: Phase,
     ): Promise<Array<{ id: string; status: string; advancingTeamId: string | null }>> {
-        const select = { id: true, status: true, advancingTeamId: true } as const;
-
         try {
-            return await this.prisma.match.findMany({
-                where: { phase, leagueMatches: { some: { leagueId } } },
-                select,
-                orderBy: { matchDate: 'asc' },
-            });
+            return await loadLeaguePhaseMatches(this.prisma, leagueId, phase);
         } catch {
             return [];
         }

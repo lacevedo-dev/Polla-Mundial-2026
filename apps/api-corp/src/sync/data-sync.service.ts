@@ -549,6 +549,7 @@ export class DataSyncService implements OnModuleInit {
         const teams = await this.syncTeams();
         const matches = await this.syncMatches();
         const bootstrap = await this.syncCorporateBootstrap();
+        await this.syncAllLeagueMatchesFromMain();
         this.logger.log('Sincronizacion completa finalizada');
         return { ok: true, bootstrap, tournaments, teams, matches };
     }
@@ -885,6 +886,53 @@ export class DataSyncService implements OnModuleInit {
         this.logger.warn(
             `externalId=${externalId} desvinculado del partido ${conflicting.id} para sincronizar ${canonicalMatchId}`,
         );
+    }
+
+    /**
+     * Sincroniza todos los LeagueMatch del API principal (no solo los de partidos recién sincronizados).
+     */
+    private async syncAllLeagueMatchesFromMain(): Promise<number> {
+        if (!this.internalApiKey) return 0;
+
+        try {
+            const response = await axios.get(`${this.mainApiUrl}/internal/league-matches`, {
+                headers: { 'x-internal-api-key': this.internalApiKey },
+            });
+            const leagueMatches = Array.isArray(response.data) ? response.data : [];
+            let synced = 0;
+
+            for (const lm of leagueMatches) {
+                if (!lm?.leagueId || !lm?.matchId) continue;
+                if (!await this.existsById('match', lm.matchId)) continue;
+                if (!await this.existsById('league', lm.leagueId)) continue;
+
+                await this.prisma.leagueMatch.upsert({
+                    where: { leagueId_matchId: { leagueId: lm.leagueId, matchId: lm.matchId } },
+                    create: {
+                        id: lm.id,
+                        leagueId: lm.leagueId,
+                        matchId: lm.matchId,
+                        active: lm.active !== false,
+                        addedAt: lm.addedAt ? new Date(lm.addedAt) : new Date(),
+                        addedBy: lm.addedBy ?? null,
+                    } as any,
+                    update: {
+                        active: lm.active !== false,
+                        addedAt: lm.addedAt ? new Date(lm.addedAt) : new Date(),
+                        addedBy: lm.addedBy ?? null,
+                    } as any,
+                });
+                synced += 1;
+            }
+
+            if (synced > 0) {
+                this.logger.log(`LeagueMatch sincronizados desde API principal: ${synced}`);
+            }
+            return synced;
+        } catch (error) {
+            this.logger.error('Error sincronizando LeagueMatch completos:', this.formatError(error));
+            return 0;
+        }
     }
 
     /**
