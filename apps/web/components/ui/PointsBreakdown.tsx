@@ -76,12 +76,17 @@ export const PointsBreakdown: React.FC<PointsBreakdownProps> = ({ detail, compac
     }
 
     const isKnockout = detail.phase !== 'GROUP';
+    const hasKnockoutMultiplier = isKnockout && detail.multiplier !== 1;
+    const matchSubtotal = hasKnockoutMultiplier
+        ? detail.basePoints * detail.multiplier
+        : detail.basePoints + detail.uniqueBonus;
 
     if (compact) {
         return (
             <div className="space-y-1.5">
                 {items.map((item, idx) => {
                     const Icon = item.icon;
+                    const isUniqueBonus = item.label === 'Predicción única';
                     return (
                         <div key={idx} className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-1.5">
@@ -95,10 +100,17 @@ export const PointsBreakdown: React.FC<PointsBreakdownProps> = ({ detail, compac
                     );
                 })}
 
-                {isKnockout && (
-                    <div className="flex items-center justify-between gap-3 border-t border-slate-700 pt-1.5">
-                        <span className="text-xs text-slate-300">Multiplicador ({formatPhase(detail.phase)})</span>
-                        <span className="text-xs font-bold text-sky-400">×{detail.multiplier}</span>
+                {hasKnockoutMultiplier && detail.basePoints > 0 && (
+                    <div className="flex flex-col gap-1 border-t border-slate-700 pt-1.5">
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs text-slate-300">
+                                Base {detail.basePoints} pts × {detail.multiplier} ({formatPhase(detail.phase)})
+                            </span>
+                            <span className="text-xs font-bold text-sky-400">{matchSubtotal} pts</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-snug">
+                            El ×{detail.multiplier} se aplica al total base del partido (suma primero, multiplica después).
+                        </p>
                     </div>
                 )}
 
@@ -129,12 +141,17 @@ export const PointsBreakdown: React.FC<PointsBreakdownProps> = ({ detail, compac
                 })}
             </div>
 
-            {isKnockout && (
-                <div className="rounded-lg border border-sky-700/30 bg-sky-950/20 px-2.5 py-1.5">
+            {hasKnockoutMultiplier && detail.basePoints > 0 && (
+                <div className="rounded-lg border border-sky-700/30 bg-sky-950/20 px-2.5 py-1.5 space-y-1">
                     <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs text-sky-300">Multiplicador ({formatPhase(detail.phase)})</span>
-                        <span className="text-sm font-bold text-sky-400">×{detail.multiplier}</span>
+                        <span className="text-xs text-sky-300">
+                            Base {detail.basePoints} pts × {detail.multiplier} ({formatPhase(detail.phase)})
+                        </span>
+                        <span className="text-sm font-bold text-sky-400">{matchSubtotal} pts</span>
                     </div>
+                    <p className="text-[10px] text-sky-400/90 leading-snug">
+                        Suma tus aciertos primero; el ×{detail.multiplier} se aplica a esa base completa.
+                    </p>
                 </div>
             )}
 

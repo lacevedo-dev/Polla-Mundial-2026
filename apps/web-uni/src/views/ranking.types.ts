@@ -1,3 +1,5 @@
+import type { PhaseBonusProgressItem } from '@polla-2026/shared';
+
 export type LeaderboardCategory = 'GENERAL' | 'MATCH' | 'GROUP' | 'ROUND';
 
 export interface RankingCategoryMeta {
@@ -87,4 +89,5 @@ export interface RankingBreakdownResponse {
         points: number;
         awardedAt: string;
     }>;
+    phaseBonusProgress?: PhaseBonusProgressItem[];
 }

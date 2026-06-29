@@ -45,6 +45,8 @@ import {
     type ParticipationSummaryBar,
 } from '../types/participation';
 import { AdvanceTeamSelector } from '../components/predictions/AdvanceTeamSelector';
+import { PhaseBonusProgressIndicator } from '../components/ranking/PhaseBonusProgressIndicator';
+import type { PhaseBonusProgressItem } from '@polla-2026/shared';
 import {
     requiresKnockoutAdvanceSelection,
     resolveAdvanceTeamIdFromScore,
@@ -1913,6 +1915,26 @@ const Predictions: React.FC = () => {
     const [manualPaymentDone, setManualPaymentDone] = React.useState(false);
     const [currentTime, setCurrentTime] = React.useState(() => Date.now());
     const refreshInFlightRef = React.useRef(false);
+    const [phaseBonusProgress, setPhaseBonusProgress] = React.useState<PhaseBonusProgressItem[]>([]);
+
+    const fetchPhaseBonusProgress = React.useCallback(async () => {
+        if (!activeLeague?.id) {
+            setPhaseBonusProgress([]);
+            return;
+        }
+        try {
+            const data = await request<PhaseBonusProgressItem[]>(
+                `/predictions/league/${activeLeague.id}/phase-bonus-progress`,
+            );
+            setPhaseBonusProgress(data);
+        } catch {
+            setPhaseBonusProgress([]);
+        }
+    }, [activeLeague?.id]);
+
+    React.useEffect(() => {
+        void fetchPhaseBonusProgress();
+    }, [fetchPhaseBonusProgress]);
 
     const applyParticipationBatch = React.useCallback(
         (batch: ParticipationOptionsBatch | null) => {
@@ -2124,6 +2146,11 @@ const Predictions: React.FC = () => {
             return matchesPhase && matchesGroup && matchesSearch;
         });
     }, [matches, phaseFilter, activeGroup, searchTerm]);
+
+    const showPhaseBonusProgress =
+        phaseFilter !== 'GROUP' &&
+        filteredMatches.some((match) => match.isKnockout) &&
+        phaseBonusProgress.length > 0;
 
     const groupedMatches = React.useMemo(() => {
         return filteredMatches.reduce<Record<string, MatchViewModel[]>>((acc, match) => {
@@ -2367,6 +2394,9 @@ const Predictions: React.FC = () => {
                 Number.parseInt(nextDraft.away, 10),
                 resolvedAdvanceTeamId,
             );
+            if (match.isKnockout) {
+                void fetchPhaseBonusProgress();
+            }
             showToast('✓ Guardado — podrías ganar hasta 3 pts si aciertas el marcador exacto', 'success');
         } catch (nextError) {
             const msg = nextError instanceof Error ? nextError.message : 'No fue posible guardar el pronóstico.';
@@ -3009,6 +3039,10 @@ const Predictions: React.FC = () => {
                                 No encontramos partidos con los filtros actuales.
                             </div>
                         ) : null}
+
+                        {showPhaseBonusProgress && (
+                            <PhaseBonusProgressIndicator items={phaseBonusProgress} />
+                        )}
 
                         {/* MATCH LIST */}
                         {!isLoading ? (

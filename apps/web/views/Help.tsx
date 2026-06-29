@@ -20,13 +20,7 @@ import {
   Target,
   Zap,
 } from 'lucide-react';
-
-const KNOCKOUT_MULTIPLIER = 1.5;
-
-function knockoutPts(base: number): string {
-  const total = base * KNOCKOUT_MULTIPLIER;
-  return Number.isInteger(total) ? `${total}` : `${total}`;
-}
+import { KnockoutMultiplierGuide } from '../components/help/KnockoutMultiplierGuide';
 
 const Help: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<'rules' | 'points' | 'groups'>('rules');
@@ -148,9 +142,9 @@ const Help: React.FC = () => {
             <div className="text-center space-y-3">
               <h3 className="text-3xl font-black font-brand uppercase tracking-tighter text-slate-900">Sistema de Puntuación</h3>
               <p className="text-slate-500 text-base leading-relaxed max-w-xl mx-auto">
-                Cada partido vale hasta <strong className="text-slate-800">5 puntos base</strong> en fase de grupos
-                (o <strong className="text-slate-800">7.5</strong> en eliminatorias con el multiplicador ×{KNOCKOUT_MULTIPLIER}) más bonos adicionales.
-                Los puntos de ganador y gol se <strong className="text-slate-800">suman entre sí</strong>; el marcador exacto es una categoría independiente.
+                En <strong className="text-slate-800">fase de grupos</strong> cada partido vale hasta 5 pts base.
+                En <strong className="text-slate-800">eliminatorias</strong> esos aciertos se multiplican ×1.5
+                (ej. marcador exacto = 7.5 pts). Los bonos únicos y clasificados van aparte.
               </p>
             </div>
 
@@ -250,37 +244,27 @@ const Help: React.FC = () => {
               </div>
             </section>
 
-            {/* ── 2. Bonos ── */}
-            <section aria-labelledby="sec-bonos">
+            {/* ── 2. Multiplicador eliminatorias ── */}
+            <section aria-labelledby="sec-eliminatorias">
               <div className="flex items-center gap-3 mb-4">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">2</span>
+                <h4 id="sec-eliminatorias" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">
+                  Multiplicador en eliminatorias (×1.5)
+                </h4>
+              </div>
+              <KnockoutMultiplierGuide />
+            </section>
+
+            {/* ── 3. Bonos ── */}
+            <section aria-labelledby="sec-bonos">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">3</span>
                 <h4 id="sec-bonos" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">Bonos adicionales</h4>
               </div>
+              <p className="text-sm text-slate-500 leading-relaxed mb-4 max-w-2xl">
+                Son independientes del multiplicador ×1.5 del partido: se suman a tu total cuando cumples su condición.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                {/* Multiplicador eliminatorias */}
-                <div className="rounded-[2rem] border-2 border-sky-200 bg-sky-50 p-6 space-y-3 sm:col-span-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl" aria-hidden="true">🔥</span>
-                      <span className="text-sm font-black uppercase tracking-wide text-sky-800">Multiplicador eliminatorias</span>
-                    </div>
-                    <span className="text-3xl font-black text-sky-700 tabular-nums">×{KNOCKOUT_MULTIPLIER}</span>
-                  </div>
-                  <p className="text-sm text-sky-700 leading-relaxed">
-                    En todas las fases eliminatorias (dieciseisavos, octavos, cuartos, semifinal, final y tercer lugar),
-                    los puntos obtenidos por <strong>marcador exacto, ganador o gol</strong> se multiplican por{' '}
-                    <strong>{KNOCKOUT_MULTIPLIER}</strong>. No aplica en fase de grupos.
-                  </p>
-                  <div className="rounded-xl bg-sky-100 px-3 py-2">
-                    <p className="text-xs text-sky-800 font-medium italic">
-                      Predijiste <strong>0‑1</strong> en dieciseisavos y terminó <strong>0‑1</strong> → Marcador exacto: 5 pts × {KNOCKOUT_MULTIPLIER} (eliminatoria) = <strong>7.5 pts</strong>
-                    </p>
-                  </div>
-                  <p className="text-[10px] text-sky-600 leading-snug">
-                    El bono de predicción única (+5) se suma después, sin multiplicar. Los bonos por clasificados de fase son independientes.
-                  </p>
-                </div>
 
                 {/* Predicción única */}
                 <div className="rounded-[2rem] border-2 border-amber-200 bg-amber-50 p-6 space-y-3">
@@ -335,10 +319,10 @@ const Help: React.FC = () => {
               </div>
             </section>
 
-            {/* ── 3. Ejemplo completo ── */}
+            {/* ── 4. Ejemplo completo ── */}
             <section aria-labelledby="sec-ejemplo">
               <div className="flex items-center gap-3 mb-4">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">3</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">4</span>
                 <h4 id="sec-ejemplo" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">Ejemplo de calificación</h4>
               </div>
               <Card className="!p-0 overflow-hidden shadow-xl rounded-[2.5rem] border-0">
@@ -403,10 +387,10 @@ const Help: React.FC = () => {
               </Card>
             </section>
 
-            {/* ── 4. Desempate ── */}
+            {/* ── 5. Desempate ── */}
             <section aria-labelledby="sec-desempate">
               <div className="flex items-center gap-3 mb-4">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">4</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">5</span>
                 <h4 id="sec-desempate" className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-700">Criterio de desempate en el ranking</h4>
               </div>
               <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">

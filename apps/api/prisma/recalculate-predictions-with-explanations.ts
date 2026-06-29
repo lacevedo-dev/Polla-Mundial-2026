@@ -119,7 +119,7 @@ function calculatePointsForOne(
     if (type === 'EXACT_SCORE') {
         explanation = `Marcador exacto: ${basePoints} pts`;
     } else if (type === 'CORRECT_WINNER_GOAL') {
-        explanation = `Ganador (${winnerPoints} pts) + Gol (${goalPoints} pt)`;
+        explanation = `Ganador (${winnerPoints} pts) + Gol (${goalPoints} pt) = ${basePoints} pts`;
     } else if (type === 'CORRECT_WINNER') {
         explanation = `Ganador correcto: ${winnerPoints} pts`;
     } else if (type === 'TEAM_GOALS') {

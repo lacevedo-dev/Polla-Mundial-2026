@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, ListChecks } from 'lucide-react';
-import { TIEBREAK_CRITERIA } from '@polla-2026/shared';
+import { TIEBREAK_CRITERIA, type PhaseBonusProgressItem } from '@polla-2026/shared';
+import { KnockoutMultiplierGuide } from './help/KnockoutMultiplierGuide';
+import { request } from '../api';
 
 type ScoringTab = 'resultado' | 'bonos' | 'desempate';
 
@@ -16,6 +18,7 @@ interface ScoringRulesCardProps {
     defaultTab?: ScoringTab;
     className?: string;
     scoringRules?: ScoringRule[];
+    leagueId?: string;
 }
 
 function getPoints(rules: ScoringRule[] | undefined, ruleType: string, fallback: number): number {
@@ -39,9 +42,30 @@ export function ScoringRulesCard({
     defaultTab = 'desempate',
     className = '',
     scoringRules,
+    leagueId,
 }: ScoringRulesCardProps) {
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [scoringTab, setScoringTab] = useState<ScoringTab>(defaultTab);
+    const [phaseBonusProgress, setPhaseBonusProgress] = useState<PhaseBonusProgressItem[] | null>(null);
+
+    useEffect(() => {
+        if (scoringTab !== 'bonos' || !leagueId) {
+            return;
+        }
+
+        let cancelled = false;
+        void request<PhaseBonusProgressItem[]>('/corp/phase-bonus-progress')
+            .then((data) => {
+                if (!cancelled) setPhaseBonusProgress(data);
+            })
+            .catch(() => {
+                if (!cancelled) setPhaseBonusProgress([]);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [scoringTab, leagueId]);
 
     const exactScore    = getPoints(scoringRules, 'EXACT_SCORE',        5);
     const correctWinner = getPoints(scoringRules, 'CORRECT_WINNER',     2);
@@ -146,17 +170,7 @@ export function ScoringRulesCard({
                         hidden={scoringTab !== 'bonos'}
                         className="space-y-3"
                     >
-                        <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-1.5">Multiplicador eliminatorias</p>
-                            <div className="flex items-center gap-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2.5">
-                                <span className="text-base leading-none shrink-0" aria-hidden="true">🔥</span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-800 leading-tight">Puntos ×{KNOCKOUT_MULTIPLIER} en rondas finales</p>
-                                    <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Marcador, ganador y gol. No aplica en grupos ni al bono único.</p>
-                                </div>
-                                <span className="text-sm font-black text-sky-600 shrink-0">×{KNOCKOUT_MULTIPLIER}</span>
-                            </div>
-                        </div>
+                        <KnockoutMultiplierGuide variant="compact" />
                         <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-1.5">Predicción única</p>
                             <div className="flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5">
@@ -172,28 +186,41 @@ export function ScoringRulesCard({
                             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-1">Bono clasificados</p>
                             <p className="text-[9px] text-slate-400 leading-snug mb-1.5">
                                 Predice qué equipo clasifica en cada partido de eliminatoria.
-                                El bono se otorga si <span className="font-bold text-slate-600">todos</span> tus picks de la fase son correctos.
+                                El bono se otorga al <span className="font-bold text-slate-600">cerrar la fase</span> si todos tus picks son correctos.
+                                Progreso: <span className="font-mono font-bold">aciertos/total:pts</span>.
                             </p>
                             <div className="grid grid-cols-2 gap-1.5">
                                 {[
-                                    { label: 'Octavos',   pts: bonusR16,   icon: '🥈' },
-                                    { label: 'Cuartos',   pts: bonusQF,    icon: '🥉' },
-                                    { label: 'Semifinal', pts: bonusSF,    icon: '🏅' },
-                                    { label: 'Campeón',   pts: bonusFinal, icon: '🏆' },
-                                ].map((bonus) => (
+                                    { phase: 'ROUND_OF_16', label: 'Octavos',   pts: bonusR16,   icon: '🥈' },
+                                    { phase: 'QUARTER', label: 'Cuartos',   pts: bonusQF,    icon: '🥉' },
+                                    { phase: 'SEMI', label: 'Semifinal', pts: bonusSF,    icon: '🏅' },
+                                    { phase: 'FINAL', label: 'Campeón',   pts: bonusFinal, icon: '🏆' },
+                                ].map((bonus) => {
+                                    const prog = phaseBonusProgress?.find((item) => item.phase === bonus.phase);
+                                    return (
                                     <div key={bonus.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-xs leading-none" aria-hidden="true">{bonus.icon}</span>
-                                            <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-600">{bonus.label}</span>
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="text-xs leading-none shrink-0" aria-hidden="true">{bonus.icon}</span>
+                                            <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-600 truncate">{bonus.label}</span>
                                         </div>
-                                        <span
-                                            className="text-[11px] font-black"
-                                            style={{ color: 'var(--color-primary, #f59e0b)' }}
-                                        >
-                                            {fmtPts(bonus.pts)}
-                                        </span>
+                                        {prog ? (
+                                            <span
+                                                className="text-[11px] font-black tabular-nums font-mono shrink-0"
+                                                style={{ color: 'var(--color-primary, #f59e0b)' }}
+                                            >
+                                                {prog.progressLabel}
+                                            </span>
+                                        ) : (
+                                            <span
+                                                className="text-[11px] font-black shrink-0"
+                                                style={{ color: 'var(--color-primary, #f59e0b)' }}
+                                            >
+                                                {fmtPts(bonus.pts)}
+                                            </span>
+                                        )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                             <p className="text-[9px] text-slate-500 leading-snug pt-1">
                                 Si fallas aunque sea uno de los picks de la fase, no obtienes el bono de esa ronda.

@@ -133,10 +133,10 @@ export class CorpPortalController {
             knockoutAdvance: {
                 title: 'Clasifica en eliminatorias',
                 summary:
-                    'En octavos, cuartos, semifinal y final debes indicar qué equipo pasa a la siguiente ronda. '
-                    + 'Si el marcador tiene ganador, se asigna automáticamente; en empate debes elegirlo manualmente (penales). '
-                    + 'Esta selección influye en los bonos por fase clasificados. '
-                    + 'Además, en todas las rondas eliminatorias los puntos de marcador, ganador y gol se multiplican ×1.5.',
+                    'En octavos, cuartos, semifinal y final indicas qué equipo pasa (en empate, manualmente). '
+                    + 'Eso solo influye en el bono clasificados por fase. '
+                    + 'Los puntos del marcador se calculan aparte: en eliminatorias sumas tus aciertos (marcador, ganador, gol) '
+                    + 'y multiplicas esa base × 1.5 — primero sumas, luego multiplicas. Ej: (2+1)=3 × 1.5 = 4.5 pts.',
             },
         };
     }
@@ -368,6 +368,15 @@ export class CorpPortalController {
         @Query('category') category?: string,
     ) {
         return this.corpRanking.getUserBreakdown(req.tenantId, targetUserId, category);
+    }
+
+    @Get('phase-bonus-progress')
+    async getPhaseBonusProgress(@Req() req: any) {
+        const league = await this.corpRanking.resolveActiveLeague(req.tenantId);
+        if (!league) {
+            throw new NotFoundException('No hay polla activa para este tenant');
+        }
+        return this.predictionsService.getPhaseBonusProgress(league.id, req.user.userId);
     }
 
     @Get('ranking')

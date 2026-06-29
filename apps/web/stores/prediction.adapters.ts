@@ -1,4 +1,5 @@
 import { resolveApiAssetUrl } from '../api';
+import type { PhaseBonusProgressItem } from '@polla-2026/shared';
 
 export interface MatchResponse {
     id: string;
@@ -148,6 +149,7 @@ export interface LeaderboardBreakdownApiResponse {
         points: number;
         awardedAt: string;
     }>;
+    phaseBonusProgress?: PhaseBonusProgressItem[];
 }
 
 export interface LeaderboardBreakdownDetail {
@@ -205,6 +207,7 @@ export interface LeaderboardBreakdown {
         points: number;
         awardedAt: string;
     }>;
+    phaseBonusProgress: PhaseBonusProgressItem[];
 }
 
 function toPointSummaryLabel(pointDetail?: LeaderboardBreakdownApiResponse['matches'][number]['pointDetail'] | null): string {
@@ -428,5 +431,6 @@ export function toLeaderboardBreakdown(
             resultAway: item.match.awayScore ?? undefined,
         })),
         bonuses: input.bonuses,
+        phaseBonusProgress: input.phaseBonusProgress ?? [],
     };
 }

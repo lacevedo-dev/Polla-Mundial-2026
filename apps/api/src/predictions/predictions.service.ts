@@ -4,6 +4,11 @@ import { CreatePredictionDto } from './dto/prediction.dto';
 import { MemberStatus, ParticipationCategory, ParticipationStatus, Phase, ScoringType } from '@prisma/client';
 import { matchTeamSelect } from '../matches/match-response.util';
 import { USER_STATUS } from '../users/user-status.constants';
+import {
+    PHASE_BONUS_DISPLAY_LABELS,
+    TRACKED_PHASE_BONUS_PHASES,
+    type PhaseBonusProgressItem,
+} from '@polla-2026/shared';
 
 type ScoringRuleLike = {
     ruleType: ScoringType | string;
@@ -526,6 +531,79 @@ export class PredictionsService {
         }
     }
 
+    async getPhaseBonusProgress(leagueId: string, userId: string): Promise<PhaseBonusProgressItem[]> {
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            include: { scoringRules: { where: { active: true } } },
+        });
+        if (!league) {
+            throw new NotFoundException('Liga no encontrada');
+        }
+
+        const awardedBonuses = await this.prisma.phaseBonus.findMany({
+            where: { leagueId, userId },
+            select: { phase: true, points: true },
+        });
+        const awardedMap = new Map(awardedBonuses.map((bonus) => [bonus.phase, bonus.points]));
+
+        const progress: PhaseBonusProgressItem[] = [];
+
+        for (const phaseKey of TRACKED_PHASE_BONUS_PHASES) {
+            const phase = phaseKey as Phase;
+            const maxBonusPoints = this.getPhaseBonusPoints(phase, league.scoringRules);
+            if (maxBonusPoints === 0) continue;
+
+            const phaseMatches = await this.prisma.match.findMany({
+                where: {
+                    phase,
+                    predictions: { some: { leagueId } },
+                },
+                select: { id: true, status: true, advancingTeamId: true },
+            });
+
+            if (phaseMatches.length === 0) continue;
+
+            const totalMatches = phaseMatches.length;
+            const isPhaseComplete = phaseMatches.every(
+                (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
+            );
+
+            const userPreds = await this.prisma.prediction.findMany({
+                where: {
+                    leagueId,
+                    userId,
+                    matchId: { in: phaseMatches.map((match) => match.id) },
+                    advanceTeamId: { not: null },
+                },
+                select: { matchId: true, advanceTeamId: true },
+            });
+            const predMap = new Map(userPreds.map((pred) => [pred.matchId, pred.advanceTeamId]));
+
+            let correctCount = 0;
+            for (const match of phaseMatches) {
+                if (match.status !== 'FINISHED' || !match.advancingTeamId) continue;
+                if (predMap.get(match.id) === match.advancingTeamId) correctCount++;
+            }
+
+            const isAwarded = awardedMap.has(phase);
+            const awardedPoints = isAwarded ? awardedMap.get(phase)! : 0;
+
+            progress.push({
+                phase,
+                label: PHASE_BONUS_DISPLAY_LABELS[phase] ?? phase,
+                correctCount,
+                totalMatches,
+                maxBonusPoints,
+                awardedPoints,
+                isPhaseComplete,
+                isAwarded,
+                progressLabel: `${correctCount}/${totalMatches}:${awardedPoints}`,
+            });
+        }
+
+        return progress;
+    }
+
     private getPhaseBonusPoints(phase: Phase, rules: ScoringRuleLike[]): number {
         const phaseToScoringType: Partial<Record<Phase, ScoringType>> = {
             [Phase.ROUND_OF_32]: ScoringType.PHASE_BONUS_R32,
@@ -604,7 +682,7 @@ export class PredictionsService {
         if (type === 'EXACT_SCORE') {
             explanation = `Marcador exacto: ${basePoints} pts`;
         } else if (type === 'CORRECT_WINNER_GOAL') {
-            explanation = `Ganador (${winnerPoints} pts) + Gol (${goalPoints} pt)`;
+            explanation = `Ganador (${winnerPoints} pts) + Gol (${goalPoints} pt) = ${basePoints} pts`;
         } else if (type === 'CORRECT_WINNER') {
             explanation = `Ganador correcto: ${winnerPoints} pts`;
         } else if (type === 'TEAM_GOALS') {
@@ -825,6 +903,7 @@ export class PredictionsService {
                 },
                 matches: [],
                 bonuses: [],
+                phaseBonusProgress: [],
             };
         }
 
@@ -886,6 +965,10 @@ export class PredictionsService {
         );
 
         const bonusTotal = filteredBonuses.reduce((sum, bonus) => sum + bonus.points, 0);
+        const phaseBonusProgress =
+            leaderboardCategory === 'GENERAL'
+                ? await this.getPhaseBonusProgress(leagueId, userId)
+                : [];
 
         return {
             user: member.user,
@@ -922,6 +1005,7 @@ export class PredictionsService {
                 points: bonus.points,
                 awardedAt: bonus.awardedAt,
             })),
+            phaseBonusProgress,
         };
     }
 

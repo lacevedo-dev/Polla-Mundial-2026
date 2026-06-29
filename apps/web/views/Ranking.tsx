@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { Tooltip } from '../components/ui/Tooltip';
 import { PointsBreakdown, type PointDetail } from '../components/ui/PointsBreakdown';
 import { RankingGuidePanel } from '../components/ranking/RankingGuidePanel';
+import { PhaseBonusProgressIndicator } from '../components/ranking/PhaseBonusProgressIndicator';
 import {
     RankingTiebreakSummary,
     leaderboardToTiebreakEntry,
@@ -212,12 +213,15 @@ function BreakdownPanel({
     if (loading && !breakdown) {
         return <p className="px-4 py-3 text-sm text-slate-500">Cargando detalle...</p>;
     }
-    if (!breakdown || (!breakdown.matches.length && !breakdown.bonuses.length)) {
+    if (!breakdown || (!breakdown.matches.length && !breakdown.bonuses.length && !breakdown.phaseBonusProgress.length)) {
         return <p className="px-4 py-3 text-sm text-slate-500">Sin detalle disponible para esta categoría.</p>;
     }
 
     return (
         <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-3 space-y-2">
+            {breakdown.phaseBonusProgress.length > 0 && (
+                <PhaseBonusProgressIndicator items={breakdown.phaseBonusProgress} compact />
+            )}
             {breakdown.matches.map((match) => (
                 <div key={match.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
                     <div className="flex items-start justify-between gap-3">

@@ -96,6 +96,9 @@ describe('PredictionsService', () => {
             expect(result.total).toBe(4.5);
             expect(result.detail.type).toBe('CORRECT_WINNER_GOAL');
             expect(result.detail.multiplier).toBe(1.5);
+            expect(result.detail.explanation).toBe(
+                'Ganador (2 pts) + Gol (1 pt) = 3 pts × 1.5 (eliminatoria) = 4.5 pts',
+            );
         });
 
         it('solo ganador en eliminatoria con multiplicador: 2*1.5 = 3 pts', () => {

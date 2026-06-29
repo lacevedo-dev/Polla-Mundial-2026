@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Trophy, Zap, Loader2 } from 'lucide-react';
+import type { PhaseBonusProgressItem } from '@polla-2026/shared';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
+import { PhaseBonusProgressIndicator } from '../components/PhaseBonusProgressIndicator';
 import { LeagueDetail, UpcomingMatch } from './PollaDetail/types';
 import { isPredictionClosed, isLiveStatus, isFinishedStatus } from './PollaDetail/helpers';
 import { LeagueHero } from './PollaDetail/LeagueHero';
@@ -21,6 +23,16 @@ export default function PollaDetail() {
     const [phaseFilter, setPhaseFilter] = useState<'ALL' | 'GROUP' | 'KNOCKOUT'>('ALL');
     const [groupFilter, setGroupFilter] = useState<string>('ALL');
     const [search, setSearch] = useState('');
+    const [phaseBonusProgress, setPhaseBonusProgress] = useState<PhaseBonusProgressItem[]>([]);
+
+    const fetchPhaseBonusProgress = useCallback(async () => {
+        try {
+            const data = await request<PhaseBonusProgressItem[]>('/corp/phase-bonus-progress');
+            setPhaseBonusProgress(data);
+        } catch {
+            setPhaseBonusProgress([]);
+        }
+    }, []);
 
     useEffect(() => {
         if (!id) return;
@@ -29,7 +41,8 @@ export default function PollaDetail() {
             .then((l) => { setLeague(l); setMatches(l.upcomingMatches); })
             .catch(() => setLeague(null))
             .finally(() => setLoading(false));
-    }, [id]);
+        void fetchPhaseBonusProgress();
+    }, [id, fetchPhaseBonusProgress]);
 
     function handlePredictionSaved(matchId: string, home: number, away: number, advanceTeamId?: string | null) {
         setMatches(prev => prev.map(m =>
@@ -37,6 +50,10 @@ export default function PollaDetail() {
                 ? { ...m, myPrediction: { homeScore: home, awayScore: away, points: null, advanceTeamId: advanceTeamId ?? null } }
                 : m
         ));
+        const savedMatch = matches.find((m) => m.id === matchId);
+        if (savedMatch?.phase && savedMatch.phase !== 'GROUP') {
+            void fetchPhaseBonusProgress();
+        }
     }
 
     const pendingCount = matches.filter(m => {
@@ -63,6 +80,11 @@ export default function PollaDetail() {
             (m.awayTeam.shortCode ?? '').toLowerCase().includes(search.toLowerCase())
         )
         : byGroup;
+
+    const showPhaseBonusProgress =
+        phaseFilter !== 'GROUP' &&
+        filtered.some((m) => m.phase && m.phase !== 'GROUP') &&
+        phaseBonusProgress.length > 0;
 
     return (
         <CorpLayout>
@@ -117,6 +139,9 @@ export default function PollaDetail() {
                                 onGroupByChange={setGroupBy}
                                 onSearchChange={setSearch}
                             />
+                            {showPhaseBonusProgress && (
+                                <PhaseBonusProgressIndicator items={phaseBonusProgress} />
+                            )}
                             <MatchSections
                                 filtered={filtered}
                                 leagueId={league.id}

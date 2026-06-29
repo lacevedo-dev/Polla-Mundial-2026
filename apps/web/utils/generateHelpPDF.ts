@@ -667,7 +667,17 @@ export function generateHelpPDF(): void {
         <span class="point-card-pts" style="color:#0369a1">×1.5</span>
       </div>
       <p style="color:#0369a1">En dieciseisavos, octavos, cuartos, semifinal, final y tercer lugar, los puntos de <strong>marcador exacto, ganador y gol</strong> se multiplican por <strong>1.5</strong>. No aplica en fase de grupos.</p>
+      <p style="color:#0369a1;margin-top:6px"><strong>Fórmula:</strong> base de aciertos × 1.5. Primero sumas (ej. ganador 2 + gol 1 = 3), luego multiplicas (3 × 1.5 = 4.5).</p>
       <div class="point-card-example" style="background:#e0f2fe;color:#0369a1">Predijiste <strong>0-1</strong> en dieciseisavos y terminó <strong>0-1</strong> → 5 pts × 1.5 (eliminatoria) = <strong>7.5 pts</strong></div>
+      <table class="summary-table" style="margin-top:10px">
+        <thead><tr><th>Pronóstico</th><th>Caso (resultado 0-1)</th><th>Cálculo</th><th>Total</th></tr></thead>
+        <tbody>
+          <tr><td>0-1</td><td>Marcador exacto</td><td>5 × 1.5</td><td class="pts-slate">7.5</td></tr>
+          <tr><td>1-2</td><td>Solo ganador</td><td>2 × 1.5</td><td class="pts-slate">3</td></tr>
+          <tr style="background:#fffbeb"><td>0-2</td><td>Ganador + gol</td><td>(2+1)=3 × 1.5</td><td class="pts-amber">4.5</td></tr>
+          <tr><td>1-1</td><td>Solo gol</td><td>1 × 1.5</td><td class="pts-slate">1.5</td></tr>
+        </tbody>
+      </table>
       <p class="point-card-warning" style="color:#0284c7">El bono de predicción única (+5) se suma después, sin multiplicar. Los bonos por clasificados de fase son independientes.</p>
     </div>
 

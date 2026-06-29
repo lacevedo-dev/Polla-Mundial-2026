@@ -964,7 +964,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            <ScoringRulesCard defaultTab="resultado" scoringRules={leagueDetail?.scoringRules} />
+                            <ScoringRulesCard defaultTab="resultado" scoringRules={leagueDetail?.scoringRules} leagueId={leagueDetail?.id} />
                         </aside>
 
                     </div>

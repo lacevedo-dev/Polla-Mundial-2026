@@ -5,6 +5,7 @@ import {
     sortLeaderboardEntries,
 } from '@polla-2026/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { PredictionsService } from '../predictions/predictions.service';
 
 export const CORP_RANKING_LIMIT = 50;
 
@@ -67,7 +68,10 @@ type ParticipationRow = {
 
 @Injectable()
 export class CorpRankingService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly predictionsService: PredictionsService,
+    ) {}
 
     private parsePointDetail(pointDetail: string | null): PointDetail | null {
         if (!pointDetail) return null;
@@ -516,6 +520,7 @@ export class CorpRankingService {
                     },
                     matches: [],
                     bonuses: [],
+                    phaseBonusProgress: [],
                 };
             }
         }
@@ -576,6 +581,10 @@ export class CorpRankingService {
         );
 
         const bonusTotal = phaseBonuses.reduce((sum, bonus) => sum + bonus.points, 0);
+        const phaseBonusProgress =
+            category === 'GENERAL'
+                ? await this.predictionsService.getPhaseBonusProgress(leagueId, userId)
+                : [];
 
         return {
             user: {
@@ -615,6 +624,7 @@ export class CorpRankingService {
                 points: bonus.points,
                 awardedAt: new Date().toISOString(),
             })),
+            phaseBonusProgress,
         };
     }
 }

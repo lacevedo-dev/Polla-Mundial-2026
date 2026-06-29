@@ -37,6 +37,11 @@ export class PredictionsController {
         return this.predictionsService.getLeaderboardUserBreakdown(leagueId, userId, category);
     }
 
+    @Get('league/:leagueId/phase-bonus-progress')
+    async getPhaseBonusProgress(@Request() req, @Param('leagueId') leagueId: string) {
+        return this.predictionsService.getPhaseBonusProgress(leagueId, req.user.userId);
+    }
+
     /** Clasificación provisional considerando el marcador actual de partidos en vivo */
     @Get('live-standings/:leagueId')
     async getLiveStandings(
