@@ -5,7 +5,8 @@ import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { PrismaService } from '../overrides/prisma.service';
 import {
     mergeCorporateUserReferences,
-    purgeCorporatePhaseBonuses,
+    purgeCorporateUserDependencies,
+    releaseStaleCorporateUserIdentity,
 } from './corporate-user-merge.util';
 import axios, { AxiosError } from 'axios';
 
@@ -673,10 +674,9 @@ export class DataSyncService implements OnModuleInit {
         try {
             if (canonicalExists) {
                 await mergeCorporateUserReferences(tx, staleUserId, canonicalUserId);
-            } else {
-                await purgeCorporatePhaseBonuses(tx, staleUserId);
             }
 
+            await purgeCorporateUserDependencies(tx, staleUserId, { afterMerge: canonicalExists });
             await tx.user.delete({ where: { id: staleUserId } });
         } catch (error) {
             this.logger.warn(
@@ -703,6 +703,13 @@ export class DataSyncService implements OnModuleInit {
 
                 for (const staleUserId of staleUserIds) {
                     await this.evictStaleCorporateUser(tx, staleUserId, user.id, canonicalExists);
+                    const staleStillPresent = await tx.user.findUnique({
+                        where: { id: staleUserId },
+                        select: { id: true },
+                    });
+                    if (staleStillPresent) {
+                        await releaseStaleCorporateUserIdentity(tx, staleUserId);
+                    }
                 }
 
                 await tx.user.upsert({

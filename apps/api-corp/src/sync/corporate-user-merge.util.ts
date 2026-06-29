@@ -4,18 +4,21 @@ export type CorporateUserMergeTx = {
         findMany: (args: unknown) => Promise<Array<{ id: string; tenantId: string }>>;
         findFirst: (args: unknown) => Promise<{ id: string } | null>;
         delete: (args: unknown) => Promise<unknown>;
+        deleteMany: (args: unknown) => Promise<unknown>;
         update: (args: unknown) => Promise<unknown>;
     };
     leagueMember: {
         findMany: (args: unknown) => Promise<Array<{ id: string; leagueId: string }>>;
         findFirst: (args: unknown) => Promise<{ id: string } | null>;
         delete: (args: unknown) => Promise<unknown>;
+        deleteMany: (args: unknown) => Promise<unknown>;
         update: (args: unknown) => Promise<unknown>;
     };
     prediction: {
         findMany: (args: unknown) => Promise<Array<{ id: string; matchId: string; leagueId: string }>>;
         findFirst: (args: unknown) => Promise<{ id: string } | null>;
         delete: (args: unknown) => Promise<unknown>;
+        deleteMany: (args: unknown) => Promise<unknown>;
         update: (args: unknown) => Promise<unknown>;
     };
     notification: {
@@ -67,6 +70,104 @@ export async function purgeCorporatePhaseBonuses(
     } catch {
         // ignorar si no existe la tabla
     }
+}
+
+/** Cliente mínimo para purgar referencias y archivar identidad de usuario stale. */
+export type CorporateUserPurgeTx = CorporateUserMergeTx & {
+    user: {
+        findUnique: (args: unknown) => Promise<{ documentNumber: string; username: string } | null>;
+        update: (args: unknown) => Promise<unknown>;
+    };
+    notification?: { deleteMany: (args: unknown) => Promise<unknown> };
+    verificationToken?: { deleteMany: (args: unknown) => Promise<unknown> };
+    passwordResetToken?: { deleteMany: (args: unknown) => Promise<unknown> };
+};
+
+async function tryExecuteRaw(
+    tx: Pick<CorporateUserMergeTx, '$executeRaw' | '$queryRaw'>,
+    run: () => Promise<unknown>,
+): Promise<void> {
+    try {
+        await run();
+    } catch {
+        // Tabla ausente en este entorno o sin filas: no bloquear sync.
+    }
+}
+
+/**
+ * Tablas heredadas del API principal (Payment, AuditLog, etc.) que pueden existir
+ * en la BD corp y bloquear user.delete() aunque el schema Prisma corp no las modele.
+ */
+async function purgeCorporateExtensionUserReferences(
+    tx: Pick<CorporateUserMergeTx, '$executeRaw' | '$queryRaw'>,
+    userId: string,
+): Promise<void> {
+    await tryExecuteRaw(tx, async () => {
+        const payments = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM Payment WHERE userId = ${userId}
+        `;
+        for (const payment of payments) {
+            await tx.$executeRaw`DELETE FROM Transaction WHERE paymentId = ${payment.id}`;
+        }
+        await tx.$executeRaw`DELETE FROM Payment WHERE userId = ${userId}`;
+    });
+
+    await tryExecuteRaw(tx, () => tx.$executeRaw`DELETE FROM AuditLog WHERE userId = ${userId}`);
+    await tryExecuteRaw(tx, () => tx.$executeRaw`DELETE FROM ParticipationObligation WHERE userId = ${userId}`);
+    await tryExecuteRaw(tx, () => tx.$executeRaw`DELETE FROM Invitation WHERE invitedBy = ${userId}`);
+    await tryExecuteRaw(tx, () => tx.$executeRaw`DELETE FROM UserAiCredits WHERE userId = ${userId}`);
+    await purgeCorporatePhaseBonuses(tx, userId);
+}
+
+/**
+ * Elimina dependencias del usuario antes de borrarlo.
+ * Con afterMerge=true solo purga extensiones (las relaciones corp ya se fusionaron).
+ */
+export async function purgeCorporateUserDependencies(
+    tx: CorporateUserPurgeTx,
+    userId: string,
+    options: { afterMerge?: boolean } = {},
+): Promise<void> {
+    const afterMerge = options.afterMerge ?? false;
+
+    if (!afterMerge) {
+        await tx.prediction.deleteMany({ where: { userId } });
+        await tx.leagueMember.deleteMany({ where: { userId } });
+        await tx.tenantMember.deleteMany({ where: { userId } });
+        await tx.notification?.deleteMany?.({ where: { userId } });
+        await tx.verificationToken?.deleteMany?.({ where: { userId } });
+        await tx.passwordResetToken?.deleteMany?.({ where: { userId } });
+    }
+
+    await purgeCorporateExtensionUserReferences(tx, userId);
+}
+
+/**
+ * Libera documentNumber/username del usuario stale para que el canónico pueda upsertear.
+ * Se usa cuando user.delete() falla por FK residual.
+ */
+export async function releaseStaleCorporateUserIdentity(
+    tx: Pick<CorporateUserPurgeTx, 'user'>,
+    staleUserId: string,
+): Promise<void> {
+    const stale = await tx.user.findUnique({
+        where: { id: staleUserId },
+        select: { documentNumber: true, username: true },
+    });
+    if (!stale) return;
+
+    const suffix = `_dup_${staleUserId.slice(-10)}`;
+    const newDocumentNumber = `${stale.documentNumber}${suffix}`.slice(0, 64);
+    const newUsername = `${stale.username}${suffix}`.slice(0, 191);
+
+    await tx.user.update({
+        where: { id: staleUserId },
+        data: {
+            documentNumber: newDocumentNumber,
+            username: newUsername,
+            status: 'INACTIVE',
+        },
+    });
 }
 
 export async function mergeCorporateUserReferences(
