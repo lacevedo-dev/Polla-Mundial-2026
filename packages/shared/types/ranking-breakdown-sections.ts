@@ -45,8 +45,9 @@ export type RankingBreakdownMatchSlice = {
 function compareSectionKeys(a: string, b: string): number {
     const aIsGroup = a.startsWith('group:');
     const bIsGroup = b.startsWith('group:');
-    if (aIsGroup && !bIsGroup) return -1;
-    if (!aIsGroup && bIsGroup) return 1;
+    // Eliminatorias primero; grupos al final.
+    if (aIsGroup && !bIsGroup) return 1;
+    if (!aIsGroup && bIsGroup) return -1;
     if (aIsGroup && bIsGroup) {
         return a.slice(6).localeCompare(b.slice(6), 'es', { sensitivity: 'base' });
     }
@@ -59,6 +60,49 @@ function compareSectionKeys(a: string, b: string): number {
     const rankB = orderB === -1 ? Number.MAX_SAFE_INTEGER : orderB;
     if (rankA !== rankB) return rankA - rankB;
     return phaseA.localeCompare(phaseB, 'es');
+}
+
+/** Bloque padre que agrupa Grupo A, B, C… debajo de las eliminatorias. */
+export interface RankingBreakdownGroupsBlock<T> {
+    key: 'groups';
+    kind: 'groups-parent';
+    label: string;
+    totalPoints: number;
+    matchCount: number;
+    groupCount: number;
+    groups: RankingBreakdownSection<T>[];
+}
+
+export type RankingBreakdownBlock<T> = RankingBreakdownSection<T> | RankingBreakdownGroupsBlock<T>;
+
+export function isRankingBreakdownGroupsBlock<T>(
+    block: RankingBreakdownBlock<T>,
+): block is RankingBreakdownGroupsBlock<T> {
+    return block.kind === 'groups-parent';
+}
+
+/** Ordena eliminatorias arriba y envuelve los grupos en un bloque padre. */
+export function organizeRankingBreakdownBlocks<T>(
+    sections: RankingBreakdownSection<T>[],
+): RankingBreakdownBlock<T>[] {
+    const knockout = sections.filter((section) => section.kind === 'knockout');
+    const groups = sections.filter((section) => section.kind === 'group');
+
+    const blocks: RankingBreakdownBlock<T>[] = [...knockout];
+
+    if (groups.length > 0) {
+        blocks.push({
+            key: 'groups',
+            kind: 'groups-parent',
+            label: 'Grupos',
+            totalPoints: groups.reduce((sum, group) => sum + group.totalPoints, 0),
+            matchCount: groups.reduce((sum, group) => sum + group.matches.length, 0),
+            groupCount: groups.length,
+            groups,
+        });
+    }
+
+    return blocks;
 }
 
 /** Agrupa partidos de grupos por letra de grupo; eliminatorias por fase. */
