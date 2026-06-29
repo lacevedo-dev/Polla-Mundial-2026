@@ -4,6 +4,7 @@ import {
     getPhaseBonusProgressPercent,
     getPhaseBonusStatusHeadline,
     getPhaseBonusStatusSubline,
+    getPhaseBonusChipFraction,
     getPhaseBonusVisualState,
     PHASE_BONUS_COMPACT_LABELS,
     PHASE_BONUS_GLOBAL_HINT,
@@ -104,8 +105,8 @@ function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
                     <span className="text-[8px] font-black uppercase tracking-wide truncate hidden min-[380px]:inline">
                         {compactLabel}
                     </span>
-                    <span className="text-[10px] font-black tabular-nums shrink-0 ml-auto">
-                        {item.correctCount}/{item.totalMatches}
+                    <span className="text-[10px] font-black tabular-nums shrink-0 ml-auto" title="aciertos en partidos ya jugados">
+                        {getPhaseBonusChipFraction(item)}
                     </span>
                 </div>
                 <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-black/5">

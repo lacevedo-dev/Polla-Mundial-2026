@@ -19,10 +19,10 @@ export const PHASE_BONUS_DISPLAY_LABELS: Record<string, string> = {
 
 /** Descripción corta del bono por fase (qué hay que acertar). */
 export const PHASE_BONUS_SHORT_HINTS: Record<string, string> = {
-    ROUND_OF_32: 'Quién clasifica en cada dieciseisavos',
-    ROUND_OF_16: 'Quién clasifica en cada octavo',
-    QUARTER: 'Quién clasifica en cada cuarto',
-    SEMI: 'Quién clasifica en cada semifinal',
+    ROUND_OF_32: 'Los 16 clasificados en dieciseisavos',
+    ROUND_OF_16: 'Los 8 clasificados en octavos (un pick por partido)',
+    QUARTER: 'Los 4 clasificados en cuartos',
+    SEMI: 'Los 2 clasificados en semifinal',
     FINAL: 'Quién gana la final',
 };
 
@@ -36,7 +36,16 @@ export const PHASE_BONUS_COMPACT_LABELS: Record<string, string> = {
 };
 
 export const PHASE_BONUS_GLOBAL_HINT =
-    'En cada fase eliminatoria debes acertar quién clasifica en todos los partidos. El bono se suma solo cuando cierra la fase completa.';
+    'En cada fase eliminatoria debes acertar quién clasifica en todos los partidos de esa ronda (ej. los 8 octavos). El bono se suma solo cuando cierra la fase completa.';
+
+/** Partidos esperados por fase en un cuadro completo (Mundial 48 equipos). */
+export const PHASE_KNOCKOUT_EXPECTED_MATCHES: Record<string, number> = {
+    ROUND_OF_32: 16,
+    ROUND_OF_16: 8,
+    QUARTER: 4,
+    SEMI: 2,
+    FINAL: 1,
+};
 
 export interface PhaseBonusProgressItem {
     phase: string;
@@ -81,6 +90,11 @@ export function getPhaseBonusStatusHeadline(item: PhaseBonusProgressItem): strin
         return `0 de ${total} aciertos`;
     }
     return `${n} de ${total} aciertos`;
+}
+
+/** Texto corto para chips: `1/8` → muestra aciertos sobre total de la fase. */
+export function getPhaseBonusChipFraction(item: PhaseBonusProgressItem): string {
+    return `${item.correctCount}/${item.totalMatches}`;
 }
 
 /** Subtítulo de estado (cuándo se otorga o por qué no). */

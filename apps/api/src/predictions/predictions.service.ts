@@ -467,14 +467,7 @@ export class PredictionsService {
         });
 
         for (const { leagueId } of leagueEntries) {
-            // All matches in this phase for this league
-            const phaseMatches = await this.prisma.match.findMany({
-                where: {
-                    phase: match.phase,
-                    predictions: { some: { leagueId } },
-                },
-                select: { id: true, status: true, homeTeamId: true, awayTeamId: true, advancingTeamId: true },
-            });
+            const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, match.phase);
 
             // Only proceed if ALL phase matches are finished AND have advancingTeamId set
             const allDone = phaseMatches.every(
@@ -566,13 +559,7 @@ export class PredictionsService {
             const maxBonusPoints = this.getPhaseBonusPoints(phase, league.scoringRules);
             if (maxBonusPoints === 0) continue;
 
-            const phaseMatches = await this.prisma.match.findMany({
-                where: {
-                    phase,
-                    predictions: { some: { leagueId } },
-                },
-                select: { id: true, status: true, advancingTeamId: true },
-            });
+            const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, phase);
 
             if (phaseMatches.length === 0) continue;
 
@@ -615,6 +602,35 @@ export class PredictionsService {
         }
 
         return progress;
+    }
+
+    /** Partidos de una fase que pertenecen a la liga (vía LeagueMatch), no solo los que ya tienen predicción. */
+    private async loadLeaguePhaseMatches(
+        leagueId: string,
+        phase: Phase,
+    ): Promise<
+        Array<{
+            id: string;
+            status: string;
+            homeTeamId?: string;
+            awayTeamId?: string;
+            advancingTeamId: string | null;
+        }>
+    > {
+        return this.prisma.match.findMany({
+            where: {
+                phase,
+                leagueMatches: { some: { leagueId } },
+            },
+            select: {
+                id: true,
+                status: true,
+                homeTeamId: true,
+                awayTeamId: true,
+                advancingTeamId: true,
+            },
+            orderBy: { matchDate: 'asc' },
+        });
     }
 
     /** Compatible con api-corp: PhaseBonus no está en el cliente Prisma corporativo. */

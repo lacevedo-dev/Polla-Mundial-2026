@@ -265,19 +265,10 @@ export class CorpRankingService {
         const select = { id: true, status: true, advancingTeamId: true } as const;
 
         try {
-            const viaPredictions = await this.prisma.match.findMany({
-                where: { phase, predictions: { some: { leagueId } } },
-                select,
-            });
-            if (viaPredictions.length > 0) return viaPredictions;
-        } catch {
-            /* fallback */
-        }
-
-        try {
             return await this.prisma.match.findMany({
                 where: { phase, leagueMatches: { some: { leagueId } } },
                 select,
+                orderBy: { matchDate: 'asc' },
             });
         } catch {
             return [];
