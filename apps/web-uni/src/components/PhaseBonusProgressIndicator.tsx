@@ -5,7 +5,6 @@ import {
     getPhaseBonusStatusSubline,
     getPhaseBonusChipFraction,
     getPhaseBonusVisualState,
-    PHASE_BONUS_COMPACT_LABELS,
     PHASE_BONUS_GLOBAL_HINT,
     PHASE_BONUS_SHORT_HINTS,
 } from '@polla-2026/shared';
@@ -87,21 +86,17 @@ function PhaseBonusTooltipContent({ item }: { item: PhaseBonusProgressItem }) {
 function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
     const state = getPhaseBonusVisualState(item);
     const percent = getPhaseBonusProgressPercent(item);
-    const compactLabel = PHASE_BONUS_COMPACT_LABELS[item.phase] ?? item.label;
     const icon = PHASE_ICONS[item.phase] ?? '⚽';
 
     return (
-        <Tooltip content={<PhaseBonusTooltipContent item={item} />} position="top" className="w-full">
+        <Tooltip content={<PhaseBonusTooltipContent item={item} />} position="top" className="min-w-0 flex-1 basis-0">
             <div
-                className={`w-full rounded-lg border px-1.5 py-1.5 transition-colors ${chipTone(state)}`}
+                className={`w-full rounded-lg border px-1 py-1.5 transition-colors ${chipTone(state)}`}
                 aria-label={`${item.label}: ${getPhaseBonusStatusHeadline(item)}`}
             >
-                <div className="flex items-center justify-between gap-1 min-w-0">
+                <div className="flex items-center justify-center gap-0.5 min-w-0">
                     <span className="text-[10px] leading-none shrink-0" aria-hidden>{icon}</span>
-                    <span className="text-[8px] font-black uppercase tracking-wide truncate hidden min-[380px]:inline">
-                        {compactLabel}
-                    </span>
-                    <span className="text-[10px] font-black tabular-nums shrink-0 ml-auto" title="aciertos en partidos ya jugados">
+                    <span className="text-[9px] font-black tabular-nums shrink-0" title="aciertos en partidos ya jugados">
                         {getPhaseBonusChipFraction(item)}
                     </span>
                 </div>
@@ -145,15 +140,7 @@ function CompactPhaseBonusCell({
                 </Tooltip>
             </div>
 
-            <div className={`grid gap-1.5 ${
-                items.length === 1
-                    ? 'grid-cols-1'
-                    : items.length === 2
-                      ? 'grid-cols-2'
-                      : items.length === 3
-                        ? 'grid-cols-3'
-                        : 'grid-cols-2 min-[420px]:grid-cols-4'
-            }`}>
+            <div className="flex flex-nowrap items-stretch gap-1">
                 {items.map((item) => (
                     <PhaseBonusChip key={item.phase} item={item} />
                 ))}
