@@ -3,6 +3,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { PrismaService } from '../overrides/prisma.service';
+import {
+    mergeCorporateUserReferences,
+    purgeCorporatePhaseBonuses,
+} from './corporate-user-merge.util';
 import axios, { AxiosError } from 'axios';
 
 /**
@@ -658,68 +662,6 @@ export class DataSyncService implements OnModuleInit {
         return [...staleIds];
     }
 
-    private async mergeCorporateUserReferences(
-        tx: Prisma.TransactionClient,
-        fromUserId: string,
-        toUserId: string,
-    ): Promise<void> {
-        if (fromUserId === toUserId) return;
-
-        const tenantMembers = await tx.tenantMember.findMany({ where: { userId: fromUserId } });
-        for (const member of tenantMembers) {
-            const duplicate = await tx.tenantMember.findFirst({
-                where: { tenantId: member.tenantId, userId: toUserId },
-            });
-            if (duplicate) {
-                await tx.tenantMember.delete({ where: { id: member.id } });
-            } else {
-                await tx.tenantMember.update({
-                    where: { id: member.id },
-                    data: { userId: toUserId },
-                });
-            }
-        }
-
-        const leagueMembers = await tx.leagueMember.findMany({ where: { userId: fromUserId } });
-        for (const member of leagueMembers) {
-            const duplicate = await tx.leagueMember.findFirst({
-                where: { leagueId: member.leagueId, userId: toUserId },
-            });
-            if (duplicate) {
-                await tx.leagueMember.delete({ where: { id: member.id } });
-            } else {
-                await tx.leagueMember.update({
-                    where: { id: member.id },
-                    data: { userId: toUserId },
-                });
-            }
-        }
-
-        const predictions = await tx.prediction.findMany({ where: { userId: fromUserId } });
-        for (const prediction of predictions) {
-            const duplicate = await tx.prediction.findFirst({
-                where: {
-                    userId: toUserId,
-                    matchId: prediction.matchId,
-                    leagueId: prediction.leagueId,
-                },
-            });
-            if (duplicate) {
-                await tx.prediction.delete({ where: { id: prediction.id } });
-            } else {
-                await tx.prediction.update({
-                    where: { id: prediction.id },
-                    data: { userId: toUserId },
-                });
-            }
-        }
-
-        await tx.notification.updateMany({
-            where: { userId: fromUserId },
-            data: { userId: toUserId },
-        });
-    }
-
     private async evictStaleCorporateUser(
         tx: Prisma.TransactionClient,
         staleUserId: string,
@@ -728,11 +670,19 @@ export class DataSyncService implements OnModuleInit {
     ): Promise<void> {
         if (staleUserId === canonicalUserId) return;
 
-        if (canonicalExists) {
-            await this.mergeCorporateUserReferences(tx, staleUserId, canonicalUserId);
-        }
+        try {
+            if (canonicalExists) {
+                await mergeCorporateUserReferences(tx, staleUserId, canonicalUserId);
+            } else {
+                await purgeCorporatePhaseBonuses(tx, staleUserId);
+            }
 
-        await tx.user.delete({ where: { id: staleUserId } });
+            await tx.user.delete({ where: { id: staleUserId } });
+        } catch (error) {
+            this.logger.warn(
+                `No se pudo eliminar usuario duplicado ${staleUserId} (canónico ${canonicalUserId}): ${this.formatError(error)}`,
+            );
+        }
     }
 
     private async upsertCorporateUser(user: any): Promise<void> {
