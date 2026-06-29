@@ -99,8 +99,11 @@ function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
                 className={`w-full rounded-lg border px-1 py-1.5 transition-colors cursor-help ${chipTone(state)}`}
                 aria-label={`${item.label}: ${getPhaseBonusStatusHeadline(item)}`}
             >
-                <div className="hidden md:flex items-center justify-between gap-1.5 min-w-0 px-0.5">
-                    <span className="text-[10px] font-bold truncate min-w-0 leading-tight">{item.label}</span>
+                <div className="hidden md:flex items-center justify-between gap-1 min-w-0 px-0.5">
+                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                        <span className="text-[10px] leading-none shrink-0" aria-hidden>{icon}</span>
+                        <span className="text-[10px] font-bold truncate leading-tight">{item.label}</span>
+                    </div>
                     <span
                         className="text-[10px] font-black tabular-nums shrink-0"
                         title="aciertos en partidos ya jugados"
