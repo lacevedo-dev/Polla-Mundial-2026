@@ -532,6 +532,22 @@ export class PredictionsService {
     }
 
     async getPhaseBonusProgress(leagueId: string, userId: string): Promise<PhaseBonusProgressItem[]> {
+        try {
+            return await this.computePhaseBonusProgress(leagueId, userId);
+        } catch (error) {
+            this.logger.warn(
+                `No se pudo calcular progreso de bonos para liga ${leagueId}, usuario ${userId}: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+            return [];
+        }
+    }
+
+    private async computePhaseBonusProgress(
+        leagueId: string,
+        userId: string,
+    ): Promise<PhaseBonusProgressItem[]> {
         const league = await this.prisma.league.findUnique({
             where: { id: leagueId },
             include: { scoringRules: { where: { active: true } } },
@@ -601,27 +617,11 @@ export class PredictionsService {
         return progress;
     }
 
-    /** Compatible con api-corp: PhaseBonus puede no estar en el cliente Prisma generado. */
+    /** Compatible con api-corp: PhaseBonus no está en el cliente Prisma corporativo. */
     private async loadUserPhaseBonuses(
         leagueId: string,
         userId: string,
     ): Promise<Array<{ phase: Phase; points: number }>> {
-        try {
-            const delegate = (this.prisma as { phaseBonus?: { findMany: Function } }).phaseBonus;
-            if (delegate?.findMany) {
-                const rows = await delegate.findMany({
-                    where: { leagueId, userId },
-                    select: { phase: true, points: true },
-                });
-                return rows.map((row: { phase: Phase; points: number }) => ({
-                    phase: row.phase,
-                    points: Number(row.points ?? 0),
-                }));
-            }
-        } catch {
-            /* fallback raw */
-        }
-
         try {
             const rows = await this.prisma.$queryRaw<Array<{ phase: string; points: number }>>`
                 SELECT phase, points

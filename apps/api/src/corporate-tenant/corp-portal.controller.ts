@@ -376,7 +376,7 @@ export class CorpPortalController {
         if (!league) {
             throw new NotFoundException('No hay polla activa para este tenant');
         }
-        return this.predictionsService.getPhaseBonusProgress(league.id, req.user.userId);
+        return this.corpRanking.getPhaseBonusProgressForUser(league.id, req.user.userId);
     }
 
     @Get('ranking')

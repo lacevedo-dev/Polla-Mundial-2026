@@ -3,9 +3,12 @@ import {
     assignCompetitionRanks,
     formatTiebreakNote,
     sortLeaderboardEntries,
+    PHASE_BONUS_DISPLAY_LABELS,
+    TRACKED_PHASE_BONUS_PHASES,
+    type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
+import { Phase, ScoringType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PredictionsService } from '../predictions/predictions.service';
 
 export const CORP_RANKING_LIMIT = 50;
 
@@ -66,12 +69,30 @@ type ParticipationRow = {
     referenceId: string | null;
 };
 
+type ScoringRuleRow = {
+    ruleType: ScoringType | string;
+    points: number;
+};
+
+const DEFAULT_PHASE_BONUS_POINTS: Record<string, number> = {
+    PHASE_BONUS_R32: 0,
+    PHASE_BONUS_R16: 8,
+    PHASE_BONUS_QF: 4,
+    PHASE_BONUS_SF: 2,
+    PHASE_BONUS_FINAL: 5,
+};
+
+const PHASE_TO_SCORING_TYPE: Partial<Record<Phase, ScoringType>> = {
+    [Phase.ROUND_OF_32]: ScoringType.PHASE_BONUS_R32,
+    [Phase.ROUND_OF_16]: ScoringType.PHASE_BONUS_R16,
+    [Phase.QUARTER]: ScoringType.PHASE_BONUS_QF,
+    [Phase.SEMI]: ScoringType.PHASE_BONUS_SF,
+    [Phase.FINAL]: ScoringType.PHASE_BONUS_FINAL,
+};
+
 @Injectable()
 export class CorpRankingService {
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly predictionsService: PredictionsService,
-    ) {}
+    constructor(private readonly prisma: PrismaService) {}
 
     private parsePointDetail(pointDetail: string | null): PointDetail | null {
         if (!pointDetail) return null;
@@ -189,6 +210,146 @@ export class CorpRankingService {
         if (category === 'GENERAL') return true;
         if (category !== 'ROUND') return false;
         return participationKeys.has(`${phaseBonus.userId}:${phaseBonus.phase}`);
+    }
+
+    async getPhaseBonusProgressForUser(
+        leagueId: string,
+        userId: string,
+    ): Promise<PhaseBonusProgressItem[]> {
+        try {
+            return await this.buildPhaseBonusProgress(leagueId, userId);
+        } catch {
+            return [];
+        }
+    }
+
+    private resolvePhaseBonusPoints(phase: Phase, rules: ScoringRuleRow[]): number {
+        const scoringType = PHASE_TO_SCORING_TYPE[phase];
+        if (!scoringType) return 0;
+
+        const defaultKey = {
+            [ScoringType.PHASE_BONUS_R32]: 'PHASE_BONUS_R32',
+            [ScoringType.PHASE_BONUS_R16]: 'PHASE_BONUS_R16',
+            [ScoringType.PHASE_BONUS_QF]: 'PHASE_BONUS_QF',
+            [ScoringType.PHASE_BONUS_SF]: 'PHASE_BONUS_SF',
+            [ScoringType.PHASE_BONUS_FINAL]: 'PHASE_BONUS_FINAL',
+        }[scoringType];
+
+        const fallback = DEFAULT_PHASE_BONUS_POINTS[defaultKey] ?? 0;
+        return rules.find((rule) => rule.ruleType === scoringType)?.points ?? fallback;
+    }
+
+    private async loadUserAwardedPhaseBonuses(
+        leagueId: string,
+        userId: string,
+    ): Promise<Array<{ phase: Phase; points: number }>> {
+        try {
+            const rows = await this.prisma.$queryRaw<Array<{ phase: string; points: number }>>`
+                SELECT phase, points
+                FROM PhaseBonus
+                WHERE leagueId = ${leagueId} AND userId = ${userId}
+            `;
+            return rows.map((row) => ({
+                phase: row.phase as Phase,
+                points: Number(row.points ?? 0),
+            }));
+        } catch {
+            return [];
+        }
+    }
+
+    private async loadLeaguePhaseMatches(
+        leagueId: string,
+        phase: Phase,
+    ): Promise<Array<{ id: string; status: string; advancingTeamId: string | null }>> {
+        const select = { id: true, status: true, advancingTeamId: true } as const;
+
+        try {
+            const viaPredictions = await this.prisma.match.findMany({
+                where: { phase, predictions: { some: { leagueId } } },
+                select,
+            });
+            if (viaPredictions.length > 0) return viaPredictions;
+        } catch {
+            /* fallback */
+        }
+
+        try {
+            return await this.prisma.match.findMany({
+                where: { phase, leagueMatches: { some: { leagueId } } },
+                select,
+            });
+        } catch {
+            return [];
+        }
+    }
+
+    private async buildPhaseBonusProgress(
+        leagueId: string,
+        userId: string,
+    ): Promise<PhaseBonusProgressItem[]> {
+        const league = await this.prisma.league.findUnique({
+            where: { id: leagueId },
+            include: { scoringRules: { where: { active: true } } },
+        });
+        if (!league) return [];
+
+        const awardedMap = new Map(
+            (await this.loadUserAwardedPhaseBonuses(leagueId, userId)).map((bonus) => [
+                bonus.phase,
+                bonus.points,
+            ]),
+        );
+
+        const progress: PhaseBonusProgressItem[] = [];
+
+        for (const phaseKey of TRACKED_PHASE_BONUS_PHASES) {
+            const phase = phaseKey as Phase;
+            const maxBonusPoints = this.resolvePhaseBonusPoints(phase, league.scoringRules);
+            if (maxBonusPoints === 0) continue;
+
+            const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, phase);
+            if (phaseMatches.length === 0) continue;
+
+            const totalMatches = phaseMatches.length;
+            const isPhaseComplete = phaseMatches.every(
+                (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
+            );
+
+            const userPreds = await this.prisma.prediction.findMany({
+                where: {
+                    leagueId,
+                    userId,
+                    matchId: { in: phaseMatches.map((match) => match.id) },
+                    advanceTeamId: { not: null },
+                },
+                select: { matchId: true, advanceTeamId: true },
+            });
+            const predMap = new Map(userPreds.map((pred) => [pred.matchId, pred.advanceTeamId]));
+
+            let correctCount = 0;
+            for (const match of phaseMatches) {
+                if (match.status !== 'FINISHED' || !match.advancingTeamId) continue;
+                if (predMap.get(match.id) === match.advancingTeamId) correctCount++;
+            }
+
+            const isAwarded = awardedMap.has(phase);
+            const awardedPoints = isAwarded ? awardedMap.get(phase)! : 0;
+
+            progress.push({
+                phase,
+                label: PHASE_BONUS_DISPLAY_LABELS[phase] ?? phase,
+                correctCount,
+                totalMatches,
+                maxBonusPoints,
+                awardedPoints,
+                isPhaseComplete,
+                isAwarded,
+                progressLabel: `${correctCount}/${totalMatches}:${awardedPoints}`,
+            });
+        }
+
+        return progress;
     }
 
     /** Leaderboard compatible con api-corp (sin modelos Prisma PhaseBonus / ParticipationObligation). */
@@ -581,14 +742,10 @@ export class CorpRankingService {
         );
 
         const bonusTotal = phaseBonuses.reduce((sum, bonus) => sum + bonus.points, 0);
-        let phaseBonusProgress: Awaited<ReturnType<PredictionsService['getPhaseBonusProgress']>> = [];
-        if (category === 'GENERAL') {
-            try {
-                phaseBonusProgress = await this.predictionsService.getPhaseBonusProgress(leagueId, userId);
-            } catch {
-                phaseBonusProgress = [];
-            }
-        }
+        const phaseBonusProgress =
+            category === 'GENERAL'
+                ? await this.getPhaseBonusProgressForUser(leagueId, userId)
+                : [];
 
         return {
             user: {
