@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, ListChecks } from 'lucide-react';
 import { TIEBREAK_CRITERIA, type PhaseBonusProgressItem } from '@polla-2026/shared';
 import { KnockoutMultiplierGuide } from './help/KnockoutMultiplierGuide';
+import { PhaseBonusProgressIndicator } from './PhaseBonusProgressIndicator';
 import { request } from '../api';
 
 type ScoringTab = 'resultado' | 'bonos' | 'desempate';
@@ -187,41 +188,32 @@ export function ScoringRulesCard({
                             <p className="text-[9px] text-slate-400 leading-snug mb-1.5">
                                 Predice qué equipo clasifica en cada partido de eliminatoria.
                                 El bono se otorga al <span className="font-bold text-slate-600">cerrar la fase</span> si todos tus picks son correctos.
-                                Progreso: <span className="font-mono font-bold">aciertos/total:pts</span>.
                             </p>
+                            {phaseBonusProgress && phaseBonusProgress.length > 0 ? (
+                                <PhaseBonusProgressIndicator items={phaseBonusProgress} variant="ranking" />
+                            ) : (
                             <div className="grid grid-cols-2 gap-1.5">
                                 {[
                                     { phase: 'ROUND_OF_16', label: 'Octavos',   pts: bonusR16,   icon: '🥈' },
                                     { phase: 'QUARTER', label: 'Cuartos',   pts: bonusQF,    icon: '🥉' },
                                     { phase: 'SEMI', label: 'Semifinal', pts: bonusSF,    icon: '🏅' },
                                     { phase: 'FINAL', label: 'Campeón',   pts: bonusFinal, icon: '🏆' },
-                                ].map((bonus) => {
-                                    const prog = phaseBonusProgress?.find((item) => item.phase === bonus.phase);
-                                    return (
+                                ].map((bonus) => (
                                     <div key={bonus.label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2">
                                         <div className="flex items-center gap-1.5 min-w-0">
                                             <span className="text-xs leading-none shrink-0" aria-hidden="true">{bonus.icon}</span>
                                             <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-600 truncate">{bonus.label}</span>
                                         </div>
-                                        {prog ? (
-                                            <span
-                                                className="text-[11px] font-black tabular-nums font-mono shrink-0"
-                                                style={{ color: 'var(--color-primary, #f59e0b)' }}
-                                            >
-                                                {prog.progressLabel}
-                                            </span>
-                                        ) : (
-                                            <span
-                                                className="text-[11px] font-black shrink-0"
-                                                style={{ color: 'var(--color-primary, #f59e0b)' }}
-                                            >
-                                                {fmtPts(bonus.pts)}
-                                            </span>
-                                        )}
+                                        <span
+                                            className="text-[11px] font-black shrink-0"
+                                            style={{ color: 'var(--color-primary, #f59e0b)' }}
+                                        >
+                                            {fmtPts(bonus.pts)}
+                                        </span>
                                     </div>
-                                    );
-                                })}
+                                ))}
                             </div>
+                            )}
                             <p className="text-[9px] text-slate-500 leading-snug pt-1">
                                 Si fallas aunque sea uno de los picks de la fase, no obtienes el bono de esa ronda.
                             </p>

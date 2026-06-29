@@ -1,67 +1,186 @@
+import React from 'react';
 import type { PhaseBonusProgressItem } from '@polla-2026/shared';
+import {
+    getPhaseBonusProgressPercent,
+    getPhaseBonusStatusHeadline,
+    getPhaseBonusStatusSubline,
+    getPhaseBonusVisualState,
+    PHASE_BONUS_COMPACT_LABELS,
+    PHASE_BONUS_GLOBAL_HINT,
+    PHASE_BONUS_SHORT_HINTS,
+} from '@polla-2026/shared';
+import { HelpCircle } from 'lucide-react';
+import { Tooltip } from '../ui/Tooltip';
+
+export type PhaseBonusIndicatorVariant = 'full' | 'ranking' | 'inline' | 'compact';
 
 interface PhaseBonusProgressIndicatorProps {
     items: PhaseBonusProgressItem[];
+    variant?: PhaseBonusIndicatorVariant;
+    /** @deprecated Usar variant="compact" */
     compact?: boolean;
     className?: string;
     primaryClassName?: string;
 }
 
-function progressTone(item: PhaseBonusProgressItem): string {
-    if (item.isAwarded) return 'text-lime-600';
-    if (item.isPhaseComplete && !item.isAwarded) return 'text-slate-400';
-    return 'text-slate-700';
+const PHASE_ICONS: Record<string, string> = {
+    ROUND_OF_32: '🏟️',
+    ROUND_OF_16: '🥈',
+    QUARTER: '🥉',
+    SEMI: '🏅',
+    FINAL: '🏆',
+};
+
+function chipTone(state: ReturnType<typeof getPhaseBonusVisualState>): string {
+    switch (state) {
+        case 'awarded':
+            return 'border-lime-200 bg-lime-50 text-lime-800';
+        case 'missed':
+            return 'border-slate-200 bg-slate-50 text-slate-500';
+        case 'in_progress':
+            return 'border-amber-200 bg-amber-50 text-amber-900';
+        default:
+            return 'border-slate-200 bg-white text-slate-600';
+    }
 }
 
-export function PhaseBonusProgressIndicator({
-    items,
-    compact = false,
-    className = '',
-    primaryClassName = 'text-lime-600',
-}: PhaseBonusProgressIndicatorProps) {
-    if (items.length === 0) return null;
+function barTone(state: ReturnType<typeof getPhaseBonusVisualState>): string {
+    switch (state) {
+        case 'awarded':
+            return 'bg-lime-500';
+        case 'missed':
+            return 'bg-slate-300';
+        case 'in_progress':
+            return 'bg-amber-400';
+        default:
+            return 'bg-slate-200';
+    }
+}
+
+function PhaseBonusTooltipContent({ item }: { item: PhaseBonusProgressItem }) {
+    const state = getPhaseBonusVisualState(item);
+    const percent = getPhaseBonusProgressPercent(item);
+    const hint = PHASE_BONUS_SHORT_HINTS[item.phase];
 
     return (
-        <div
-            className={`rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2.5 ${className}`}
-            aria-label="Progreso bonos clasificados por fase"
-        >
-            {!compact && (
-                <div className="mb-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-900">
-                        Bono clasificados por fase
-                    </p>
-                    <p className="text-[9px] text-amber-800/70 leading-snug mt-0.5">
-                        Se otorga al cerrar cada fase si acertaste todos los picks.
-                        Formato: <span className="font-mono font-bold">aciertos/total:pts</span>
-                    </p>
-                </div>
-            )}
-            <div className="space-y-1">
-                {items.map((item) => (
-                    <div
-                        key={item.phase}
-                        className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2 py-1.5 border border-amber-100/80"
-                    >
-                        <div className="min-w-0 flex items-center gap-2">
-                            <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-600 truncate">
-                                {item.label}
-                            </span>
-                            {!compact && (
-                                <span className="text-[8px] font-bold text-slate-400 shrink-0">
-                                    max {item.maxBonusPoints}
-                                </span>
-                            )}
-                        </div>
-                        <span
-                            className={`text-[11px] font-black tabular-nums font-mono shrink-0 ${progressTone(item)} ${item.isAwarded ? primaryClassName : ''}`}
-                            title={`${item.correctCount} aciertos de ${item.totalMatches} partidos finalizados · ${item.awardedPoints} pts otorgados`}
-                        >
-                            {item.progressLabel}
-                        </span>
-                    </div>
-                ))}
+        <div className="space-y-2">
+            <div>
+                <p className="font-black text-[11px] uppercase tracking-wide text-white">
+                    {PHASE_ICONS[item.phase]} {item.label}
+                </p>
+                {hint && <p className="text-[10px] text-slate-300 mt-0.5 leading-snug">{hint}</p>}
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-700">
+                <div
+                    className={`h-full rounded-full ${barTone(state)}`}
+                    style={{ width: `${Math.max(state === 'pending' ? 6 : 0, percent)}%` }}
+                />
+            </div>
+            <div className="space-y-0.5">
+                <p className="font-bold text-[11px] text-white">{getPhaseBonusStatusHeadline(item)}</p>
+                <p className="text-[10px] text-slate-300 leading-snug">{getPhaseBonusStatusSubline(item)}</p>
+                <p className="text-[10px] text-slate-400 pt-0.5">
+                    Bono máximo: +{item.maxBonusPoints} pts al cerrar la fase
+                </p>
             </div>
         </div>
     );
 }
+
+function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
+    const state = getPhaseBonusVisualState(item);
+    const percent = getPhaseBonusProgressPercent(item);
+    const compactLabel = PHASE_BONUS_COMPACT_LABELS[item.phase] ?? item.label;
+    const icon = PHASE_ICONS[item.phase] ?? '⚽';
+
+    return (
+        <Tooltip content={<PhaseBonusTooltipContent item={item} />} position="top" className="w-full">
+            <div
+                className={`w-full rounded-lg border px-1.5 py-1.5 transition-colors cursor-help ${chipTone(state)}`}
+                aria-label={`${item.label}: ${getPhaseBonusStatusHeadline(item)}`}
+            >
+                <div className="flex items-center justify-between gap-1 min-w-0">
+                    <span className="text-[10px] leading-none shrink-0" aria-hidden>{icon}</span>
+                    <span className="text-[8px] font-black uppercase tracking-wide truncate hidden min-[380px]:inline">
+                        {compactLabel}
+                    </span>
+                    <span className="text-[10px] font-black tabular-nums shrink-0 ml-auto">
+                        {item.correctCount}/{item.totalMatches}
+                    </span>
+                </div>
+                <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-black/5">
+                    <div
+                        className={`h-full rounded-full ${barTone(state)}`}
+                        style={{ width: `${Math.max(state === 'pending' ? 8 : 0, percent)}%` }}
+                    />
+                </div>
+            </div>
+        </Tooltip>
+    );
+}
+
+function CompactPhaseBonusCell({
+    items,
+    className = '',
+}: {
+    items: PhaseBonusProgressItem[];
+    className?: string;
+}) {
+    return (
+        <section
+            className={`rounded-xl border border-amber-100 bg-amber-50/50 px-2.5 py-2 ${className}`}
+            aria-label="Bonos por clasificados en eliminatorias"
+        >
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+                <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-900">
+                    Bonos clasificados
+                </p>
+                <Tooltip
+                    content={
+                        <p className="text-[10px] leading-snug text-slate-200">{PHASE_BONUS_GLOBAL_HINT}</p>
+                    }
+                    position="left"
+                >
+                    <span className="inline-flex items-center text-amber-700/80 hover:text-amber-900">
+                        <HelpCircle className="h-3.5 w-3.5" aria-hidden />
+                        <span className="sr-only">Cómo funcionan los bonos</span>
+                    </span>
+                </Tooltip>
+            </div>
+
+            <div className={`grid gap-1.5 ${
+                items.length === 1
+                    ? 'grid-cols-1'
+                    : items.length === 2
+                      ? 'grid-cols-2'
+                      : items.length === 3
+                        ? 'grid-cols-3'
+                        : 'grid-cols-2 min-[420px]:grid-cols-4'
+            }`}>
+                {items.map((item) => (
+                    <PhaseBonusChip key={item.phase} item={item} />
+                ))}
+            </div>
+        </section>
+    );
+}
+
+const PhaseBonusProgressIndicator: React.FC<PhaseBonusProgressIndicatorProps> = ({
+    items,
+    variant,
+    compact = false,
+    className = '',
+}) => {
+    if (items.length === 0) return null;
+
+    const resolvedVariant = variant ?? (compact ? 'compact' : 'full');
+
+    if (resolvedVariant === 'full' || resolvedVariant === 'ranking' || resolvedVariant === 'inline' || resolvedVariant === 'compact') {
+        return <CompactPhaseBonusCell items={items} className={className} />;
+    }
+
+    return <CompactPhaseBonusCell items={items} className={className} />;
+};
+
+export default PhaseBonusProgressIndicator;
+export { PhaseBonusProgressIndicator };

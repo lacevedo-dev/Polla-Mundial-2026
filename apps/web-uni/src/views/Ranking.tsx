@@ -45,7 +45,7 @@ function BreakdownPanel({
     return (
         <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-3 space-y-2">
             {breakdown.phaseBonusProgress && breakdown.phaseBonusProgress.length > 0 && (
-                <PhaseBonusProgressIndicator items={breakdown.phaseBonusProgress} compact />
+                <PhaseBonusProgressIndicator items={breakdown.phaseBonusProgress} variant="ranking" />
             )}
             {breakdown.matches.map((match) => (
                 <div key={match.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">

@@ -6,16 +6,14 @@ interface TooltipProps {
     content: React.ReactNode;
     position?: 'top' | 'bottom' | 'left' | 'right';
     className?: string;
-    /** @deprecated El tooltip ahora funciona también con tap en móvil */
-    disableOnMobile?: boolean;
 }
 
-export const Tooltip: React.FC<TooltipProps> = ({
+export function Tooltip({
     children,
     content,
     position = 'top',
     className = '',
-}) => {
+}: TooltipProps) {
     const [isVisible, setIsVisible] = useState(false);
     const [coords, setCoords] = useState({ top: 0, left: 0 });
     const [actualPosition, setActualPosition] = useState(position);
@@ -142,4 +140,4 @@ export const Tooltip: React.FC<TooltipProps> = ({
             )}
         </>
     );
-};
+}
