@@ -130,7 +130,7 @@ export class CorpPortalController {
                 title: 'Clasifica en eliminatorias',
                 summary:
                     'En dieciseisavos, octavos, cuartos, semifinal y final indicas qué equipo pasa (en empate, manualmente). '
-                    + 'Eso influye en el bono clasificados por fase (+8 en dieciseisavos y octavos si aciertas todos los picks de la ronda). '
+                    + 'Eso influye en el bono clasificados por fase (+12 en dieciseisavos, +8 en octavos si aciertas todos los picks de la ronda). '
                     + 'Los puntos del marcador se calculan aparte: en eliminatorias sumas tus aciertos (marcador, ganador, gol) '
                     + 'y multiplicas esa base × 1.5 — primero sumas, luego multiplicas. Ej: (2+1)=3 × 1.5 = 4.5 pts.',
             },

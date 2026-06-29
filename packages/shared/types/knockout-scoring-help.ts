@@ -48,7 +48,7 @@ export const KNOCKOUT_MULTIPLIER_EXAMPLES = [
 export const KNOCKOUT_MULTIPLIER_NOT_APPLIES = [
     'Fase de grupos (siempre puntos normales, sin × 1.5)',
     'Predicción única (+5): se suma al final, sin multiplicar',
-    'Bono clasificados por fase (dieciseisavos 8, octavos 8, cuartos 4, etc.)',
+    'Bono clasificados por fase (dieciseisavos 12, octavos 8, cuartos 4, etc.)',
 ] as const;
 
 export const KNOCKOUT_PHASES_LABEL =

@@ -6,7 +6,7 @@ export const CORP_DEFAULT_SCORING_RULES = [
     { ruleType: ScoringType.CORRECT_WINNER, points: 2, description: 'Ganador / empate correcto', multiplier: 1, active: true },
     { ruleType: ScoringType.TEAM_GOALS, points: 1, description: 'Gol acertado (al menos un equipo)', multiplier: 1, active: true },
     { ruleType: ScoringType.UNIQUE_PREDICTION, points: 5, description: 'Predicción única en la liga', multiplier: 1, active: true },
-    { ruleType: ScoringType.PHASE_BONUS_R32, points: 8, description: 'Bono clasificados Dieciseisavos', multiplier: 1, active: true },
+    { ruleType: ScoringType.PHASE_BONUS_R32, points: 12, description: 'Bono clasificados Dieciseisavos', multiplier: 1, active: true },
     { ruleType: ScoringType.PHASE_BONUS_R16, points: 8, description: 'Bono clasificados Octavos', multiplier: 1, active: true },
     { ruleType: ScoringType.PHASE_BONUS_QF, points: 4, description: 'Bono clasificados Cuartos', multiplier: 1, active: true },
     { ruleType: ScoringType.PHASE_BONUS_SF, points: 2, description: 'Bono clasificados Semifinal', multiplier: 1, active: true },

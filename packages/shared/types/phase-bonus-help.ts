@@ -1,6 +1,6 @@
 /** Puntos por defecto del bono al cerrar cada fase (todas las clasificaciones correctas). */
 export const DEFAULT_PHASE_BONUS_POINTS: Record<string, number> = {
-    PHASE_BONUS_R32: 8,
+    PHASE_BONUS_R32: 12,
     PHASE_BONUS_R16: 8,
     PHASE_BONUS_QF: 4,
     PHASE_BONUS_SF: 2,
