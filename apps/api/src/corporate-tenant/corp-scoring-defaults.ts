@@ -13,6 +13,7 @@ export const CORP_DEFAULT_SCORING_RULES = [
 ] as const;
 
 export const CORP_PHASE_BONUS_HELP = [
+    { label: 'Dieciseisavos', sub: '32 → 16', ruleType: ScoringType.PHASE_BONUS_R32, icon: '🏟️' },
     { label: 'Octavos', sub: '16 → 8', ruleType: ScoringType.PHASE_BONUS_R16, icon: '🥈' },
     { label: 'Cuartos', sub: '8 → 4', ruleType: ScoringType.PHASE_BONUS_QF, icon: '🥉' },
     { label: 'Semifinal', sub: '4 → 2', ruleType: ScoringType.PHASE_BONUS_SF, icon: '🏅' },

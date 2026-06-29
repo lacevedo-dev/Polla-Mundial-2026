@@ -19,8 +19,8 @@ export const PHASE_BONUS_DISPLAY_LABELS: Record<string, string> = {
 
 /** Descripción corta del bono por fase (qué hay que acertar). */
 export const PHASE_BONUS_SHORT_HINTS: Record<string, string> = {
-    ROUND_OF_32: 'Los 16 clasificados en dieciseisavos',
-    ROUND_OF_16: 'Los 8 clasificados en octavos (un pick por partido)',
+    ROUND_OF_32: 'Quién clasifica en cada dieciseisavo (16 partidos · 32→16)',
+    ROUND_OF_16: 'Quién clasifica en cada partido de octavos (8 partidos · 16→8)',
     QUARTER: 'Los 4 clasificados en cuartos',
     SEMI: 'Los 2 clasificados en semifinal',
     FINAL: 'Quién gana la final',
@@ -109,6 +109,9 @@ export function getPhaseBonusStatusSubline(item: PhaseBonusProgressItem): string
     }
     if (item.isPhaseComplete) {
         return 'Fase cerrada';
+    }
+    if (item.maxBonusPoints <= 0) {
+        return 'Seguimiento de aciertos (sin bono en esta fase)';
     }
     return `+${item.maxBonusPoints} pts al cerrar la fase`;
 }

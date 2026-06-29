@@ -7,6 +7,8 @@ import { USER_STATUS } from '../users/user-status.constants';
 import {
     PHASE_BONUS_DISPLAY_LABELS,
     TRACKED_PHASE_BONUS_PHASES,
+    countPhaseBonusCorrect,
+    resolveEffectiveAdvanceTeamId,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { loadLeaguePhaseMatches } from './league-phase-matches.util';
@@ -468,11 +470,15 @@ export class PredictionsService {
         });
 
         for (const { leagueId } of leagueEntries) {
-            const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, match.phase);
+            const phaseMatchesRaw = await this.loadLeaguePhaseMatches(leagueId, match.phase);
+            const phaseMatches = phaseMatchesRaw.filter(
+                (phaseMatch): phaseMatch is typeof phaseMatch & { homeTeamId: string; awayTeamId: string } =>
+                    Boolean(phaseMatch.homeTeamId && phaseMatch.awayTeamId),
+            );
 
             // Only proceed if ALL phase matches are finished AND have advancingTeamId set
             const allDone = phaseMatches.every(
-                m => m.status === 'FINISHED' && m.advancingTeamId !== null,
+                (m) => m.status === 'FINISHED' && m.advancingTeamId !== null,
             );
             if (!allDone) continue;
 
@@ -485,32 +491,41 @@ export class PredictionsService {
             const bonusPoints = this.getPhaseBonusPoints(match.phase, league.scoringRules);
             if (bonusPoints === 0) continue;
 
-            // 1 query: ALL advance predictions for this league+phase (replaces N+1 per user)
-            const allAdvancePreds = await this.prisma.prediction.findMany({
+            const allPreds = await this.prisma.prediction.findMany({
                 where: {
                     leagueId,
-                    match: { phase: match.phase },
-                    advanceTeamId: { not: null },
+                    matchId: { in: phaseMatches.map((phaseMatch) => phaseMatch.id) },
                 },
-                select: { userId: true, matchId: true, advanceTeamId: true },
+                select: {
+                    userId: true,
+                    matchId: true,
+                    advanceTeamId: true,
+                    homeScore: true,
+                    awayScore: true,
+                },
             });
 
-            // Index by userId -> matchId -> advanceTeamId
-            const predsByUser = new Map<string, Map<string, string | null>>();
-            for (const pred of allAdvancePreds) {
+            const matchById = new Map(phaseMatches.map((phaseMatch) => [phaseMatch.id, phaseMatch]));
+            const predsByUser = new Map<string, Map<string, string>>();
+
+            for (const pred of allPreds) {
+                const phaseMatch = matchById.get(pred.matchId);
+                if (!phaseMatch?.homeTeamId || !phaseMatch?.awayTeamId) continue;
+
+                const effectiveAdvance = resolveEffectiveAdvanceTeamId(pred, phaseMatch);
+                if (!effectiveAdvance) continue;
+
                 if (!predsByUser.has(pred.userId)) {
                     predsByUser.set(pred.userId, new Map());
                 }
-                predsByUser.get(pred.userId)!.set(pred.matchId, pred.advanceTeamId);
+                predsByUser.get(pred.userId)!.set(pred.matchId, effectiveAdvance);
             }
 
             for (const [userId, userPreds] of predsByUser) {
-                // Must have predicted ALL phase matches
                 if (userPreds.size !== phaseMatches.length) continue;
 
-                // Check all were correct
-                const allCorrect = phaseMatches.every(pm =>
-                    userPreds.get(pm.id) === pm.advancingTeamId,
+                const allCorrect = phaseMatches.every(
+                    (phaseMatch) => userPreds.get(phaseMatch.id) === phaseMatch.advancingTeamId,
                 );
 
                 if (allCorrect) {
@@ -558,14 +573,19 @@ export class PredictionsService {
         for (const phaseKey of TRACKED_PHASE_BONUS_PHASES) {
             const phase = phaseKey as Phase;
             const maxBonusPoints = this.getPhaseBonusPoints(phase, league.scoringRules);
-            if (maxBonusPoints === 0) continue;
 
             const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, phase);
 
             if (phaseMatches.length === 0) continue;
 
-            const totalMatches = phaseMatches.length;
-            const isPhaseComplete = phaseMatches.every(
+            const countableMatches = phaseMatches.filter(
+                (match): match is typeof match & { homeTeamId: string; awayTeamId: string } =>
+                    Boolean(match.homeTeamId && match.awayTeamId),
+            );
+            if (countableMatches.length === 0) continue;
+
+            const totalMatches = countableMatches.length;
+            const isPhaseComplete = countableMatches.every(
                 (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
             );
 
@@ -573,18 +593,21 @@ export class PredictionsService {
                 where: {
                     leagueId,
                     userId,
-                    matchId: { in: phaseMatches.map((match) => match.id) },
-                    advanceTeamId: { not: null },
+                    matchId: { in: countableMatches.map((match) => match.id) },
                 },
-                select: { matchId: true, advanceTeamId: true },
+                select: {
+                    matchId: true,
+                    homeScore: true,
+                    awayScore: true,
+                    advanceTeamId: true,
+                },
             });
-            const predMap = new Map(userPreds.map((pred) => [pred.matchId, pred.advanceTeamId]));
 
-            let correctCount = 0;
-            for (const match of phaseMatches) {
-                if (match.status !== 'FINISHED' || !match.advancingTeamId) continue;
-                if (predMap.get(match.id) === match.advancingTeamId) correctCount++;
-            }
+            const correctCount = countPhaseBonusCorrect(countableMatches, userPreds);
+            const finishedInPhase = countableMatches.some(
+                (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
+            );
+            if (maxBonusPoints === 0 && correctCount === 0 && !finishedInPhase) continue;
 
             const isAwarded = awardedMap.has(phase);
             const awardedPoints = isAwarded ? awardedMap.get(phase)! : 0;

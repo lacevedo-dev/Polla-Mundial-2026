@@ -5,6 +5,7 @@ import {
     sortLeaderboardEntries,
     PHASE_BONUS_DISPLAY_LABELS,
     TRACKED_PHASE_BONUS_PHASES,
+    countPhaseBonusCorrect,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { Phase, ScoringType } from '@prisma/client';
@@ -262,9 +263,21 @@ export class CorpRankingService {
     private async loadLeaguePhaseMatches(
         leagueId: string,
         phase: Phase,
-    ): Promise<Array<{ id: string; status: string; advancingTeamId: string | null }>> {
+    ): Promise<
+        Array<{
+            id: string;
+            status: string;
+            homeTeamId: string;
+            awayTeamId: string;
+            advancingTeamId: string | null;
+        }>
+    > {
         try {
-            return await loadLeaguePhaseMatches(this.prisma, leagueId, phase);
+            const rows = await loadLeaguePhaseMatches(this.prisma, leagueId, phase);
+            return rows.filter(
+                (row): row is typeof row & { homeTeamId: string; awayTeamId: string } =>
+                    Boolean(row.homeTeamId && row.awayTeamId),
+            );
         } catch {
             return [];
         }
@@ -292,7 +305,6 @@ export class CorpRankingService {
         for (const phaseKey of TRACKED_PHASE_BONUS_PHASES) {
             const phase = phaseKey as Phase;
             const maxBonusPoints = this.resolvePhaseBonusPoints(phase, league.scoringRules);
-            if (maxBonusPoints === 0) continue;
 
             const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, phase);
             if (phaseMatches.length === 0) continue;
@@ -307,17 +319,20 @@ export class CorpRankingService {
                     leagueId,
                     userId,
                     matchId: { in: phaseMatches.map((match) => match.id) },
-                    advanceTeamId: { not: null },
                 },
-                select: { matchId: true, advanceTeamId: true },
+                select: {
+                    matchId: true,
+                    homeScore: true,
+                    awayScore: true,
+                    advanceTeamId: true,
+                },
             });
-            const predMap = new Map(userPreds.map((pred) => [pred.matchId, pred.advanceTeamId]));
 
-            let correctCount = 0;
-            for (const match of phaseMatches) {
-                if (match.status !== 'FINISHED' || !match.advancingTeamId) continue;
-                if (predMap.get(match.id) === match.advancingTeamId) correctCount++;
-            }
+            const correctCount = countPhaseBonusCorrect(phaseMatches, userPreds);
+            const finishedInPhase = phaseMatches.some(
+                (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
+            );
+            if (maxBonusPoints === 0 && correctCount === 0 && !finishedInPhase) continue;
 
             const isAwarded = awardedMap.has(phase);
             const awardedPoints = isAwarded ? awardedMap.get(phase)! : 0;
