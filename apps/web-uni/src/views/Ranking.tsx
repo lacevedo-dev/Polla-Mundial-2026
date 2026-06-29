@@ -10,8 +10,10 @@ import type {
     CorpRankingEntry,
     LeaderboardCategory,
     RankingBreakdownResponse,
+    RankingBreakdownMatch,
 } from './ranking.types';
 import { PhaseBonusProgressIndicator } from '../components/PhaseBonusProgressIndicator';
+import { RankingBreakdownAccordion } from '../components/RankingBreakdownAccordion';
 import {
     buildPointsResume,
     formatPhaseLabel,
@@ -23,6 +25,39 @@ const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
 function avatarFallback(name: string): string {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=e2e8f0&color=64748b&size=128`;
+}
+
+function BreakdownMatchCard({ match }: { match: RankingBreakdownMatch }) {
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900 truncate">
+                        {match.match.homeTeam.name} vs {match.match.awayTeam.name}
+                    </p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mt-0.5">
+                        {toDisplayDate(match.match.matchDate)}
+                        {match.match.group ? ` · Grupo ${match.match.group}` : ` · ${formatPhaseLabel(match.match.phase)}`}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                        Pronóstico {match.prediction.homeScore}-{match.prediction.awayScore}
+                        {typeof match.match.homeScore === 'number' && typeof match.match.awayScore === 'number'
+                            ? ` · Resultado ${match.match.homeScore}-${match.match.awayScore}`
+                            : ''}
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-600 mt-1">
+                        {toPointSummaryLabel(match.pointDetail)}
+                    </p>
+                </div>
+                <div className="text-right shrink-0">
+                    <p className="text-base font-black" style={{ color: 'var(--color-primary, #f59e0b)' }}>
+                        {match.points}
+                    </p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 function BreakdownPanel({
@@ -47,36 +82,17 @@ function BreakdownPanel({
             {breakdown.phaseBonusProgress && breakdown.phaseBonusProgress.length > 0 && (
                 <PhaseBonusProgressIndicator items={breakdown.phaseBonusProgress} variant="ranking" />
             )}
-            {breakdown.matches.map((match) => (
-                <div key={match.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">
-                                {match.match.homeTeam.name} vs {match.match.awayTeam.name}
-                            </p>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mt-0.5">
-                                {toDisplayDate(match.match.matchDate)}
-                                {match.match.group ? ` · Grupo ${match.match.group}` : ` · ${formatPhaseLabel(match.match.phase)}`}
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                                Pronóstico {match.prediction.homeScore}-{match.prediction.awayScore}
-                                {typeof match.match.homeScore === 'number' && typeof match.match.awayScore === 'number'
-                                    ? ` · Resultado ${match.match.homeScore}-${match.match.awayScore}`
-                                    : ''}
-                            </p>
-                            <p className="text-[11px] font-medium text-slate-600 mt-1">
-                                {toPointSummaryLabel(match.pointDetail)}
-                            </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                            <p className="text-base font-black" style={{ color: 'var(--color-primary, #f59e0b)' }}>
-                                {match.points}
-                            </p>
-                            <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
-                        </div>
-                    </div>
-                </div>
-            ))}
+            <RankingBreakdownAccordion
+                matches={breakdown.matches}
+                getMatchKey={(match) => match.id}
+                matchSelectors={{
+                    phase: (match) => match.match.phase,
+                    group: (match) => match.match.group,
+                    points: (match) => match.points,
+                    date: (match) => match.match.matchDate,
+                }}
+                renderMatch={(match) => <BreakdownMatchCard match={match} />}
+            />
             {breakdown.bonuses.map((bonus) => (
                 <div key={bonus.id} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center justify-between gap-3">
                     <div>

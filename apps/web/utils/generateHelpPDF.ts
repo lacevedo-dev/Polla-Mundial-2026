@@ -1,4 +1,8 @@
+import { renderPhaseBonusHelpCardsHtml, renderPhaseBonusHelpTableRowsHtml } from '@polla-2026/shared';
+
 export function generateHelpPDF(): void {
+  const phaseBonusTableRows = renderPhaseBonusHelpTableRowsHtml();
+  const phaseBonusCards = renderPhaseBonusHelpCardsHtml();
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -329,7 +333,7 @@ export function generateHelpPDF(): void {
     /* ── Bonos ── */
     .bonus-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
       margin-top: 8px;
     }
@@ -508,7 +512,7 @@ export function generateHelpPDF(): void {
       <p>El usuario puede realizar y cambiar sus predicciones hasta <strong>15 minutos antes de iniciar el partido</strong>, momento en el cual el sistema no permitirá modificar la predicción para ese partido. Realiza las predicciones con tiempo. Se usa la hora del sistema.</p>
       <ul>
         <li>Si el jugador no realiza la predicción para un partido, no se sumarán puntos.</li>
-        <li>En fases de octavos, cuartos, etc., el usuario podrá seleccionar el equipo que clasificará a la siguiente ronda. Esta selección solo influye en los bonos que serán entregados en cada fase.</li>
+        <li>En fases de dieciseisavos, octavos, cuartos, etc., el usuario podrá seleccionar el equipo que clasificará a la siguiente ronda. Esta selección solo influye en los bonos que serán entregados en cada fase.</li>
       </ul>
     </div>
   </div>
@@ -555,26 +559,7 @@ export function generateHelpPDF(): void {
           <td>En rondas finales, los puntos de marcador, ganador y gol se multiplican ×1.5 (no aplica en grupos ni al bono único)</td>
           <td class="pts-slate">×1.5</td>
         </tr>
-        <tr>
-          <td><strong>🥈 Bono Octavos</strong></td>
-          <td>Aciertas todos los equipos clasificados a cuartos</td>
-          <td class="pts-slate">8</td>
-        </tr>
-        <tr>
-          <td><strong>🥉 Bono Cuartos</strong></td>
-          <td>Aciertas todos los equipos clasificados a semifinal</td>
-          <td class="pts-slate">4</td>
-        </tr>
-        <tr>
-          <td><strong>🏅 Bono Semifinal</strong></td>
-          <td>Aciertas todos los equipos clasificados a la final</td>
-          <td class="pts-slate">2</td>
-        </tr>
-        <tr>
-          <td><strong>🏆 Bono Final / Campeón</strong></td>
-          <td>Aciertas el campeón del torneo</td>
-          <td class="pts-lime">5</td>
-        </tr>
+        ${phaseBonusTableRows}
       </tbody>
     </table>
 
@@ -689,30 +674,7 @@ export function generateHelpPDF(): void {
       </div>
       <p>En cada partido de eliminatoria, elige qué equipo clasifica a la siguiente ronda. Si <strong>aciertas todos los picks de una fase completa</strong>, recibes el bono de esa fase. Si fallas aunque sea uno, no obtienes el bono de esa ronda.</p>
       <div class="bonus-grid">
-        <div class="bonus-card">
-          <div class="bonus-icon">🥈</div>
-          <div class="bonus-phase">Octavos</div>
-          <div class="bonus-sub">16 → 8</div>
-          <div class="bonus-pts">8 pts</div>
-        </div>
-        <div class="bonus-card">
-          <div class="bonus-icon">🥉</div>
-          <div class="bonus-phase">Cuartos</div>
-          <div class="bonus-sub">8 → 4</div>
-          <div class="bonus-pts">4 pts</div>
-        </div>
-        <div class="bonus-card">
-          <div class="bonus-icon">🏅</div>
-          <div class="bonus-phase">Semifinal</div>
-          <div class="bonus-sub">4 → 2</div>
-          <div class="bonus-pts">2 pts</div>
-        </div>
-        <div class="bonus-card">
-          <div class="bonus-icon">🏆</div>
-          <div class="bonus-phase">Campeón</div>
-          <div class="bonus-sub">El ganador</div>
-          <div class="bonus-pts">5 pts</div>
-        </div>
+        ${phaseBonusCards}
       </div>
     </div>
   </div>
@@ -901,7 +863,7 @@ export function generateHelpPDF(): void {
         </tbody>
       </table>
       <div class="bono-note">
-        <strong>Bono Octavos:</strong> Pelé, Baggio y Batistuta han acertado 1 equipo clasificado en octavos de final. Si logran acertar los 8 equipos que pasan en esta fase, se sumará el bono de 8 puntos. La misma filosofía aplica para cuartos, semifinal y final.
+        <strong>Bono Dieciseisavos / Octavos:</strong> Pelé, Baggio y Batistuta han acertado clasificados en sus respectivas fases. Si logran acertar todos los picks de una fase completa (16 en dieciseisavos, 8 en octavos, etc.), se suma el bono de esa ronda. La misma filosofía aplica para cuartos, semifinal y final.
       </div>
     </div>
   </div>
@@ -1024,7 +986,7 @@ export function generateHelpPDF(): void {
       <div class="faq-a">Esperamos actualizar la tabla de posiciones en el menor tiempo posible. Sin embargo definimos un tiempo de <strong>60 minutos</strong> para ver los cambios.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">¿Por qué en fases de octavos, cuartos, semifinal, final aparece NA?</div>
+      <div class="faq-q">¿Por qué en fases de dieciseisavos, octavos, cuartos, semifinal, final aparece NA?</div>
       <div class="faq-a">Porque todavía no se conocen los equipos que van a jugar el partido. A medida que avance el torneo, aparecerán los equipos que van a jugar esos partidos. Las predicciones de los usuarios no influyen en la conformación del partido, las apuestas siempre son sobre partidos reales.</div>
     </div>
     <div class="faq-item">

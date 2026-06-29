@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { KnockoutMultiplierGuide } from '../components/help/KnockoutMultiplierGuide';
+import { DEFAULT_PHASE_BONUS_POINTS, PHASE_BONUS_HELP_ITEMS } from '@polla-2026/shared';
 
 const Help: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<'rules' | 'points' | 'groups'>('rules');
@@ -295,19 +296,16 @@ const Help: React.FC = () => {
                     En cada partido de eliminatoria, elige qué equipo clasifica a la siguiente ronda.
                     Si <strong className="text-slate-800">aciertas todos los picks de una fase completa</strong>, recibes el bono de esa fase.
                   </p>
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    {[
-                      { phase: 'Octavos',   sub: '16 → 8',  pts: '8 pts', icon: '🥈' },
-                      { phase: 'Cuartos',   sub: '8 → 4',   pts: '4 pts', icon: '🥉' },
-                      { phase: 'Semifinal', sub: '4 → 2',   pts: '2 pts', icon: '🏅' },
-                      { phase: 'Campeón',   sub: 'El ganador', pts: '5 pts', icon: '🏆' },
-                    ].map((b) => (
-                      <div key={b.phase} className="flex flex-col rounded-xl bg-white border border-slate-200 px-3 py-2.5 shadow-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                    {PHASE_BONUS_HELP_ITEMS.map((b) => (
+                      <div key={b.ruleType} className="flex flex-col rounded-xl bg-white border border-slate-200 px-3 py-2.5 shadow-sm">
                         <div className="flex items-center justify-between">
                           <span className="text-sm" aria-hidden="true">{b.icon}</span>
-                          <span className="text-sm font-black text-lime-600">{b.pts}</span>
+                          <span className="text-sm font-black text-lime-600">
+                            +{DEFAULT_PHASE_BONUS_POINTS[b.ruleType] ?? 0} pts
+                          </span>
                         </div>
-                        <p className="text-[11px] font-black text-slate-700 mt-1">{b.phase}</p>
+                        <p className="text-[11px] font-black text-slate-700 mt-1">{b.label}</p>
                         <p className="text-[10px] text-slate-400">{b.sub}</p>
                       </div>
                     ))}

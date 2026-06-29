@@ -86,3 +86,24 @@ export function buildPhaseBonusPointsMap(
         ]),
     );
 }
+
+/** Filas HTML para tablas de ayuda / PDF (bonos clasificados). */
+export function renderPhaseBonusHelpTableRowsHtml(): string {
+    return PHASE_BONUS_HELP_ITEMS.map((item) => {
+        const pts = DEFAULT_PHASE_BONUS_POINTS[item.ruleType] ?? 0;
+        const title =
+            item.label === 'Campeón'
+                ? '🏆 Bono Final / Campeón'
+                : `${item.icon} Bono ${item.label}`;
+        const ptsClass = item.ruleType === 'PHASE_BONUS_FINAL' ? 'pts-lime' : 'pts-slate';
+        return `<tr><td><strong>${title}</strong></td><td>${item.description}</td><td class="${ptsClass}">${pts}</td></tr>`;
+    }).join('\n        ');
+}
+
+/** Tarjetas HTML para grillas de ayuda / PDF (bonos clasificados). */
+export function renderPhaseBonusHelpCardsHtml(): string {
+    return PHASE_BONUS_HELP_ITEMS.map((item) => {
+        const pts = DEFAULT_PHASE_BONUS_POINTS[item.ruleType] ?? 0;
+        return `<div class="bonus-card"><div class="bonus-icon">${item.icon}</div><div class="bonus-phase">${item.label}</div><div class="bonus-sub">${item.sub}</div><div class="bonus-pts">${pts} pts</div></div>`;
+    }).join('\n        ');
+}

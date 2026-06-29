@@ -421,7 +421,7 @@ const Help: React.FC = () => {
                             <p className="text-sm text-slate-500 leading-relaxed">
                                 {scoringGuide?.knockoutAdvance.summary ?? (
                                     <>
-                                        En octavos, cuartos, semifinal y final debes indicar qué equipo pasa a la siguiente ronda.
+                                        En dieciseisavos, octavos, cuartos, semifinal y final debes indicar qué equipo pasa a la siguiente ronda.
                                         Si el marcador tiene ganador, se asigna automáticamente; en empate debes elegirlo manualmente (penales).
                                         Esta selección solo influye en los <strong className="text-slate-700">bonos por fase</strong>, no en los puntos del marcador.
                                     </>

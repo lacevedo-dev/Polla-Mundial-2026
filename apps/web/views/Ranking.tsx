@@ -5,12 +5,13 @@ import {
 } from 'lucide-react';
 import { useLeagueStore } from '../stores/league.store';
 import { usePredictionStore, type LeaderboardRow } from '../stores/prediction.store';
-import type { LeaderboardBreakdown, LeaderboardCategory } from '../stores/prediction.adapters';
+import type { LeaderboardBreakdown, LeaderboardCategory, LeaderboardBreakdownDetail } from '../stores/prediction.adapters';
 import { useAuthStore } from '../stores/auth.store';
 import { Tooltip } from '../components/ui/Tooltip';
 import { PointsBreakdown, type PointDetail } from '../components/ui/PointsBreakdown';
 import { RankingGuidePanel } from '../components/ranking/RankingGuidePanel';
 import { PhaseBonusProgressIndicator } from '../components/ranking/PhaseBonusProgressIndicator';
+import { RankingBreakdownAccordion } from '../components/ranking/RankingBreakdownAccordion';
 import {
     RankingTiebreakSummary,
     leaderboardToTiebreakEntry,
@@ -194,6 +195,43 @@ const ParticipantsGrid: React.FC<{ players: LeaderboardRow[] }> = ({ players }) 
 
 // ─── breakdown panel (inline) ───────────────────────────────────────────────
 
+function BreakdownMatchCard({ match }: { match: LeaderboardBreakdownDetail }) {
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-900">{match.homeTeam} vs {match.awayTeam}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mt-0.5">
+                        {match.displayDate}{match.group ? ` · Grupo ${match.group}` : ` · ${match.phase}`}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                        Pronóstico {match.predictionHome}-{match.predictionAway}
+                        {typeof match.resultHome === 'number' && typeof match.resultAway === 'number'
+                            ? ` · Resultado ${match.resultHome}-${match.resultAway}`
+                            : ''}
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-600 mt-1">{match.summaryLabel}</p>
+                </div>
+                <div className="text-right shrink-0">
+                    {match.pointDetail ? (
+                        <Tooltip content={<PointsBreakdown detail={match.pointDetail as PointDetail} compact />}>
+                            <div className="cursor-help">
+                                <p className="text-base font-black text-lime-600 underline decoration-dotted decoration-2 underline-offset-4">{match.points}</p>
+                                <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
+                            </div>
+                        </Tooltip>
+                    ) : (
+                        <>
+                            <p className="text-base font-black text-lime-600">{match.points}</p>
+                            <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function BreakdownPanel({
     playerId,
     leagueId,
@@ -222,40 +260,17 @@ function BreakdownPanel({
             {breakdown.phaseBonusProgress.length > 0 && (
                 <PhaseBonusProgressIndicator items={breakdown.phaseBonusProgress} variant="ranking" />
             )}
-            {breakdown.matches.map((match) => (
-                <div key={match.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                            <p className="truncate text-sm font-bold text-slate-900">{match.homeTeam} vs {match.awayTeam}</p>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mt-0.5">
-                                {match.displayDate}{match.group ? ` · Grupo ${match.group}` : ` · ${match.phase}`}
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                                Pronóstico {match.predictionHome}-{match.predictionAway}
-                                {typeof match.resultHome === 'number' && typeof match.resultAway === 'number'
-                                    ? ` · Resultado ${match.resultHome}-${match.resultAway}`
-                                    : ''}
-                            </p>
-                            <p className="text-[11px] font-medium text-slate-600 mt-1">{match.summaryLabel}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                            {match.pointDetail ? (
-                                <Tooltip content={<PointsBreakdown detail={match.pointDetail as PointDetail} compact />}>
-                                    <div className="cursor-help">
-                                        <p className="text-base font-black text-lime-600 underline decoration-dotted decoration-2 underline-offset-4">{match.points}</p>
-                                        <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
-                                    </div>
-                                </Tooltip>
-                            ) : (
-                                <>
-                                    <p className="text-base font-black text-lime-600">{match.points}</p>
-                                    <p className="text-[10px] font-bold uppercase text-slate-400">pts</p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            ))}
+            <RankingBreakdownAccordion
+                matches={breakdown.matches}
+                getMatchKey={(match) => match.id}
+                matchSelectors={{
+                    phase: (match) => match.phase,
+                    group: (match) => match.group,
+                    points: (match) => match.points,
+                    date: (match) => match.date,
+                }}
+                renderMatch={(match) => <BreakdownMatchCard match={match} />}
+            />
             {breakdown.bonuses.map((bonus) => (
                 <div key={bonus.id} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center justify-between gap-3">
                     <div>
