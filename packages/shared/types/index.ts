@@ -137,3 +137,4 @@ export * from './ranking-tiebreak';
 export * from './knockout-scoring-help';
 export * from './phase-bonus-progress';
 export * from './phase-bonus-count';
+export * from './phase-bonus-help';

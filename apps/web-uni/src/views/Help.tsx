@@ -3,7 +3,11 @@ import {
     Trophy, TrendingUp, CheckCircle2, Calendar, Zap,
     Bell, BellOff, Shield, Target, HelpCircle, Download, Star,
 } from 'lucide-react';
-import { TIEBREAK_CRITERIA } from '@polla-2026/shared';
+import {
+    TIEBREAK_CRITERIA,
+    PHASE_BONUS_HELP_ITEMS,
+    buildPhaseBonusPointsMap,
+} from '@polla-2026/shared';
 import { KnockoutMultiplierGuide } from '../components/help/KnockoutMultiplierGuide';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useTenantStore } from '../stores/tenant.store';
@@ -67,22 +71,13 @@ const Help: React.FC = () => {
     const correctWinner = getPoints(rules, 'CORRECT_WINNER', 2);
     const teamGoals = getPoints(rules, 'TEAM_GOALS', 1);
     const uniquePred = getPoints(rules, 'UNIQUE_PREDICTION', 5);
-    const bonusR16 = getPoints(rules, 'PHASE_BONUS_R16', 8);
-    const bonusQF = getPoints(rules, 'PHASE_BONUS_QF', 4);
-    const bonusSF = getPoints(rules, 'PHASE_BONUS_SF', 2);
-    const bonusFinal = getPoints(rules, 'PHASE_BONUS_FINAL', 5);
-    const phaseBonuses = scoringGuide?.phaseBonuses ?? [
-        { label: 'Octavos', sub: '16 → 8', ruleType: 'PHASE_BONUS_R16', icon: '🥈' },
-        { label: 'Cuartos', sub: '8 → 4', ruleType: 'PHASE_BONUS_QF', icon: '🥉' },
-        { label: 'Semifinal', sub: '4 → 2', ruleType: 'PHASE_BONUS_SF', icon: '🏅' },
-        { label: 'Campeón', sub: 'El ganador', ruleType: 'PHASE_BONUS_FINAL', icon: '🏆' },
-    ];
-    const phaseBonusPoints: Record<string, number> = {
-        PHASE_BONUS_R16: bonusR16,
-        PHASE_BONUS_QF: bonusQF,
-        PHASE_BONUS_SF: bonusSF,
-        PHASE_BONUS_FINAL: bonusFinal,
-    };
+    const phaseBonuses = scoringGuide?.phaseBonuses ?? PHASE_BONUS_HELP_ITEMS.map((item) => ({
+        label: item.label,
+        sub: item.sub,
+        ruleType: item.ruleType,
+        icon: item.icon,
+    }));
+    const phaseBonusPoints = buildPhaseBonusPointsMap(rules);
 
     const orgName = tenant?.branding?.companyDisplayName ?? tenant?.name ?? 'tu organización';
     const primaryColor = 'var(--color-primary, #f59e0b)';
@@ -290,13 +285,13 @@ const Help: React.FC = () => {
                                     En cada partido de eliminatoria, elige qué equipo clasifica a la siguiente ronda con el selector <strong className="text-slate-800">Clasifica</strong>.
                                     Si <strong className="text-slate-800">aciertas todos los picks de una fase completa</strong>, recibes el bono de esa fase.
                                 </p>
-                                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
                                     {phaseBonuses.map((b) => (
                                         <div key={b.label} className="flex flex-col rounded-xl bg-white border border-slate-200 px-3 py-2.5 shadow-sm">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-sm">{b.icon}</span>
                                                 <span className="text-sm font-black" style={{ color: primaryColor }}>
-                                                    {fmtPts(phaseBonusPoints[b.ruleType] ?? 0)}
+                                                    +{fmtPts(phaseBonusPoints[b.ruleType] ?? 0)}
                                                 </span>
                                             </div>
                                             <p className="text-[11px] font-black text-slate-700 mt-1">{b.label}</p>

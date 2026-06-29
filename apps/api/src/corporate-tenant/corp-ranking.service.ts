@@ -6,6 +6,7 @@ import {
     PHASE_BONUS_DISPLAY_LABELS,
     TRACKED_PHASE_BONUS_PHASES,
     countPhaseBonusCorrect,
+    DEFAULT_PHASE_BONUS_POINTS,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { Phase, ScoringType } from '@prisma/client';
@@ -74,14 +75,6 @@ type ParticipationRow = {
 type ScoringRuleRow = {
     ruleType: ScoringType | string;
     points: number;
-};
-
-const DEFAULT_PHASE_BONUS_POINTS: Record<string, number> = {
-    PHASE_BONUS_R32: 0,
-    PHASE_BONUS_R16: 8,
-    PHASE_BONUS_QF: 4,
-    PHASE_BONUS_SF: 2,
-    PHASE_BONUS_FINAL: 5,
 };
 
 const PHASE_TO_SCORING_TYPE: Partial<Record<Phase, ScoringType>> = {

@@ -269,7 +269,8 @@ export function generateHelpPDF(orgName = 'Portal Corporativo', primaryColor = '
         <tr><td><strong>⚽ Gol Acertado</strong></td><td>Aciertas el número de goles de uno de los equipos</td><td class="pts-purple">1</td></tr>
         <tr><td><strong>⭐ Predicción Única</strong></td><td>Fuiste el único que acertó el marcador exacto en el grupo</td><td class="pts-amber">+5</td></tr>
         <tr><td><strong>🔥 Multiplicador Eliminatorias</strong></td><td>En rondas finales, marcador, ganador y gol ×1.5 (no en grupos ni al bono único)</td><td class="pts-slate">×1.5</td></tr>
-        <tr><td><strong>🥈 Bono Octavos</strong></td><td>Aciertas todos los equipos clasificados a cuartos</td><td class="pts-slate">8</td></tr>
+        <tr><td><strong>🏟️ Bono Dieciseisavos</strong></td><td>Aciertas los 16 clasificados en dieciseisavos</td><td class="pts-slate">8</td></tr>
+        <tr><td><strong>🥈 Bono Octavos</strong></td><td>Aciertas los 8 clasificados en octavos</td><td class="pts-slate">8</td></tr>
         <tr><td><strong>🥉 Bono Cuartos</strong></td><td>Aciertas todos los equipos clasificados a semifinal</td><td class="pts-slate">4</td></tr>
         <tr><td><strong>🏅 Bono Semifinal</strong></td><td>Aciertas todos los equipos clasificados a la final</td><td class="pts-slate">2</td></tr>
         <tr><td><strong>🏆 Bono Final / Campeón</strong></td><td>Aciertas el campeón del torneo</td><td class="pts-lime">5</td></tr>
@@ -346,6 +347,7 @@ export function generateHelpPDF(orgName = 'Portal Corporativo', primaryColor = '
       </div>
       <p>En cada partido de eliminatoria, elige qué equipo clasifica a la siguiente ronda. Si <strong>aciertas todos los picks de una fase completa</strong>, recibes el bono de esa fase.</p>
       <div class="bonus-grid">
+        <div class="bonus-card"><div class="bonus-icon">🏟️</div><div class="bonus-phase">Dieciseisavos</div><div class="bonus-sub">32 → 16</div><div class="bonus-pts">8 pts</div></div>
         <div class="bonus-card"><div class="bonus-icon">🥈</div><div class="bonus-phase">Octavos</div><div class="bonus-sub">16 → 8</div><div class="bonus-pts">8 pts</div></div>
         <div class="bonus-card"><div class="bonus-icon">🥉</div><div class="bonus-phase">Cuartos</div><div class="bonus-sub">8 → 4</div><div class="bonus-pts">4 pts</div></div>
         <div class="bonus-card"><div class="bonus-icon">🏅</div><div class="bonus-phase">Semifinal</div><div class="bonus-sub">4 → 2</div><div class="bonus-pts">2 pts</div></div>

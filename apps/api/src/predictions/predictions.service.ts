@@ -88,7 +88,7 @@ export class PredictionsService {
         CORRECT_WINNER:     2,
         TEAM_GOALS:         1,
         UNIQUE_PREDICTION:  5,
-        PHASE_BONUS_R32:    0,
+        PHASE_BONUS_R32:    8,
         PHASE_BONUS_R16:    8,
         PHASE_BONUS_QF:     4,
         PHASE_BONUS_SF:     2,
