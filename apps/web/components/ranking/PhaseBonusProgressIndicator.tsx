@@ -8,6 +8,7 @@ import {
     getPhaseBonusVisualState,
     PHASE_BONUS_GLOBAL_HINT,
     PHASE_BONUS_SHORT_HINTS,
+    PHASE_BONUS_COMPACT_LABELS,
 } from '@polla-2026/shared';
 import { HelpCircle } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
@@ -92,6 +93,7 @@ function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
     const percent = getPhaseBonusProgressPercent(item);
     const icon = PHASE_ICONS[item.phase] ?? '⚽';
     const pointsLabel = `${item.awardedPoints} pts`;
+    const desktopLabel = PHASE_BONUS_COMPACT_LABELS[item.phase] ?? item.label;
 
     return (
         <Tooltip content={<PhaseBonusTooltipContent item={item} />} position="top" className="min-w-0 flex-1 basis-0">
@@ -102,7 +104,9 @@ function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
                 <div className="hidden md:grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 min-w-0 px-0.5 w-full">
                     <div className="flex items-center gap-1 min-w-0 justify-self-start">
                         <span className="text-[10px] leading-none shrink-0" aria-hidden>{icon}</span>
-                        <span className="text-[10px] font-bold truncate leading-tight">{item.label}</span>
+                        <span className="text-[10px] font-bold truncate leading-tight" title={item.label}>
+                            {desktopLabel}
+                        </span>
                     </div>
                     <span
                         className="text-[10px] font-black tabular-nums justify-self-center"
