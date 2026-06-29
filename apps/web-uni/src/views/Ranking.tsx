@@ -35,6 +35,9 @@ function BreakdownPanel({
     if (loading) {
         return <p className="px-4 py-3 text-sm text-slate-500">Cargando detalle...</p>;
     }
+    if (breakdown?.loadError) {
+        return <p className="px-4 py-3 text-sm text-rose-600">No se pudo cargar el detalle. Intenta de nuevo en unos segundos.</p>;
+    }
     if (!breakdown || (!breakdown.matches.length && !breakdown.bonuses.length && !breakdown.phaseBonusProgress?.length)) {
         return <p className="px-4 py-3 text-sm text-slate-500">Sin detalle disponible para esta categoría.</p>;
     }
@@ -163,7 +166,24 @@ export default function Ranking() {
             );
             setBreakdowns((prev) => ({ ...prev, [cacheKey]: breakdown }));
         } catch {
-            /* detalle opcional */
+            setBreakdowns((prev) => ({
+                ...prev,
+                [cacheKey]: {
+                    user: { id: entry.userId, username: entry.username, name: entry.name, avatar: entry.avatar },
+                    summary: {
+                        points: entry.totalPoints,
+                        exactCount: entry.exactCount,
+                        winnerCount: entry.winnerCount,
+                        goalCount: entry.goalCount,
+                        uniqueCount: entry.uniqueCount,
+                        phaseBonusPoints: entry.phaseBonusPoints,
+                    },
+                    matches: [],
+                    bonuses: [],
+                    phaseBonusProgress: [],
+                    loadError: true,
+                },
+            }));
         } finally {
             setLoadingBreakdownId((current) => (current === entry.userId ? null : current));
         }

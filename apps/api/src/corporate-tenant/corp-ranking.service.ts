@@ -581,10 +581,14 @@ export class CorpRankingService {
         );
 
         const bonusTotal = phaseBonuses.reduce((sum, bonus) => sum + bonus.points, 0);
-        const phaseBonusProgress =
-            category === 'GENERAL'
-                ? await this.predictionsService.getPhaseBonusProgress(leagueId, userId)
-                : [];
+        let phaseBonusProgress: Awaited<ReturnType<PredictionsService['getPhaseBonusProgress']>> = [];
+        if (category === 'GENERAL') {
+            try {
+                phaseBonusProgress = await this.predictionsService.getPhaseBonusProgress(leagueId, userId);
+            } catch {
+                phaseBonusProgress = [];
+            }
+        }
 
         return {
             user: {

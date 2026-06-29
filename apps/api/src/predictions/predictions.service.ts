@@ -540,10 +540,7 @@ export class PredictionsService {
             throw new NotFoundException('Liga no encontrada');
         }
 
-        const awardedBonuses = await this.prisma.phaseBonus.findMany({
-            where: { leagueId, userId },
-            select: { phase: true, points: true },
-        });
+        const awardedBonuses = await this.loadUserPhaseBonuses(leagueId, userId);
         const awardedMap = new Map(awardedBonuses.map((bonus) => [bonus.phase, bonus.points]));
 
         const progress: PhaseBonusProgressItem[] = [];
@@ -602,6 +599,42 @@ export class PredictionsService {
         }
 
         return progress;
+    }
+
+    /** Compatible con api-corp: PhaseBonus puede no estar en el cliente Prisma generado. */
+    private async loadUserPhaseBonuses(
+        leagueId: string,
+        userId: string,
+    ): Promise<Array<{ phase: Phase; points: number }>> {
+        try {
+            const delegate = (this.prisma as { phaseBonus?: { findMany: Function } }).phaseBonus;
+            if (delegate?.findMany) {
+                const rows = await delegate.findMany({
+                    where: { leagueId, userId },
+                    select: { phase: true, points: true },
+                });
+                return rows.map((row: { phase: Phase; points: number }) => ({
+                    phase: row.phase,
+                    points: Number(row.points ?? 0),
+                }));
+            }
+        } catch {
+            /* fallback raw */
+        }
+
+        try {
+            const rows = await this.prisma.$queryRaw<Array<{ phase: string; points: number }>>`
+                SELECT phase, points
+                FROM PhaseBonus
+                WHERE leagueId = ${leagueId} AND userId = ${userId}
+            `;
+            return rows.map((row) => ({
+                phase: row.phase as Phase,
+                points: Number(row.points ?? 0),
+            }));
+        } catch {
+            return [];
+        }
     }
 
     private getPhaseBonusPoints(phase: Phase, rules: ScoringRuleLike[]): number {

@@ -90,4 +90,5 @@ export interface RankingBreakdownResponse {
         awardedAt: string;
     }>;
     phaseBonusProgress?: PhaseBonusProgressItem[];
+    loadError?: boolean;
 }
