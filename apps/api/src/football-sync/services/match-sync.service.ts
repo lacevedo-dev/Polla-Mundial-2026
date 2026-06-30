@@ -883,6 +883,16 @@ export class MatchSyncService {
       // so closeStaleUnlinkedMatches doesn't re-close it with the wrong date.
       const matchDateChanged = matchDateDriftMs > 60_000 || wasForceClosedAndNowActive;
 
+      const penaltyHomeScore = fixture.score?.penalty?.home ?? null;
+      const penaltyAwayScore = fixture.score?.penalty?.away ?? null;
+      const advancingTeamIdLive = this.resolveAdvancingTeamIdFromFixture(
+        match.phase,
+        status,
+        fixture,
+        homeTeamId,
+        awayTeamId,
+      );
+
       // Update match (including elapsed + statusShort for live timer persistence)
       const updatedMatch = await this.prisma.match.update({
         where: { id: match.id },
@@ -893,6 +903,9 @@ export class MatchSyncService {
           ...(clearResultNotification ? { resultNotificationSentAt: null } : {}),
           homeScore: fixture.goals.home,
           awayScore: fixture.goals.away,
+          ...(penaltyHomeScore !== null ? { penaltyHomeScore } : {}),
+          ...(penaltyAwayScore !== null ? { penaltyAwayScore } : {}),
+          ...(advancingTeamIdLive ? { advancingTeamId: advancingTeamIdLive } : {}),
           status,
           elapsed:     fixture.fixture.status.elapsed ?? null,
           statusShort: fixture.fixture.status.short ?? null,
@@ -1056,10 +1069,13 @@ export class MatchSyncService {
           matchId: match.id,
           homeScore: fixture.goals.home,
           awayScore: fixture.goals.away,
+          penaltyHomeScore,
+          penaltyAwayScore,
           status,
           externalId: fixture.fixture.id.toString(),
           elapsed: fixture.fixture.status.elapsed ?? null,
           statusShort: fixture.fixture.status.short,
+          advancingTeamId: updatedMatch.advancingTeamId,
           lastSyncAt: updatedMatch.lastSyncAt?.toISOString() ?? new Date().toISOString(),
           eventsRevision,
           goalEvents,
@@ -1778,6 +1794,28 @@ export class MatchSyncService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Live event ${event} failed for match ${ctx.matchId}: ${message}`);
     }
+  }
+
+  private resolveAdvancingTeamIdFromFixture(
+    phase: Phase,
+    status: MatchStatus,
+    fixture: ApiFootballFixture,
+    homeTeamId: string,
+    awayTeamId: string,
+  ): string | null {
+    if (phase === Phase.GROUP) {
+      return null;
+    }
+    if (status !== MatchStatus.LIVE && status !== MatchStatus.FINISHED) {
+      return null;
+    }
+    if (fixture.teams.home.winner === true) {
+      return homeTeamId;
+    }
+    if (fixture.teams.away.winner === true) {
+      return awayTeamId;
+    }
+    return null;
   }
 
   private async finalizeFinishedMatchPoints(

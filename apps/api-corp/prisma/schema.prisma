@@ -422,6 +422,8 @@ model Match {
   awayTeamId               String
   homeScore                Int?
   awayScore                Int?
+  penaltyHomeScore         Int?
+  penaltyAwayScore         Int?
   phase                    Phase
   group                    String?
   matchNumber              Int?

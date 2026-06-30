@@ -299,6 +299,8 @@ export class CorpPortalController {
                 elapsed: lm.match.elapsed,
                 homeScore: lm.match.homeScore,
                 awayScore: lm.match.awayScore,
+                penaltyHomeScore: lm.match.penaltyHomeScore,
+                penaltyAwayScore: lm.match.penaltyAwayScore,
                 advancingTeamId: lm.match.advancingTeamId,
                 venue: lm.match.venue,
                 phase: lm.match.phase,

@@ -96,11 +96,36 @@ export class MatchesService {
             });
         }
 
+        const isKnockout = match.phase !== Phase.GROUP;
+        const regulationTie = newHome === newAway;
+        let advancingTeamId = updateScoreDto.advancingTeamId;
+
+        if (!advancingTeamId && isKnockout) {
+            if (!regulationTie) {
+                advancingTeamId = newHome > newAway ? match.homeTeamId : match.awayTeamId;
+            } else if (
+                updateScoreDto.penaltyHomeScore != null &&
+                updateScoreDto.penaltyAwayScore != null &&
+                updateScoreDto.penaltyHomeScore !== updateScoreDto.penaltyAwayScore
+            ) {
+                advancingTeamId = updateScoreDto.penaltyHomeScore > updateScoreDto.penaltyAwayScore
+                    ? match.homeTeamId
+                    : match.awayTeamId;
+            }
+        }
+
         const updatedMatch = await this.prisma.match.update({
             where: { id },
             data: {
                 homeScore: updateScoreDto.homeScore,
                 awayScore: updateScoreDto.awayScore,
+                ...(updateScoreDto.penaltyHomeScore !== undefined
+                    ? { penaltyHomeScore: updateScoreDto.penaltyHomeScore }
+                    : {}),
+                ...(updateScoreDto.penaltyAwayScore !== undefined
+                    ? { penaltyAwayScore: updateScoreDto.penaltyAwayScore }
+                    : {}),
+                ...(advancingTeamId ? { advancingTeamId } : {}),
                 status: MatchStatus.FINISHED,
             },
             select: matchWithTeamsSelect,
@@ -122,6 +147,8 @@ export class MatchesService {
                 phase: true,
                 homeScore: true,
                 awayScore: true,
+                penaltyHomeScore: true,
+                penaltyAwayScore: true,
                 homeTeamId: true,
                 awayTeamId: true,
                 advancingTeamId: true,
@@ -136,10 +163,23 @@ export class MatchesService {
             throw new BadRequestException('El partido no tiene marcador registrado para calcular puntos.');
         }
 
-        if (match.phase !== Phase.GROUP && match.homeScore !== match.awayScore) {
-            const advancingTeamId = match.homeScore > match.awayScore
-                ? match.homeTeamId
-                : match.awayTeamId;
+        if (match.phase !== Phase.GROUP) {
+            let advancingTeamId: string | null = match.advancingTeamId;
+
+            if (match.homeScore > match.awayScore) {
+                advancingTeamId = match.homeTeamId;
+            } else if (match.awayScore > match.homeScore) {
+                advancingTeamId = match.awayTeamId;
+            } else if (
+                match.penaltyHomeScore != null &&
+                match.penaltyAwayScore != null &&
+                match.penaltyHomeScore !== match.penaltyAwayScore
+            ) {
+                advancingTeamId = match.penaltyHomeScore > match.penaltyAwayScore
+                    ? match.homeTeamId
+                    : match.awayTeamId;
+            }
+
             if (advancingTeamId && match.advancingTeamId !== advancingTeamId) {
                 await this.prisma.match.update({
                     where: { id: matchId },

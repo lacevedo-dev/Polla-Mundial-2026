@@ -39,4 +39,18 @@ export class UpdateMatchScoreDto {
     @IsInt()
     @IsNotEmpty()
     awayScore: number;
+
+  /** Goles en tanda de penales (API-Football score.penalty). */
+    @IsOptional()
+    @IsInt()
+    penaltyHomeScore?: number;
+
+    @IsOptional()
+    @IsInt()
+    penaltyAwayScore?: number;
+
+  /** Clasificado en eliminatoria — obligatorio si el marcador queda empatado. */
+    @IsOptional()
+    @IsString()
+    advancingTeamId?: string;
 }

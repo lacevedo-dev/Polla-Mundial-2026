@@ -27,6 +27,9 @@ export class AdminCreateMatchDto {
 export class AdminUpdateScoreDto {
     @IsNumber() homeScore: number;
     @IsNumber() awayScore: number;
+    @IsOptional() @IsNumber() penaltyHomeScore?: number;
+    @IsOptional() @IsNumber() penaltyAwayScore?: number;
+    @IsOptional() @IsString() advancingTeamId?: string;
 }
 
 export class AdminUpdateMatchDto {
