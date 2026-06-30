@@ -12,6 +12,12 @@ import type { AdminMatch, AdminMatchLinkAudit, AdminMatchSyncLog, AdminTournamen
 import { useAdminWhatsappStore } from '../../stores/admin.whatsapp.store';
 import type { FootballMatchLinkCandidate } from '../../types/football-sync';
 import { formatMatchPhaseLabel, isKnockoutPhase } from '../../utils/match-phase';
+import { inferLiveFromFixture } from '../../utils/live-match-status';
+import { MatchScoreDisplay } from '../../components/MatchScoreDisplay';
+import {
+    requiresKnockoutAdvanceSelection,
+    resolveAdvanceTeamIdFromScore,
+} from '../../utils/knockout-advance';
 
 const PHASES = ['GROUP', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER', 'SEMI', 'THIRD_PLACE', 'FINAL'];
 const STATUSES_MATCH = ['SCHEDULED', 'LIVE', 'FINISHED', 'POSTPONED', 'CANCELLED'];
@@ -128,9 +134,15 @@ const summaryCardClassName = (active: boolean, tone: 'emerald' | 'rose' | 'amber
   return `rounded-[1.5rem] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none ${tones[tone]}`;
 };
 
-const MatchupRow: React.FC<{ match: any; showScore?: boolean }> = ({ match, showScore = false }) => {
+const MatchupRow: React.FC<{ match: AdminMatch; showScore?: boolean }> = ({ match, showScore = false }) => {
   const hasScore = showScore && match.homeScore != null;
-  const isLive = match.status === 'LIVE';
+  const isLive = inferLiveFromFixture(match.status, match.statusShort);
+  const isKnockout = isKnockoutPhase(match.phase);
+  const advancingCode = match.advancingTeamId === match.homeTeam?.id
+    ? match.homeTeam?.code
+    : match.advancingTeamId === match.awayTeam?.id
+      ? match.awayTeam?.code
+      : null;
   const flagClass = 'h-6 w-9 shrink-0 rounded object-cover border border-slate-200 shadow-sm bg-slate-100';
   return (
     <div className="flex items-center gap-2 min-w-0">
@@ -141,16 +153,32 @@ const MatchupRow: React.FC<{ match: any; showScore?: boolean }> = ({ match, show
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{match.homeTeam?.code}</p>
         </div>
       </div>
-      <div className="shrink-0 flex flex-col items-center min-w-[52px]">
+      <div className="shrink-0 flex flex-col items-center min-w-[72px]">
         {hasScore ? (
-          <p className={`text-base font-black ${isLive ? 'text-rose-600' : 'text-slate-900'}`}>{match.homeScore} – {match.awayScore}</p>
+          <MatchScoreDisplay
+            homeScore={match.homeScore}
+            awayScore={match.awayScore}
+            penaltyHomeScore={match.penaltyHomeScore}
+            penaltyAwayScore={match.penaltyAwayScore}
+            className={`justify-center gap-0.5 ${isLive ? 'text-rose-600' : 'text-slate-900'}`}
+            scoreClassName="text-sm font-black"
+            penaltyClassName="text-[9px] font-bold text-slate-500"
+            separatorClassName="text-sm font-black mx-0.5"
+          />
         ) : (
           <>
             <p className="text-[10px] font-black text-slate-300">VS</p>
             {!isLive && <p className="text-[9px] text-slate-400">{formatTime(match.matchDate)}</p>}
           </>
         )}
-        {isLive && <span className="inline-flex rounded-full bg-rose-500 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-white">LIVE</span>}
+        {isLive && (
+          <span className="inline-flex rounded-full bg-rose-500 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-white">
+            {match.statusShort === 'P' ? 'PEN' : 'LIVE'}
+          </span>
+        )}
+        {isKnockout && advancingCode && !isLive && (
+          <span className="mt-0.5 text-[8px] font-black uppercase tracking-wide text-lime-600">→ {advancingCode}</span>
+        )}
       </div>
       <div className="flex flex-1 items-center gap-2 min-w-0 justify-end">
         <div className="min-w-0 text-right">
@@ -163,20 +191,75 @@ const MatchupRow: React.FC<{ match: any; showScore?: boolean }> = ({ match, show
   );
 };
 
-const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
+const ScoreDialog: React.FC<{ match: AdminMatch | null; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
   const { updateScore, isSaving } = useAdminMatchesStore();
-  const [home, setHome] = React.useState(match?.homeScore ?? 0);
-  const [away, setAway] = React.useState(match?.awayScore ?? 0);
+  const [home, setHome] = React.useState('0');
+  const [away, setAway] = React.useState('0');
+  const [penaltyHome, setPenaltyHome] = React.useState('');
+  const [penaltyAway, setPenaltyAway] = React.useState('');
+  const [advancingTeamId, setAdvancingTeamId] = React.useState<string | undefined>();
+  const [localError, setLocalError] = React.useState<string | null>(null);
+
+  const isKnockout = match ? isKnockoutPhase(match.phase) : false;
 
   React.useEffect(() => {
     if (match) {
-      setHome(match.homeScore ?? 0);
-      setAway(match.awayScore ?? 0);
+      setHome(String(match.homeScore ?? 0));
+      setAway(String(match.awayScore ?? 0));
+      setPenaltyHome(match.penaltyHomeScore != null ? String(match.penaltyHomeScore) : '');
+      setPenaltyAway(match.penaltyAwayScore != null ? String(match.penaltyAwayScore) : '');
+      setAdvancingTeamId(match.advancingTeamId ?? undefined);
+      setLocalError(null);
     }
   }, [match]);
 
+  const inferredAdvanceId = match
+    ? resolveAdvanceTeamIdFromScore(home, away, match.homeTeam.id, match.awayTeam.id)
+    : undefined;
+  const penaltyAdvanceId = match
+    && home !== ''
+    && away !== ''
+    && Number(home) === Number(away)
+    && penaltyHome !== ''
+    && penaltyAway !== ''
+    && Number(penaltyHome) !== Number(penaltyAway)
+    ? Number(penaltyHome) > Number(penaltyAway)
+      ? match.homeTeam.id
+      : match.awayTeam.id
+    : undefined;
+  const effectiveAdvanceId = inferredAdvanceId ?? penaltyAdvanceId ?? advancingTeamId;
+  const needsAdvancePick = isKnockout && requiresKnockoutAdvanceSelection(home, away, effectiveAdvanceId);
+
   const handleSave = async () => {
-    await updateScore(match.id, Number(home), Number(away));
+    if (!match) return;
+    setLocalError(null);
+
+    if (needsAdvancePick) {
+      setLocalError('En eliminatorias empatadas debes indicar quién clasifica o registrar los penales.');
+      return;
+    }
+
+    const payload: {
+      homeScore: number;
+      awayScore: number;
+      penaltyHomeScore?: number;
+      penaltyAwayScore?: number;
+      advancingTeamId?: string;
+    } = {
+      homeScore: Number(home),
+      awayScore: Number(away),
+    };
+
+    if (penaltyHome !== '' && penaltyAway !== '') {
+      payload.penaltyHomeScore = Number(penaltyHome);
+      payload.penaltyAwayScore = Number(penaltyAway);
+    }
+
+    if (effectiveAdvanceId) {
+      payload.advancingTeamId = effectiveAdvanceId;
+    }
+
+    await updateScore(match.id, payload);
     onOpenChange(false);
   };
 
@@ -184,9 +267,16 @@ const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boole
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[1.75rem] bg-white p-6 shadow-2xl">
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[1.75rem] bg-white p-6 shadow-2xl">
           <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Actualizar resultado</DialogPrimitive.Title>
-          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</DialogPrimitive.Description>
+          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">
+            {match?.homeTeam?.name} vs {match?.awayTeam?.name}
+            {isKnockout && (
+              <span className="mt-1 block text-[11px] font-semibold text-amber-700">
+                {formatMatchPhaseLabel(match.phase)} — marcador 90&apos; + prórroga; penales aparte
+              </span>
+            )}
+          </DialogPrimitive.Description>
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{match?.homeTeam?.name}</label>
@@ -198,6 +288,78 @@ const ScoreDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boole
               <input type="number" min="0" value={away} onChange={(e) => setAway(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-center text-2xl font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400" />
             </div>
           </div>
+
+          {isKnockout && (
+            <div className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Tanda de penales (opcional)</p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    value={penaltyHome}
+                    onChange={(e) => setPenaltyHome(e.target.value)}
+                    placeholder="—"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-lg font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <span className="text-sm font-black text-slate-400">pen.</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={penaltyAway}
+                    onChange={(e) => setPenaltyAway(e.target.value)}
+                    placeholder="—"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-lg font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              </div>
+
+              {needsAdvancePick && match && (
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Clasifica</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAdvancingTeamId(match.homeTeam.id)}
+                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-all ${
+                        advancingTeamId === match.homeTeam.id
+                          ? 'bg-lime-400 text-slate-900'
+                          : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {match.homeTeam.code}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvancingTeamId(match.awayTeam.id)}
+                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-all ${
+                        advancingTeamId === match.awayTeam.id
+                          ? 'bg-lime-400 text-slate-900'
+                          : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {match.awayTeam.code}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[10px] font-medium text-amber-700">
+                    Empate en tiempo reglamentario: indica el clasificado o completa los penales.
+                  </p>
+                </div>
+              )}
+
+              {!needsAdvancePick && effectiveAdvanceId && match && (
+                <p className="text-[11px] font-semibold text-slate-600">
+                  Clasifica:{' '}
+                  <span className="font-black text-lime-700">
+                    {effectiveAdvanceId === match.homeTeam.id ? match.homeTeam.code : match.awayTeam.code}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {localError && <p className="mt-4 text-sm font-semibold text-rose-600">{localError}</p>}
+
           <div className="mt-6 flex gap-3">
             <button onClick={() => onOpenChange(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">Cancelar</button>
             <button onClick={handleSave} disabled={isSaving} className="flex-1 rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 disabled:opacity-60">{isSaving ? 'Guardando...' : 'Guardar resultado'}</button>

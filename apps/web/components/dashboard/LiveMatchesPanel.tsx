@@ -21,6 +21,7 @@ import {
     type GoalStickerSettings,
 } from '../../utils/goalStickerConfig';
 import { calcLivePoints } from '../../utils/dashboard';
+import { MatchScoreDisplay } from '../MatchScoreDisplay';
 import { AdvanceTeamSelector } from '../predictions/AdvanceTeamSelector';
 import { resolvePredictionAdvanceTeamId, isPenaltyPhaseStatus } from '../../utils/knockout-advance';
 
@@ -89,6 +90,7 @@ function getLatestGoalHint(
     const name = latest.playerName?.split(/\s+/).pop() ?? 'Gol';
     return `${name} ${latest.minute}'`;
 }
+
 
 function getKnockoutAdvanceChipCode(match: MatchViewModel): string | null {
     if (!match.isKnockout || !match.saved) return null;
@@ -196,8 +198,18 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                         {match.homeTeamCode || match.homeTeam.slice(0, 3)}
                                     </span>
                                 </div>
-                                <span className={`text-[15px] font-black tabular-nums leading-none shrink-0 ${scoreColor}`}>
-                                    {match.result ? `${rH}–${rA}` : '–'}
+                                <span className={`shrink-0 ${scoreColor}`}>
+                                    {match.result ? (
+                                        <MatchScoreDisplay
+                                            homeScore={match.result.home}
+                                            awayScore={match.result.away}
+                                            penaltyHomeScore={match.penaltyHomeScore}
+                                            penaltyAwayScore={match.penaltyAwayScore}
+                                            scoreClassName="text-[15px] font-black"
+                                            penaltyClassName="text-[9px] font-bold text-white/55"
+                                            separatorClassName="text-[15px] font-black mx-0.5"
+                                        />
+                                    ) : '–'}
                                 </span>
                                 <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
                                     {match.awayFlag && <img src={match.awayFlag} alt="" className="h-4 w-6 rounded-[3px] object-cover" />}
@@ -232,8 +244,18 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                     {match.homeFlag && <img src={match.homeFlag} alt="" className="h-3.5 w-4.5 rounded object-cover" />}
                                     <span className="text-[8px] font-bold text-white/80 truncate">{match.homeTeamCode || match.homeTeam.slice(0, 3)}</span>
                                 </div>
-                                <span className={`text-base font-black tabular-nums leading-none ${scoreColor} mx-1`}>
-                                    {match.result ? `${rH}–${rA}` : '–'}
+                                <span className={`shrink-0 ${scoreColor} mx-1`}>
+                                    {match.result ? (
+                                        <MatchScoreDisplay
+                                            homeScore={match.result.home}
+                                            awayScore={match.result.away}
+                                            penaltyHomeScore={match.penaltyHomeScore}
+                                            penaltyAwayScore={match.penaltyAwayScore}
+                                            scoreClassName="text-base font-black"
+                                            penaltyClassName="text-[8px] font-bold text-white/55"
+                                            separatorClassName="text-base font-black mx-0.5"
+                                        />
+                                    ) : '–'}
                                 </span>
                                 <div className="flex flex-col items-center gap-0.5 shrink-0">
                                     {match.awayFlag && <img src={match.awayFlag} alt="" className="h-3.5 w-4.5 rounded object-cover" />}
@@ -359,8 +381,18 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                                 {match.homeTeamCode || match.homeTeam.slice(0, 3)}
                                             </span>
                                         </div>
-                                        <span className={`text-xs font-black tabular-nums leading-none shrink-0 ${scoreColor}`}>
-                                            {match.result ? `${rH}–${rA}` : '–'}
+                                        <span className={`shrink-0 ${scoreColor}`}>
+                                            {match.result ? (
+                                                <MatchScoreDisplay
+                                                    homeScore={match.result.home}
+                                                    awayScore={match.result.away}
+                                                    penaltyHomeScore={match.penaltyHomeScore}
+                                                    penaltyAwayScore={match.penaltyAwayScore}
+                                                    scoreClassName="text-xs font-black"
+                                                    penaltyClassName="text-[7px] font-bold text-white/55"
+                                                    separatorClassName="text-xs font-black mx-0.5"
+                                                />
+                                            ) : '–'}
                                         </span>
                                         <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
                                             {match.awayFlag && <img src={match.awayFlag} alt="" className="h-3 w-5 rounded-[2px] object-cover" />}
@@ -516,10 +548,16 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
                     <span className="font-bold text-white truncate text-[10px]">{expandedMatch.homeTeam}</span>
                 </div>
                 <div className="mx-2 shrink-0">
-                    <div className="rounded-lg bg-white/10 px-2 py-0.5 tabular-nums text-[11px]">
-                        <span className="font-black text-white">{expandedRealHome}</span>
-                        <span className="mx-1 text-white/30">–</span>
-                        <span className="font-black text-white">{expandedRealAway}</span>
+                    <div className="rounded-lg bg-white/10 px-2 py-0.5 tabular-nums text-[11px] text-center">
+                        <MatchScoreDisplay
+                            homeScore={expandedRealHome}
+                            awayScore={expandedRealAway}
+                            penaltyHomeScore={expandedMatch.penaltyHomeScore}
+                            penaltyAwayScore={expandedMatch.penaltyAwayScore}
+                            scoreClassName="text-[11px] font-black text-white"
+                            penaltyClassName="text-[8px] font-bold text-white/55"
+                            separatorClassName="text-[11px] font-black text-white mx-0.5"
+                        />
                     </div>
                     {expandedHasPred && (
                         <p className={`mt-0.5 font-mono text-[8px] font-bold text-center ${expandedStatusColor}`}>

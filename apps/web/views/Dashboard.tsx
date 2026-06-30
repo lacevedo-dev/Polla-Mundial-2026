@@ -9,6 +9,7 @@ import { useDashboardStore } from '../stores/dashboard.store';
 import { useAuthStore } from '../stores/auth.store';
 import { ErrorBanner } from '../components/dashboard/ErrorBanner';
 import { useLiveSyncEvents } from '../hooks/useLiveSyncEvents';
+import { useLeagueLiveRefresh } from '../hooks/useLeagueLiveRefresh';
 import { useLiveMatchEvents } from '../hooks/useLiveMatchEvents';
 import { useLiveDisplaySettings } from '../hooks/useLiveDisplaySettings';
 import { useGoalStickerSettings } from '../hooks/useGoalStickerSettings';
@@ -95,6 +96,7 @@ const Dashboard: React.FC = () => {
     const liveMatches = useMemo(() => matches.filter((m) => m.status === 'live'), [matches]);
     const liveMatchIds = useMemo(() => liveMatches.map((m) => m.id), [liveMatches]);
     const liveSync = useLiveSyncEvents();
+    useLeagueLiveRefresh(liveSync);
     const { eventsByMatchId: matchEvents, loadingMatchIds: eventsLoadingMatchIds } =
         useLiveMatchEvents(liveMatchIds);
     const liveDisplay = useLiveDisplaySettings();

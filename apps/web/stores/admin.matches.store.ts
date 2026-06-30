@@ -31,6 +31,11 @@ export interface AdminMatch {
     status: string;
     homeScore?: number;
     awayScore?: number;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
+    advancingTeamId?: string | null;
+    statusShort?: string | null;
+    elapsed?: number | null;
     externalId?: string | null;
     tournamentId?: string | null;
     tournamentName?: string | null;
@@ -98,6 +103,14 @@ export interface AdminMatchLinkAudit {
     } | null;
 }
 
+export interface AdminUpdateScorePayload {
+    homeScore: number;
+    awayScore: number;
+    penaltyHomeScore?: number;
+    penaltyAwayScore?: number;
+    advancingTeamId?: string;
+}
+
 interface MatchesFilters {
     page: number;
     limit: number;
@@ -127,7 +140,7 @@ interface AdminMatchesState {
     fetchTournaments: () => Promise<void>;
     createMatch: (data: Partial<AdminMatch>) => Promise<void>;
     updateMatch: (id: string, data: Partial<AdminMatch> & { linkSource?: 'manual' | 'suggested' }) => Promise<void>;
-    updateScore: (id: string, homeScore: number, awayScore: number) => Promise<void>;
+    updateScore: (id: string, payload: AdminUpdateScorePayload) => Promise<void>;
     resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     getMatchPreviewLeagues: (id: string) => Promise<{ id: string; name: string; code: string }[]>;
@@ -229,15 +242,15 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
         }
     },
 
-    updateScore: async (id, homeScore, awayScore) => {
+    updateScore: async (id, payload) => {
         set({ isSaving: true });
         try {
             const updated = await request<AdminMatch>(`/admin/matches/${id}/score`, {
                 method: 'PATCH',
-                body: JSON.stringify({ homeScore, awayScore }),
+                body: JSON.stringify(payload),
             });
             set((state) => ({
-                matches: state.matches.map((m) => (m.id === id ? { ...m, ...updated, homeScore, awayScore, status: 'FINISHED' } : m)),
+                matches: state.matches.map((m) => (m.id === id ? { ...m, ...updated, status: 'FINISHED' } : m)),
                 isSaving: false,
             }));
         } catch (error) {

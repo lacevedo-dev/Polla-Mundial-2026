@@ -1,6 +1,7 @@
 import React from 'react';
 import { BASE_URL } from '../api';
 import { usePredictionStore, type LiveScoreUpdate } from '../stores/prediction.store';
+import { useLeagueStore } from '../stores/league.store';
 
 export interface MatchEventPlayerProfile {
     photoUrl: string | null;
@@ -118,6 +119,10 @@ export function useLiveSyncEvents(): LiveSyncState {
                     lastSyncAt: Date.now(),
                     syncCompletedCount: prev.syncCompletedCount + 1,
                 }));
+                const leagueId = useLeagueStore.getState().activeLeague?.id;
+                if (leagueId) {
+                    void usePredictionStore.getState().fetchLeagueMatches(leagueId, { background: true });
+                }
                 // Also fetch updated interval
                 fetch(`${BASE_URL}/matches/live/sync-info`, {
                     headers: { Authorization: `Bearer ${token}` },

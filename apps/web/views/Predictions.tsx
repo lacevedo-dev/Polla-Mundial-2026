@@ -2102,7 +2102,14 @@ const Predictions: React.FC = () => {
                 window.clearTimeout(timeoutId);
             }
         };
-    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches, hasLiveMatches, liveSync.syncIntervalMinutes]);
+    }, [activeLeague?.id, dirtyMatchIds.length, fetchLeagueMatches, hasLiveMatches, liveSync.syncCompletedCount, liveSync.syncIntervalMinutes]);
+
+    React.useEffect(() => {
+        if (!activeLeague?.id || liveSync.syncCompletedCount === 0) {
+            return;
+        }
+        void fetchLeagueMatches(activeLeague.id, { background: true });
+    }, [activeLeague?.id, fetchLeagueMatches, liveSync.syncCompletedCount]);
 
     const loadParticipationOptions = React.useCallback(
         async (matchId: string) => {

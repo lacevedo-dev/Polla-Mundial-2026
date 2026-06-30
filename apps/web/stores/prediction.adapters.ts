@@ -1,5 +1,6 @@
 import { resolveApiAssetUrl } from '../api';
 import type { PhaseBonusProgressItem } from '@polla-2026/shared';
+import { inferLiveFromFixture } from '../utils/live-match-status';
 
 export interface MatchResponse {
     id: string;
@@ -10,6 +11,8 @@ export interface MatchResponse {
     venue?: string | null;
     homeScore?: number | null;
     awayScore?: number | null;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
     advancingTeamId?: string | null;
     elapsed?: number | null;
     statusShort?: string | null;
@@ -73,6 +76,8 @@ export interface MatchViewModel {
     venue: string;
     isKnockout: boolean;
     advancingTeamId?: string;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
     prediction: {
         home: string;
         away: string;
@@ -254,6 +259,9 @@ function resolveMatchStatus(
     if (statusShort && ['FT', 'AET', 'PEN'].includes(statusShort)) {
         return 'finished';
     }
+    if (inferLiveFromFixture(apiStatus, statusShort)) {
+        return 'live';
+    }
     const base = normalizeMatchStatus(apiStatus);
     if (base === 'open' && new Date(matchDate).getTime() < Date.now()) {
         return 'closed';
@@ -349,6 +357,8 @@ export function toMatchViewModel(
         venue: match.venue ?? 'Por definir',
         isKnockout,
         advancingTeamId: match.advancingTeamId ?? undefined,
+        penaltyHomeScore: match.penaltyHomeScore ?? undefined,
+        penaltyAwayScore: match.penaltyAwayScore ?? undefined,
         prediction: {
             home: hasPrediction ? String(prediction?.homeScore ?? '') : '',
             away: hasPrediction ? String(prediction?.awayScore ?? '') : '',

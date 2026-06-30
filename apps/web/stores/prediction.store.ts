@@ -14,6 +14,7 @@ import {
     type MatchViewModel,
 } from './prediction.adapters';
 import { mergeMatchViewModels, normalizeMatchEvents } from '../utils/liveFixture.util';
+import { inferLiveFromFixture } from '../utils/live-match-status';
 import type { MatchEventItem } from '../hooks/useLiveSyncEvents';
 
 export type { LeaderboardRow, MatchViewModel } from './prediction.adapters';
@@ -22,6 +23,9 @@ export interface LiveScoreUpdate {
     matchId: string;
     homeScore: number | null;
     awayScore: number | null;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
+    advancingTeamId?: string | null;
     status: string;
     elapsed?: number | null;
     statusShort?: string | null;
@@ -256,6 +260,9 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                 const {
                     homeScore,
                     awayScore,
+                    penaltyHomeScore,
+                    penaltyAwayScore,
+                    advancingTeamId,
                     status,
                     elapsed,
                     statusShort,
@@ -273,6 +280,9 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                     if (statusShort && ['FT', 'AET', 'PEN'].includes(statusShort)) {
                         return 'finished';
                     }
+                    if (inferLiveFromFixture(status, statusShort)) {
+                        return 'live';
+                    }
                     if (status === 'LIVE') return 'live';
                     if (status === 'FINISHED') return 'finished';
                     if (status === 'SCHEDULED') return 'open';
@@ -286,6 +296,9 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                     elapsed: elapsed ?? m.elapsed,
                     statusShort: statusShort ?? m.statusShort,
                     lastSyncAt: lastSyncAt ?? m.lastSyncAt,
+                    penaltyHomeScore: penaltyHomeScore ?? m.penaltyHomeScore,
+                    penaltyAwayScore: penaltyAwayScore ?? m.penaltyAwayScore,
+                    advancingTeamId: advancingTeamId ?? m.advancingTeamId,
                 };
 
                 const merged = mergeMatchViewModels([m], [candidate])[0];
@@ -295,7 +308,10 @@ export const usePredictionStore = create<PredictionState>((set) => ({
                     merged.statusShort === m.statusShort &&
                     merged.lastSyncAt === m.lastSyncAt &&
                     merged.result?.home === m.result?.home &&
-                    merged.result?.away === m.result?.away;
+                    merged.result?.away === m.result?.away &&
+                    merged.penaltyHomeScore === m.penaltyHomeScore &&
+                    merged.penaltyAwayScore === m.penaltyAwayScore &&
+                    merged.advancingTeamId === m.advancingTeamId;
 
                 if (nextResult && m.status === 'live') {
                     const prevHome = m.result?.home ?? 0;

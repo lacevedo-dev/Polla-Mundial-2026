@@ -4,6 +4,7 @@ import { LiveMatchTimer, MatchProgressBar } from '../live/LiveMatchTimer';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { calcLivePoints } from '../../utils/dashboard';
+import { MatchScoreDisplay } from '../MatchScoreDisplay';
 import { AdvanceTeamSelector } from '../predictions/AdvanceTeamSelector';
 import {
     formatAnnulledGoalLabel,
@@ -179,9 +180,15 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                         </div>
                         <div className="mx-2 shrink-0 text-center">
                             <div className="rounded-lg bg-white/10 px-3 py-1 tabular-nums border border-white/10">
-                                <span className="text-lg font-black text-white">{expandedRealHome}</span>
-                                <span className="mx-1 text-white/30">—</span>
-                                <span className="text-lg font-black text-white">{expandedRealAway}</span>
+                                <MatchScoreDisplay
+                                    homeScore={expandedRealHome}
+                                    awayScore={expandedRealAway}
+                                    penaltyHomeScore={expandedMatch.penaltyHomeScore}
+                                    penaltyAwayScore={expandedMatch.penaltyAwayScore}
+                                    scoreClassName="text-lg font-black text-white"
+                                    penaltyClassName="text-[11px] font-bold text-white/55"
+                                    separatorClassName="text-lg font-black text-white mx-0.5"
+                                />
                             </div>
                             {expandedHasPred && (
                                 <p className={`mt-0.5 font-mono text-[8px] font-bold ${expandedStatusColor}`}>
