@@ -4,6 +4,7 @@ import { LiveMatchTimer, MatchProgressBar } from '../live/LiveMatchTimer';
 import type { MatchViewModel } from '../../stores/prediction.store';
 import type { MatchEventItem } from '../../hooks/useLiveSyncEvents';
 import { calcLivePoints } from '../../utils/dashboard';
+import { AdvanceTeamSelector } from '../predictions/AdvanceTeamSelector';
 import {
     formatAnnulledGoalLabel,
     splitGoalEvents,
@@ -186,6 +187,21 @@ const LiveMatchExpandedCard: React.FC<LiveMatchExpandedCardProps> = ({
                                 <p className={`mt-0.5 font-mono text-[8px] font-bold ${expandedStatusColor}`}>
                                     pred {expandedPredHome}–{expandedPredAway}
                                 </p>
+                            )}
+                            {expandedMatch.isKnockout && expandedHasPred && (
+                                <AdvanceTeamSelector
+                                    match={expandedMatch}
+                                    draft={{
+                                        home: expandedMatch.prediction.home,
+                                        away: expandedMatch.prediction.away,
+                                        advanceTeamId: expandedMatch.prediction.advanceTeamId,
+                                    }}
+                                    canEdit={false}
+                                    onSelect={() => {}}
+                                    layout="centered"
+                                    tone="dark"
+                                    className="mt-1"
+                                />
                             )}
                         </div>
                         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">

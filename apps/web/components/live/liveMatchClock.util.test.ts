@@ -80,4 +80,17 @@ describe('liveMatchClock.util', () => {
         });
         expect(formatLiveClockMinute(stoppage)).toBe("90+5'");
     });
+
+    it('marca fase de penales con status P (tanda en curso)', () => {
+        const baseNow = 1_700_000_000_000;
+        const penalties = computeLiveClockState({
+            matchDate: new Date(baseNow).toISOString(),
+            elapsed: 120,
+            lastSyncAt: baseNow,
+            statusShort: 'P',
+            now: baseNow,
+        });
+        expect(penalties.halfLabel).toBe('Penales');
+        expect(penalties.phase).toBe('pen');
+    });
 });

@@ -21,6 +21,8 @@ import {
     type GoalStickerSettings,
 } from '../../utils/goalStickerConfig';
 import { calcLivePoints } from '../../utils/dashboard';
+import { AdvanceTeamSelector } from '../predictions/AdvanceTeamSelector';
+import { resolvePredictionAdvanceTeamId, isPenaltyPhaseStatus } from '../../utils/knockout-advance';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
 
@@ -88,6 +90,30 @@ function getLatestGoalHint(
     return `${name} ${latest.minute}'`;
 }
 
+function getKnockoutAdvanceChipCode(match: MatchViewModel): string | null {
+    if (!match.isKnockout || !match.saved) return null;
+    const advanceId = resolvePredictionAdvanceTeamId(
+        match.homeTeamId,
+        match.awayTeamId,
+        match.prediction,
+    );
+    if (!advanceId) return null;
+    return advanceId === match.homeTeamId
+        ? (match.homeTeamCode || match.homeTeam.slice(0, 3))
+        : (match.awayTeamCode || match.awayTeam.slice(0, 3));
+}
+
+function shouldShowKnockoutAdvanceHint(
+    match: MatchViewModel,
+    clockStatusShort: string | null,
+): boolean {
+    const code = getKnockoutAdvanceChipCode(match);
+    if (!code) return false;
+    const rH = match.result?.home ?? 0;
+    const rA = match.result?.away ?? 0;
+    return rH === rA || isPenaltyPhaseStatus(clockStatusShort);
+}
+
 function getChipStatus(match: MatchViewModel) {
     const pH = parseInt(match.prediction.home, 10);
     const pA = parseInt(match.prediction.away, 10);
@@ -135,6 +161,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                     const chipStatus = getChipStatus(match);
                     const goalHint = getLatestGoalHint(match, matchEvents, liveDisplay.goals);
                     const clockStatusShort = effectiveStatusShort(match.statusShort, match.elapsed);
+                    const knockoutAdvanceCode = getKnockoutAdvanceChipCode(match);
+                    const showKnockoutHint = shouldShowKnockoutAdvanceHint(match, clockStatusShort);
                     const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
                         ? 'border-lime-500/50'
                         : chipStatus === 'losing' ? 'border-rose-500/50' : 'border-white/10';
@@ -183,6 +211,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                     ⚽ {goalHint}
                                 </p>
                             )}
+                            {showKnockoutHint && knockoutAdvanceCode && (
+                                <p className="xl:hidden mt-0.5 text-[8px] font-semibold text-purple-300/90 truncate w-full text-center">
+                                    ↑ {knockoutAdvanceCode}
+                                </p>
+                            )}
 
                             {/* Escritorio: centrado con timer arriba */}
                             <div className="hidden xl:w-full xl:flex xl:justify-center xl:mb-0.5">
@@ -210,6 +243,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                             {goalHint && (
                                 <p className="hidden xl:block mt-0.5 text-[7px] font-semibold text-lime-300/80 truncate w-full text-center">
                                     ⚽ {goalHint}
+                                </p>
+                            )}
+                            {showKnockoutHint && knockoutAdvanceCode && (
+                                <p className="hidden xl:block mt-0.5 text-[7px] font-semibold text-purple-300/80 truncate w-full text-center">
+                                    ↑ {knockoutAdvanceCode}
                                 </p>
                             )}
                         </button>
@@ -289,6 +327,8 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                             const chipStatus = getChipStatus(match);
                             const goalHint = getLatestGoalHint(match, matchEvents, liveDisplay.goals);
                             const clockStatusShort = effectiveStatusShort(match.statusShort, match.elapsed);
+                            const knockoutAdvanceCode = getKnockoutAdvanceChipCode(match);
+                            const showKnockoutHint = shouldShowKnockoutAdvanceHint(match, clockStatusShort);
                             const borderColor = chipStatus === 'exact' || chipStatus === 'winning'
                                 ? 'border-lime-500/50'
                                 : chipStatus === 'losing' ? 'border-rose-500/50' : 'border-slate-200';
@@ -332,6 +372,11 @@ const LiveMatchesPanel: React.FC<LiveMatchesPanelProps> = ({
                                     {goalHint && (
                                         <p className="mt-0.5 text-[8px] font-semibold text-lime-300/90 truncate w-full text-center">
                                             ⚽ {goalHint}
+                                        </p>
+                                    )}
+                                    {showKnockoutHint && knockoutAdvanceCode && (
+                                        <p className="mt-0.5 text-[8px] font-semibold text-purple-300/90 truncate w-full text-center">
+                                            ↑ {knockoutAdvanceCode}
                                         </p>
                                     )}
                                 </button>
@@ -480,6 +525,21 @@ const FloatingExpandedCard: React.FC<FloatingExpandedCardProps> = ({
                         <p className={`mt-0.5 font-mono text-[8px] font-bold text-center ${expandedStatusColor}`}>
                             {expandedPredHome}–{expandedPredAway}
                         </p>
+                    )}
+                    {expandedMatch.isKnockout && expandedHasPred && (
+                        <AdvanceTeamSelector
+                            match={expandedMatch}
+                            draft={{
+                                home: expandedMatch.prediction.home,
+                                away: expandedMatch.prediction.away,
+                                advanceTeamId: expandedMatch.prediction.advanceTeamId,
+                            }}
+                            canEdit={false}
+                            onSelect={() => {}}
+                            layout="centered"
+                            tone="dark"
+                            className="mt-1"
+                        />
                     )}
                 </div>
                 <div className="flex items-center justify-end gap-1 min-w-0 flex-1">

@@ -38,13 +38,18 @@ export function resolvePeriodBase(statusShort?: string | null): number {
     return 45;
 }
 
+export function isPenaltyShootoutStatus(statusShort?: string | null): boolean {
+    const normalized = statusShort ?? null;
+    return normalized === 'P' || normalized === 'BT' || normalized === 'PEN';
+}
+
 export function resolveHalfLabel(statusShort?: string | null): string | null {
     const normalized = statusShort ?? null;
     if (normalized === '1H') return '1T';
     if (normalized === 'HT') return 'ET';
     if (normalized === '2H') return '2T';
     if (normalized === 'ET') return 'Prórroga';
-    if (normalized === 'PEN') return 'Penales';
+    if (isPenaltyShootoutStatus(normalized)) return 'Penales';
     return null;
 }
 
@@ -127,7 +132,7 @@ export function computeLiveClockState(input: LiveClockInput): LiveClockState {
         };
     }
 
-    if (statusShort === 'PEN') {
+    if (isPenaltyShootoutStatus(statusShort)) {
         return {
             anchor: input.anchor ?? null,
             totalSeconds: 120 * 60,

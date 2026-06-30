@@ -3,6 +3,7 @@ import {
     computeLiveClockState,
     formatLiveClockMinute,
     formatLiveClockSeconds,
+    isPenaltyShootoutStatus,
     liveClockProgressPercent,
     resolveClockAnchor,
     type LiveClockAnchor,
@@ -125,7 +126,7 @@ export function LiveMatchClock({
         );
     }
 
-    if (statusShort === 'PEN') {
+    if (isPenaltyShootoutStatus(statusShort)) {
         return (
             <span className={`inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 font-mono text-[10px] font-black text-purple-700 ${className ?? ''}`}>
                 Penales
@@ -173,6 +174,14 @@ export function LiveMatchClockProgressBar(
         return (
             <div className="h-0.5 w-full rounded-full bg-amber-100">
                 <div className="h-full w-1/2 rounded-full bg-amber-400" />
+            </div>
+        );
+    }
+
+    if (isPenaltyShootoutStatus(statusShort)) {
+        return (
+            <div className="h-0.5 w-full rounded-full bg-purple-100">
+                <div className="h-full w-full rounded-full bg-purple-500" />
             </div>
         );
     }

@@ -69,3 +69,47 @@ export function resolveQuickDraftAdvanceTeamId(
         resolveAdvanceTeamIdFromScore(home, away, match.homeTeamId, match.awayTeamId)
     );
 }
+
+/** API-Football: P/BT = tanda en curso; PEN = partido ya finalizado tras penales. */
+export function isPenaltyPhaseStatus(statusShort?: string | null): boolean {
+    return statusShort === 'P' || statusShort === 'BT' || statusShort === 'PEN';
+}
+
+export function isLiveScoreTied(result?: { home: number; away: number } | null): boolean {
+    return !!result && result.home === result.away;
+}
+
+export function resolvePredictionAdvanceTeamId(
+    homeTeamId: string,
+    awayTeamId: string,
+    draft: { home: string; away: string; advanceTeamId?: string },
+): string | undefined {
+    return (
+        resolveAdvanceTeamIdFromScore(draft.home, draft.away, homeTeamId, awayTeamId) ??
+        draft.advanceTeamId
+    );
+}
+
+export type LiveAdvancePickStatus = 'pending_penalties' | 'winning' | 'losing';
+
+export function getLiveAdvancePickStatus(params: {
+    resolvedAdvanceTeamId?: string;
+    advancingTeamId?: string;
+    result?: { home: number; away: number };
+    statusShort?: string | null;
+}): LiveAdvancePickStatus | null {
+    const { resolvedAdvanceTeamId, advancingTeamId, result, statusShort } = params;
+    if (!resolvedAdvanceTeamId) {
+        return null;
+    }
+
+    if (advancingTeamId) {
+        return resolvedAdvanceTeamId === advancingTeamId ? 'winning' : 'losing';
+    }
+
+    if (isPenaltyPhaseStatus(statusShort) || isLiveScoreTied(result)) {
+        return 'pending_penalties';
+    }
+
+    return null;
+}
