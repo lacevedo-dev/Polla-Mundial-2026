@@ -295,6 +295,8 @@ export class CorpPortalController {
                 id: lm.match.id,
                 matchDate: lm.match.matchDate,
                 status: lm.match.status,
+                statusShort: lm.match.statusShort,
+                elapsed: lm.match.elapsed,
                 homeScore: lm.match.homeScore,
                 awayScore: lm.match.awayScore,
                 advancingTeamId: lm.match.advancingTeamId,
