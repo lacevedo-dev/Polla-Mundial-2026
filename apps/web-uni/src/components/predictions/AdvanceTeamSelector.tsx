@@ -1,5 +1,10 @@
 import React from 'react';
-import { requiresKnockoutAdvanceSelection } from '../../utils/knockout-advance';
+import {
+    getLiveAdvancePickStatus,
+    requiresKnockoutAdvanceSelection,
+    resolvePredictionAdvanceTeamId,
+    type MatchUiStatus,
+} from '../../utils/knockout-advance';
 
 export type KnockoutMatchForAdvance = {
     id: string;
@@ -9,6 +14,9 @@ export type KnockoutMatchForAdvance = {
     awayTeamCode: string;
     advancingTeamId?: string | null;
     isKnockout: boolean;
+    status?: MatchUiStatus;
+    statusShort?: string | null;
+    result?: { home: number; away: number };
 };
 
 export type AdvanceTeamSelectorProps = {
@@ -18,6 +26,7 @@ export type AdvanceTeamSelectorProps = {
     onSelect: (matchId: string, teamId: string) => void;
     className?: string;
     layout?: 'default' | 'centered';
+    tone?: 'light' | 'dark';
 };
 
 export function AdvanceTeamSelector({
@@ -27,16 +36,23 @@ export function AdvanceTeamSelector({
     onSelect,
     className,
     layout = 'default',
+    tone = 'light',
 }: AdvanceTeamSelectorProps) {
     if (!match.isKnockout) {
         return null;
     }
 
     const isCentered = layout === 'centered';
+    const isDark = tone === 'dark';
     const tieRequiresSelection = requiresKnockoutAdvanceSelection(
         draft.home,
         draft.away,
         draft.advanceTeamId,
+    );
+    const resolvedAdvanceTeamId = resolvePredictionAdvanceTeamId(
+        match.homeTeamId,
+        match.awayTeamId,
+        draft,
     );
 
     if (!canEdit && match.advancingTeamId) {
@@ -46,17 +62,64 @@ export function AdvanceTeamSelector({
                     isCentered ? 'w-full justify-center' : ''
                 } ${className ?? ''}`}
             >
-                <span className="text-[9px] font-black uppercase text-slate-400">Clasificó:</span>
-                <span className="text-[11px] font-bold text-lime-600">
+                <span className={`text-[9px] font-black uppercase ${isDark ? 'text-white/40' : 'text-slate-400'}`}>
+                    Clasificó:
+                </span>
+                <span className={`text-[11px] font-bold ${isDark ? 'text-lime-300' : 'text-lime-600'}`}>
                     {match.advancingTeamId === match.homeTeamId ? match.homeTeamCode : match.awayTeamCode}
                 </span>
                 {draft.advanceTeamId && (
                     <span
                         className={`text-[9px] font-black uppercase ${
-                            draft.advanceTeamId === match.advancingTeamId ? 'text-lime-500' : 'text-rose-500'
+                            draft.advanceTeamId === match.advancingTeamId
+                                ? isDark ? 'text-lime-300' : 'text-lime-500'
+                                : isDark ? 'text-rose-300' : 'text-rose-500'
                         }`}
                     >
                         {draft.advanceTeamId === match.advancingTeamId ? '✓ Acertaste' : '✗ Fallaste'}
+                    </span>
+                )}
+            </div>
+        );
+    }
+
+    if (!canEdit && match.status === 'live' && resolvedAdvanceTeamId) {
+        const advanceCode =
+            resolvedAdvanceTeamId === match.homeTeamId ? match.homeTeamCode : match.awayTeamCode;
+        const liveStatus = getLiveAdvancePickStatus({
+            resolvedAdvanceTeamId,
+            advancingTeamId: match.advancingTeamId ?? undefined,
+            result: match.result,
+            statusShort: match.statusShort,
+        });
+
+        return (
+            <div
+                className={`flex flex-col gap-0.5 ${
+                    isCentered ? 'w-full items-center text-center' : ''
+                } ${className ?? ''}`}
+            >
+                <div className={`flex flex-wrap items-center gap-1.5 ${isCentered ? 'justify-center' : ''}`}>
+                    <span className={`text-[9px] font-black uppercase ${isDark ? 'text-white/40' : 'text-slate-400'}`}>
+                        Tu clasificado:
+                    </span>
+                    <span className={`text-[11px] font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                        {advanceCode}
+                    </span>
+                    {liveStatus === 'winning' && (
+                        <span className={`text-[9px] font-black uppercase ${isDark ? 'text-lime-300' : 'text-lime-500'}`}>
+                            ✓ Acertaste
+                        </span>
+                    )}
+                    {liveStatus === 'losing' && (
+                        <span className={`text-[9px] font-black uppercase ${isDark ? 'text-rose-300' : 'text-rose-500'}`}>
+                            ✗ Fallaste
+                        </span>
+                    )}
+                </div>
+                {liveStatus === 'pending_penalties' && (
+                    <span className={`text-[9px] font-bold ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
+                        Definiendo en penales
                     </span>
                 )}
             </div>

@@ -12,6 +12,7 @@ import {
     isKnockoutPhase,
     requiresKnockoutAdvanceSelection,
     resolveAdvanceTeamIdFromScore,
+    buildKnockoutAdvanceMatch,
 } from '../../utils/knockout-advance';
 import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../../utils/score-input';
 
@@ -58,15 +59,7 @@ export function PredictionRow({
     const timeFmt = formatMatchTime(match.matchDate);
     const daysUntil = getDaysUntil(match.matchDate);
 
-    const knockoutMatch = {
-        id: match.id,
-        homeTeamId: match.homeTeam.id,
-        awayTeamId: match.awayTeam.id,
-        homeTeamCode: homeCode,
-        awayTeamCode: awayCode,
-        advancingTeamId: match.advancingTeamId,
-        isKnockout,
-    };
+    const knockoutMatch = buildKnockoutAdvanceMatch(match, homeCode, awayCode);
 
     const adjust = useCallback((side: 'home' | 'away', delta: number) => {
         if (!canPredict) return;

@@ -10,6 +10,8 @@ export interface UpcomingMatch {
     id: string;
     matchDate: string;
     status: string;
+    statusShort?: string | null;
+    elapsed?: number | null;
     homeScore: number | null;
     awayScore: number | null;
     homeTeam: Team;

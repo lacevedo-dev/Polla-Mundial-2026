@@ -15,7 +15,10 @@ import {
     isKnockoutPhase,
     requiresKnockoutAdvanceSelection,
     resolveAdvanceTeamIdFromScore,
+    buildKnockoutAdvanceMatch,
+    isPenaltyPhaseStatus,
 } from '../utils/knockout-advance';
+import { resolveLiveStatusLabel } from '../utils/live-match-status';
 import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../utils/score-input';
 
 /* ─── Types ─────────────────────────────────────────────────── */
@@ -23,6 +26,8 @@ import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../utils/sc
 interface Team { id: string; name: string; shortCode: string | null; flagUrl: string | null; }
 interface UpcomingMatch {
     id: string; matchDate: string; status: string;
+    statusShort?: string | null;
+    elapsed?: number | null;
     homeScore: number | null; awayScore: number | null;
     phase?: string | null;
     advancingTeamId?: string | null;
@@ -69,6 +74,86 @@ function isFinished(s: string) { return ['FINISHED', 'FT'].includes(s); }
 function fmtTime(d: string) { return new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d)); }
 function fmtDate(d: string) { return new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: '2-digit', month: 'short' }).format(new Date(d)); }
 
+function getLivePredStatus(
+    pred: { homeScore: number; awayScore: number } | null | undefined,
+    homeScore: number | null,
+    awayScore: number | null,
+): 'exact' | 'winning' | 'losing' | null {
+    if (!pred || homeScore == null || awayScore == null) return null;
+    if (pred.homeScore === homeScore && pred.awayScore === awayScore) return 'exact';
+    return Math.sign(pred.homeScore - pred.awayScore) === Math.sign(homeScore - awayScore)
+        ? 'winning'
+        : 'losing';
+}
+
+function LiveMatchCard({ match }: { match: UpcomingMatch }) {
+    const hc = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
+    const ac = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
+    const rH = match.homeScore ?? 0;
+    const rA = match.awayScore ?? 0;
+    const pred = match.myPrediction;
+    const predStatus = getLivePredStatus(pred, match.homeScore, match.awayScore);
+    const scoreColor = predStatus === 'exact'
+        ? 'text-lime-300'
+        : predStatus === 'winning'
+            ? 'text-lime-400'
+            : predStatus === 'losing'
+                ? 'text-rose-400'
+                : 'text-rose-400';
+    const statusLabel = resolveLiveStatusLabel(match.statusShort, match.elapsed);
+    const isPenalties = isPenaltyPhaseStatus(match.statusShort);
+    const knockoutMatch = buildKnockoutAdvanceMatch(match, hc, ac);
+    const draft = pred
+        ? {
+            home: String(pred.homeScore),
+            away: String(pred.awayScore),
+            advanceTeamId: pred.advanceTeamId ?? undefined,
+        }
+        : { home: '', away: '' };
+
+    return (
+        <div className="rounded-xl bg-slate-800 px-3 py-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <span className={`rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider ${
+                    isPenalties ? 'bg-purple-500/20 text-purple-300' : 'bg-rose-500/20 text-rose-300'
+                }`}>
+                    {statusLabel}
+                </span>
+                {pred && (
+                    <span className={`text-[8px] font-mono font-bold ${scoreColor}`}>
+                        pred {pred.homeScore}–{pred.awayScore}
+                    </span>
+                )}
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                    <Flag team={match.homeTeam} size="xs" />
+                    <span className="text-[11px] font-black text-white truncate">{hc}</span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                    <span className={`text-base font-black tabular-nums ${scoreColor}`}>{rH}</span>
+                    <span className="text-xs font-black text-slate-600">–</span>
+                    <span className={`text-base font-black tabular-nums ${scoreColor}`}>{rA}</span>
+                </div>
+                <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
+                    <span className="text-[11px] font-black text-white truncate text-right">{ac}</span>
+                    <Flag team={match.awayTeam} size="xs" />
+                </div>
+            </div>
+            {isKnockoutPhase(match.phase) && pred && (
+                <AdvanceTeamSelector
+                    match={knockoutMatch}
+                    draft={draft}
+                    canEdit={false}
+                    onSelect={() => {}}
+                    layout="centered"
+                    tone="dark"
+                />
+            )}
+        </div>
+    );
+}
+
 /* ─── Sub-components ─────────────────────────────────────────── */
 
 function Flag({ team, size = 'sm' }: { team: Pick<Team, 'name' | 'shortCode' | 'flagUrl'>; size?: 'sm' | 'lg' | 'xs' }) {
@@ -113,15 +198,7 @@ function PredRow({ match, leagueId, closeMin, onSaved }: {
     const homeCode = (match.homeTeam.shortCode ?? match.homeTeam.name.slice(0, 3)).toUpperCase();
     const awayCode = (match.awayTeam.shortCode ?? match.awayTeam.name.slice(0, 3)).toUpperCase();
 
-    const knockoutMatch = {
-        id: match.id,
-        homeTeamId: match.homeTeam.id,
-        awayTeamId: match.awayTeam.id,
-        homeTeamCode: homeCode,
-        awayTeamCode: awayCode,
-        advancingTeamId: match.advancingTeamId,
-        isKnockout,
-    };
+    const knockoutMatch = buildKnockoutAdvanceMatch(match, homeCode, awayCode);
 
     function handleHomeChange(v: string) {
         setHome(v);
@@ -271,15 +348,7 @@ function MatchCard({ match, leagueId, closeMin, onSaved, onDirtyChange, forceSav
     const prevForceSave = useRef(forceSave);
     const prevResetTick = useRef(resetTick);
 
-    const knockoutMatch = {
-        id: match.id,
-        homeTeamId: match.homeTeam.id,
-        awayTeamId: match.awayTeam.id,
-        homeTeamCode: homeCode,
-        awayTeamCode: awayCode,
-        advancingTeamId: match.advancingTeamId,
-        isKnockout,
-    };
+    const knockoutMatch = buildKnockoutAdvanceMatch(match, homeCode, awayCode);
 
     useEffect(() => {
         onDirtyChange?.(match.id, isDirty, home, away, advanceTeamId);
@@ -806,27 +875,9 @@ export default function Dashboard() {
                                         <span className="ml-auto text-[10px] text-slate-500 font-bold">{liveMatches.length} partido{liveMatches.length !== 1 ? 's' : ''}</span>
                                     </div>
                                     <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        {liveMatches.map((m) => {
-                                            const hc = (m.homeTeam.shortCode ?? m.homeTeam.name.slice(0, 3)).toUpperCase();
-                                            const ac = (m.awayTeam.shortCode ?? m.awayTeam.name.slice(0, 3)).toUpperCase();
-                                            return (
-                                                <div key={m.id} className="flex items-center gap-2 bg-slate-800 rounded-xl px-3 py-2">
-                                                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                                                        {m.homeTeam.flagUrl ? <img src={m.homeTeam.flagUrl} alt={hc} className="w-5 h-3.5 object-cover rounded shrink-0" /> : <div className="w-5 h-3.5 rounded bg-slate-700 shrink-0" />}
-                                                        <span className="text-[11px] font-black text-white truncate">{hc}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 shrink-0">
-                                                        <span className="text-base font-black text-rose-400">{m.homeScore ?? 0}</span>
-                                                        <span className="text-xs font-black text-slate-600">–</span>
-                                                        <span className="text-base font-black text-rose-400">{m.awayScore ?? 0}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
-                                                        <span className="text-[11px] font-black text-white truncate text-right">{ac}</span>
-                                                        {m.awayTeam.flagUrl ? <img src={m.awayTeam.flagUrl} alt={ac} className="w-5 h-3.5 object-cover rounded shrink-0" /> : <div className="w-5 h-3.5 rounded bg-slate-700 shrink-0" />}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                                        {liveMatches.map((m) => (
+                                            <LiveMatchCard key={m.id} match={m} />
+                                        ))}
                                     </div>
                                 </div>
                             )}
