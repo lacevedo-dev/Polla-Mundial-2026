@@ -18,6 +18,7 @@ import {
     buildKnockoutAdvanceMatch,
     isPenaltyPhaseStatus,
 } from '../utils/knockout-advance';
+import { MatchScoreDisplay } from '../components/MatchScoreDisplay';
 import { resolveLiveStatusLabel } from '../utils/live-match-status';
 import { SCORE_INPUT_PLACEHOLDER, scoreInputPlaceholderClass } from '../utils/score-input';
 
@@ -28,6 +29,8 @@ interface UpcomingMatch {
     id: string; matchDate: string; status: string;
     statusShort?: string | null;
     elapsed?: number | null;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
     homeScore: number | null; awayScore: number | null;
     phase?: string | null;
     advancingTeamId?: string | null;
@@ -131,9 +134,15 @@ function LiveMatchCard({ match }: { match: UpcomingMatch }) {
                     <span className="text-[11px] font-black text-white truncate">{hc}</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                    <span className={`text-base font-black tabular-nums ${scoreColor}`}>{rH}</span>
-                    <span className="text-xs font-black text-slate-600">–</span>
-                    <span className={`text-base font-black tabular-nums ${scoreColor}`}>{rA}</span>
+                    <MatchScoreDisplay
+                        homeScore={rH}
+                        awayScore={rA}
+                        penaltyHomeScore={match.penaltyHomeScore}
+                        penaltyAwayScore={match.penaltyAwayScore}
+                        scoreClassName={`text-base font-black tabular-nums ${scoreColor}`}
+                        penaltyClassName="text-[9px] font-bold text-white/50"
+                        separatorClassName={`text-base font-black tabular-nums mx-0.5 ${scoreColor}`}
+                    />
                 </div>
                 <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
                     <span className="text-[11px] font-black text-white truncate text-right">{ac}</span>
@@ -534,6 +543,8 @@ export default function Dashboard() {
     const [forceSaveTick, setForceSaveTick] = useState(0);
     const [resetTick, setResetTick] = useState(0);
     const [pendingNavTo, setPendingNavTo] = useState<string | null>(null);
+    const matchesRef = useRef(matches);
+    matchesRef.current = matches;
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -565,6 +576,49 @@ export default function Dashboard() {
             .then((l) => { setLeagueDetail(l); setMatches(l.upcomingMatches); })
             .catch(() => setLeagueDetail(null))
             .finally(() => setLoadingDetail(false));
+    }, [selectedLeagueId]);
+
+    useEffect(() => {
+        if (!selectedLeagueId) return;
+
+        let cancelled = false;
+        let timeoutId: number | null = null;
+
+        const refresh = async () => {
+            if (cancelled || document.visibilityState === 'hidden') return;
+            try {
+                const l = await request<LeagueDetail>(`/corp/leagues/${selectedLeagueId}`);
+                if (!cancelled) {
+                    setLeagueDetail(l);
+                    setMatches(l.upcomingMatches);
+                }
+            } catch {
+                // silent
+            }
+        };
+
+        const schedule = () => {
+            if (cancelled) return;
+            const current = matchesRef.current;
+            const hasLive = current.some((m) => isLive(m.status));
+            const hasSoon = current.some((m) => {
+                if (isLive(m.status) || isFinished(m.status)) return false;
+                const delta = new Date(m.matchDate).getTime() - Date.now();
+                return delta < 3 * 60 * 60_000 && delta > -2 * 60 * 60_000;
+            });
+            const delay = hasLive ? 60_000 : hasSoon ? 90_000 : 300_000;
+            timeoutId = window.setTimeout(async () => {
+                await refresh();
+                schedule();
+            }, delay);
+        };
+
+        schedule();
+
+        return () => {
+            cancelled = true;
+            if (timeoutId !== null) window.clearTimeout(timeoutId);
+        };
     }, [selectedLeagueId]);
 
     function onSaved(matchId: string, h: number, a: number, advanceTeamId?: string | null) {

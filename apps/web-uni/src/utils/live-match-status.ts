@@ -18,3 +18,17 @@ export function resolveLiveStatusLabel(
     }
     return 'En vivo';
 }
+
+export function formatMatchScoreWithPenalties(params: {
+    homeScore?: number | null;
+    awayScore?: number | null;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
+}): string {
+    const h = params.homeScore ?? 0;
+    const a = params.awayScore ?? 0;
+    if (params.penaltyHomeScore != null && params.penaltyAwayScore != null) {
+        return `${h} (${params.penaltyHomeScore})–${a} (${params.penaltyAwayScore}) pen.`;
+    }
+    return `${h}–${a}`;
+}

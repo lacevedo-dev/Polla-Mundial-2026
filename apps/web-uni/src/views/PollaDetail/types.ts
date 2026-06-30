@@ -12,6 +12,8 @@ export interface UpcomingMatch {
     status: string;
     statusShort?: string | null;
     elapsed?: number | null;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
     homeScore: number | null;
     awayScore: number | null;
     homeTeam: Team;
