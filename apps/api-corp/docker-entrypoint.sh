@@ -22,24 +22,20 @@ else
     echo "[entrypoint] Volumen de branding ya tiene contenido — se conserva."
 fi
 
-# Sincronizar schema Prisma con la BD corporativa (polla_corp).
-# api-corp no usa migrate deploy; db push aplica columnas nuevas como penaltyHomeScore.
-if [ -n "${CORP_DATABASE_URL:-}" ] || [ -n "${DATABASE_URL:-}" ]; then
-    echo "[entrypoint] Aplicando schema Prisma (db push)..."
-    MAX_RETRIES=5
-    ATTEMPT=1
-    until npx prisma db push --skip-generate; do
-        if [ "$ATTEMPT" -ge "$MAX_RETRIES" ]; then
-            echo "[entrypoint] ERROR: prisma db push falló tras ${MAX_RETRIES} intentos."
-            exit 1
+# Schema sync opcional al arranque (desactivado por defecto).
+# En producción las migraciones SQL de prisma/migrations/ se aplican manualmente;
+# db push en cada deploy puede tardar o bloquear el arranque si el schema ya está al día.
+if [ "${CORP_DB_PUSH_ON_START:-false}" = "true" ]; then
+    if [ -n "${CORP_DATABASE_URL:-}" ] || [ -n "${DATABASE_URL:-}" ]; then
+        echo "[entrypoint] CORP_DB_PUSH_ON_START=true — ejecutando prisma db push..."
+        if npx prisma db push --skip-generate; then
+            echo "[entrypoint] Schema corporativo sincronizado."
+        else
+            echo "[entrypoint] WARN: prisma db push falló; iniciando API de todos modos."
         fi
-        echo "[entrypoint] Reintentando db push (${ATTEMPT}/${MAX_RETRIES}) en 5s..."
-        ATTEMPT=$((ATTEMPT + 1))
-        sleep 5
-    done
-    echo "[entrypoint] Schema corporativo sincronizado."
-else
-    echo "[entrypoint] WARN: CORP_DATABASE_URL no definida; se omite db push."
+    else
+        echo "[entrypoint] WARN: CORP_DB_PUSH_ON_START=true pero falta CORP_DATABASE_URL."
+    fi
 fi
 
 # Iniciar la aplicación
