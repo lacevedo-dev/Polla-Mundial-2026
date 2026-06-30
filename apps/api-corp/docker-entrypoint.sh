@@ -22,5 +22,25 @@ else
     echo "[entrypoint] Volumen de branding ya tiene contenido — se conserva."
 fi
 
+# Sincronizar schema Prisma con la BD corporativa (polla_corp).
+# api-corp no usa migrate deploy; db push aplica columnas nuevas como penaltyHomeScore.
+if [ -n "${CORP_DATABASE_URL:-}" ] || [ -n "${DATABASE_URL:-}" ]; then
+    echo "[entrypoint] Aplicando schema Prisma (db push)..."
+    MAX_RETRIES=5
+    ATTEMPT=1
+    until npx prisma db push --skip-generate; do
+        if [ "$ATTEMPT" -ge "$MAX_RETRIES" ]; then
+            echo "[entrypoint] ERROR: prisma db push falló tras ${MAX_RETRIES} intentos."
+            exit 1
+        fi
+        echo "[entrypoint] Reintentando db push (${ATTEMPT}/${MAX_RETRIES}) en 5s..."
+        ATTEMPT=$((ATTEMPT + 1))
+        sleep 5
+    done
+    echo "[entrypoint] Schema corporativo sincronizado."
+else
+    echo "[entrypoint] WARN: CORP_DATABASE_URL no definida; se omite db push."
+fi
+
 # Iniciar la aplicación
 exec node dist/main.js

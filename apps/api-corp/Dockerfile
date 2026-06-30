@@ -69,6 +69,8 @@ COPY --from=builder /app/packages ./packages
 # Artefactos de api-corp
 COPY --from=builder /app/apps/api-corp/dist ./apps/api-corp/dist
 COPY --from=builder /app/apps/api-corp/package.json ./apps/api-corp/
+COPY --from=builder /app/apps/api-corp/prisma ./apps/api-corp/prisma
+COPY --from=builder /app/apps/api-corp/prisma.config.ts ./apps/api-corp/prisma.config.ts
 
 WORKDIR /app/apps/api-corp
 
