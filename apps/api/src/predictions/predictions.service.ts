@@ -100,7 +100,11 @@ export class PredictionsService {
 
     constructor(private readonly prisma: PrismaService) { }
 
-    async upsertPrediction(userId: string, createPredictionDto: CreatePredictionDto) {
+    async upsertPrediction(
+        userId: string,
+        createPredictionDto: CreatePredictionDto,
+        options?: { skipDeadline?: boolean },
+    ) {
         const { matchId, leagueId, homeScore, awayScore } = createPredictionDto;
 
         // 1. Verificar que el usuario sea miembro activo de la liga
@@ -136,13 +140,20 @@ export class PredictionsService {
             throw new NotFoundException('Partido o Liga no encontrados');
         }
 
-        // 4. Validar si el tiempo para predecir ya expiró
-        const now = new Date();
-        const matchDate = new Date(match.matchDate);
-        const closingTime = new Date(matchDate.getTime() - league.closePredictionMinutes * 60000);
+        // 3b. No permitir si el partido ya finalizó (scores en vivo no cuentan)
+        if (match.status === 'FINISHED') {
+            throw new BadRequestException('No se puede ingresar pronóstico: el partido ya finalizó');
+        }
 
-        if (now > closingTime) {
-            throw new BadRequestException('El tiempo para realizar predicciones ha expirado para este partido');
+        // 4. Validar si el tiempo para predecir ya expiró (salvo override admin)
+        const now = new Date();
+        if (!options?.skipDeadline) {
+            const matchDate = new Date(match.matchDate);
+            const closingTime = new Date(matchDate.getTime() - league.closePredictionMinutes * 60000);
+
+            if (now > closingTime) {
+                throw new BadRequestException('El tiempo para realizar predicciones ha expirado para este partido');
+            }
         }
 
         const advanceTeamId = this.resolveKnockoutAdvanceTeamId(
@@ -173,6 +184,11 @@ export class PredictionsService {
                 submittedAt: now,
             },
         });
+    }
+
+    /** SUPERADMIN: ingresar/corregir pronóstico de un participante (omite deadline). */
+    async upsertPredictionForUser(targetUserId: string, createPredictionDto: CreatePredictionDto) {
+        return this.upsertPrediction(targetUserId, createPredictionDto, { skipDeadline: true });
     }
 
     private resolveKnockoutAdvanceTeamId(

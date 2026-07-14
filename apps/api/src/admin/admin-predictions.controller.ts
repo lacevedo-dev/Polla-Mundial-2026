@@ -3,12 +3,15 @@ import {
     BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsEnum, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsArray, IsEnum, IsBoolean, IsInt, IsNotEmpty, Min } from 'class-validator';
+import { MemberStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { PredictionsService } from '../predictions/predictions.service';
 import { USER_STATUS } from '../users/user-status.constants';
 
 export enum PredictionStrategy {
@@ -37,13 +40,44 @@ export class BulkSeedPredictionsDto {
     simulatePayments?: boolean;
 }
 
+export class AdminCreatePredictionForUserDto {
+    @IsNotEmpty()
+    @IsString()
+    userId: string;
+
+    @IsNotEmpty()
+    @IsString()
+    matchId: string;
+
+    @IsNotEmpty()
+    @IsString()
+    leagueId: string;
+
+    @Type(() => Number)
+    @IsInt()
+    @Min(0)
+    homeScore: number;
+
+    @Type(() => Number)
+    @IsInt()
+    @Min(0)
+    awayScore: number;
+
+    @IsOptional()
+    @IsString()
+    advanceTeamId?: string;
+}
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPERADMIN')
 @Controller('admin/predictions')
 export class AdminPredictionsController {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly predictionsService: PredictionsService,
+    ) {}
 
     @Get('filters')
     @ApiOperation({ summary: 'List compact filter options for admin predictions' })
@@ -107,6 +141,82 @@ export class AdminPredictionsController {
             phases: [...phases].sort((left, right) => left.localeCompare(right, 'es')),
             rounds: [...rounds].sort((left, right) => left.localeCompare(right, 'es')),
         };
+    }
+
+    @Get('form-options')
+    @ApiOperation({ summary: 'Leagues, members and open matches for admin proxy prediction form' })
+    async getFormOptions(@Query('leagueId') leagueId?: string) {
+        const leagues = await this.prisma.league.findMany({
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true },
+        });
+
+        if (!leagueId) {
+            return { leagues, members: [], matches: [] };
+        }
+
+        const [members, leagueMatches] = await Promise.all([
+            this.prisma.leagueMember.findMany({
+                where: {
+                    leagueId,
+                    status: { in: [MemberStatus.ACTIVE, MemberStatus.PENDING_PAYMENT] },
+                    user: { status: USER_STATUS.ACTIVE },
+                },
+                orderBy: { user: { name: 'asc' } },
+                select: {
+                    user: { select: { id: true, name: true, username: true } },
+                },
+            }),
+            this.prisma.leagueMatch.findMany({
+                where: {
+                    leagueId,
+                    active: true,
+                    match: {
+                        status: { not: 'FINISHED' },
+                    },
+                },
+                orderBy: { match: { matchDate: 'asc' } },
+                select: {
+                    match: {
+                        select: {
+                            id: true,
+                            matchDate: true,
+                            phase: true,
+                            group: true,
+                            round: true,
+                            homeTeamId: true,
+                            awayTeamId: true,
+                            homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+                            awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
+                        },
+                    },
+                },
+                take: 300,
+            }),
+        ]);
+
+        return {
+            leagues,
+            members: members.map((m) => ({
+                id: m.user.id,
+                name: m.user.name,
+                username: m.user.username,
+            })),
+            matches: leagueMatches.map((lm) => lm.match),
+        };
+    }
+
+    @Post('for-user')
+    @ApiOperation({ summary: 'Create or update a prediction on behalf of a league member' })
+    async createForUser(@Body() dto: AdminCreatePredictionForUserDto) {
+        const { userId, matchId, leagueId, homeScore, awayScore, advanceTeamId } = dto;
+        return this.predictionsService.upsertPredictionForUser(userId, {
+            matchId,
+            leagueId,
+            homeScore,
+            awayScore,
+            advanceTeamId,
+        });
     }
 
     @Post('bulk-seed')

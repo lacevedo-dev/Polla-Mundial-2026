@@ -7,10 +7,12 @@ import {
     Sparkles,
     Target,
     Trophy,
+    UserPlus,
     XCircle,
 } from 'lucide-react';
 import {
     useAdminPredictionsStore,
+    type AdminFormMatch,
     type AdminPrediction,
     type AdminPredictionFilterOption,
 } from '../../stores/admin.predictions.store';
@@ -115,6 +117,16 @@ function formatDateTime(value: string): string {
     }).format(new Date(value));
 }
 
+function needsAdvanceTeam(match: AdminFormMatch | undefined, homeScore: number, awayScore: number): boolean {
+    if (!match) return false;
+    if (match.phase === 'GROUP' || match.phase === 'THIRD_PLACE') return false;
+    return homeScore === awayScore;
+}
+
+function formatMatchOption(match: AdminFormMatch): string {
+    return `${match.homeTeam.name} vs ${match.awayTeam.name} · ${formatDateTime(match.matchDate)}`;
+}
+
 function formatPhase(phase?: string | null): string {
     switch (phase) {
         case 'GROUP':
@@ -179,14 +191,27 @@ const AdminPredictions: React.FC = () => {
         total,
         filters,
         filterOptions,
+        formOptions,
         isLoading,
         isLoadingFilters,
+        isLoadingFormOptions,
+        isSubmittingForUser,
         error,
         fetchPredictions,
         fetchFilterOptions,
+        fetchFormOptions,
+        submitForUser,
         setFilters,
     } = useAdminPredictionsStore();
     const [searchInput, setSearchInput] = React.useState(filters.search ?? '');
+    const [formLeagueId, setFormLeagueId] = React.useState<string>('');
+    const [formUserId, setFormUserId] = React.useState<string>('');
+    const [formMatchId, setFormMatchId] = React.useState<string>('');
+    const [formHomeScore, setFormHomeScore] = React.useState('0');
+    const [formAwayScore, setFormAwayScore] = React.useState('0');
+    const [formAdvanceTeamId, setFormAdvanceTeamId] = React.useState<string>('');
+    const [formError, setFormError] = React.useState<string | null>(null);
+    const [formSuccess, setFormSuccess] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         void fetchPredictions();
@@ -197,11 +222,64 @@ const AdminPredictions: React.FC = () => {
     }, [filters.leagueId, fetchFilterOptions]);
 
     React.useEffect(() => {
+        void fetchFormOptions(formLeagueId || undefined);
+    }, [formLeagueId, fetchFormOptions]);
+
+    React.useEffect(() => {
         const timeout = setTimeout(() => {
             setFilters({ search: searchInput || undefined, page: 1 });
         }, 250);
         return () => clearTimeout(timeout);
     }, [searchInput, setFilters]);
+
+    const selectedFormMatch = React.useMemo(
+        () => formOptions.matches.find((m) => m.id === formMatchId),
+        [formOptions.matches, formMatchId],
+    );
+
+    const homeScoreNum = Number.parseInt(formHomeScore, 10);
+    const awayScoreNum = Number.parseInt(formAwayScore, 10);
+    const showAdvanceSelector = needsAdvanceTeam(
+        selectedFormMatch,
+        Number.isFinite(homeScoreNum) ? homeScoreNum : 0,
+        Number.isFinite(awayScoreNum) ? awayScoreNum : 0,
+    );
+
+    const handleSubmitForUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setFormError(null);
+        setFormSuccess(null);
+
+        if (!formLeagueId || !formUserId || !formMatchId) {
+            setFormError('Selecciona polla, jugador y partido.');
+            return;
+        }
+        if (!Number.isFinite(homeScoreNum) || !Number.isFinite(awayScoreNum) || homeScoreNum < 0 || awayScoreNum < 0) {
+            setFormError('El marcador debe ser un número entero mayor o igual a 0.');
+            return;
+        }
+        if (showAdvanceSelector && !formAdvanceTeamId) {
+            setFormError('En eliminatorias con empate debes indicar qué equipo clasifica.');
+            return;
+        }
+
+        try {
+            await submitForUser({
+                leagueId: formLeagueId,
+                userId: formUserId,
+                matchId: formMatchId,
+                homeScore: homeScoreNum,
+                awayScore: awayScoreNum,
+                ...(showAdvanceSelector && formAdvanceTeamId ? { advanceTeamId: formAdvanceTeamId } : {}),
+            });
+            setFormSuccess('Pronóstico guardado correctamente.');
+            setFormHomeScore('0');
+            setFormAwayScore('0');
+            setFormAdvanceTeamId('');
+        } catch (err) {
+            setFormError(err instanceof Error ? err.message : 'No se pudo guardar el pronóstico');
+        }
+    };
 
     const enriched = React.useMemo(
         () => predictions.map((prediction) => ({ prediction, detail: parsePointDetail(prediction.pointDetail), outcome: getOutcome(prediction) })),
@@ -240,6 +318,171 @@ const AdminPredictions: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            <form
+                onSubmit={handleSubmitForUser}
+                className="rounded-[1.85rem] border border-amber-200 bg-gradient-to-br from-amber-50/80 to-white p-5 shadow-sm"
+            >
+                <div className="flex items-center gap-3">
+                    <UserPlus size={16} className="text-amber-600" />
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Ingresar por participante</p>
+                        <p className="text-xs text-slate-500">
+                            Carga o corrige el marcador de un jugador que no pudo pronosticar. Omite el cierre de ventana; no aplica a partidos ya finalizados.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                    <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Polla</span>
+                        <select
+                            value={formLeagueId}
+                            onChange={(e) => {
+                                setFormLeagueId(e.target.value);
+                                setFormUserId('');
+                                setFormMatchId('');
+                                setFormAdvanceTeamId('');
+                                setFormError(null);
+                                setFormSuccess(null);
+                            }}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                            <option value="">{isLoadingFormOptions && !formOptions.leagues.length ? 'Cargando...' : 'Seleccionar polla'}</option>
+                            {formOptions.leagues.map((league) => (
+                                <option key={league.id} value={league.id}>{league.name}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Jugador</span>
+                        <select
+                            value={formUserId}
+                            disabled={!formLeagueId}
+                            onChange={(e) => {
+                                setFormUserId(e.target.value);
+                                setFormError(null);
+                                setFormSuccess(null);
+                            }}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 disabled:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                            <option value="">
+                                {!formLeagueId
+                                    ? 'Elige una polla primero'
+                                    : isLoadingFormOptions
+                                      ? 'Cargando...'
+                                      : formOptions.members.length === 0
+                                        ? 'Sin miembros activos'
+                                        : 'Seleccionar jugador'}
+                            </option>
+                            {formOptions.members.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                    {member.name} (@{member.username})
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Partido</span>
+                        <select
+                            value={formMatchId}
+                            disabled={!formLeagueId}
+                            onChange={(e) => {
+                                setFormMatchId(e.target.value);
+                                setFormAdvanceTeamId('');
+                                setFormError(null);
+                                setFormSuccess(null);
+                            }}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 disabled:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                            <option value="">
+                                {!formLeagueId
+                                    ? 'Elige una polla primero'
+                                    : isLoadingFormOptions
+                                      ? 'Cargando...'
+                                      : formOptions.matches.length === 0
+                                        ? 'Sin partidos abiertos'
+                                        : 'Seleccionar partido'}
+                            </option>
+                            {formOptions.matches.map((match) => (
+                                <option key={match.id} value={match.id}>{formatMatchOption(match)}</option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+                    <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                            {selectedFormMatch ? selectedFormMatch.homeTeam.name : 'Local'}
+                        </span>
+                        <input
+                            type="number"
+                            min={0}
+                            value={formHomeScore}
+                            onChange={(e) => {
+                                setFormHomeScore(e.target.value);
+                                setFormAdvanceTeamId('');
+                                setFormError(null);
+                                setFormSuccess(null);
+                            }}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                            {selectedFormMatch ? selectedFormMatch.awayTeam.name : 'Visitante'}
+                        </span>
+                        <input
+                            type="number"
+                            min={0}
+                            value={formAwayScore}
+                            onChange={(e) => {
+                                setFormAwayScore(e.target.value);
+                                setFormAdvanceTeamId('');
+                                setFormError(null);
+                                setFormSuccess(null);
+                            }}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                    </label>
+
+                    {showAdvanceSelector && selectedFormMatch ? (
+                        <label className="block sm:col-span-2 lg:col-span-1">
+                            <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Clasifica</span>
+                            <select
+                                value={formAdvanceTeamId}
+                                onChange={(e) => setFormAdvanceTeamId(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            >
+                                <option value="">¿Quién clasifica?</option>
+                                <option value={selectedFormMatch.homeTeamId}>{selectedFormMatch.homeTeam.name}</option>
+                                <option value={selectedFormMatch.awayTeamId}>{selectedFormMatch.awayTeam.name}</option>
+                            </select>
+                        </label>
+                    ) : (
+                        <div className="hidden lg:block" />
+                    )}
+
+                    <button
+                        type="submit"
+                        disabled={isSubmittingForUser}
+                        className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {isSubmittingForUser ? 'Guardando...' : 'Guardar pronóstico'}
+                    </button>
+                </div>
+
+                {formError ? (
+                    <p className="mt-3 text-sm font-semibold text-rose-600">{formError}</p>
+                ) : null}
+                {formSuccess ? (
+                    <p className="mt-3 text-sm font-semibold text-emerald-700">{formSuccess}</p>
+                ) : null}
+            </form>
 
             <div className="rounded-[1.85rem] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-3">

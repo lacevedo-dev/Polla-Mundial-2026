@@ -39,6 +39,39 @@ export interface AdminPredictionFiltersResponse {
     rounds: string[];
 }
 
+export interface AdminFormMember {
+    id: string;
+    name: string;
+    username: string;
+}
+
+export interface AdminFormMatch {
+    id: string;
+    matchDate: string;
+    phase?: string | null;
+    group?: string | null;
+    round?: string | null;
+    homeTeamId: string;
+    awayTeamId: string;
+    homeTeam: { id: string; name: string; flagUrl?: string | null; code?: string | null };
+    awayTeam: { id: string; name: string; flagUrl?: string | null; code?: string | null };
+}
+
+export interface AdminFormOptionsResponse {
+    leagues: AdminPredictionFilterOption[];
+    members: AdminFormMember[];
+    matches: AdminFormMatch[];
+}
+
+export interface AdminSubmitForUserPayload {
+    userId: string;
+    matchId: string;
+    leagueId: string;
+    homeScore: number;
+    awayScore: number;
+    advanceTeamId?: string;
+}
+
 interface PredictionsFilters {
     page: number;
     limit: number;
@@ -57,12 +90,17 @@ interface AdminPredictionsState {
     total: number;
     filters: PredictionsFilters;
     filterOptions: AdminPredictionFiltersResponse;
+    formOptions: AdminFormOptionsResponse;
     isLoading: boolean;
     isLoadingFilters: boolean;
+    isLoadingFormOptions: boolean;
+    isSubmittingForUser: boolean;
     error: string | null;
 
     fetchPredictions: () => Promise<void>;
     fetchFilterOptions: () => Promise<void>;
+    fetchFormOptions: (leagueId?: string) => Promise<void>;
+    submitForUser: (payload: AdminSubmitForUserPayload) => Promise<void>;
     setFilters: (filters: Partial<PredictionsFilters>) => void;
 }
 
@@ -75,13 +113,22 @@ const EMPTY_FILTER_OPTIONS: AdminPredictionFiltersResponse = {
     rounds: [],
 };
 
+const EMPTY_FORM_OPTIONS: AdminFormOptionsResponse = {
+    leagues: [],
+    members: [],
+    matches: [],
+};
+
 export const useAdminPredictionsStore = create<AdminPredictionsState>((set, get) => ({
     predictions: [],
     total: 0,
     filters: { page: 1, limit: 20 },
     filterOptions: EMPTY_FILTER_OPTIONS,
+    formOptions: EMPTY_FORM_OPTIONS,
     isLoading: false,
     isLoadingFilters: false,
+    isLoadingFormOptions: false,
+    isSubmittingForUser: false,
     error: null,
 
     fetchPredictions: async () => {
@@ -118,6 +165,34 @@ export const useAdminPredictionsStore = create<AdminPredictionsState>((set, get)
             set({ filterOptions: response, isLoadingFilters: false });
         } catch {
             set({ isLoadingFilters: false });
+        }
+    },
+
+    fetchFormOptions: async (leagueId?: string) => {
+        const params = new URLSearchParams({
+            ...(leagueId && { leagueId }),
+        });
+        set({ isLoadingFormOptions: true });
+        try {
+            const response = await request<AdminFormOptionsResponse>(`/admin/predictions/form-options?${params}`);
+            set({ formOptions: response, isLoadingFormOptions: false });
+        } catch {
+            set({ isLoadingFormOptions: false });
+        }
+    },
+
+    submitForUser: async (payload) => {
+        set({ isSubmittingForUser: true });
+        try {
+            await request('/admin/predictions/for-user', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            });
+            set({ isSubmittingForUser: false });
+            await get().fetchPredictions();
+        } catch (error) {
+            set({ isSubmittingForUser: false });
+            throw error;
         }
     },
 
