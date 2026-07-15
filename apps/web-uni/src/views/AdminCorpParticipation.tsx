@@ -12,7 +12,7 @@ import {
 import { AdminProxyPredictionPanel } from '../components/AdminProxyPredictionPanel';
 import { request, resolveApiAssetUrl, ApiError } from '../api';
 import { useAuthStore } from '../stores/auth.store';
-import { isSystemSuperAdmin } from '../utils/tenantRole';
+import { isSystemSuperAdmin, isTenantAdmin } from '../utils/tenantRole';
 
 interface ParticipationSummary {
     totalMembers: number;
@@ -124,7 +124,7 @@ function formatRelative(iso: string | null) {
 
 export default function AdminCorpParticipation() {
     const user = useAuthStore((state) => state.user);
-    const canProxyPredictions = isSystemSuperAdmin(user);
+    const canProxyPredictions = isTenantAdmin(user) || isSystemSuperAdmin(user);
     const [overview, setOverview] = useState<ParticipationOverview | null>(null);
     const [members, setMembers] = useState<MemberParticipation[]>([]);
     const [membersTotal, setMembersTotal] = useState(0);

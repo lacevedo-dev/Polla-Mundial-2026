@@ -2,8 +2,6 @@
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '@corp-api/auth/guards/jwt-auth.guard';
-import { RolesGuard } from '@corp-api/auth/guards/roles.guard';
-import { Roles } from '@corp-api/auth/decorators/roles.decorator';
 import { TenantMemberGuard } from '@corp-api/corporate-tenant/guards/tenant-member.guard';
 import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin.guard';
 import { TenantStaffGuard } from '@corp-api/corporate-tenant/guards/tenant-staff.guard';
@@ -937,8 +935,7 @@ export class CorpPortalController {
         return { synced, members: activeMembers.length, leagues: activeLeagues.length };
     }
 
-    @UseGuards(RolesGuard)
-    @Roles('SUPERADMIN')
+    @UseGuards(TenantAdminGuard)
     @Get('predictions/admin/form-options')
     async getPredictionFormOptions(@Req() req: any, @Query('leagueId') leagueId?: string) {
         const tenantId: string = req.tenantId;
@@ -1019,8 +1016,7 @@ export class CorpPortalController {
         };
     }
 
-    @UseGuards(RolesGuard)
-    @Roles('SUPERADMIN')
+    @UseGuards(TenantAdminGuard)
     @Post('predictions/for-user')
     async upsertPredictionForUser(@Req() req: any, @Body() dto: CorpPredictionForUserDto) {
         const tenantId: string = req.tenantId;

@@ -182,7 +182,7 @@ export function AdminProxyPredictionPanel({ onSaved }: { onSaved?: () => void })
                 <UserPlus size={16} className="mt-0.5 shrink-0 text-amber-600" />
                 <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
-                        SUPERADMIN · Ingresar por participante
+                        Admin · Ingresar por participante
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                         Carga o corrige el marcador de un usuario específico. Omite el cierre de ventana e incluye
@@ -190,7 +190,7 @@ export function AdminProxyPredictionPanel({ onSaved }: { onSaved?: () => void })
                     </p>
                     {selectedMember ? (
                         <p className="mt-1 text-xs font-bold text-amber-800">
-                            Ingresando como SUPERADMIN para {selectedMember.name}
+                            Ingresando para {selectedMember.name}
                         </p>
                     ) : null}
                 </div>
