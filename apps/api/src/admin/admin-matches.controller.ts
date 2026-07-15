@@ -1,11 +1,12 @@
 import {
     Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards,
     NotFoundException, ParseIntPipe, DefaultValuePipe, BadRequestException, ConflictException,
+    ForbiddenException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Phase, MatchStatus, SyncLogStatus } from '@prisma/client';
-import { IsOptional, IsEnum, IsString, IsNumber, IsDateString } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsNumber, IsDateString, IsArray } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -22,6 +23,8 @@ export class AdminCreateMatchDto {
     @IsOptional() @IsString() venue?: string;
     @IsOptional() @IsString() group?: string;
     @IsOptional() @IsNumber() matchNumber?: number;
+    /** Torneo al que pertenece el partido — necesario para poder activarlo en pollas. */
+    @IsOptional() @IsString() tournamentId?: string;
 }
 
 export class AdminUpdateScoreDto {
@@ -46,6 +49,14 @@ export class AdminUpdateMatchDto {
      *  marcador en BD puede quedar empatado (e.g. 1-1) y el sync no puede
      *  inferir el ganador sin el campo winner de API-Football. */
     @IsOptional() @IsString() advancingTeamId?: string;
+    /** Torneo al que pertenece el partido — necesario para poder activarlo en pollas. */
+    @IsOptional() @IsString() tournamentId?: string;
+}
+
+export class AdminMatchLeaguesDto {
+    @IsArray()
+    @IsString({ each: true })
+    leagueIds: string[];
 }
 
 const MAX_MATCHES_PAGE_LIMIT = 100;
@@ -282,13 +293,35 @@ export class AdminMatchesController {
     @Post()
     @ApiOperation({ summary: 'Create a new match' })
     async create(@Body() dto: AdminCreateMatchDto) {
-        return this.matchesService.create(dto as any);
+        const tournamentId = this.normalizeOptionalId(dto.tournamentId);
+        if (tournamentId) {
+            const tournament = await this.prisma.tournament.findUnique({
+                where: { id: tournamentId },
+                select: { id: true },
+            });
+            if (!tournament) throw new BadRequestException('Torneo no encontrado');
+        }
+        return this.matchesService.create({
+            ...dto,
+            ...(dto.tournamentId !== undefined ? { tournamentId } : {}),
+        } as any);
     }
 
     private normalizeExternalId(externalId?: string) {
         if (externalId === undefined) return undefined;
         const normalized = String(externalId).trim();
         return normalized || null;
+    }
+
+    private normalizeOptionalId(value?: string) {
+        if (value === undefined) return undefined;
+        const normalized = String(value).trim();
+        return normalized || null;
+    }
+
+    private normalizeLeagueIds(leagueIds?: string[]) {
+        if (!Array.isArray(leagueIds) || leagueIds.length === 0) return [];
+        return [...new Set(leagueIds.map((id) => String(id).trim()).filter(Boolean))];
     }
 
     @Patch(':id')
@@ -298,6 +331,7 @@ export class AdminMatchesController {
         if (!match) throw new NotFoundException('Partido no encontrado');
         const { linkSource, ...matchFields } = dto;
         const normalizedExternalId = this.normalizeExternalId(dto.externalId);
+        const normalizedTournamentId = this.normalizeOptionalId(dto.tournamentId);
 
         if (normalizedExternalId) {
             const duplicate = await this.prisma.match.findFirst({
@@ -311,9 +345,18 @@ export class AdminMatchesController {
             }
         }
 
+        if (normalizedTournamentId) {
+            const tournament = await this.prisma.tournament.findUnique({
+                where: { id: normalizedTournamentId },
+                select: { id: true },
+            });
+            if (!tournament) throw new BadRequestException('Torneo no encontrado');
+        }
+
         const data = {
             ...matchFields,
             ...(dto.externalId !== undefined ? { externalId: normalizedExternalId } : {}),
+            ...(dto.tournamentId !== undefined ? { tournamentId: normalizedTournamentId } : {}),
         };
 
         let updatedMatch;
@@ -411,6 +454,119 @@ export class AdminMatchesController {
         if (!match) throw new NotFoundException('Partido no encontrado');
         await this.prisma.match.delete({ where: { id } });
         return { message: 'Partido eliminado exitosamente' };
+    }
+
+    @Get(':id/leagues')
+    @ApiOperation({ summary: 'List leagues eligible to activate this match (same tournament linked)' })
+    async getMatchLeagues(@Param('id') id: string) {
+        const match = await this.prisma.match.findUnique({
+            where: { id },
+            select: { id: true, tournamentId: true },
+        });
+        if (!match) throw new NotFoundException('Partido no encontrado');
+        if (!match.tournamentId) {
+            return { tournamentId: null as string | null, leagues: [] as Array<{
+                id: string;
+                name: string;
+                code: string;
+                activeInLeague: boolean;
+            }> };
+        }
+
+        const linked = await this.prisma.leagueTournament.findMany({
+            where: { tournamentId: match.tournamentId },
+            select: {
+                league: { select: { id: true, name: true, code: true } },
+            },
+        });
+        linked.sort((a, b) => a.league.name.localeCompare(b.league.name, 'es'));
+
+        const leagueIds = linked.map((row) => row.league.id);
+        const leagueMatches = leagueIds.length
+            ? await this.prisma.leagueMatch.findMany({
+                where: { matchId: id, leagueId: { in: leagueIds } },
+                select: { leagueId: true, active: true },
+            })
+            : [];
+        const activeByLeague = new Map(leagueMatches.map((lm) => [lm.leagueId, lm.active]));
+
+        return {
+            tournamentId: match.tournamentId,
+            leagues: linked.map((row) => ({
+                id: row.league.id,
+                name: row.league.name,
+                code: row.league.code,
+                activeInLeague: activeByLeague.get(row.league.id) ?? false,
+            })),
+        };
+    }
+
+    @Post(':id/activate-in-leagues')
+    @ApiOperation({ summary: 'Activate this match in one or more leagues' })
+    async activateInLeagues(
+        @Param('id') matchId: string,
+        @Body() dto: AdminMatchLeaguesDto,
+        @CurrentUser() user: { userId: string },
+    ) {
+        const leagueIds = this.normalizeLeagueIds(dto.leagueIds);
+        if (!leagueIds.length) return { activated: 0 };
+
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            select: { tournamentId: true },
+        });
+        if (!match) throw new NotFoundException('Partido no encontrado');
+        if (!match.tournamentId) {
+            throw new BadRequestException('Partido sin torneo asignado');
+        }
+
+        const linked = await this.prisma.leagueTournament.findMany({
+            where: {
+                tournamentId: match.tournamentId,
+                leagueId: { in: leagueIds },
+            },
+            select: { leagueId: true },
+        });
+        const allowed = new Set(linked.map((row) => row.leagueId));
+        const rejected = leagueIds.filter((id) => !allowed.has(id));
+        if (rejected.length) {
+            throw new ForbiddenException(
+                'Una o más pollas no tienen vinculado el torneo de este partido',
+            );
+        }
+
+        for (const leagueId of leagueIds) {
+            await this.prisma.leagueMatch.upsert({
+                where: { leagueId_matchId: { leagueId, matchId } },
+                create: { leagueId, matchId, active: true, addedBy: user.userId },
+                update: { active: true },
+            });
+        }
+
+        return { activated: leagueIds.length };
+    }
+
+    @Post(':id/deactivate-in-leagues')
+    @ApiOperation({ summary: 'Deactivate this match in one or more leagues (keeps predictions)' })
+    async deactivateInLeagues(
+        @Param('id') matchId: string,
+        @Body() dto: AdminMatchLeaguesDto,
+    ) {
+        const leagueIds = this.normalizeLeagueIds(dto.leagueIds);
+        if (!leagueIds.length) return { deactivated: 0 };
+
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            select: { id: true },
+        });
+        if (!match) throw new NotFoundException('Partido no encontrado');
+
+        const result = await this.prisma.leagueMatch.updateMany({
+            where: { matchId, leagueId: { in: leagueIds } },
+            data: { active: false },
+        });
+
+        return { deactivated: result.count };
     }
 
     @Get(':id/predictions')

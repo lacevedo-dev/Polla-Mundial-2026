@@ -386,47 +386,253 @@ function cotLocalInputToUtcIso(localDate: string): string {
   return new Date(Date.UTC(year, month - 1, day, hour + 5, minute)).toISOString();
 }
 
-const RescheduleDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
-  const { updateMatch, isSaving } = useAdminMatchesStore();
-  const [localDate, setLocalDate] = React.useState('');
+const EditMatchDialog: React.FC<{ match: AdminMatch | null; open: boolean; onOpenChange: (v: boolean) => void; }> = ({ match, open, onOpenChange }) => {
+  const {
+    teams,
+    tournaments,
+    updateMatch,
+    fetchMatchLeagues,
+    activateMatchInLeagues,
+    deactivateMatchInLeagues,
+    isSaving,
+  } = useAdminMatchesStore();
+  const [form, setForm] = React.useState({
+    homeTeamId: '',
+    awayTeamId: '',
+    phase: 'GROUP',
+    group: '',
+    matchDate: '',
+    status: 'SCHEDULED',
+    venue: '',
+    tournamentId: '',
+  });
+  const [leagues, setLeagues] = React.useState<Array<{ id: string; name: string; code: string; activeInLeague: boolean }>>([]);
+  const [selectedLeagueIds, setSelectedLeagueIds] = React.useState<Set<string>>(new Set());
+  const [initialActiveIds, setInitialActiveIds] = React.useState<Set<string>>(new Set());
+  const [savedTournamentId, setSavedTournamentId] = React.useState('');
+  const [isLoadingLeagues, setIsLoadingLeagues] = React.useState(false);
+  const [localError, setLocalError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (match) setLocalDate(toLocalDateTimeInput(match.matchDate));
+    if (!match) return;
+    setForm({
+      homeTeamId: match.homeTeam?.id ?? '',
+      awayTeamId: match.awayTeam?.id ?? '',
+      phase: match.phase ?? 'GROUP',
+      group: match.group ?? '',
+      matchDate: toLocalDateTimeInput(match.matchDate),
+      status: match.status ?? 'SCHEDULED',
+      venue: match.venue ?? '',
+      tournamentId: match.tournamentId ?? '',
+    });
+    setSavedTournamentId(match.tournamentId ?? '');
+    setLocalError(null);
+    setLeagues([]);
+    setSelectedLeagueIds(new Set());
+    setInitialActiveIds(new Set());
   }, [match]);
 
+  React.useEffect(() => {
+    if (!open || !match?.id) return;
+    let mounted = true;
+    const loadLeagues = async () => {
+      try {
+        setIsLoadingLeagues(true);
+        setLocalError(null);
+        const result = await fetchMatchLeagues(match.id);
+        if (!mounted) return;
+        setLeagues(result.leagues);
+        const active = new Set(result.leagues.filter((l) => l.activeInLeague).map((l) => l.id));
+        setInitialActiveIds(active);
+        setSelectedLeagueIds(new Set(active));
+      } catch (error: any) {
+        if (mounted) setLocalError(error?.message || 'No se pudieron cargar las pollas');
+      } finally {
+        if (mounted) setIsLoadingLeagues(false);
+      }
+    };
+    void loadLeagues();
+    return () => { mounted = false; };
+  }, [open, match?.id, match?.tournamentId, fetchMatchLeagues]);
+
+  const toggleLeague = (leagueId: string) => {
+    setSelectedLeagueIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leagueId)) next.delete(leagueId);
+      else next.add(leagueId);
+      return next;
+    });
+  };
+
   const handleSave = async () => {
+    if (!match) return;
     try {
-      await updateMatch(match.id, { matchDate: cotLocalInputToUtcIso(localDate) });
+      setLocalError(null);
+      const tournamentChanged = (form.tournamentId || '') !== (savedTournamentId || '');
+      await updateMatch(match.id, {
+        homeTeamId: form.homeTeamId,
+        awayTeamId: form.awayTeamId,
+        phase: form.phase,
+        group: form.group || undefined,
+        matchDate: cotLocalInputToUtcIso(form.matchDate),
+        status: form.status,
+        venue: form.venue || undefined,
+        tournamentId: form.tournamentId || null,
+      });
+      setSavedTournamentId(form.tournamentId || '');
+
+      // Si cambió el torneo, las pollas elegibles cambian: recargar y dejar el diálogo abierto.
+      if (tournamentChanged) {
+        const result = await fetchMatchLeagues(match.id);
+        setLeagues(result.leagues);
+        const active = new Set(result.leagues.filter((l) => l.activeInLeague).map((l) => l.id));
+        setInitialActiveIds(active);
+        setSelectedLeagueIds(new Set(active));
+        setLocalError(form.tournamentId
+          ? 'Torneo actualizado. Revisa las pollas y vuelve a guardar para activar.'
+          : 'Torneo quitado. Asigna uno para poder activar en pollas.');
+        return;
+      }
+
+      if (form.tournamentId) {
+        const toActivate = [...selectedLeagueIds].filter((id) => !initialActiveIds.has(id));
+        const toDeactivate = [...initialActiveIds].filter((id) => !selectedLeagueIds.has(id));
+        if (toActivate.length) await activateMatchInLeagues(match.id, toActivate);
+        if (toDeactivate.length) await deactivateMatchInLeagues(match.id, toDeactivate);
+      }
+
       onOpenChange(false);
-    } catch {
-      // El store ya registra el error; evitar promesa rechazada sin manejar.
+    } catch (error: any) {
+      setLocalError(error?.message || 'No se pudo guardar el partido');
     }
   };
+
+  const canSave = !!form.homeTeamId && !!form.awayTeamId && !!form.matchDate && form.homeTeamId !== form.awayTeamId;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[1.75rem] bg-white p-6 shadow-2xl">
-          <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Reprogramar partido</DialogPrimitive.Title>
-          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">{match?.homeTeam?.name} vs {match?.awayTeam?.name}</DialogPrimitive.Description>
-          <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-              Nueva fecha y hora <span className="font-normal normal-case tracking-normal text-slate-400">(hora Colombia COT)</span>
-            </label>
-            <input
-              type="datetime-local"
-              value={localDate}
-              onChange={(e) => setLocalDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
-            <p className="mt-1.5 text-[11px] text-slate-400">
-              UTC: {localDate ? cotLocalInputToUtcIso(localDate) : '—'}
-            </p>
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] bg-white p-6 shadow-2xl">
+          <DialogPrimitive.Title className="mb-1 text-lg font-black text-slate-900">Ajustar partido</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="mb-5 text-sm text-slate-500">
+            Edita los datos cuando la API aún no los trae y actívalo en las pollas para que puedan ingresar marcadores.
+          </DialogPrimitive.Description>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Equipo local</label>
+                <select value={form.homeTeamId} onChange={(e) => setForm({ ...form, homeTeamId: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                  <option value="">Seleccionar...</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Equipo visitante</label>
+                <select value={form.awayTeamId} onChange={(e) => setForm({ ...form, awayTeamId: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                  <option value="">Seleccionar...</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Fase</label>
+                <select value={form.phase} onChange={(e) => setForm({ ...form, phase: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                  {PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Grupo</label>
+                <input value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} placeholder="Ej: A" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estado</label>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                  {STATUSES_MATCH.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Torneo</label>
+                <select value={form.tournamentId} onChange={(e) => setForm({ ...form, tournamentId: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                  <option value="">Sin torneo</option>
+                  {tournaments.map((t) => <option key={t.id} value={t.id}>{t.name} {t.season}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Fecha y hora <span className="font-normal normal-case tracking-normal text-slate-400">(hora Colombia COT)</span>
+              </label>
+              <input
+                type="datetime-local"
+                value={form.matchDate}
+                onChange={(e) => setForm({ ...form, matchDate: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <p className="mt-1.5 text-[11px] text-slate-400">
+                UTC: {form.matchDate ? cotLocalInputToUtcIso(form.matchDate) : '—'}
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Estadio / sede</label>
+              <input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} placeholder="Ej: Estadio Azteca" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Disponible en pollas</p>
+              <p className="mt-1 text-xs text-slate-500">Activa el partido para que los participantes puedan ingresar marcadores.</p>
+
+              {!form.tournamentId ? (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Asigna un torneo para poder activar este partido en pollas.
+                </p>
+              ) : isLoadingLeagues ? (
+                <p className="mt-3 flex items-center gap-2 text-xs text-slate-500"><Loader2 size={14} className="animate-spin" /> Cargando pollas...</p>
+              ) : leagues.length === 0 ? (
+                <p className="mt-3 text-xs text-slate-500">No hay pollas con este torneo vinculado.</p>
+              ) : (
+                <div className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                  {leagues.map((league) => {
+                    const checked = selectedLeagueIds.has(league.id);
+                    return (
+                      <label key={league.id} className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition ${checked ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-900">{league.name}</p>
+                          <p className="text-[11px] text-slate-500">{league.code}</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleLeague(league.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-400"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {localError && (
+              <div className={`rounded-lg border px-3 py-2 text-xs ${localError.includes('Torneo') ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+                {localError}
+              </div>
+            )}
           </div>
+
           <div className="mt-6 flex gap-3">
             <button onClick={() => onOpenChange(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50">Cancelar</button>
-            <button onClick={handleSave} disabled={isSaving || !localDate} className="flex-1 rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 disabled:opacity-60">{isSaving ? 'Guardando...' : 'Reprogramar'}</button>
+            <button onClick={() => void handleSave()} disabled={isSaving || !canSave} className="flex-1 rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition-all hover:bg-amber-500 disabled:opacity-60">
+              {isSaving ? 'Guardando...' : 'Guardar'}
+            </button>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -722,14 +928,18 @@ const LinkDialog: React.FC<{ match: any; open: boolean; onOpenChange: (v: boolea
 };
 
 const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void; }> = ({ open, onOpenChange }) => {
-  const { teams, createMatch, isSaving } = useAdminMatchesStore();
-  const [form, setForm] = React.useState({ homeTeamId: '', awayTeamId: '', phase: 'GROUP', matchDate: '', venue: '', group: '' });
+  const { teams, tournaments, createMatch, isSaving } = useAdminMatchesStore();
+  const [form, setForm] = React.useState({ homeTeamId: '', awayTeamId: '', phase: 'GROUP', matchDate: '', venue: '', group: '', tournamentId: '' });
 
   const handleCreate = async () => {
     // datetime-local da la hora en tiempo local (COT). Convertir a UTC ISO antes de enviar
     // para que el backend (Node.js) no lo interprete como UTC y guarde 5 horas de diferencia.
     const matchDateUtc = form.matchDate ? new Date(form.matchDate).toISOString() : '';
-    await createMatch({ ...form, matchDate: matchDateUtc } as any);
+    await createMatch({
+      ...form,
+      matchDate: matchDateUtc,
+      tournamentId: form.tournamentId || null,
+    } as any);
     onOpenChange(false);
   };
 
@@ -770,6 +980,13 @@ const CreateMatchDialog: React.FC<{ open: boolean; onOpenChange: (v: boolean) =>
               </div>
             </div>
             <div>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Torneo</label>
+              <select value={form.tournamentId} onChange={(e) => setForm({ ...form, tournamentId: e.target.value })} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                <option value="">Sin torneo (no se podrá activar en pollas)</option>
+                {tournaments.map((t) => <option key={t.id} value={t.id}>{t.name} {t.season}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Fecha y hora <span className="font-normal normal-case tracking-normal text-slate-400">(hora Colombia COT)</span></label>
               <input type="datetime-local" value={form.matchDate} onChange={(e) => setForm({ ...form, matchDate: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
             </div>
@@ -793,7 +1010,7 @@ const AdminMatches: React.FC = () => {
   const { publishManual: waPublish } = useAdminWhatsappStore();
   const [scoreMatch, setScoreMatch] = React.useState<any>(null);
   const [linkMatch, setLinkMatch] = React.useState<any>(null);
-  const [rescheduleMatch, setRescheduleMatch] = React.useState<any>(null);
+  const [editMatch, setEditMatch] = React.useState<AdminMatch | null>(null);
   const [showCreate, setShowCreate] = React.useState(false);
   const [showImportTournament, setShowImportTournament] = React.useState(false);
   const [recalculating, setRecalculating] = React.useState(false);
@@ -1317,7 +1534,7 @@ const AdminMatches: React.FC = () => {
                       <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} title={match.externalId ? 'Sincronizar' : 'Auto-vincular y sincronizar'} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Sincronizar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><RefreshCw size={14} className="mx-auto" /></button>
                       <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de arranque de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Mail size={14} className="mx-auto" /></button>
                       <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-40" aria-label={`Ver correo de cierre de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><MailCheck size={14} className="mx-auto" /></button>
-                      <button onClick={() => setRescheduleMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-amber-600" aria-label={`Reprogramar ${match.homeTeam.name} vs ${match.awayTeam.name}`} title="Reprogramar / corregir fecha"><Calendar size={14} className="mx-auto" /></button>
+                      <button onClick={() => setEditMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-amber-600" aria-label={`Ajustar ${match.homeTeam.name} vs ${match.awayTeam.name}`} title="Ajustar partido / activar en pollas"><Calendar size={14} className="mx-auto" /></button>
                       <button onClick={() => setScoreMatch(match)} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700" aria-label={`Editar resultado de ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Edit3 size={14} className="mx-auto" /></button>
                       <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-rose-600" aria-label={`Eliminar ${match.homeTeam.name} vs ${match.awayTeam.name}`}><Trash2 size={14} className="mx-auto" /></button>
                     </div>
@@ -1426,7 +1643,7 @@ const AdminMatches: React.FC = () => {
                           <button onClick={() => void handleSyncOrAutoLink(match)} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-lime-50 hover:text-lime-600 disabled:opacity-40" title={match.externalId ? 'Sincronizar ahora' : 'Auto-vincular y sincronizar'}><RefreshCw size={14} /></button>
                           <button onClick={() => void handleOpenPreview(match, 'start')} disabled={isSaving} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-sky-50 hover:text-sky-600 disabled:opacity-40" title="Ver y enviar correo de arranque"><Mail size={14} /></button>
                           <button onClick={() => void handleOpenPreview(match, 'results')} disabled={isSaving || match.homeScore == null || match.awayScore == null} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40" title="Ver y enviar correo de cierre"><MailCheck size={14} /></button>
-                          <button onClick={() => setRescheduleMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Reprogramar / corregir fecha y hora"><Calendar size={14} /></button>
+                          <button onClick={() => setEditMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Ajustar partido / activar en pollas"><Calendar size={14} /></button>
                           <button onClick={() => setScoreMatch(match)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-amber-50 hover:text-amber-600" title="Editar resultado"><Edit3 size={14} /></button>
                           <button onClick={() => setConfirmDelete({ id: match.id, name: `${match.homeTeam.name} vs ${match.awayTeam.name}` })} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-rose-50 hover:text-rose-600" title="Eliminar"><Trash2 size={14} /></button>
                         </div>
@@ -1443,7 +1660,7 @@ const AdminMatches: React.FC = () => {
       <AdminPagination page={filters.page} limit={filters.limit} total={total} onPageChange={(p) => setFilters({ page: p })} />
 
       <ScoreDialog match={scoreMatch} open={!!scoreMatch} onOpenChange={(v) => { if (!v) setScoreMatch(null); }} />
-      <RescheduleDialog match={rescheduleMatch} open={!!rescheduleMatch} onOpenChange={(v) => { if (!v) setRescheduleMatch(null); }} />
+      <EditMatchDialog match={editMatch} open={!!editMatch} onOpenChange={(v) => { if (!v) setEditMatch(null); }} />
       <LinkDialog match={linkMatch} open={!!linkMatch} onOpenChange={(v) => { if (!v) setLinkMatch(null); }} />
       <CreateMatchDialog open={showCreate} onOpenChange={setShowCreate} />
       {showImportTournament && (

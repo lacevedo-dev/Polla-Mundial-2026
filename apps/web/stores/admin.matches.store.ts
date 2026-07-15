@@ -111,6 +111,18 @@ export interface AdminUpdateScorePayload {
     advancingTeamId?: string;
 }
 
+export interface AdminMatchLeagueActivation {
+    id: string;
+    name: string;
+    code: string;
+    activeInLeague: boolean;
+}
+
+export interface AdminMatchLeaguesResponse {
+    tournamentId: string | null;
+    leagues: AdminMatchLeagueActivation[];
+}
+
 interface MatchesFilters {
     page: number;
     limit: number;
@@ -138,9 +150,21 @@ interface AdminMatchesState {
     fetchMatches: () => Promise<void>;
     fetchTeams: () => Promise<void>;
     fetchTournaments: () => Promise<void>;
-    createMatch: (data: Partial<AdminMatch>) => Promise<void>;
-    updateMatch: (id: string, data: Partial<AdminMatch> & { linkSource?: 'manual' | 'suggested' }) => Promise<void>;
+    createMatch: (data: Partial<AdminMatch> & {
+        homeTeamId?: string;
+        awayTeamId?: string;
+        tournamentId?: string | null;
+    }) => Promise<void>;
+    updateMatch: (id: string, data: Partial<AdminMatch> & {
+        linkSource?: 'manual' | 'suggested';
+        homeTeamId?: string;
+        awayTeamId?: string;
+        tournamentId?: string | null;
+    }) => Promise<void>;
     updateScore: (id: string, payload: AdminUpdateScorePayload) => Promise<void>;
+    fetchMatchLeagues: (id: string) => Promise<AdminMatchLeaguesResponse>;
+    activateMatchInLeagues: (id: string, leagueIds: string[]) => Promise<{ activated: number }>;
+    deactivateMatchInLeagues: (id: string, leagueIds: string[]) => Promise<{ deactivated: number }>;
     resendPredictionReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     resendResultsReport: (id: string) => Promise<{ message: string; leagues: number; recipients: number }>;
     getMatchPreviewLeagues: (id: string) => Promise<{ id: string; name: string; code: string }[]>;
@@ -253,6 +277,40 @@ export const useAdminMatchesStore = create<AdminMatchesState>((set, get) => ({
                 matches: state.matches.map((m) => (m.id === id ? { ...m, ...updated, status: 'FINISHED' } : m)),
                 isSaving: false,
             }));
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    fetchMatchLeagues: async (id) => {
+        return request<AdminMatchLeaguesResponse>(`/admin/matches/${id}/leagues`);
+    },
+
+    activateMatchInLeagues: async (id, leagueIds) => {
+        set({ isSaving: true, error: null });
+        try {
+            const result = await request<{ activated: number }>(`/admin/matches/${id}/activate-in-leagues`, {
+                method: 'POST',
+                body: JSON.stringify({ leagueIds }),
+            });
+            set({ isSaving: false });
+            return result;
+        } catch (error) {
+            set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
+            throw error;
+        }
+    },
+
+    deactivateMatchInLeagues: async (id, leagueIds) => {
+        set({ isSaving: true, error: null });
+        try {
+            const result = await request<{ deactivated: number }>(`/admin/matches/${id}/deactivate-in-leagues`, {
+                method: 'POST',
+                body: JSON.stringify({ leagueIds }),
+            });
+            set({ isSaving: false });
+            return result;
         } catch (error) {
             set({ isSaving: false, error: error instanceof Error ? error.message : 'Error' });
             throw error;
