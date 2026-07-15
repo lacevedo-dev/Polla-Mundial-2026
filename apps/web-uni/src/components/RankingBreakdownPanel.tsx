@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     isPhaseBonusAdvanceCorrect,
     resolveEffectiveAdvanceTeamId,
+    type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { PhaseBonusProgressIndicator } from './PhaseBonusProgressIndicator';
 import { RankingBreakdownAccordion } from './RankingBreakdownAccordion';
@@ -20,21 +21,86 @@ function isKnockoutPhase(phase?: string | null): boolean {
     return !!phase && phase !== 'GROUP' && phase !== 'THIRD_PLACE';
 }
 
+function resolveMatchAdvancingTeamId(item: RankingBreakdownMatch): string | null {
+    if (item.match.advancingTeamId) return item.match.advancingTeamId;
+    if (!item.match.homeTeam.id || !item.match.awayTeam.id) return null;
+    if (typeof item.match.homeScore !== 'number' || typeof item.match.awayScore !== 'number') return null;
+    if (item.match.homeScore === item.match.awayScore) return null;
+    return item.match.homeScore > item.match.awayScore
+        ? item.match.homeTeam.id
+        : item.match.awayTeam.id;
+}
+
+function isBreakdownAdvanceCorrect(item: RankingBreakdownMatch): boolean {
+    if (!item.match.homeTeam.id || !item.match.awayTeam.id) return false;
+    const advancingTeamId = resolveMatchAdvancingTeamId(item);
+    if (!advancingTeamId) return false;
+    return isPhaseBonusAdvanceCorrect(
+        {
+            matchId: item.match.id,
+            homeScore: item.prediction.homeScore,
+            awayScore: item.prediction.awayScore,
+            advanceTeamId: item.prediction.advanceTeamId ?? null,
+        },
+        {
+            id: item.match.id,
+            status: 'FINISHED',
+            homeTeamId: item.match.homeTeam.id,
+            awayTeamId: item.match.awayTeam.id,
+            advancingTeamId,
+            homeScore: item.match.homeScore,
+            awayScore: item.match.awayScore,
+            penaltyHomeScore: item.match.penaltyHomeScore,
+            penaltyAwayScore: item.match.penaltyAwayScore,
+        },
+    );
+}
+
+/** Alinea chips superiores con el detalle de partidos (evita 4/4 cuando un pick no cuenta). */
+function reconcilePhaseBonusProgress(
+    progress: PhaseBonusProgressItem[],
+    matches: RankingBreakdownMatch[],
+): PhaseBonusProgressItem[] {
+    const byPhase = new Map<string, RankingBreakdownMatch[]>();
+    for (const match of matches) {
+        if (!isKnockoutPhase(match.match.phase)) continue;
+        const list = byPhase.get(match.match.phase) ?? [];
+        list.push(match);
+        byPhase.set(match.match.phase, list);
+    }
+
+    return progress.map((item) => {
+        const phaseMatches = byPhase.get(item.phase);
+        if (!phaseMatches || phaseMatches.length === 0) return item;
+
+        const finished = phaseMatches.filter((match) => resolveMatchAdvancingTeamId(match));
+        if (finished.length === 0) return item;
+
+        const correctCount = finished.filter((match) => isBreakdownAdvanceCorrect(match)).length;
+        // Si el detalle trae todos los partidos de la fase, usa ese denominador; si no, conserva el del API.
+        const totalMatches =
+            phaseMatches.length >= item.totalMatches ? phaseMatches.length : item.totalMatches;
+        const fullyCorrect = totalMatches > 0 && correctCount >= totalMatches;
+        const isAwarded = fullyCorrect && item.isAwarded;
+        const awardedPoints = isAwarded ? item.awardedPoints : 0;
+
+        return {
+            ...item,
+            correctCount,
+            totalMatches,
+            isAwarded,
+            awardedPoints,
+            isPhaseComplete: item.isPhaseComplete || finished.length >= totalMatches,
+            progressLabel: `${correctCount}/${totalMatches}:${awardedPoints}`,
+        };
+    });
+}
+
 function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
     if (!isKnockoutPhase(item.match.phase)) return null;
     if (!item.match.homeTeam.id || !item.match.awayTeam.id) return null;
 
-    const inferredAdvancingTeamId =
-        item.match.advancingTeamId
-        ?? (
-            typeof item.match.homeScore === 'number'
-            && typeof item.match.awayScore === 'number'
-            && item.match.homeScore !== item.match.awayScore
-                ? (item.match.homeScore > item.match.awayScore
-                    ? item.match.homeTeam.id
-                    : item.match.awayTeam.id)
-                : null
-        );
+    const inferredAdvancingTeamId = resolveMatchAdvancingTeamId(item);
 
     const pred = {
         matchId: item.match.id,
@@ -44,7 +110,7 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
     };
     const matchForCount = {
         id: item.match.id,
-        status: item.match.status === 'FINISHED' || inferredAdvancingTeamId ? 'FINISHED' : (item.match.status ?? 'SCHEDULED'),
+        status: inferredAdvancingTeamId ? 'FINISHED' : (item.match.status ?? 'SCHEDULED'),
         homeTeamId: item.match.homeTeam.id,
         awayTeamId: item.match.awayTeam.id,
         advancingTeamId: inferredAdvancingTeamId,
@@ -63,7 +129,7 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
             : teamCode(item.match.awayTeam);
 
     const predictedDraw = item.prediction.homeScore === item.prediction.awayScore;
-    const finished = matchForCount.status === 'FINISHED' && Boolean(inferredAdvancingTeamId);
+    const finished = Boolean(inferredAdvancingTeamId);
     const matchWentToPens =
         typeof item.match.homeScore === 'number' &&
         typeof item.match.awayScore === 'number' &&
@@ -78,7 +144,7 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
         );
     }
 
-    const correct = isPhaseBonusAdvanceCorrect(pred, matchForCount);
+    const correct = isBreakdownAdvanceCorrect(item);
 
     let note: string | null = null;
     if (predictedDraw && !matchWentToPens) {
@@ -150,6 +216,23 @@ export function RankingBreakdownPanel({
     loading: boolean;
     className?: string;
 }) {
+    const reconciledProgress = useMemo(() => {
+        if (!breakdown?.phaseBonusProgress?.length) return [];
+        return reconcilePhaseBonusProgress(breakdown.phaseBonusProgress, breakdown.matches);
+    }, [breakdown]);
+
+    const visibleBonuses = useMemo(() => {
+        if (!breakdown) return [];
+        const awardedPhases = new Set(
+            reconciledProgress.filter((item) => item.isAwarded && item.awardedPoints > 0).map((item) => item.phase),
+        );
+        // Si hay progreso reconciliado, oculta bonos de fase que ya no aplican.
+        if (reconciledProgress.length > 0) {
+            return breakdown.bonuses.filter((bonus) => awardedPhases.has(bonus.phase));
+        }
+        return breakdown.bonuses;
+    }, [breakdown, reconciledProgress]);
+
     if (loading) {
         return <p className="px-4 py-3 text-sm text-slate-500">Cargando detalle...</p>;
     }
@@ -167,8 +250,8 @@ export function RankingBreakdownPanel({
 
     return (
         <div className={className}>
-            {breakdown.phaseBonusProgress && breakdown.phaseBonusProgress.length > 0 && (
-                <PhaseBonusProgressIndicator items={breakdown.phaseBonusProgress} variant="ranking" />
+            {reconciledProgress.length > 0 && (
+                <PhaseBonusProgressIndicator items={reconciledProgress} variant="ranking" />
             )}
             <RankingBreakdownAccordion
                 matches={breakdown.matches}
@@ -181,7 +264,7 @@ export function RankingBreakdownPanel({
                 }}
                 renderMatch={(match) => <BreakdownMatchCard match={match} />}
             />
-            {breakdown.bonuses.map((bonus) => (
+            {visibleBonuses.map((bonus) => (
                 <div
                     key={bonus.id}
                     className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center justify-between gap-3"

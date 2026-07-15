@@ -63,8 +63,10 @@ export interface PhaseBonusProgressItem {
 export type PhaseBonusVisualState = 'awarded' | 'missed' | 'in_progress' | 'pending';
 
 export function getPhaseBonusVisualState(item: PhaseBonusProgressItem): PhaseBonusVisualState {
-    if (item.isAwarded) return 'awarded';
-    if (item.isPhaseComplete && !item.isAwarded) return 'missed';
+    const fullyCorrect = item.totalMatches > 0 && item.correctCount >= item.totalMatches;
+    // No mostrar bono verde si el recuento vivo ya no es perfecto (p. ej. empate sin penales).
+    if (item.isAwarded && fullyCorrect) return 'awarded';
+    if (item.isPhaseComplete && !(item.isAwarded && fullyCorrect)) return 'missed';
     if (item.correctCount > 0 || item.totalMatches > item.correctCount) return 'in_progress';
     return 'pending';
 }

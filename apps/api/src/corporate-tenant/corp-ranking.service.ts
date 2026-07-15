@@ -366,7 +366,8 @@ export class CorpRankingService {
             );
             if (maxBonusPoints === 0 && correctCount === 0 && !finishedInPhase) continue;
 
-            const isAwarded = awardedMap.has(phase);
+            const fullyCorrect = totalMatches > 0 && correctCount >= totalMatches;
+            const isAwarded = awardedMap.has(phase) && fullyCorrect;
             const awardedPoints = isAwarded ? awardedMap.get(phase)! : 0;
 
             progress.push({
