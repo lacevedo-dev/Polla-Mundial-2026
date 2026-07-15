@@ -124,7 +124,15 @@ function needsAdvanceTeam(match: AdminFormMatch | undefined, homeScore: number, 
 }
 
 function formatMatchOption(match: AdminFormMatch): string {
-    return `${match.homeTeam.name} vs ${match.awayTeam.name} · ${formatDateTime(match.matchDate)}`;
+    const base = `${match.homeTeam.name} vs ${match.awayTeam.name} · ${formatDateTime(match.matchDate)}`;
+    if (match.status === 'FINISHED') {
+        const score =
+            match.homeScore != null && match.awayScore != null
+                ? ` ${match.homeScore}-${match.awayScore}`
+                : '';
+        return `${base} · Finalizado${score}`;
+    }
+    return base;
 }
 
 function formatPhase(phase?: string | null): string {
@@ -328,7 +336,8 @@ const AdminPredictions: React.FC = () => {
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Ingresar por participante</p>
                         <p className="text-xs text-slate-500">
-                            Carga o corrige el marcador de un jugador que no pudo pronosticar. Omite el cierre de ventana; no aplica a partidos ya finalizados.
+                            Carga o corrige el marcador de un jugador que no pudo pronosticar. Omite el cierre de ventana
+                            e incluye partidos finalizados (recalcula puntos al guardar).
                         </p>
                     </div>
                 </div>

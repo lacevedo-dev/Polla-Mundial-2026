@@ -48,11 +48,14 @@ export interface AdminFormMember {
 export interface AdminFormMatch {
     id: string;
     matchDate: string;
+    status?: string | null;
     phase?: string | null;
     group?: string | null;
     round?: string | null;
     homeTeamId: string;
     awayTeamId: string;
+    homeScore?: number | null;
+    awayScore?: number | null;
     homeTeam: { id: string; name: string; flagUrl?: string | null; code?: string | null };
     awayTeam: { id: string; name: string; flagUrl?: string | null; code?: string | null };
 }

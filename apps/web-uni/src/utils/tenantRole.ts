@@ -10,6 +10,11 @@ export function isTenantAdmin(user?: AuthUser | null): boolean {
     return user?.tenantRole === 'OWNER' || user?.tenantRole === 'ADMIN';
 }
 
+/** Operador de plataforma (systemRole), no rol de tenant. */
+export function isSystemSuperAdmin(user?: AuthUser | null): boolean {
+    return user?.systemRole === 'SUPERADMIN';
+}
+
 export function getHomeRoute(user?: AuthUser | null): string {
     return isStaffUser(user) ? STAFF_HOME : '/';
 }

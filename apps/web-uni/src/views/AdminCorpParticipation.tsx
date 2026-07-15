@@ -9,7 +9,10 @@ import {
     ParticipationBreakdownChart,
     buildParticipationSegments,
 } from '../components/ParticipationBreakdownChart';
+import { AdminProxyPredictionPanel } from '../components/AdminProxyPredictionPanel';
 import { request, resolveApiAssetUrl, ApiError } from '../api';
+import { useAuthStore } from '../stores/auth.store';
+import { isSystemSuperAdmin } from '../utils/tenantRole';
 
 interface ParticipationSummary {
     totalMembers: number;
@@ -120,6 +123,8 @@ function formatRelative(iso: string | null) {
 }
 
 export default function AdminCorpParticipation() {
+    const user = useAuthStore((state) => state.user);
+    const canProxyPredictions = isSystemSuperAdmin(user);
     const [overview, setOverview] = useState<ParticipationOverview | null>(null);
     const [members, setMembers] = useState<MemberParticipation[]>([]);
     const [membersTotal, setMembersTotal] = useState(0);
@@ -250,6 +255,10 @@ export default function AdminCorpParticipation() {
                     <p className="font-bold">Backend desactualizado</p>
                     <p className="mt-1">{apiError}</p>
                 </div>
+            )}
+
+            {canProxyPredictions && (
+                <AdminProxyPredictionPanel onSaved={() => void handleRefresh()} />
             )}
 
             <Link

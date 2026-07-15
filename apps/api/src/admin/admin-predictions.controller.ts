@@ -171,9 +171,6 @@ export class AdminPredictionsController {
                 where: {
                     leagueId,
                     active: true,
-                    match: {
-                        status: { not: 'FINISHED' },
-                    },
                 },
                 orderBy: { match: { matchDate: 'asc' } },
                 select: {
@@ -181,19 +178,31 @@ export class AdminPredictionsController {
                         select: {
                             id: true,
                             matchDate: true,
+                            status: true,
                             phase: true,
                             group: true,
                             round: true,
                             homeTeamId: true,
                             awayTeamId: true,
+                            homeScore: true,
+                            awayScore: true,
                             homeTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
                             awayTeam: { select: { id: true, name: true, flagUrl: true, code: true } },
                         },
                     },
                 },
-                take: 300,
+                take: 400,
             }),
         ]);
+
+        const matches = leagueMatches
+            .map((lm) => lm.match)
+            .sort((a, b) => {
+                const aFinished = a.status === 'FINISHED' ? 1 : 0;
+                const bFinished = b.status === 'FINISHED' ? 1 : 0;
+                if (aFinished !== bFinished) return aFinished - bFinished;
+                return new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime();
+            });
 
         return {
             leagues,
@@ -202,7 +211,7 @@ export class AdminPredictionsController {
                 name: m.user.name,
                 username: m.user.username,
             })),
-            matches: leagueMatches.map((lm) => lm.match),
+            matches,
         };
     }
 

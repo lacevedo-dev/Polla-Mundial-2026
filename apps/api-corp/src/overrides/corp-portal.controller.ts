@@ -2,6 +2,8 @@
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '@corp-api/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@corp-api/auth/guards/roles.guard';
+import { Roles } from '@corp-api/auth/decorators/roles.decorator';
 import { TenantMemberGuard } from '@corp-api/corporate-tenant/guards/tenant-member.guard';
 import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin.guard';
 import { TenantStaffGuard } from '@corp-api/corporate-tenant/guards/tenant-staff.guard';
@@ -15,6 +17,7 @@ import { ParticipationService, ParticipationMemberFilter } from '@corp-api/corpo
 import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operations.service';
 import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.service';
 import { PredictionsService } from '@corp-api/predictions/predictions.service';
+import { USER_STATUS } from '@corp-api/users/user-status.constants';
 import { CORP_DEFAULT_SCORING_RULES, CORP_PHASE_BONUS_HELP } from './corp-scoring-defaults';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -71,6 +74,19 @@ class CorpPredictionDto {
     @IsString() @IsNotEmpty() leagueId: string;
     @IsInt() @Min(0) @Max(99) homeScore: number;
     @IsInt() @Min(0) @Max(99) awayScore: number;
+    @IsOptional() @IsString() advanceTeamId?: string;
+}
+
+class CorpPredictionForUserDto {
+    @IsString() @IsNotEmpty() userId: string;
+    @IsString() @IsNotEmpty() matchId: string;
+    @IsString() @IsNotEmpty() leagueId: string;
+    @Type(() => Number)
+    @IsInt() @Min(0) @Max(99)
+    homeScore: number;
+    @Type(() => Number)
+    @IsInt() @Min(0) @Max(99)
+    awayScore: number;
     @IsOptional() @IsString() advanceTeamId?: string;
 }
 
@@ -921,6 +937,139 @@ export class CorpPortalController {
         return { synced, members: activeMembers.length, leagues: activeLeagues.length };
     }
 
+    @UseGuards(RolesGuard)
+    @Roles('SUPERADMIN')
+    @Get('predictions/admin/form-options')
+    async getPredictionFormOptions(@Req() req: any, @Query('leagueId') leagueId?: string) {
+        const tenantId: string = req.tenantId;
+
+        const leagues = await this.prisma.league.findMany({
+            where: { tenantId, status: 'ACTIVE' },
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true },
+        });
+
+        if (!leagueId) {
+            return { leagues, members: [], matches: [] };
+        }
+
+        const league = leagues.find((item) => item.id === leagueId);
+        if (!league) {
+            throw new NotFoundException('Polla no encontrada en este tenant');
+        }
+
+        const [members, leagueMatches] = await Promise.all([
+            this.prisma.tenantMember.findMany({
+                where: {
+                    tenantId,
+                    status: TenantMemberStatus.ACTIVE,
+                    user: { status: USER_STATUS.ACTIVE },
+                },
+                orderBy: { user: { name: 'asc' } },
+                select: {
+                    user: { select: { id: true, name: true, username: true, documentNumber: true } },
+                },
+            }),
+            this.prisma.leagueMatch.findMany({
+                where: {
+                    leagueId,
+                    active: true,
+                },
+                orderBy: { match: { matchDate: 'asc' } },
+                select: {
+                    match: {
+                        select: {
+                            id: true,
+                            matchDate: true,
+                            status: true,
+                            phase: true,
+                            group: true,
+                            round: true,
+                            homeTeamId: true,
+                            awayTeamId: true,
+                            homeScore: true,
+                            awayScore: true,
+                            homeTeam: { select: { id: true, name: true, flagUrl: true, code: true, shortCode: true } },
+                            awayTeam: { select: { id: true, name: true, flagUrl: true, code: true, shortCode: true } },
+                        },
+                    },
+                },
+                take: 400,
+            }),
+        ]);
+
+        // Prioriza abiertos; al final los finalizados (proxy SUPERADMIN puede cargar ambos).
+        const matches = leagueMatches
+            .map((leagueMatch) => leagueMatch.match)
+            .sort((a, b) => {
+                const aFinished = a.status === MatchStatus.FINISHED ? 1 : 0;
+                const bFinished = b.status === MatchStatus.FINISHED ? 1 : 0;
+                if (aFinished !== bFinished) return aFinished - bFinished;
+                return new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime();
+            });
+
+        return {
+            leagues,
+            members: members.map((member) => ({
+                id: member.user.id,
+                name: member.user.name,
+                username: member.user.documentNumber ?? member.user.username,
+            })),
+            matches,
+        };
+    }
+
+    @UseGuards(RolesGuard)
+    @Roles('SUPERADMIN')
+    @Post('predictions/for-user')
+    async upsertPredictionForUser(@Req() req: any, @Body() dto: CorpPredictionForUserDto) {
+        const tenantId: string = req.tenantId;
+        const { userId, matchId, leagueId, homeScore, awayScore, advanceTeamId } = dto;
+
+        const league = await this.prisma.league.findFirst({
+            where: { id: leagueId, tenantId },
+        });
+        if (!league) throw new NotFoundException('Polla no encontrada en este tenant');
+
+        const tenantMember = await this.prisma.tenantMember.findFirst({
+            where: {
+                tenantId,
+                userId,
+                status: TenantMemberStatus.ACTIVE,
+                user: { status: USER_STATUS.ACTIVE },
+            },
+        });
+        if (!tenantMember) {
+            throw new BadRequestException('El usuario no es un miembro activo de este tenant');
+        }
+
+        const leagueMatch = await this.prisma.leagueMatch.findUnique({
+            where: { leagueId_matchId: { leagueId, matchId } },
+        });
+        if (!leagueMatch || !leagueMatch.active) {
+            throw new BadRequestException('Este partido no está disponible para pronósticos');
+        }
+
+        const now = new Date();
+        await this.prisma.leagueMember.upsert({
+            where: { userId_leagueId: { userId, leagueId } },
+            create: { leagueId, userId, role: 'PLAYER', status: 'ACTIVE', joinedAt: now },
+            update: { status: 'ACTIVE' },
+        });
+
+        const prediction = await this.predictionsService.upsertPredictionForUser(userId, {
+            matchId,
+            leagueId,
+            homeScore,
+            awayScore,
+            advanceTeamId,
+        });
+
+        this.participationService.invalidateOverviewCache(tenantId);
+
+        return { ok: true, id: prediction.id };
+    }
+
     @Post('predictions')
     async upsertPrediction(@Req() req: any, @Body() dto: CorpPredictionDto) {
         const tenantId: string = req.tenantId;
@@ -933,12 +1082,12 @@ export class CorpPortalController {
         });
         if (!league) throw new NotFoundException('Polla no encontrada en este tenant');
 
-        // Verificar que el partido estÃ¡ activo en la polla
+        // Verificar que el partido está activo en la polla
         const leagueMatch = await this.prisma.leagueMatch.findUnique({
             where: { leagueId_matchId: { leagueId, matchId } },
         });
         if (!leagueMatch || !leagueMatch.active) {
-            throw new BadRequestException('Este partido no estÃ¡ disponible para pronÃ³sticos');
+            throw new BadRequestException('Este partido no está disponible para pronósticos');
         }
 
         // Validar tiempo de cierre

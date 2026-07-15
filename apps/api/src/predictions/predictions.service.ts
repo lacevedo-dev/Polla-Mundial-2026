@@ -105,7 +105,7 @@ export class PredictionsService {
     async upsertPrediction(
         userId: string,
         createPredictionDto: CreatePredictionDto,
-        options?: { skipDeadline?: boolean },
+        options?: { skipDeadline?: boolean; allowFinished?: boolean },
     ) {
         const { matchId, leagueId, homeScore, awayScore } = createPredictionDto;
 
@@ -142,8 +142,8 @@ export class PredictionsService {
             throw new NotFoundException('Partido o Liga no encontrados');
         }
 
-        // 3b. No permitir si el partido ya finalizó (scores en vivo no cuentan)
-        if (match.status === 'FINISHED') {
+        // 3b. No permitir si el partido ya finalizó (salvo override admin proxy)
+        if (match.status === 'FINISHED' && !options?.allowFinished) {
             throw new BadRequestException('No se puede ingresar pronóstico: el partido ya finalizó');
         }
 
@@ -188,9 +188,41 @@ export class PredictionsService {
         });
     }
 
-    /** SUPERADMIN: ingresar/corregir pronóstico de un participante (omite deadline). */
+    /**
+     * SUPERADMIN: ingresar/corregir pronóstico de un participante.
+     * Omite deadline y permite partidos finalizados; si el partido ya tiene
+     * marcador final, recalcula puntos (y bonos de fase) de inmediato.
+     */
     async upsertPredictionForUser(targetUserId: string, createPredictionDto: CreatePredictionDto) {
-        return this.upsertPrediction(targetUserId, createPredictionDto, { skipDeadline: true });
+        const prediction = await this.upsertPrediction(targetUserId, createPredictionDto, {
+            skipDeadline: true,
+            allowFinished: true,
+        });
+
+        const match = await this.prisma.match.findUnique({
+            where: { id: createPredictionDto.matchId },
+            select: {
+                id: true,
+                status: true,
+                homeScore: true,
+                awayScore: true,
+            },
+        });
+
+        if (
+            match?.status === 'FINISHED' &&
+            match.homeScore != null &&
+            match.awayScore != null
+        ) {
+            await this.calculateMatchPoints(match.id);
+            await this.calculatePhaseBonuses(match.id).catch((error: Error) => {
+                this.logger.warn(
+                    `No se pudieron recalcular bonos de fase tras proxy en ${match.id}: ${error.message}`,
+                );
+            });
+        }
+
+        return prediction;
     }
 
     private resolveKnockoutAdvanceTeamId(
