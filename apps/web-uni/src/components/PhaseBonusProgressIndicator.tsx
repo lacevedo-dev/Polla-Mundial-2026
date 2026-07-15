@@ -92,33 +92,25 @@ function PhaseBonusChip({ item }: { item: PhaseBonusProgressItem }) {
     const desktopLabel = PHASE_BONUS_COMPACT_LABELS[item.phase] ?? item.label;
 
     return (
-        <Tooltip content={<PhaseBonusTooltipContent item={item} />} position="top" className="min-w-0 flex-1 basis-0">
+        <Tooltip content={<PhaseBonusTooltipContent item={item} />} position="top" className="min-w-0">
             <div
-                className={`w-full rounded-lg border px-1 py-1.5 transition-colors cursor-help ${chipTone(state)}`}
+                className={`h-full w-full rounded-xl border px-2.5 py-2 transition-colors cursor-help ${chipTone(state)}`}
                 aria-label={`${item.label}: ${getPhaseBonusStatusHeadline(item)}`}
             >
-                <div className="hidden md:grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 min-w-0 px-0.5 w-full">
-                    <div className="flex items-center gap-1 min-w-0 justify-self-start">
-                        <span className="text-[10px] leading-none shrink-0" aria-hidden>{icon}</span>
-                        <span className="text-[10px] font-bold truncate leading-tight" title={item.label}>
-                            {desktopLabel}
-                        </span>
-                    </div>
-                    <span
-                        className="text-[10px] font-black tabular-nums justify-self-center"
-                        title="aciertos en partidos ya jugados"
-                    >
-                        {getPhaseBonusChipFraction(item)}
-                    </span>
-                    <span className="text-[10px] font-black tabular-nums justify-self-end">{pointsLabel}</span>
-                </div>
-                <div className="flex md:hidden items-center justify-center gap-0.5 min-w-0">
-                    <span className="text-[10px] leading-none shrink-0" aria-hidden>{icon}</span>
-                    <span className="text-[9px] font-black tabular-nums shrink-0" title="aciertos en partidos ya jugados">
-                        {getPhaseBonusChipFraction(item)}
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm leading-none shrink-0" aria-hidden>{icon}</span>
+                    <span className="text-[11px] font-black uppercase tracking-wide truncate" title={item.label}>
+                        {desktopLabel}
                     </span>
                 </div>
-                <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-black/5">
+                <p
+                    className="mt-1.5 text-sm font-black tabular-nums text-inherit"
+                    title="aciertos en partidos ya jugados"
+                >
+                    {getPhaseBonusChipFraction(item)}
+                </p>
+                <p className="text-[11px] font-bold tabular-nums opacity-80">{pointsLabel}</p>
+                <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-black/5">
                     <div
                         className={`h-full rounded-full ${barTone(state)}`}
                         style={{ width: `${Math.max(state === 'pending' ? 8 : 0, percent)}%` }}
@@ -138,11 +130,11 @@ function CompactPhaseBonusCell({
 }) {
     return (
         <section
-            className={`rounded-xl border border-amber-100 bg-amber-50/50 px-2.5 py-2 ${className}`}
+            className={`rounded-2xl border border-amber-100 bg-amber-50/50 px-3 py-3 ${className}`}
             aria-label="Bonos por clasificados en eliminatorias"
         >
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-                <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-900">
+            <div className="flex items-center justify-between gap-2 mb-2.5">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-900">
                     Bonos clasificados
                 </p>
                 <Tooltip
@@ -158,7 +150,7 @@ function CompactPhaseBonusCell({
                 </Tooltip>
             </div>
 
-            <div className="flex flex-nowrap items-stretch gap-1 md:gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                 {items.map((item) => (
                     <PhaseBonusChip key={item.phase} item={item} />
                 ))}

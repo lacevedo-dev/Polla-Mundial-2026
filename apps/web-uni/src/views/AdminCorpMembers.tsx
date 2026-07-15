@@ -1086,9 +1086,12 @@ export default function AdminCorpMembers() {
 
             {/* ── Modal: Detalle de ranking ── */}
             {rankingTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-                        <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
+                <div
+                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+                >
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-3xl h-[92vh] sm:h-auto sm:max-h-[88vh] flex flex-col">
+                        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
                             <div className="flex items-start gap-3 min-w-0">
                                 <Avatar member={rankingTarget} />
                                 <div className="min-w-0">
@@ -1102,7 +1105,7 @@ export default function AdminCorpMembers() {
                                         </p>
                                     )}
                                     {rankingBreakdown && !rankingBreakdown.loadError && (
-                                        <div className="mt-1.5">
+                                        <div className="mt-2">
                                             <RankingTiebreakSummary
                                                 entry={{
                                                     totalPoints: rankingBreakdown.summary.points,
@@ -1120,14 +1123,14 @@ export default function AdminCorpMembers() {
                                     )}
                                 </div>
                             </div>
-                            <div className="flex items-start gap-2 shrink-0">
+                            <div className="flex items-start gap-3 shrink-0">
                                 {rankingBreakdown && !rankingBreakdown.loadError && (
                                     <div className="text-right pt-0.5">
-                                        <p className="text-lg font-black text-slate-900 tabular-nums">
+                                        <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
                                             {rankingBreakdown.summary.points}
                                         </p>
                                         {(rankingBreakdown.summary.phaseBonusPoints ?? 0) > 0 && (
-                                            <p className="text-[9px] font-bold text-amber-600">
+                                            <p className="text-[10px] font-bold text-amber-600 mt-1">
                                                 +{rankingBreakdown.summary.phaseBonusPoints} bono
                                             </p>
                                         )}
@@ -1146,10 +1149,10 @@ export default function AdminCorpMembers() {
                             <RankingBreakdownPanel
                                 breakdown={rankingBreakdown}
                                 loading={rankingLoading}
-                                className="bg-slate-50/80 px-4 py-3 space-y-2"
+                                className="bg-slate-50/80 px-4 sm:px-6 py-4 space-y-3"
                             />
                         </div>
-                        <div className="px-5 py-3 border-t border-slate-100 shrink-0">
+                        <div className="px-4 sm:px-6 py-3 border-t border-slate-100 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                             <button
                                 onClick={closeRankingModal}
                                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
