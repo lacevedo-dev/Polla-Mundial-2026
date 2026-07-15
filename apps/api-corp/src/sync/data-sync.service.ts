@@ -460,12 +460,14 @@ export class DataSyncService implements OnModuleInit {
                 if (await this.scoreFinishedMatch(matchId)) scored += 1;
             }
             scored += await this.scoreBacklogFinishedMatches(30);
+            const phaseBonusesChecked = await this.awardBacklogPhaseBonuses(40);
 
             const leagueMatchesSynced = await this.syncLeagueMatchesForSyncedMatches(syncedMatchIds);
 
             this.logger.log(
                 `${synced} partidos sincronizados${skipped ? ` (${skipped} omitidos por datos incompletos)` : ''}` +
                 `${scored ? `, ${scored} partido(s) puntuados` : ''}` +
+                `${phaseBonusesChecked ? `, ${phaseBonusesChecked} partido(s) con bonos de fase revisados` : ''}` +
                 `${leagueMatchesSynced ? `, ${leagueMatchesSynced} LeagueMatch sincronizado(s)` : ''}`,
             );
             return { synced, skipped, scored, leagueMatchesSynced };
@@ -495,11 +497,7 @@ export class DataSyncService implements OnModuleInit {
             if (!match || match.status !== 'FINISHED') return false;
             if (match.homeScore === null || match.awayScore === null) return false;
 
-            const unscored = await this.prisma.prediction.count({
-                where: { matchId, points: null },
-            });
-            if (unscored === 0) return false;
-
+            // Asegurar advancingTeamId aunque los puntos ya est?n calculados (necesario para bonos de fase).
             if (match.phase !== 'GROUP' && match.homeScore !== match.awayScore) {
                 const advancingTeamId = match.homeScore > match.awayScore
                     ? match.homeTeamId
@@ -512,10 +510,22 @@ export class DataSyncService implements OnModuleInit {
                 }
             }
 
-            await this.predictionsService.calculateMatchPoints(matchId);
-            await this.predictionsService.calculatePhaseBonuses(matchId);
-            this.logger.log(`Puntos calculados para partido ${matchId} (${unscored} pron?stico(s) pendiente(s))`);
-            return true;
+            const unscored = await this.prisma.prediction.count({
+                where: { matchId, points: null },
+            });
+
+            if (unscored > 0) {
+                await this.predictionsService.calculateMatchPoints(matchId);
+                this.logger.log(`Puntos calculados para partido ${matchId} (${unscored} pron?stico(s) pendiente(s))`);
+            }
+
+            // Siempre recalcular bonos de fase en eliminatorias (idempotente).
+            // Antes se omit?a cuando unscored===0, as? que fases ya puntuadas nunca otorgaban PhaseBonus.
+            if (match.phase !== 'GROUP') {
+                await this.predictionsService.calculatePhaseBonuses(matchId);
+            }
+
+            return unscored > 0;
         } catch (error) {
             this.logger.error(`Error calculando puntos del partido ${matchId}:`, this.formatError(error));
             return false;
@@ -540,6 +550,40 @@ export class DataSyncService implements OnModuleInit {
             if (await this.scoreFinishedMatch(id)) scored += 1;
         }
         return scored;
+    }
+
+    /**
+     * Recalcula bonos de fase en eliminatorias ya finalizadas.
+     * Cubre el caso en que los puntos de partido se calcularon antes de existir
+     * soporte de PhaseBonus en api-corp (ranking sin +N bono).
+     */
+    private async awardBacklogPhaseBonuses(limit: number): Promise<number> {
+        const knockout = await this.prisma.match.findMany({
+            where: {
+                status: 'FINISHED',
+                homeScore: { not: null },
+                awayScore: { not: null },
+                phase: { not: 'GROUP' },
+                predictions: { some: {} },
+            },
+            select: { id: true },
+            orderBy: { matchDate: 'desc' },
+            take: limit,
+        });
+
+        let awarded = 0;
+        for (const { id } of knockout) {
+            try {
+                await this.predictionsService.calculatePhaseBonuses(id);
+                awarded += 1;
+            } catch (error) {
+                this.logger.error(
+                    `Error recalculando bonos de fase para partido ${id}:`,
+                    this.formatError(error),
+                );
+            }
+        }
+        return awarded;
     }
 
     /** Sincronizacion inicial/manual completa. La data corporativa solo se sincroniza aqui, no por cron. */

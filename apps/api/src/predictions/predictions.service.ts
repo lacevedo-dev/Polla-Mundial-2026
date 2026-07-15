@@ -545,15 +545,46 @@ export class PredictionsService {
                 );
 
                 if (allCorrect) {
-                    await this.prisma.phaseBonus.upsert({
-                        where: { userId_leagueId_phase: { userId, leagueId, phase: match.phase } },
-                        update: { points: bonusPoints, awardedAt: new Date() },
-                        create: { userId, leagueId, phase: match.phase, points: bonusPoints },
+                    await this.upsertPhaseBonusAward({
+                        userId,
+                        leagueId,
+                        phase: match.phase,
+                        points: bonusPoints,
                     });
                     this.logger.log(`Bono de fase ${match.phase} otorgado a ${userId} en liga ${leagueId}`);
                 }
             }
         }
+    }
+
+    /**
+     * Persiste un bono de fase. Usa el modelo Prisma cuando existe;
+     * en api-corp (cliente sin PhaseBonus) cae a SQL crudo.
+     */
+    private async upsertPhaseBonusAward(params: {
+        userId: string;
+        leagueId: string;
+        phase: Phase;
+        points: number;
+    }): Promise<void> {
+        const { userId, leagueId, phase, points } = params;
+        const phaseBonusDelegate = (this.prisma as { phaseBonus?: { upsert: Function } }).phaseBonus;
+
+        if (typeof phaseBonusDelegate?.upsert === 'function') {
+            await phaseBonusDelegate.upsert({
+                where: { userId_leagueId_phase: { userId, leagueId, phase } },
+                update: { points, awardedAt: new Date() },
+                create: { userId, leagueId, phase, points },
+            });
+            return;
+        }
+
+        const id = `pb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        await this.prisma.$executeRaw`
+            INSERT INTO PhaseBonus (id, userId, leagueId, phase, points, awardedAt)
+            VALUES (${id}, ${userId}, ${leagueId}, ${phase}, ${points}, NOW())
+            ON DUPLICATE KEY UPDATE points = VALUES(points), awardedAt = VALUES(awardedAt)
+        `;
     }
 
     async getPhaseBonusProgress(leagueId: string, userId: string): Promise<PhaseBonusProgressItem[]> {

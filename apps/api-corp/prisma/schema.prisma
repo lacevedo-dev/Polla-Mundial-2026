@@ -41,6 +41,7 @@ model User {
   tenantMemberships  TenantMember[]
   leagueMembers      LeagueMember[]
   predictions        Prediction[]
+  phaseBonuses       PhaseBonus[]
   notifications      Notification[]
 
   @@index([email])
@@ -250,6 +251,7 @@ model League {
   members                LeagueMember[]
   leagueTournaments      LeagueTournament[]
   predictions            Prediction[]
+  phaseBonuses           PhaseBonus[]
   scoringRules           ScoringRule[]
 
   @@index([code])
@@ -313,6 +315,23 @@ model ScoringRule {
   league                League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, ruleType, appliesToPhase])
+}
+
+/// Bonos por acertar todos los clasificados de una fase eliminatoria.
+/// El ranking corporativo suma estos puntos vía CorpRankingService.
+model PhaseBonus {
+  id        String   @id @default(cuid())
+  userId    String
+  leagueId  String
+  phase     Phase
+  points    Float
+  awardedAt DateTime @default(now())
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leagueId, phase])
+  @@index([leagueId])
+  @@index([userId])
 }
 
 // ─── Pronósticos ─────────────────────────────────────────────────────────────
