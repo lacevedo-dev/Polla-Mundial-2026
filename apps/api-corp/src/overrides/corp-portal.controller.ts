@@ -955,47 +955,35 @@ export class CorpPortalController {
             throw new NotFoundException('Polla no encontrada en este tenant');
         }
 
-        const [members, leagueMatches] = await Promise.all([
-            this.prisma.tenantMember.findMany({
-                where: {
-                    tenantId,
-                    status: TenantMemberStatus.ACTIVE,
-                    user: { status: USER_STATUS.ACTIVE },
-                },
-                orderBy: { user: { name: 'asc' } },
-                select: {
-                    user: { select: { id: true, name: true, username: true, documentNumber: true } },
-                },
-            }),
-            this.prisma.leagueMatch.findMany({
-                where: {
-                    leagueId,
-                    active: true,
-                },
-                orderBy: { match: { matchDate: 'asc' } },
-                select: {
-                    match: {
-                        select: {
-                            id: true,
-                            matchDate: true,
-                            status: true,
-                            phase: true,
-                            group: true,
-                            round: true,
-                            homeTeamId: true,
-                            awayTeamId: true,
-                            homeScore: true,
-                            awayScore: true,
-                            homeTeam: { select: { id: true, name: true, flagUrl: true, code: true, shortCode: true } },
-                            awayTeam: { select: { id: true, name: true, flagUrl: true, code: true, shortCode: true } },
-                        },
+        // No devolver todos los miembros (pueden ser 10k+). El front busca con /corp/members?search=
+        const leagueMatches = await this.prisma.leagueMatch.findMany({
+            where: {
+                leagueId,
+                active: true,
+            },
+            orderBy: { match: { matchDate: 'asc' } },
+            select: {
+                match: {
+                    select: {
+                        id: true,
+                        matchDate: true,
+                        status: true,
+                        phase: true,
+                        group: true,
+                        round: true,
+                        homeTeamId: true,
+                        awayTeamId: true,
+                        homeScore: true,
+                        awayScore: true,
+                        homeTeam: { select: { id: true, name: true, flagUrl: true, code: true, shortCode: true } },
+                        awayTeam: { select: { id: true, name: true, flagUrl: true, code: true, shortCode: true } },
                     },
                 },
-                take: 400,
-            }),
-        ]);
+            },
+            take: 400,
+        });
 
-        // Prioriza abiertos; al final los finalizados (proxy SUPERADMIN puede cargar ambos).
+        // Prioriza abiertos; al final los finalizados (proxy admin puede cargar ambos).
         const matches = leagueMatches
             .map((leagueMatch) => leagueMatch.match)
             .sort((a, b) => {
@@ -1007,11 +995,7 @@ export class CorpPortalController {
 
         return {
             leagues,
-            members: members.map((member) => ({
-                id: member.user.id,
-                name: member.user.name,
-                username: member.user.documentNumber ?? member.user.username,
-            })),
+            members: [],
             matches,
         };
     }
