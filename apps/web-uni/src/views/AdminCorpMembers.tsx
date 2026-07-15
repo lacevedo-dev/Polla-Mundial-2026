@@ -2,12 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
     Users, Search, Crown, Shield, User, Mail, Copy, Check,
     Plus, Pencil, Trash2, X, Loader2, AlertTriangle, Upload,
-    Send, KeyRound, EyeOff, Eye, RefreshCw, Hash,
+    Send, KeyRound, EyeOff, Eye, RefreshCw, Hash, Medal,
 } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request, ApiError, resolveApiAssetUrl } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
+import { RankingBreakdownPanel } from '../components/RankingBreakdownPanel';
+import { RankingTiebreakSummary } from '../components/RankingTiebreakSummary';
+import type { RankingBreakdownResponse } from './ranking.types';
 
 interface Member {
     id: string;
@@ -152,6 +155,10 @@ export default function AdminCorpMembers() {
     const [resending, setResending] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
     const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+
+    const [rankingTarget, setRankingTarget] = useState<Member | null>(null);
+    const [rankingBreakdown, setRankingBreakdown] = useState<RankingBreakdownResponse | null>(null);
+    const [rankingLoading, setRankingLoading] = useState(false);
 
     const listAbortRef = useRef<AbortController | null>(null);
     const fetchSeqRef = useRef(0);
@@ -384,6 +391,50 @@ export default function AdminCorpMembers() {
     }
     function openDelete(m: Member) { setTarget(m); setModalError(null); setModal('delete'); }
     function closeModal() { setModal(null); setTarget(null); setModalError(null); setBulkResults(null); }
+
+    function closeRankingModal() {
+        setRankingTarget(null);
+        setRankingBreakdown(null);
+        setRankingLoading(false);
+    }
+
+    async function openRanking(member: Member) {
+        setRankingTarget(member);
+        setRankingBreakdown(null);
+        setRankingLoading(true);
+        try {
+            const breakdown = await request<RankingBreakdownResponse>(
+                `/corp/ranking/users/${member.userId}`,
+            );
+            setRankingBreakdown(breakdown);
+        } catch (e) {
+            setRankingBreakdown({
+                user: {
+                    id: member.userId,
+                    username: member.username,
+                    name: member.name,
+                    avatar: member.avatar,
+                },
+                summary: {
+                    points: 0,
+                    exactCount: 0,
+                    winnerCount: 0,
+                    goalCount: 0,
+                    uniqueCount: 0,
+                    phaseBonusPoints: 0,
+                },
+                matches: [],
+                bonuses: [],
+                phaseBonusProgress: [],
+                loadError: true,
+                loadErrorMessage: e instanceof ApiError
+                    ? e.message
+                    : 'No se pudo cargar el detalle de ranking.',
+            });
+        } finally {
+            setRankingLoading(false);
+        }
+    }
 
     async function handleCreate() {
         if (!form.documentNumber.trim() || !form.name.trim() || !form.email.trim()) { setModalError('Documento, nombre y email son obligatorios.'); return; }
@@ -974,6 +1025,13 @@ export default function AdminCorpMembers() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            onClick={() => void openRanking(member)}
+                                            title="Ver detalle de ranking"
+                                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                        >
+                                            <Medal size={14} />
+                                        </button>
                                         <button onClick={() => handleResend(member)} disabled={resending === member.id} title="Reenviar credenciales"
                                             className="p-1.5 rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-colors disabled:opacity-40">
                                             {resending === member.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -1022,6 +1080,83 @@ export default function AdminCorpMembers() {
                             className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
                             »
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal: Detalle de ranking ── */}
+            {rankingTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
+                            <div className="flex items-start gap-3 min-w-0">
+                                <Avatar member={rankingTarget} />
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <Medal size={14} className="text-amber-500 shrink-0" />
+                                        <h3 className="font-black text-slate-900 truncate">{rankingTarget.name}</h3>
+                                    </div>
+                                    {rankingTarget.username && (
+                                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                            {rankingTarget.username}
+                                        </p>
+                                    )}
+                                    {rankingBreakdown && !rankingBreakdown.loadError && (
+                                        <div className="mt-1.5">
+                                            <RankingTiebreakSummary
+                                                entry={{
+                                                    totalPoints: rankingBreakdown.summary.points,
+                                                    hasChampion: rankingBreakdown.bonuses.some(
+                                                        (bonus) => bonus.phase === 'FINAL',
+                                                    ),
+                                                    exactCount: rankingBreakdown.summary.exactCount,
+                                                    winnerCount: rankingBreakdown.summary.winnerCount,
+                                                    goalCount: rankingBreakdown.summary.goalCount,
+                                                    uniqueCount: rankingBreakdown.summary.uniqueCount,
+                                                }}
+                                                phaseBonusPoints={rankingBreakdown.summary.phaseBonusPoints}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-2 shrink-0">
+                                {rankingBreakdown && !rankingBreakdown.loadError && (
+                                    <div className="text-right pt-0.5">
+                                        <p className="text-lg font-black text-slate-900 tabular-nums">
+                                            {rankingBreakdown.summary.points}
+                                        </p>
+                                        {(rankingBreakdown.summary.phaseBonusPoints ?? 0) > 0 && (
+                                            <p className="text-[9px] font-bold text-amber-600">
+                                                +{rankingBreakdown.summary.phaseBonusPoints} bono
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                <button
+                                    onClick={closeRankingModal}
+                                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"
+                                    title="Cerrar"
+                                >
+                                    <X size={17} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-y-auto flex-1 min-h-0">
+                            <RankingBreakdownPanel
+                                breakdown={rankingBreakdown}
+                                loading={rankingLoading}
+                                className="bg-slate-50/80 px-4 py-3 space-y-2"
+                            />
+                        </div>
+                        <div className="px-5 py-3 border-t border-slate-100 shrink-0">
+                            <button
+                                onClick={closeRankingModal}
+                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -20,6 +20,7 @@ interface RankingTiebreakSummaryProps {
     previous?: TiebreakSummaryEntry | null;
     next?: TiebreakSummaryEntry | null;
     compact?: boolean;
+    phaseBonusPoints?: number;
 }
 
 export function toTiebreakStats(
@@ -43,6 +44,7 @@ export function RankingTiebreakSummary({
     previous = null,
     next = null,
     compact = false,
+    phaseBonusPoints = 0,
 }: RankingTiebreakSummaryProps) {
     const stats = toTiebreakStats(entry);
     const tiedWithPrevious = previous != null && previous.totalPoints === entry.totalPoints;
@@ -82,6 +84,16 @@ export function RankingTiebreakSummary({
                         </span>
                     );
                 })}
+                {phaseBonusPoints > 0 && (
+                    <span
+                        title={`Bono de fase: ${phaseBonusPoints} pts`}
+                        aria-label={`Bono de fase: ${phaseBonusPoints} puntos`}
+                        className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-amber-700"
+                    >
+                        <span aria-hidden="true">🎁</span>
+                        <span className="tabular-nums">+{phaseBonusPoints}</span>
+                    </span>
+                )}
             </div>
             {(noteAbove || noteBelow) && (
                 <div className="space-y-0.5">
