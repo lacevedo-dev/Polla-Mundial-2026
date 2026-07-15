@@ -162,8 +162,15 @@ export default function AdminCorpRoles() {
     // ── Carga de datos ──
     function loadMembers() {
         setLoadingMembers(true);
-        request<Member[]>('/corp/members')
-            .then(setMembers)
+        request<{ data?: Member[] } | Member[]>('/corp/members?limit=200')
+            .then((res) => {
+                const list = Array.isArray(res)
+                    ? res
+                    : Array.isArray(res?.data)
+                      ? res.data
+                      : [];
+                setMembers(list);
+            })
             .catch(() => setMembers([]))
             .finally(() => setLoadingMembers(false));
     }
