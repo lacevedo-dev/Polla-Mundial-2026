@@ -11,6 +11,7 @@ import {
 } from '@polla-2026/shared';
 import { Phase, ScoringType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PredictionsService } from '../predictions/predictions.service';
 import { loadLeaguePhaseMatches } from '../predictions/league-phase-matches.util';
 
 export const CORP_RANKING_LIMIT = 50;
@@ -87,7 +88,12 @@ const PHASE_TO_SCORING_TYPE: Partial<Record<Phase, ScoringType>> = {
 
 @Injectable()
 export class CorpRankingService {
-    constructor(private readonly prisma: PrismaService) {}
+    private readonly phaseBonusRefreshAt = new Map<string, number>();
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly predictionsService: PredictionsService,
+    ) {}
 
     private parsePointDetail(pointDetail: string | null): PointDetail | null {
         if (!pointDetail) return null;
@@ -95,6 +101,34 @@ export class CorpRankingService {
             return JSON.parse(pointDetail) as PointDetail;
         } catch {
             return null;
+        }
+    }
+
+    /**
+     * Reescribe PhaseBonus con la regla vigente (empate solo si hubo penales reales).
+     * Se dispara al consultar ranking/detalle para no depender de un sync manual.
+     */
+    private async refreshPhaseBonusesForLeague(leagueId: string, force = false): Promise<void> {
+        const now = Date.now();
+        const last = this.phaseBonusRefreshAt.get(leagueId) ?? 0;
+        if (!force && now - last < 15_000) return;
+        this.phaseBonusRefreshAt.set(leagueId, now);
+
+        for (const phaseKey of TRACKED_PHASE_BONUS_PHASES) {
+            const phase = phaseKey as Phase;
+            try {
+                const matches = await loadLeaguePhaseMatches(this.prisma, leagueId, phase);
+                const sample = matches.find(
+                    (match) =>
+                        match.status === 'FINISHED' &&
+                        match.homeScore != null &&
+                        match.awayScore != null,
+                );
+                if (!sample) continue;
+                await this.predictionsService.calculatePhaseBonuses(sample.id);
+            } catch {
+                // No bloquear ranking si una fase falla al recalcular.
+            }
         }
     }
 
@@ -212,6 +246,7 @@ export class CorpRankingService {
         userId: string,
     ): Promise<PhaseBonusProgressItem[]> {
         try {
+            await this.refreshPhaseBonusesForLeague(leagueId, true);
             return await this.buildPhaseBonusProgress(leagueId, userId);
         } catch {
             return [];
@@ -582,6 +617,7 @@ export class CorpRankingService {
 
         const available = this.buildAvailableCategories(league);
         const activeCategory = this.normalizeCategory(category, available);
+        await this.refreshPhaseBonusesForLeague(league.id);
         const leaderboard = await this.buildLeaderboard(league.id, activeCategory);
 
         return {
@@ -602,6 +638,7 @@ export class CorpRankingService {
         limit = CORP_RANKING_LIMIT,
         category: CorpLeaderboardCategory = 'GENERAL',
     ) {
+        await this.refreshPhaseBonusesForLeague(leagueId);
         const leaderboard = await this.buildLeaderboard(leagueId, category);
         const ranked = assignCompetitionRanks(leaderboard);
         const myEntry = ranked.find((entry) => entry.id === viewerUserId);
@@ -626,6 +663,7 @@ export class CorpRankingService {
 
         const available = this.buildAvailableCategories(league);
         const activeCategory = this.normalizeCategory(category, available);
+        await this.refreshPhaseBonusesForLeague(league.id, true);
 
         return this.buildUserBreakdown(league.id, targetUserId, activeCategory);
     }

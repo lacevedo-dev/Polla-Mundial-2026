@@ -24,6 +24,18 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
     if (!isKnockoutPhase(item.match.phase)) return null;
     if (!item.match.homeTeam.id || !item.match.awayTeam.id) return null;
 
+    const inferredAdvancingTeamId =
+        item.match.advancingTeamId
+        ?? (
+            typeof item.match.homeScore === 'number'
+            && typeof item.match.awayScore === 'number'
+            && item.match.homeScore !== item.match.awayScore
+                ? (item.match.homeScore > item.match.awayScore
+                    ? item.match.homeTeam.id
+                    : item.match.awayTeam.id)
+                : null
+        );
+
     const pred = {
         matchId: item.match.id,
         homeScore: item.prediction.homeScore,
@@ -32,10 +44,10 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
     };
     const matchForCount = {
         id: item.match.id,
-        status: item.match.status ?? 'FINISHED',
+        status: item.match.status === 'FINISHED' || inferredAdvancingTeamId ? 'FINISHED' : (item.match.status ?? 'SCHEDULED'),
         homeTeamId: item.match.homeTeam.id,
         awayTeamId: item.match.awayTeam.id,
-        advancingTeamId: item.match.advancingTeamId ?? null,
+        advancingTeamId: inferredAdvancingTeamId,
         homeScore: item.match.homeScore,
         awayScore: item.match.awayScore,
         penaltyHomeScore: item.match.penaltyHomeScore,
@@ -51,15 +63,13 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
             : teamCode(item.match.awayTeam);
 
     const predictedDraw = item.prediction.homeScore === item.prediction.awayScore;
-    const finished = item.match.status === 'FINISHED' || (
-        typeof item.match.homeScore === 'number' && typeof item.match.awayScore === 'number'
-    );
+    const finished = matchForCount.status === 'FINISHED' && Boolean(inferredAdvancingTeamId);
     const matchWentToPens =
         typeof item.match.homeScore === 'number' &&
         typeof item.match.awayScore === 'number' &&
         item.match.homeScore === item.match.awayScore;
 
-    if (!finished || !item.match.advancingTeamId) {
+    if (!finished) {
         return (
             <p className="text-[11px] font-medium text-slate-500 mt-1">
                 Clasifica: <span className="font-bold text-slate-700">{pickCode}</span>
@@ -68,10 +78,7 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
         );
     }
 
-    const correct = isPhaseBonusAdvanceCorrect(pred, {
-        ...matchForCount,
-        status: 'FINISHED',
-    });
+    const correct = isPhaseBonusAdvanceCorrect(pred, matchForCount);
 
     let note: string | null = null;
     if (predictedDraw && !matchWentToPens) {
