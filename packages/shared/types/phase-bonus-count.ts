@@ -35,16 +35,19 @@ export function resolveEffectiveAdvanceTeamId(
     return prediction.advanceTeamId;
 }
 
-/** El partido real se definió en penales (tanda o marcador empatado con clasificado). */
+/** El partido real se definió en penales: marcador reglamentario empatado. */
 export function matchDecidedOnPenalties(match: PhaseBonusMatchForCount): boolean {
-    if (match.penaltyHomeScore != null && match.penaltyAwayScore != null) {
-        return true;
+    // Si el marcador de 90'+ET no está empatado, no fue a penales (ignora penalty* residuales).
+    if (match.homeScore == null || match.awayScore == null) {
+        return false;
     }
+    if (match.homeScore !== match.awayScore) {
+        return false;
+    }
+    // Empate en marcador: basta clasificado o tanda registrada.
     return (
-        match.homeScore != null &&
-        match.awayScore != null &&
-        match.homeScore === match.awayScore &&
-        match.advancingTeamId != null
+        match.advancingTeamId != null ||
+        (match.penaltyHomeScore != null && match.penaltyAwayScore != null)
     );
 }
 

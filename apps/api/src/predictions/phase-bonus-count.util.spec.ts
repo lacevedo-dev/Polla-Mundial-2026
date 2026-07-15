@@ -76,4 +76,20 @@ describe('phase-bonus-count', () => {
             ),
         ).toBe(1);
     });
+
+    it('no trata como penales un 2-1 aunque existan penaltyHome/Away residuales', () => {
+        const dirty = {
+            ...match,
+            homeScore: 2,
+            awayScore: 1,
+            penaltyHomeScore: 0,
+            penaltyAwayScore: 0,
+        };
+        expect(
+            isPhaseBonusAdvanceCorrect(
+                { matchId: 'm1', homeScore: 1, awayScore: 1, advanceTeamId: 'esp' },
+                dirty,
+            ),
+        ).toBe(false);
+    });
 });

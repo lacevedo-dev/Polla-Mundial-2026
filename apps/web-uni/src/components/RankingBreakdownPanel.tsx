@@ -24,19 +24,25 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
     if (!isKnockoutPhase(item.match.phase)) return null;
     if (!item.match.homeTeam.id || !item.match.awayTeam.id) return null;
 
-    const effectiveAdvance = resolveEffectiveAdvanceTeamId(
-        {
-            matchId: item.match.id,
-            homeScore: item.prediction.homeScore,
-            awayScore: item.prediction.awayScore,
-            advanceTeamId: item.prediction.advanceTeamId ?? null,
-        },
-        {
-            homeTeamId: item.match.homeTeam.id,
-            awayTeamId: item.match.awayTeam.id,
-        },
-    );
+    const pred = {
+        matchId: item.match.id,
+        homeScore: item.prediction.homeScore,
+        awayScore: item.prediction.awayScore,
+        advanceTeamId: item.prediction.advanceTeamId ?? null,
+    };
+    const matchForCount = {
+        id: item.match.id,
+        status: item.match.status ?? 'FINISHED',
+        homeTeamId: item.match.homeTeam.id,
+        awayTeamId: item.match.awayTeam.id,
+        advancingTeamId: item.match.advancingTeamId ?? null,
+        homeScore: item.match.homeScore,
+        awayScore: item.match.awayScore,
+        penaltyHomeScore: item.match.penaltyHomeScore,
+        penaltyAwayScore: item.match.penaltyAwayScore,
+    };
 
+    const effectiveAdvance = resolveEffectiveAdvanceTeamId(pred, matchForCount);
     if (!effectiveAdvance) return null;
 
     const pickCode =
@@ -48,58 +54,49 @@ function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
     const finished = item.match.status === 'FINISHED' || (
         typeof item.match.homeScore === 'number' && typeof item.match.awayScore === 'number'
     );
+    const matchWentToPens =
+        typeof item.match.homeScore === 'number' &&
+        typeof item.match.awayScore === 'number' &&
+        item.match.homeScore === item.match.awayScore;
 
     if (!finished || !item.match.advancingTeamId) {
         return (
             <p className="text-[11px] font-medium text-slate-500 mt-1">
                 Clasifica: <span className="font-bold text-slate-700">{pickCode}</span>
-                {predictedDraw ? ' (penales)' : ''}
+                {predictedDraw ? <span className="text-slate-400"> (pick por empate)</span> : null}
             </p>
         );
     }
 
-    const correct = isPhaseBonusAdvanceCorrect(
-        {
-            matchId: item.match.id,
-            homeScore: item.prediction.homeScore,
-            awayScore: item.prediction.awayScore,
-            advanceTeamId: item.prediction.advanceTeamId ?? null,
-        },
-        {
-            id: item.match.id,
-            status: item.match.status ?? 'FINISHED',
-            homeTeamId: item.match.homeTeam.id,
-            awayTeamId: item.match.awayTeam.id,
-            advancingTeamId: item.match.advancingTeamId,
-            homeScore: item.match.homeScore,
-            awayScore: item.match.awayScore,
-            penaltyHomeScore: item.match.penaltyHomeScore,
-            penaltyAwayScore: item.match.penaltyAwayScore,
-        },
-    );
-
-    const wentToPens =
-        (item.match.penaltyHomeScore != null && item.match.penaltyAwayScore != null) ||
-        (item.match.homeScore != null &&
-            item.match.awayScore != null &&
-            item.match.homeScore === item.match.awayScore);
+    const correct = isPhaseBonusAdvanceCorrect(pred, {
+        ...matchForCount,
+        status: 'FINISHED',
+    });
 
     let note: string | null = null;
-    if (predictedDraw && !wentToPens) {
-        note = 'empate no valió: el partido no fue a penales';
+    if (predictedDraw && !matchWentToPens) {
+        note = 'Tu empate no cuenta para el bono: el partido se resolvió en el marcador (no hubo penales).';
+    } else if (predictedDraw && matchWentToPens && correct) {
+        note = 'Definido en penales: pick válido para el bono.';
     }
 
     return (
-        <p className="text-[11px] font-medium mt-1">
-            <span className="text-slate-500">Clasifica: </span>
-            <span className="font-bold text-slate-700">{pickCode}</span>
-            {predictedDraw ? <span className="text-slate-400"> (penales)</span> : null}
-            {' '}
-            <span className={`font-black uppercase ${correct ? 'text-emerald-600' : 'text-rose-500'}`}>
-                {correct ? '✓ Acertaste' : '✗ Fallaste'}
-            </span>
-            {note ? <span className="block text-[10px] text-amber-700 mt-0.5">{note}</span> : null}
-        </p>
+        <div className="mt-1 space-y-0.5">
+            <p className="text-[11px] font-medium">
+                <span className="text-slate-500">Clasifica: </span>
+                <span className="font-bold text-slate-700">{pickCode}</span>
+                {predictedDraw ? (
+                    <span className="text-slate-400">
+                        {matchWentToPens ? ' (penales reales)' : ' (predijiste empate)'}
+                    </span>
+                ) : null}
+                {' '}
+                <span className={`font-black uppercase ${correct ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    {correct ? '✓ Acertaste' : '✗ No cuenta'}
+                </span>
+            </p>
+            {note ? <p className="text-[10px] text-amber-700 leading-snug">{note}</p> : null}
+        </div>
     );
 }
 
