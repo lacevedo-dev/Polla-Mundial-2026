@@ -773,6 +773,8 @@ async sendPendingReports(
     phase: string;
     homeScore?: number | null;
     awayScore?: number | null;
+    penaltyHomeScore?: number | null;
+    penaltyAwayScore?: number | null;
     advancingTeamId?: string | null;
     advancingTeam?: { name: string } | null;
   }): ReportMatchSource {
@@ -787,6 +789,8 @@ async sendPendingReports(
       phase: match.phase,
       homeScore: match.homeScore,
       awayScore: match.awayScore,
+      penaltyHomeScore: match.penaltyHomeScore,
+      penaltyAwayScore: match.penaltyAwayScore,
       advancingTeamId: match.advancingTeamId,
       advancingTeam: match.advancingTeam,
     };
@@ -806,6 +810,8 @@ async sendPendingReports(
         phase: true,
         homeScore: true,
         awayScore: true,
+        penaltyHomeScore: true,
+        penaltyAwayScore: true,
         advancingTeamId: true,
         advancingTeam: { select: { name: true } },
       },

@@ -22,6 +22,8 @@ export type ReportMatchSource = {
   phase: string;
   homeScore?: number | null;
   awayScore?: number | null;
+  penaltyHomeScore?: number | null;
+  penaltyAwayScore?: number | null;
   advancingTeamId?: string | null;
   advancingTeam?: { name: string } | null;
 };
@@ -132,6 +134,10 @@ export function mapResultEntry(
         awayScore: prediction.awayScore,
         homeTeamId: match.homeTeamId,
         awayTeamId: match.awayTeamId,
+        matchHomeScore: match.homeScore,
+        matchAwayScore: match.awayScore,
+        penaltyHomeScore: match.penaltyHomeScore,
+        penaltyAwayScore: match.penaltyAwayScore,
       })
     : undefined;
 

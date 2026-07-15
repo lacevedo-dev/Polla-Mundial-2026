@@ -8,7 +8,7 @@ import {
     PHASE_BONUS_DISPLAY_LABELS,
     TRACKED_PHASE_BONUS_PHASES,
     countPhaseBonusCorrect,
-    resolveEffectiveAdvanceTeamId,
+    isPhaseBonusAdvanceCorrect,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { loadLeaguePhaseMatches } from './league-phase-matches.util';
@@ -522,38 +522,40 @@ export class PredictionsService {
             });
 
             const matchById = new Map(phaseMatches.map((phaseMatch) => [phaseMatch.id, phaseMatch]));
-            const predsByUser = new Map<string, Map<string, string>>();
+            const predsByUser = new Map<string, Map<string, (typeof allPreds)[number]>>();
 
             for (const pred of allPreds) {
                 const phaseMatch = matchById.get(pred.matchId);
                 if (!phaseMatch?.homeTeamId || !phaseMatch?.awayTeamId) continue;
 
-                const effectiveAdvance = resolveEffectiveAdvanceTeamId(pred, phaseMatch);
-                if (!effectiveAdvance) continue;
-
                 if (!predsByUser.has(pred.userId)) {
                     predsByUser.set(pred.userId, new Map());
                 }
-                predsByUser.get(pred.userId)!.set(pred.matchId, effectiveAdvance);
+                predsByUser.get(pred.userId)!.set(pred.matchId, pred);
             }
+
+            const deservingUserIds: string[] = [];
 
             for (const [userId, userPreds] of predsByUser) {
                 if (userPreds.size !== phaseMatches.length) continue;
 
-                const allCorrect = phaseMatches.every(
-                    (phaseMatch) => userPreds.get(phaseMatch.id) === phaseMatch.advancingTeamId,
-                );
+                const allCorrect = phaseMatches.every((phaseMatch) => {
+                    const pred = userPreds.get(phaseMatch.id);
+                    return Boolean(pred && isPhaseBonusAdvanceCorrect(pred, phaseMatch));
+                });
 
                 if (allCorrect) {
-                    await this.upsertPhaseBonusAward({
-                        userId,
-                        leagueId,
-                        phase: match.phase,
-                        points: bonusPoints,
-                    });
-                    this.logger.log(`Bono de fase ${match.phase} otorgado a ${userId} en liga ${leagueId}`);
+                    deservingUserIds.push(userId);
                 }
             }
+
+            // Reescribe premios de la fase: quita los indebidos (ej. empate sin penales) y otorga a quien cumple.
+            await this.replacePhaseBonusAwardsForPhase({
+                leagueId,
+                phase: match.phase,
+                points: bonusPoints,
+                userIds: deservingUserIds,
+            });
         }
     }
 
@@ -585,6 +587,41 @@ export class PredictionsService {
             VALUES (${id}, ${userId}, ${leagueId}, ${phase}, ${points}, NOW())
             ON DUPLICATE KEY UPDATE points = VALUES(points), awardedAt = VALUES(awardedAt)
         `;
+    }
+
+    /** Reemplaza los bonos de una fase con el conjunto correcto de ganadores. */
+    private async replacePhaseBonusAwardsForPhase(params: {
+        leagueId: string;
+        phase: Phase;
+        points: number;
+        userIds: string[];
+    }): Promise<void> {
+        const { leagueId, phase, points, userIds } = params;
+        const phaseBonusDelegate = (this.prisma as {
+            phaseBonus?: { deleteMany: Function; upsert: Function };
+        }).phaseBonus;
+
+        try {
+            if (typeof phaseBonusDelegate?.deleteMany === 'function') {
+                await phaseBonusDelegate.deleteMany({ where: { leagueId, phase } });
+            } else {
+                await this.prisma.$executeRaw`
+                    DELETE FROM PhaseBonus
+                    WHERE leagueId = ${leagueId} AND phase = ${phase}
+                `;
+            }
+        } catch (error) {
+            this.logger.warn(
+                `No se pudieron limpiar bonos de fase ${phase} en liga ${leagueId}: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+
+        for (const userId of userIds) {
+            await this.upsertPhaseBonusAward({ userId, leagueId, phase, points });
+            this.logger.log(`Bono de fase ${phase} otorgado a ${userId} en liga ${leagueId}`);
+        }
     }
 
     async getPhaseBonusProgress(leagueId: string, userId: string): Promise<PhaseBonusProgressItem[]> {
@@ -1088,8 +1125,12 @@ export class PredictionsService {
                     phase: prediction.match.phase,
                     group: prediction.match.group,
                     venue: prediction.match.venue,
+                    status: prediction.match.status,
                     homeScore: prediction.match.homeScore,
                     awayScore: prediction.match.awayScore,
+                    penaltyHomeScore: prediction.match.penaltyHomeScore,
+                    penaltyAwayScore: prediction.match.penaltyAwayScore,
+                    advancingTeamId: prediction.match.advancingTeamId,
                     homeTeam: prediction.match.homeTeam,
                     awayTeam: prediction.match.awayTeam,
                 },

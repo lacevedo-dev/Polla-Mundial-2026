@@ -263,6 +263,10 @@ export class CorpRankingService {
             homeTeamId: string;
             awayTeamId: string;
             advancingTeamId: string | null;
+            homeScore: number | null;
+            awayScore: number | null;
+            penaltyHomeScore: number | null;
+            penaltyAwayScore: number | null;
         }>
     > {
         try {
@@ -767,8 +771,12 @@ export class CorpRankingService {
                     phase: prediction.match.phase,
                     group: prediction.match.group,
                     venue: prediction.match.venue,
+                    status: prediction.match.status,
                     homeScore: prediction.match.homeScore,
                     awayScore: prediction.match.awayScore,
+                    penaltyHomeScore: prediction.match.penaltyHomeScore,
+                    penaltyAwayScore: prediction.match.penaltyAwayScore,
+                    advancingTeamId: prediction.match.advancingTeamId,
                     homeTeam: prediction.match.homeTeam,
                     awayTeam: prediction.match.awayTeam,
                 },

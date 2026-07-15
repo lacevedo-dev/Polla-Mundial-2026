@@ -7,6 +7,10 @@ export type LeaguePhaseMatchRow = {
     homeTeamId?: string;
     awayTeamId?: string;
     advancingTeamId: string | null;
+    homeScore: number | null;
+    awayScore: number | null;
+    penaltyHomeScore: number | null;
+    penaltyAwayScore: number | null;
     matchDate: Date;
 };
 
@@ -16,6 +20,10 @@ const MATCH_SELECT = {
     homeTeamId: true,
     awayTeamId: true,
     advancingTeamId: true,
+    homeScore: true,
+    awayScore: true,
+    penaltyHomeScore: true,
+    penaltyAwayScore: true,
     matchDate: true,
 } as const;
 

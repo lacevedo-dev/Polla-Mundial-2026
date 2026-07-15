@@ -1,4 +1,5 @@
 import { Phase } from '@prisma/client';
+import { isPhaseBonusAdvanceCorrect } from '@polla-2026/shared';
 
 export function isKnockoutReportPhase(phase: string | null | undefined): boolean {
   return !!phase && phase !== Phase.GROUP && phase !== Phase.THIRD_PLACE;
@@ -45,17 +46,33 @@ export function isAdvancePickCorrect(params: {
   awayScore: number;
   homeTeamId: string;
   awayTeamId: string;
+  matchHomeScore?: number | null;
+  matchAwayScore?: number | null;
+  penaltyHomeScore?: number | null;
+  penaltyAwayScore?: number | null;
+  matchStatus?: string;
 }): boolean | null {
   if (!params.advancingTeamId) return null;
-  const effectiveAdvanceId =
-    params.advanceTeamId ??
-    (params.homeScore > params.awayScore
-      ? params.homeTeamId
-      : params.awayScore > params.homeScore
-        ? params.awayTeamId
-        : null);
-  if (!effectiveAdvanceId) return null;
-  return effectiveAdvanceId === params.advancingTeamId;
+
+  return isPhaseBonusAdvanceCorrect(
+    {
+      matchId: 'report',
+      homeScore: params.homeScore,
+      awayScore: params.awayScore,
+      advanceTeamId: params.advanceTeamId ?? null,
+    },
+    {
+      id: 'report',
+      status: params.matchStatus ?? 'FINISHED',
+      homeTeamId: params.homeTeamId,
+      awayTeamId: params.awayTeamId,
+      advancingTeamId: params.advancingTeamId,
+      homeScore: params.matchHomeScore,
+      awayScore: params.matchAwayScore,
+      penaltyHomeScore: params.penaltyHomeScore,
+      penaltyAwayScore: params.penaltyAwayScore,
+    },
+  );
 }
 
 export function formatAdvanceCorrectLabel(correct: boolean | null | undefined): string {

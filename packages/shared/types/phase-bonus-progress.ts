@@ -36,7 +36,7 @@ export const PHASE_BONUS_COMPACT_LABELS: Record<string, string> = {
 };
 
 export const PHASE_BONUS_GLOBAL_HINT =
-    'En cada fase eliminatoria debes acertar quién clasifica en todos los partidos de esa ronda (dieciseisavos 16, octavos 8, etc.). El bono se suma solo cuando cierra la fase completa.';
+    'En cada fase eliminatoria debes acertar quién clasifica en todos los partidos de esa ronda (dieciseisavos 16, octavos 8, etc.). Si predices empate, el pick de penales solo cuenta si el partido real también se definió en penales. El bono se suma solo cuando cierra la fase completa.';
 
 /** Partidos esperados por fase en un cuadro completo (Mundial 48 equipos). */
 export const PHASE_KNOCKOUT_EXPECTED_MATCHES: Record<string, number> = {

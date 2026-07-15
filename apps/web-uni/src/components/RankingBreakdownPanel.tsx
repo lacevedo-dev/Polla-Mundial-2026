@@ -1,4 +1,8 @@
 import React from 'react';
+import {
+    isPhaseBonusAdvanceCorrect,
+    resolveEffectiveAdvanceTeamId,
+} from '@polla-2026/shared';
 import { PhaseBonusProgressIndicator } from './PhaseBonusProgressIndicator';
 import { RankingBreakdownAccordion } from './RankingBreakdownAccordion';
 import type { RankingBreakdownMatch, RankingBreakdownResponse } from '../views/ranking.types';
@@ -7,6 +11,97 @@ import {
     toDisplayDate,
     toPointSummaryLabel,
 } from '../views/ranking.utils';
+
+function teamCode(team: RankingBreakdownMatch['match']['homeTeam']): string {
+    return (team.shortCode ?? team.code ?? team.name.slice(0, 3)).toUpperCase();
+}
+
+function isKnockoutPhase(phase?: string | null): boolean {
+    return !!phase && phase !== 'GROUP' && phase !== 'THIRD_PLACE';
+}
+
+function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {
+    if (!isKnockoutPhase(item.match.phase)) return null;
+    if (!item.match.homeTeam.id || !item.match.awayTeam.id) return null;
+
+    const effectiveAdvance = resolveEffectiveAdvanceTeamId(
+        {
+            matchId: item.match.id,
+            homeScore: item.prediction.homeScore,
+            awayScore: item.prediction.awayScore,
+            advanceTeamId: item.prediction.advanceTeamId ?? null,
+        },
+        {
+            homeTeamId: item.match.homeTeam.id,
+            awayTeamId: item.match.awayTeam.id,
+        },
+    );
+
+    if (!effectiveAdvance) return null;
+
+    const pickCode =
+        effectiveAdvance === item.match.homeTeam.id
+            ? teamCode(item.match.homeTeam)
+            : teamCode(item.match.awayTeam);
+
+    const predictedDraw = item.prediction.homeScore === item.prediction.awayScore;
+    const finished = item.match.status === 'FINISHED' || (
+        typeof item.match.homeScore === 'number' && typeof item.match.awayScore === 'number'
+    );
+
+    if (!finished || !item.match.advancingTeamId) {
+        return (
+            <p className="text-[11px] font-medium text-slate-500 mt-1">
+                Clasifica: <span className="font-bold text-slate-700">{pickCode}</span>
+                {predictedDraw ? ' (penales)' : ''}
+            </p>
+        );
+    }
+
+    const correct = isPhaseBonusAdvanceCorrect(
+        {
+            matchId: item.match.id,
+            homeScore: item.prediction.homeScore,
+            awayScore: item.prediction.awayScore,
+            advanceTeamId: item.prediction.advanceTeamId ?? null,
+        },
+        {
+            id: item.match.id,
+            status: item.match.status ?? 'FINISHED',
+            homeTeamId: item.match.homeTeam.id,
+            awayTeamId: item.match.awayTeam.id,
+            advancingTeamId: item.match.advancingTeamId,
+            homeScore: item.match.homeScore,
+            awayScore: item.match.awayScore,
+            penaltyHomeScore: item.match.penaltyHomeScore,
+            penaltyAwayScore: item.match.penaltyAwayScore,
+        },
+    );
+
+    const wentToPens =
+        (item.match.penaltyHomeScore != null && item.match.penaltyAwayScore != null) ||
+        (item.match.homeScore != null &&
+            item.match.awayScore != null &&
+            item.match.homeScore === item.match.awayScore);
+
+    let note: string | null = null;
+    if (predictedDraw && !wentToPens) {
+        note = 'empate no valió: el partido no fue a penales';
+    }
+
+    return (
+        <p className="text-[11px] font-medium mt-1">
+            <span className="text-slate-500">Clasifica: </span>
+            <span className="font-bold text-slate-700">{pickCode}</span>
+            {predictedDraw ? <span className="text-slate-400"> (penales)</span> : null}
+            {' '}
+            <span className={`font-black uppercase ${correct ? 'text-emerald-600' : 'text-rose-500'}`}>
+                {correct ? '✓ Acertaste' : '✗ Fallaste'}
+            </span>
+            {note ? <span className="block text-[10px] text-amber-700 mt-0.5">{note}</span> : null}
+        </p>
+    );
+}
 
 function BreakdownMatchCard({ match }: { match: RankingBreakdownMatch }) {
     return (
@@ -26,6 +121,7 @@ function BreakdownMatchCard({ match }: { match: RankingBreakdownMatch }) {
                             ? ` · Resultado ${match.match.homeScore}-${match.match.awayScore}`
                             : ''}
                     </p>
+                    <AdvancePickLine item={match} />
                     <p className="text-[11px] font-medium text-slate-600 mt-1">
                         {toPointSummaryLabel(match.pointDetail)}
                     </p>

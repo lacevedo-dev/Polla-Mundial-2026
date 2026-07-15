@@ -60,10 +60,24 @@ export interface RankingBreakdownMatch {
         phase: string;
         group?: string | null;
         venue?: string | null;
+        status?: string;
         homeScore?: number | null;
         awayScore?: number | null;
-        homeTeam: { name: string };
-        awayTeam: { name: string };
+        penaltyHomeScore?: number | null;
+        penaltyAwayScore?: number | null;
+        advancingTeamId?: string | null;
+        homeTeam: {
+            id?: string;
+            name: string;
+            code?: string | null;
+            shortCode?: string | null;
+        };
+        awayTeam: {
+            id?: string;
+            name: string;
+            code?: string | null;
+            shortCode?: string | null;
+        };
     };
 }
 

@@ -7,6 +7,10 @@ function row(id: string, day: number): LeaguePhaseMatchRow {
         id,
         status: 'SCHEDULED',
         advancingTeamId: null,
+        homeScore: null,
+        awayScore: null,
+        penaltyHomeScore: null,
+        penaltyAwayScore: null,
         matchDate: new Date(`2026-07-0${day}T12:00:00Z`),
     };
 }
