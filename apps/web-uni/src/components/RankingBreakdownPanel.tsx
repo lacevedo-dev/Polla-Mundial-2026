@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
     isPhaseBonusAdvanceCorrect,
+    PHASE_KNOCKOUT_EXPECTED_MATCHES,
     resolveEffectiveAdvanceTeamId,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
@@ -57,7 +58,7 @@ function isBreakdownAdvanceCorrect(item: RankingBreakdownMatch): boolean {
 }
 
 /** Alinea chips superiores con el detalle de partidos (evita 4/4 cuando un pick no cuenta). */
-function reconcilePhaseBonusProgress(
+export function reconcilePhaseBonusProgress(
     progress: PhaseBonusProgressItem[],
     matches: RankingBreakdownMatch[],
 ): PhaseBonusProgressItem[] {
@@ -76,11 +77,13 @@ function reconcilePhaseBonusProgress(
         const finished = phaseMatches.filter((match) => resolveMatchAdvancingTeamId(match));
         if (finished.length === 0) return item;
 
+        const expected = PHASE_KNOCKOUT_EXPECTED_MATCHES[item.phase];
         const correctCount = finished.filter((match) => isBreakdownAdvanceCorrect(match)).length;
-        // Si el detalle trae todos los partidos de la fase, usa ese denominador; si no, conserva el del API.
         const totalMatches =
-            phaseMatches.length >= item.totalMatches ? phaseMatches.length : item.totalMatches;
-        const fullyCorrect = totalMatches > 0 && correctCount >= totalMatches;
+            expected ??
+            (phaseMatches.length >= item.totalMatches ? phaseMatches.length : item.totalMatches);
+        const phaseClosed = finished.length >= totalMatches || item.isPhaseComplete;
+        const fullyCorrect = totalMatches > 0 && correctCount >= totalMatches && phaseClosed;
         const isAwarded = fullyCorrect && item.isAwarded;
         const awardedPoints = isAwarded ? item.awardedPoints : 0;
 
@@ -90,10 +93,14 @@ function reconcilePhaseBonusProgress(
             totalMatches,
             isAwarded,
             awardedPoints,
-            isPhaseComplete: item.isPhaseComplete || finished.length >= totalMatches,
+            isPhaseComplete: phaseClosed,
             progressLabel: `${correctCount}/${totalMatches}:${awardedPoints}`,
         };
     });
+}
+
+export function sumReconciledPhaseBonusPoints(items: PhaseBonusProgressItem[]): number {
+    return items.reduce((sum, item) => sum + (item.awardedPoints > 0 ? item.awardedPoints : 0), 0);
 }
 
 function AdvancePickLine({ item }: { item: RankingBreakdownMatch }) {

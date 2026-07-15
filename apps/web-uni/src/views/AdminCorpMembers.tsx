@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Users, Search, Crown, Shield, User, Mail, Copy, Check,
     Plus, Pencil, Trash2, X, Loader2, AlertTriangle, Upload,
@@ -8,7 +8,11 @@ import { CorpLayout } from '../layouts/CorpLayout';
 import { request, ApiError, resolveApiAssetUrl } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
-import { RankingBreakdownPanel } from '../components/RankingBreakdownPanel';
+import {
+    RankingBreakdownPanel,
+    reconcilePhaseBonusProgress,
+    sumReconciledPhaseBonusPoints,
+} from '../components/RankingBreakdownPanel';
 import { RankingTiebreakSummary } from '../components/RankingTiebreakSummary';
 import type { RankingBreakdownResponse } from './ranking.types';
 
@@ -397,6 +401,26 @@ export default function AdminCorpMembers() {
         setRankingBreakdown(null);
         setRankingLoading(false);
     }
+
+    const rankingHeaderStats = useMemo(() => {
+        if (!rankingBreakdown || rankingBreakdown.loadError) return null;
+        const reconciled = reconcilePhaseBonusProgress(
+            rankingBreakdown.phaseBonusProgress ?? [],
+            rankingBreakdown.matches ?? [],
+        );
+        const phaseBonusPoints = sumReconciledPhaseBonusPoints(reconciled);
+        const matchPoints =
+            rankingBreakdown.summary.points - (rankingBreakdown.summary.phaseBonusPoints ?? 0);
+        return {
+            phaseBonusPoints,
+            totalPoints: matchPoints + phaseBonusPoints,
+            exactCount: rankingBreakdown.summary.exactCount,
+            winnerCount: rankingBreakdown.summary.winnerCount,
+            goalCount: rankingBreakdown.summary.goalCount,
+            uniqueCount: rankingBreakdown.summary.uniqueCount,
+            hasChampion: rankingBreakdown.bonuses.some((bonus) => bonus.phase === 'FINAL'),
+        };
+    }, [rankingBreakdown]);
 
     async function openRanking(member: Member) {
         setRankingTarget(member);
@@ -1104,34 +1128,32 @@ export default function AdminCorpMembers() {
                                             {rankingTarget.username}
                                         </p>
                                     )}
-                                    {rankingBreakdown && !rankingBreakdown.loadError && (
+                                    {rankingHeaderStats && (
                                         <div className="mt-2">
                                             <RankingTiebreakSummary
                                                 entry={{
-                                                    totalPoints: rankingBreakdown.summary.points,
-                                                    hasChampion: rankingBreakdown.bonuses.some(
-                                                        (bonus) => bonus.phase === 'FINAL',
-                                                    ),
-                                                    exactCount: rankingBreakdown.summary.exactCount,
-                                                    winnerCount: rankingBreakdown.summary.winnerCount,
-                                                    goalCount: rankingBreakdown.summary.goalCount,
-                                                    uniqueCount: rankingBreakdown.summary.uniqueCount,
+                                                    totalPoints: rankingHeaderStats.totalPoints,
+                                                    hasChampion: rankingHeaderStats.hasChampion,
+                                                    exactCount: rankingHeaderStats.exactCount,
+                                                    winnerCount: rankingHeaderStats.winnerCount,
+                                                    goalCount: rankingHeaderStats.goalCount,
+                                                    uniqueCount: rankingHeaderStats.uniqueCount,
                                                 }}
-                                                phaseBonusPoints={rankingBreakdown.summary.phaseBonusPoints}
+                                                phaseBonusPoints={rankingHeaderStats.phaseBonusPoints}
                                             />
                                         </div>
                                     )}
                                 </div>
                             </div>
                             <div className="flex items-start gap-3 shrink-0">
-                                {rankingBreakdown && !rankingBreakdown.loadError && (
+                                {rankingHeaderStats && (
                                     <div className="text-right pt-0.5">
                                         <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
-                                            {rankingBreakdown.summary.points}
+                                            {rankingHeaderStats.totalPoints}
                                         </p>
-                                        {(rankingBreakdown.summary.phaseBonusPoints ?? 0) > 0 && (
+                                        {rankingHeaderStats.phaseBonusPoints > 0 && (
                                             <p className="text-[10px] font-bold text-amber-600 mt-1">
-                                                +{rankingBreakdown.summary.phaseBonusPoints} bono
+                                                +{rankingHeaderStats.phaseBonusPoints} bono
                                             </p>
                                         )}
                                     </div>

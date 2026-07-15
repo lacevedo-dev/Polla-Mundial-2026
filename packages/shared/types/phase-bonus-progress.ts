@@ -47,6 +47,63 @@ export const PHASE_KNOCKOUT_EXPECTED_MATCHES: Record<string, number> = {
     FINAL: 1,
 };
 
+type KnockoutMatchLike = {
+    id?: string;
+    status: string;
+    advancingTeamId: string | null;
+    homeTeamId?: string | null;
+    awayTeamId?: string | null;
+    matchDate?: Date | string | null;
+};
+
+/**
+ * Reduce el set de partidos de una fase al cupo esperado del cuadro.
+ * Evita denominadores 5/9 u 0/9 por partidos fantasma del torneo, y permite
+ * cerrar/recalcular bonos cuando ya hay N finalizados aunque sobren filas.
+ */
+export function selectCountableKnockoutMatches<T extends KnockoutMatchLike>(
+    matches: T[],
+    phase: string,
+): T[] {
+    const withTeams = matches.filter((match) => Boolean(match.homeTeamId && match.awayTeamId));
+    const expected = PHASE_KNOCKOUT_EXPECTED_MATCHES[phase];
+    if (!expected || withTeams.length <= expected) return withTeams;
+
+    const byDate = (a: T, b: T) => {
+        const ta = a.matchDate ? new Date(a.matchDate).getTime() : 0;
+        const tb = b.matchDate ? new Date(b.matchDate).getTime() : 0;
+        return ta - tb;
+    };
+
+    const finished = withTeams
+        .filter((match) => match.status === 'FINISHED' && match.advancingTeamId !== null)
+        .sort(byDate);
+
+    if (finished.length >= expected) {
+        return finished.slice(0, expected);
+    }
+
+    const finishedIds = new Set(finished.map((match) => match.id).filter(Boolean));
+    const rest = withTeams
+        .filter((match) => !match.id || !finishedIds.has(match.id))
+        .sort(byDate);
+
+    return [...finished, ...rest].slice(0, expected);
+}
+
+/** True si la fase ya tiene el cupo esperado de partidos finalizados con clasificado. */
+export function isKnockoutPhaseComplete(
+    matches: KnockoutMatchLike[],
+    phase: string,
+): boolean {
+    const countable = selectCountableKnockoutMatches(matches, phase);
+    const expected = PHASE_KNOCKOUT_EXPECTED_MATCHES[phase] ?? countable.length;
+    if (countable.length < expected) return false;
+    return countable.every(
+        (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
+    );
+}
+
 export interface PhaseBonusProgressItem {
     phase: string;
     label: string;

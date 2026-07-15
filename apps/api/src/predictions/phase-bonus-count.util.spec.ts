@@ -1,7 +1,9 @@
 import {
     countPhaseBonusCorrect,
+    isKnockoutPhaseComplete,
     isPhaseBonusAdvanceCorrect,
     resolveEffectiveAdvanceTeamId,
+    selectCountableKnockoutMatches,
 } from '@polla-2026/shared';
 
 describe('phase-bonus-count', () => {
@@ -91,5 +93,39 @@ describe('phase-bonus-count', () => {
                 dirty,
             ),
         ).toBe(false);
+    });
+
+    it('recorta partidos fantasma al cupo esperado de la fase', () => {
+        const matches = [
+            ...Array.from({ length: 4 }, (_, i) => ({
+                id: `q${i}`,
+                status: 'FINISHED' as const,
+                homeTeamId: 'h',
+                awayTeamId: 'a',
+                advancingTeamId: 'h',
+                homeScore: 1,
+                awayScore: 0,
+                penaltyHomeScore: null,
+                penaltyAwayScore: null,
+                matchDate: new Date(`2026-07-0${i + 1}`),
+            })),
+            {
+                id: 'phantom',
+                status: 'SCHEDULED' as const,
+                homeTeamId: 'h',
+                awayTeamId: 'a',
+                advancingTeamId: null,
+                homeScore: null,
+                awayScore: null,
+                penaltyHomeScore: null,
+                penaltyAwayScore: null,
+                matchDate: new Date('2026-07-20'),
+            },
+        ];
+
+        const countable = selectCountableKnockoutMatches(matches, 'QUARTER');
+        expect(countable).toHaveLength(4);
+        expect(countable.map((row) => row.id)).not.toContain('phantom');
+        expect(isKnockoutPhaseComplete(matches, 'QUARTER')).toBe(true);
     });
 });

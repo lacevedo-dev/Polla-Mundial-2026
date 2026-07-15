@@ -7,6 +7,8 @@ import {
     TRACKED_PHASE_BONUS_PHASES,
     countPhaseBonusCorrect,
     DEFAULT_PHASE_BONUS_POINTS,
+    isKnockoutPhaseComplete,
+    selectCountableKnockoutMatches,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { Phase, ScoringType } from '@prisma/client';
@@ -338,13 +340,14 @@ export class CorpRankingService {
             const phase = phaseKey as Phase;
             const maxBonusPoints = this.resolvePhaseBonusPoints(phase, league.scoringRules);
 
-            const phaseMatches = await this.loadLeaguePhaseMatches(leagueId, phase);
+            const phaseMatchesRaw = await this.loadLeaguePhaseMatches(leagueId, phase);
+            if (phaseMatchesRaw.length === 0) continue;
+
+            const phaseMatches = selectCountableKnockoutMatches(phaseMatchesRaw, phase);
             if (phaseMatches.length === 0) continue;
 
             const totalMatches = phaseMatches.length;
-            const isPhaseComplete = phaseMatches.every(
-                (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
-            );
+            const isPhaseComplete = isKnockoutPhaseComplete(phaseMatches, phase);
 
             const userPreds = await this.prisma.prediction.findMany({
                 where: {
@@ -784,6 +787,21 @@ export class CorpRankingService {
                 ? await this.getPhaseBonusProgressForUser(leagueId, userId)
                 : [];
 
+        // El progreso vivo ya anula premios stale (ej. 3/4); no sumar PhaseBonus obsoleto al total.
+        const liveBonusTotal =
+            category === 'GENERAL'
+                ? phaseBonusProgress.reduce((sum, item) => sum + item.awardedPoints, 0)
+                : bonusTotal;
+        const awardedPhases = new Set(
+            phaseBonusProgress
+                .filter((item) => item.isAwarded && item.awardedPoints > 0)
+                .map((item) => item.phase),
+        );
+        const visibleBonuses =
+            category === 'GENERAL'
+                ? phaseBonuses.filter((bonus) => awardedPhases.has(bonus.phase))
+                : phaseBonuses;
+
         return {
             user: {
                 ...member.user,
@@ -791,8 +809,8 @@ export class CorpRankingService {
             },
             summary: {
                 ...summary,
-                points: summary.points + bonusTotal,
-                phaseBonusPoints: bonusTotal,
+                points: summary.points + liveBonusTotal,
+                phaseBonusPoints: liveBonusTotal,
             },
             matches: filteredPredictions.map((prediction) => ({
                 id: prediction.id,
@@ -820,7 +838,7 @@ export class CorpRankingService {
                     awayTeam: prediction.match.awayTeam,
                 },
             })),
-            bonuses: phaseBonuses.map((bonus, index) => ({
+            bonuses: visibleBonuses.map((bonus, index) => ({
                 id: `${bonus.userId}-${bonus.phase}-${index}`,
                 phase: bonus.phase,
                 points: bonus.points,

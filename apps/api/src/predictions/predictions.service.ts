@@ -8,7 +8,9 @@ import {
     PHASE_BONUS_DISPLAY_LABELS,
     TRACKED_PHASE_BONUS_PHASES,
     countPhaseBonusCorrect,
+    isKnockoutPhaseComplete,
     isPhaseBonusAdvanceCorrect,
+    selectCountableKnockoutMatches,
     type PhaseBonusProgressItem,
 } from '@polla-2026/shared';
 import { loadLeaguePhaseMatches } from './league-phase-matches.util';
@@ -487,16 +489,13 @@ export class PredictionsService {
 
         for (const { leagueId } of leagueEntries) {
             const phaseMatchesRaw = await this.loadLeaguePhaseMatches(leagueId, match.phase);
-            const phaseMatches = phaseMatchesRaw.filter(
-                (phaseMatch): phaseMatch is typeof phaseMatch & { homeTeamId: string; awayTeamId: string } =>
-                    Boolean(phaseMatch.homeTeamId && phaseMatch.awayTeamId),
+            const phaseMatches = selectCountableKnockoutMatches(
+                phaseMatchesRaw.filter(
+                    (phaseMatch): phaseMatch is typeof phaseMatch & { homeTeamId: string; awayTeamId: string } =>
+                        Boolean(phaseMatch.homeTeamId && phaseMatch.awayTeamId),
+                ),
+                match.phase,
             );
-
-            // Only proceed if ALL phase matches are finished AND have advancingTeamId set
-            const allDone = phaseMatches.every(
-                (m) => m.status === 'FINISHED' && m.advancingTeamId !== null,
-            );
-            if (!allDone) continue;
 
             const league = await this.prisma.league.findUnique({
                 where: { id: leagueId },
@@ -506,6 +505,17 @@ export class PredictionsService {
 
             const bonusPoints = this.getPhaseBonusPoints(match.phase, league.scoringRules);
             if (bonusPoints === 0) continue;
+
+            // Fase incompleta (o con partidos fantasma): limpiar premios stale, no dejar +N huérfanos.
+            if (!isKnockoutPhaseComplete(phaseMatches, match.phase)) {
+                await this.replacePhaseBonusAwardsForPhase({
+                    leagueId,
+                    phase: match.phase,
+                    points: bonusPoints,
+                    userIds: [],
+                });
+                continue;
+            }
 
             const allPreds = await this.prisma.prediction.findMany({
                 where: {
@@ -662,16 +672,17 @@ export class PredictionsService {
 
             if (phaseMatches.length === 0) continue;
 
-            const countableMatches = phaseMatches.filter(
-                (match): match is typeof match & { homeTeamId: string; awayTeamId: string } =>
-                    Boolean(match.homeTeamId && match.awayTeamId),
+            const countableMatches = selectCountableKnockoutMatches(
+                phaseMatches.filter(
+                    (match): match is typeof match & { homeTeamId: string; awayTeamId: string } =>
+                        Boolean(match.homeTeamId && match.awayTeamId),
+                ),
+                phase,
             );
             if (countableMatches.length === 0) continue;
 
             const totalMatches = countableMatches.length;
-            const isPhaseComplete = countableMatches.every(
-                (match) => match.status === 'FINISHED' && match.advancingTeamId !== null,
-            );
+            const isPhaseComplete = isKnockoutPhaseComplete(countableMatches, phase);
 
             const userPreds = await this.prisma.prediction.findMany({
                 where: {
@@ -1103,12 +1114,26 @@ export class PredictionsService {
                 ? await this.getPhaseBonusProgress(leagueId, userId)
                 : [];
 
+        const liveBonusTotal =
+            leaderboardCategory === 'GENERAL'
+                ? phaseBonusProgress.reduce((sum, item) => sum + item.awardedPoints, 0)
+                : bonusTotal;
+        const awardedPhases = new Set(
+            phaseBonusProgress
+                .filter((item) => item.isAwarded && item.awardedPoints > 0)
+                .map((item) => item.phase),
+        );
+        const visibleBonuses =
+            leaderboardCategory === 'GENERAL'
+                ? filteredBonuses.filter((bonus) => awardedPhases.has(bonus.phase))
+                : filteredBonuses;
+
         return {
             user: member.user,
             summary: {
                 ...summary,
-                points: summary.points + bonusTotal,
-                phaseBonusPoints: bonusTotal,
+                points: summary.points + liveBonusTotal,
+                phaseBonusPoints: liveBonusTotal,
             },
             matches: filteredPredictions.map((prediction) => ({
                 id: prediction.id,
@@ -1136,7 +1161,7 @@ export class PredictionsService {
                     awayTeam: prediction.match.awayTeam,
                 },
             })),
-            bonuses: filteredBonuses.map((bonus) => ({
+            bonuses: visibleBonuses.map((bonus) => ({
                 id: bonus.id,
                 phase: bonus.phase,
                 points: bonus.points,

@@ -11,10 +11,29 @@ import type {
     LeaderboardCategory,
     RankingBreakdownResponse,
 } from './ranking.types';
-import { RankingBreakdownPanel } from '../components/RankingBreakdownPanel';
+import { RankingBreakdownPanel, reconcilePhaseBonusProgress, sumReconciledPhaseBonusPoints } from '../components/RankingBreakdownPanel';
 import { buildPointsResume } from './ranking.utils';
 
 const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+function displayPhaseBonusPoints(
+    entry: CorpRankingEntry,
+    breakdown: RankingBreakdownResponse | null | undefined,
+): { phaseBonusPoints: number; totalPoints: number } {
+    if (!breakdown || breakdown.loadError || !breakdown.phaseBonusProgress?.length) {
+        return {
+            phaseBonusPoints: entry.phaseBonusPoints ?? 0,
+            totalPoints: entry.totalPoints,
+        };
+    }
+    const reconciled = reconcilePhaseBonusProgress(breakdown.phaseBonusProgress, breakdown.matches);
+    const phaseBonusPoints = sumReconciledPhaseBonusPoints(reconciled);
+    const matchPoints = entry.totalPoints - (entry.phaseBonusPoints ?? 0);
+    return {
+        phaseBonusPoints,
+        totalPoints: matchPoints + phaseBonusPoints,
+    };
+}
 
 function avatarFallback(name: string): string {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=e2e8f0&color=64748b&size=128`;
@@ -225,6 +244,7 @@ export default function Ranking() {
                             const expanded = expandedUserId === entry.userId;
                             const cacheKey = `${data?.category ?? category}:${entry.userId}`;
                             const neighbors = entryNeighbors.get(entry.userId);
+                            const display = displayPhaseBonusPoints(entry, breakdowns[cacheKey]);
                             return (
                                 <div key={entry.userId}>
                                     <button
@@ -262,10 +282,10 @@ export default function Ranking() {
                                                     {entry.isMe && <span className="ml-1 text-[10px] font-black opacity-70">(tú)</span>}
                                                 </p>
                                                 <RankingTiebreakSummary
-                                                    entry={entry}
+                                                    entry={{ ...entry, totalPoints: display.totalPoints }}
                                                     previous={neighbors?.previous ?? null}
                                                     next={neighbors?.next ?? null}
-                                                    phaseBonusPoints={entry.phaseBonusPoints ?? 0}
+                                                    phaseBonusPoints={display.phaseBonusPoints}
                                                 />
                                             </div>
                                         </div>
@@ -276,11 +296,11 @@ export default function Ranking() {
                                                     ? { color: 'var(--color-primary, #f59e0b)' }
                                                     : { color: '#0f172a' }}
                                             >
-                                                {entry.totalPoints}
+                                                {display.totalPoints}
                                             </p>
-                                            {(entry.phaseBonusPoints ?? 0) > 0 && (
+                                            {display.phaseBonusPoints > 0 && (
                                                 <p className="text-[9px] font-bold text-amber-600">
-                                                    +{entry.phaseBonusPoints} bono
+                                                    +{display.phaseBonusPoints} bono
                                                 </p>
                                             )}
                                         </div>
