@@ -43,7 +43,7 @@ export class CorpRankingReportService {
             buffer = await this.pdfService.buildRankingPdf({ orgName, exportPayload });
         } catch (error) {
             this.logger.error(
-                `Fallo PDF ranking tenant=${tenantId} rows=${exportPayload.totalParticipants}: ${
+                `Fallo PDF ranking tenant=${tenantId} rows=${exportPayload.totalParticipants} err=${
                     error instanceof Error ? error.message : String(error)
                 }`,
                 error instanceof Error ? error.stack : undefined,

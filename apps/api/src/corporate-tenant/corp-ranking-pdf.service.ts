@@ -1,31 +1,45 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { CorpRankingExportPayload } from './corp-ranking.service';
 
+/** Marcador para confirmar en logs que el contenedor corre este build (no el bundle viejo). */
+export const RANKING_PDF_BUILD_MARKER = 'pdfkit-non-webpack-require-v4';
+
 type PdfDoc = PDFKit.PDFDocument;
 type PdfCtor = new (options?: PDFKit.PDFDocumentOptions) => PdfDoc;
 
+/** Webpack define esto en target node; el require nativo no pasa por el runtime del bundle. */
+declare const __non_webpack_require__: NodeRequire | undefined;
+
+function nodeRequire(moduleId: string): unknown {
+    if (typeof __non_webpack_require__ === 'function') {
+        return __non_webpack_require__(moduleId);
+    }
+    // Jest / tsx / ejecución sin webpack
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    return require(moduleId);
+}
+
 /**
- * Carga el constructor de pdfkit compatible con:
- * - require CJS directo (webpack external)
- * - export default (ESM / interop)
+ * Carga el constructor real de pdfkit desde node_modules (CJS),
+ * sin el wrapper `pdfkit_1.default` que genera webpack.
  */
 function resolvePdfDocumentCtor(): PdfCtor {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const mod = require('pdfkit') as PdfCtor | { default: PdfCtor };
+    const mod = nodeRequire('pdfkit') as PdfCtor | { default?: PdfCtor } | null;
     const ctor = typeof mod === 'function'
         ? mod
-        : (mod as { default: PdfCtor }).default;
+        : mod && typeof mod === 'object'
+            ? mod.default
+            : undefined;
     if (typeof ctor !== 'function') {
         throw new Error(
-            `pdfkit export inválido (${typeof mod}); se esperaba un constructor`,
+            `[${RANKING_PDF_BUILD_MARKER}] pdfkit export inválido (${typeof mod})`,
         );
     }
     return ctor;
 }
 
 function createPdfDocument(options?: PDFKit.PDFDocumentOptions): PdfDoc {
-    const PDFDocument = resolvePdfDocumentCtor();
-    return new PDFDocument(options);
+    return new (resolvePdfDocumentCtor())(options);
 }
 
 const PW = 595.28;
@@ -130,6 +144,10 @@ export class CorpRankingPdfService {
         const safeOrg = pdfSafeText(orgName, 'Portal Corporativo');
         const generatedLabel = formatGeneratedAt(exportPayload.generatedAt);
         const total = exportPayload.rows.length;
+
+        this.logger.log(
+            `Generando PDF ranking marker=${RANKING_PDF_BUILD_MARKER} rows=${total}`,
+        );
 
         // Sin bufferPages: con 10k+ filas evita RAM alta y switchToPage frágil.
         const doc = createPdfDocument({ margin: 0, size: 'A4', autoFirstPage: true, bufferPages: false });
