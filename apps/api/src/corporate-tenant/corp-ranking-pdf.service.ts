@@ -1,6 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import PDFDocument from 'pdfkit';
 import type { CorpRankingExportPayload } from './corp-ranking.service';
+
+/**
+ * require() evita `default is not a constructor` cuando webpack externaliza pdfkit (CJS).
+ * eslint-disable-next-line @typescript-eslint/no-require-imports
+ */
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+const PDFDocument: typeof import('pdfkit') = (() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const mod = require('pdfkit');
+    return mod?.default ?? mod;
+})();
 
 const PW = 595.28;
 const PH = 841.89;
