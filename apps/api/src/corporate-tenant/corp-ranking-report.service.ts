@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { EmailJobPriority, EmailJobType } from '@prisma/client';
 import {
     CorpRankingExportPayload,
@@ -10,6 +10,8 @@ import { CorpRankingPdfService } from './corp-ranking-pdf.service';
 
 @Injectable()
 export class CorpRankingReportService {
+    private readonly logger = new Logger(CorpRankingReportService.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly corpRanking: CorpRankingService,
@@ -36,7 +38,21 @@ export class CorpRankingReportService {
             throw new NotFoundException('No hay polla activa para este tenant');
         }
 
-        const buffer = await this.pdfService.buildRankingPdf({ orgName, exportPayload });
+        let buffer: Buffer;
+        try {
+            buffer = await this.pdfService.buildRankingPdf({ orgName, exportPayload });
+        } catch (error) {
+            this.logger.error(
+                `Fallo PDF ranking tenant=${tenantId} rows=${exportPayload.totalParticipants}: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+                error instanceof Error ? error.stack : undefined,
+            );
+            throw new InternalServerErrorException(
+                'No se pudo generar el PDF del listado. Revisa los logs del servidor.',
+            );
+        }
+
         const slug = this.slugify(exportPayload.league.name);
         const filename = `ranking_${slug}_${this.dateStamp(exportPayload.generatedAt)}.pdf`;
 
