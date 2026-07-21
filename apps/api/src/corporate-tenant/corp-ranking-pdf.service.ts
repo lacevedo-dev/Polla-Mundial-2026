@@ -1,16 +1,32 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { CorpRankingExportPayload } from './corp-ranking.service';
 
+type PdfDoc = PDFKit.PDFDocument;
+type PdfCtor = new (options?: PDFKit.PDFDocumentOptions) => PdfDoc;
+
 /**
- * require() evita `default is not a constructor` cuando webpack externaliza pdfkit (CJS).
- * eslint-disable-next-line @typescript-eslint/no-require-imports
+ * Carga el constructor de pdfkit compatible con:
+ * - require CJS directo (webpack external)
+ * - export default (ESM / interop)
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-const PDFDocument: typeof import('pdfkit') = (() => {
+function resolvePdfDocumentCtor(): PdfCtor {
     // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const mod = require('pdfkit');
-    return mod?.default ?? mod;
-})();
+    const mod = require('pdfkit') as PdfCtor | { default: PdfCtor };
+    const ctor = typeof mod === 'function'
+        ? mod
+        : (mod as { default: PdfCtor }).default;
+    if (typeof ctor !== 'function') {
+        throw new Error(
+            `pdfkit export inválido (${typeof mod}); se esperaba un constructor`,
+        );
+    }
+    return ctor;
+}
+
+function createPdfDocument(options?: PDFKit.PDFDocumentOptions): PdfDoc {
+    const PDFDocument = resolvePdfDocumentCtor();
+    return new PDFDocument(options);
+}
 
 const PW = 595.28;
 const PH = 841.89;
@@ -45,7 +61,7 @@ const UNSAFE_CHAR_MAP: Record<string, string> = {
     '\u00B7': '-', // ·
 };
 
-function toBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
+function toBuffer(doc: PdfDoc): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         doc.on('data', (c: Buffer) => chunks.push(c));
@@ -116,7 +132,7 @@ export class CorpRankingPdfService {
         const total = exportPayload.rows.length;
 
         // Sin bufferPages: con 10k+ filas evita RAM alta y switchToPage frágil.
-        const doc = new PDFDocument({ margin: 0, size: 'A4', autoFirstPage: true, bufferPages: false });
+        const doc = createPdfDocument({ margin: 0, size: 'A4', autoFirstPage: true, bufferPages: false });
         const done = toBuffer(doc);
 
         let page = 1;
@@ -162,7 +178,7 @@ export class CorpRankingPdfService {
     }
 
     private drawHeader(
-        doc: PDFKit.PDFDocument,
+        doc: PdfDoc,
         orgName: string,
         leagueName: string,
         totalParticipants: number,
@@ -188,7 +204,7 @@ export class CorpRankingPdfService {
         return HEADER_H;
     }
 
-    private drawTableHeader(doc: PDFKit.PDFDocument, y: number): number {
+    private drawTableHeader(doc: PdfDoc, y: number): number {
         doc.rect(M, y, CW, 22).fill('#1e293b');
         doc.fillColor('#f8fafc').fontSize(9).font('Helvetica-Bold');
         doc.text('Pos.', COL.rank.x + 4, y + 6, { width: COL.rank.w - 4, lineBreak: false });
@@ -203,7 +219,7 @@ export class CorpRankingPdfService {
     }
 
     private drawRow(
-        doc: PDFKit.PDFDocument,
+        doc: PdfDoc,
         row: CorpRankingExportPayload['rows'][number],
         index: number,
         y: number,
@@ -235,7 +251,7 @@ export class CorpRankingPdfService {
     }
 
     private drawFooter(
-        doc: PDFKit.PDFDocument,
+        doc: PdfDoc,
         orgName: string,
         generatedLabel: string,
         page: number,
