@@ -44,10 +44,25 @@ import { CorpRankingReportService } from '@corp-api/corporate-tenant/corp-rankin
         MatchOperationsService,
         CorpRankingService,
         CorpRankingPdfService,
-        CorpRankingReportService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,
+        {
+            // Factory: evita token EmailQueueService duplicado (apps/api vs override webpack).
+            provide: CorpRankingReportService,
+            useFactory: (
+                prisma: PrismaService,
+                corpRanking: CorpRankingService,
+                pdfService: CorpRankingPdfService,
+                emailQueue: EmailQueueService,
+            ) => new CorpRankingReportService(
+                prisma as any,
+                corpRanking,
+                pdfService,
+                emailQueue as any,
+            ),
+            inject: [PrismaService, CorpRankingService, CorpRankingPdfService, EmailQueueService],
+        },
         {
             provide: TenantInvitationService,
             useFactory: (
