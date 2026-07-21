@@ -150,3 +150,36 @@ export async function request<T = unknown>(
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
 }
+
+/** Descarga un archivo binario (p.ej. PDF) con auth de tenant. */
+export async function downloadBlob(
+    path: string,
+    fallbackFilename = 'download.bin',
+): Promise<void> {
+    const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+    const headers = getHeaders();
+    headers.delete('Content-Type');
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+            const body = await res.json();
+            msg = body?.message ?? body?.error ?? msg;
+        } catch { /* ignore */ }
+        throw new ApiError(msg, { status: res.status });
+    }
+
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1]?.trim() || fallbackFilename;
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+}

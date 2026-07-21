@@ -46,6 +46,7 @@ type UserStats = {
 type CorpLeaderboardRow = {
     id: string;
     username: string;
+    documentNumber: string | null;
     name: string;
     avatar: string | null;
     points: number;
@@ -56,6 +57,21 @@ type CorpLeaderboardRow = {
     winnerCount: number;
     goalCount: number;
     uniqueCount: number;
+};
+
+export type CorpRankingExportRow = {
+    rank: number;
+    documentNumber: string;
+    name: string;
+    totalPoints: number;
+};
+
+export type CorpRankingExportPayload = {
+    league: { id: string; name: string } | null;
+    category: CorpLeaderboardCategory;
+    generatedAt: string;
+    totalParticipants: number;
+    rows: CorpRankingExportRow[];
 };
 
 type PointDetail = {
@@ -494,6 +510,7 @@ export class CorpRankingService {
                 return {
                     id: member.user.id,
                     username: member.user.documentNumber ?? member.user.username,
+                    documentNumber: member.user.documentNumber ?? null,
                     name: member.user.name,
                     avatar: member.user.avatar,
                     points: stats.points + bonus.total,
@@ -633,6 +650,41 @@ export class CorpRankingService {
             entries: this.mapRankedEntries(leaderboard, viewerUserId, CORP_RANKING_LIMIT),
             totalParticipants: leaderboard.length,
             limit: CORP_RANKING_LIMIT,
+        };
+    }
+
+    /**
+     * Listado completo (sin tope de 50) para export admin: cédula, nombre y puntaje.
+     */
+    async getRankingExport(tenantId: string, category?: string): Promise<CorpRankingExportPayload> {
+        const league = await this.resolveActiveLeague(tenantId);
+        if (!league) {
+            return {
+                league: null,
+                category: 'GENERAL',
+                generatedAt: new Date().toISOString(),
+                totalParticipants: 0,
+                rows: [],
+            };
+        }
+
+        const available = this.buildAvailableCategories(league);
+        const activeCategory = this.normalizeCategory(category, available);
+        await this.refreshPhaseBonusesForLeague(league.id);
+        const leaderboard = await this.buildLeaderboard(league.id, activeCategory);
+        const ranked = assignCompetitionRanks(leaderboard);
+
+        return {
+            league: { id: league.id, name: league.name },
+            category: activeCategory,
+            generatedAt: new Date().toISOString(),
+            totalParticipants: ranked.length,
+            rows: ranked.map((entry) => ({
+                rank: entry.rank,
+                documentNumber: entry.documentNumber ?? entry.username ?? '',
+                name: entry.name,
+                totalPoints: entry.points,
+            })),
         };
     }
 

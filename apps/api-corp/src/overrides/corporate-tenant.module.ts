@@ -23,6 +23,8 @@ import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operati
 import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.service';
 import { PredictionsModule } from '@corp-api/predictions/predictions.module';
 import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-members-resend.controller';
+import { CorpRankingPdfService } from './corp-ranking-pdf.service';
+import { CorpRankingReportService } from './corp-ranking-report.service';
 
 @Module({
     imports: [PrismaModule, EmailModule, PredictionsModule],
@@ -41,6 +43,8 @@ import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-mem
         ParticipationService,
         MatchOperationsService,
         CorpRankingService,
+        CorpRankingPdfService,
+        CorpRankingReportService,
         TenantMemberGuard,
         TenantAdminGuard,
         TenantStaffGuard,
@@ -50,7 +54,7 @@ import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-mem
                 prisma: PrismaService,
                 emailQueue: EmailQueueService,
                 limits: TenantLimitsService,
-            ) => new TenantInvitationService(prisma, emailQueue as any, limits),
+            ) => new TenantInvitationService(prisma as any, emailQueue as any, limits),
             inject: [PrismaService, EmailQueueService, TenantLimitsService],
         },
         {

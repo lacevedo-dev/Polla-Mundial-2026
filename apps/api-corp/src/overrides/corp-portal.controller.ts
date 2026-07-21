@@ -1,6 +1,7 @@
-﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, Res, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '@corp-api/auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from '@corp-api/corporate-tenant/guards/tenant-member.guard';
 import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin.guard';
@@ -17,6 +18,7 @@ import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.serv
 import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { USER_STATUS } from '@corp-api/users/user-status.constants';
 import { CORP_DEFAULT_SCORING_RULES, CORP_PHASE_BONUS_HELP } from './corp-scoring-defaults';
+import { CorpRankingReportService } from './corp-ranking-report.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';
@@ -88,6 +90,11 @@ class CorpPredictionForUserDto {
     @IsOptional() @IsString() advanceTeamId?: string;
 }
 
+class SendRankingReportEmailDto {
+    @IsEmail() email: string;
+    @IsOptional() @IsString() category?: string;
+}
+
 @Controller('corp')
 @UseGuards(JwtAuthGuard, TenantMemberGuard)
 export class CorpPortalController {
@@ -100,6 +107,7 @@ export class CorpPortalController {
         private readonly matchOperations: MatchOperationsService,
         private readonly corpRanking: CorpRankingService,
         private readonly predictionsService: PredictionsService,
+        private readonly rankingReport: CorpRankingReportService,
     ) {}
 
     @UseGuards(TenantAdminGuard)
@@ -392,6 +400,33 @@ export class CorpPortalController {
     @Get('ranking')
     async getRanking(@Req() req: any, @Query('category') category?: string) {
         return this.corpRanking.getRankingPayload(req.tenantId, req.user.userId, category);
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Get('admin/ranking-report')
+    async getRankingReport(@Req() req: any, @Query('category') category?: string) {
+        return this.rankingReport.getExport(req.tenantId, category);
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Get('admin/ranking-report/pdf')
+    async downloadRankingReportPdf(
+        @Req() req: any,
+        @Res() res: Response,
+        @Query('category') category?: string,
+    ) {
+        const { buffer, filename } = await this.rankingReport.getPdfBuffer(req.tenantId, category);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
+    }
+
+    @UseGuards(TenantAdminGuard)
+    @Post('admin/ranking-report/email')
+    @HttpCode(HttpStatus.OK)
+    async sendRankingReportEmail(@Req() req: any, @Body() dto: SendRankingReportEmailDto) {
+        return this.rankingReport.sendPdfByEmail(req.tenantId, dto.email, dto.category);
     }
 
     @Get('tournaments')

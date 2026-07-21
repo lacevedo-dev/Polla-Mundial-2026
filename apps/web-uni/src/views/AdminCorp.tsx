@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus, Activity, Calculator } from 'lucide-react';
+import { Users, Trophy, BarChart2, Shield, ChevronRight, TrendingUp, ArrowUpRight, Plus, Activity, Calculator, FileText } from 'lucide-react';
 import { CorpLayout } from '../layouts/CorpLayout';
 import { request } from '../api';
 import { useTenantStore } from '../stores/tenant.store';
@@ -50,6 +50,14 @@ export default function AdminCorp() {
             link: '/admin/participation',
             color: 'text-violet-600',
             bg: 'bg-violet-50',
+        },
+        {
+            label: 'Listado por puntaje',
+            desc: 'Exportar PDF o enviar por correo (cédula, nombres, puntaje)',
+            icon: FileText,
+            link: '/admin/ranking-report',
+            color: 'text-emerald-700',
+            bg: 'bg-emerald-50',
         },
         {
             label: 'Gestionar miembros',

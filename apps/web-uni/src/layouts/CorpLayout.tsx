@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     Home, Trophy, BarChart2, LogOut, Menu, X,
-    Building2, Shield, Users, HelpCircle, Bell, BellOff, PlusCircle, Settings, ShieldCheck, Activity, Calculator,
+    Building2, Shield, Users, HelpCircle, Bell, BellOff, PlusCircle, Settings, ShieldCheck, Activity, Calculator, FileText,
 } from 'lucide-react';
 import { useTenantStore } from '../stores/tenant.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -27,6 +27,7 @@ const ADMIN_NAV_ITEMS = [
     { path: '/admin', label: 'Panel Admin', icon: Shield },
     { path: '/admin/participation', label: 'Participación', icon: Activity },
     { path: '/admin/matches', label: 'Partidos y puntajes', icon: Calculator },
+    { path: '/admin/ranking-report', label: 'Listado por puntaje', icon: FileText },
     { path: '/admin/members', label: 'Gestión de usuarios', icon: Users },
     { path: '/admin/pollas', label: 'Gestionar Pollas', icon: PlusCircle },
     { path: '/admin/roles', label: 'Roles y Permisos', icon: ShieldCheck },

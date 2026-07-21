@@ -23,6 +23,7 @@ const AdminCorpSettings = React.lazy(() => import('./views/AdminCorpSettings'));
 const AdminCorpRoles = React.lazy(() => import('./views/AdminCorpRoles'));
 const AdminCorpParticipation = React.lazy(() => import('./views/AdminCorpParticipation'));
 const AdminCorpMatches = React.lazy(() => import('./views/AdminCorpMatches'));
+const AdminCorpRankingReport = React.lazy(() => import('./views/AdminCorpRankingReport'));
 const ResetPassword = React.lazy(() => import('./views/ResetPassword'));
 
 const Loader = () => (
@@ -231,6 +232,16 @@ export function AppRouter() {
                             <RequireAuth>
                                 <RequireTenantAdmin>
                                     <AdminCorpMatches />
+                                </RequireTenantAdmin>
+                            </RequireAuth>
+                        }
+                    />
+                    <Route
+                        path="/admin/ranking-report"
+                        element={
+                            <RequireAuth>
+                                <RequireTenantAdmin>
+                                    <AdminCorpRankingReport />
                                 </RequireTenantAdmin>
                             </RequireAuth>
                         }
