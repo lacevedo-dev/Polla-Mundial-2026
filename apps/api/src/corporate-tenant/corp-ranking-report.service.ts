@@ -3,9 +3,9 @@ import { EmailJobPriority, EmailJobType } from '@prisma/client';
 import {
     CorpRankingExportPayload,
     CorpRankingService,
-} from '@corp-api/corporate-tenant/corp-ranking.service';
-import { PrismaService } from '@corp-api/prisma/prisma.service';
-import { EmailQueueService } from '@corp-api/email/email-queue.service';
+} from './corp-ranking.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { CorpRankingPdfService } from './corp-ranking-pdf.service';
 
 @Injectable()

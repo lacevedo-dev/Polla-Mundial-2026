@@ -18,7 +18,7 @@ import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.serv
 import { PredictionsService } from '@corp-api/predictions/predictions.service';
 import { USER_STATUS } from '@corp-api/users/user-status.constants';
 import { CORP_DEFAULT_SCORING_RULES, CORP_PHASE_BONUS_HELP } from './corp-scoring-defaults';
-import { CorpRankingReportService } from './corp-ranking-report.service';
+import { CorpRankingReportService } from '@corp-api/corporate-tenant/corp-ranking-report.service';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsEmail, IsBoolean, IsEnum, IsNumber, Min, Max, IsInt, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Privacy, LeagueStatus, MemberRole, MemberStatus, ScoringType, Plan, TenantRole, TenantMemberStatus, MatchStatus } from '@prisma/client';

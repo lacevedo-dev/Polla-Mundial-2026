@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
-import type { CorpRankingExportPayload } from '@corp-api/corporate-tenant/corp-ranking.service';
+import type { CorpRankingExportPayload } from './corp-ranking.service';
 
 const PW = 595.28;
 const PH = 841.89;

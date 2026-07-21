@@ -23,8 +23,8 @@ import { MatchOperationsService } from '@corp-api/corporate-tenant/match-operati
 import { CorpRankingService } from '@corp-api/corporate-tenant/corp-ranking.service';
 import { PredictionsModule } from '@corp-api/predictions/predictions.module';
 import { CorpMembersResendController } from '@corp-api/corporate-tenant/corp-members-resend.controller';
-import { CorpRankingPdfService } from './corp-ranking-pdf.service';
-import { CorpRankingReportService } from './corp-ranking-report.service';
+import { CorpRankingPdfService } from '@corp-api/corporate-tenant/corp-ranking-pdf.service';
+import { CorpRankingReportService } from '@corp-api/corporate-tenant/corp-ranking-report.service';
 
 @Module({
     imports: [PrismaModule, EmailModule, PredictionsModule],
