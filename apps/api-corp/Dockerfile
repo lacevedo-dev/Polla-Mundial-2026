@@ -50,7 +50,7 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate 
 WORKDIR /app/apps/api-corp
 RUN mkdir -p /app/apps/api-corp/node_modules /app/apps/api-corp/uploads/branding
 # Invalidar caché de capa si cambia el loader de pdfkit del ranking admin
-ARG RANKING_PDF_BUILD_MARKER=pdfkit-non-webpack-require-v4
+ARG RANKING_PDF_BUILD_MARKER=pdfkit-eval-require-v5
 RUN echo "ranking-pdf-marker=${RANKING_PDF_BUILD_MARKER}" && npm run build
 
 # ---- Etapa 2: Producción ----

@@ -2,21 +2,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { CorpRankingExportPayload } from './corp-ranking.service';
 
 /** Marcador para confirmar en logs que el contenedor corre este build (no el bundle viejo). */
-export const RANKING_PDF_BUILD_MARKER = 'pdfkit-non-webpack-require-v4';
+export const RANKING_PDF_BUILD_MARKER = 'pdfkit-eval-require-v5';
 
 type PdfDoc = PDFKit.PDFDocument;
 type PdfCtor = new (options?: PDFKit.PDFDocumentOptions) => PdfDoc;
 
-/** Webpack define esto en target node; el require nativo no pasa por el runtime del bundle. */
-declare const __non_webpack_require__: NodeRequire | undefined;
-
+/**
+ * require nativo de Node, a prueba de que webpack reescriba `require` / `__non_webpack_require__`.
+ * eslint-disable-next-line no-eval
+ */
 function nodeRequire(moduleId: string): unknown {
-    if (typeof __non_webpack_require__ === 'function') {
-        return __non_webpack_require__(moduleId);
-    }
-    // Jest / tsx / ejecución sin webpack
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    return require(moduleId);
+    // eslint-disable-next-line no-eval, @typescript-eslint/no-unsafe-call
+    const req = eval('require') as NodeRequire;
+    return req(moduleId);
 }
 
 /**
