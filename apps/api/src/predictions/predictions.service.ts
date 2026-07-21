@@ -662,7 +662,12 @@ export class PredictionsService {
 
         for (const userId of userIds) {
             await this.upsertPhaseBonusAward({ userId, leagueId, phase, points });
-            this.logger.log(`Bono de fase ${phase} otorgado a ${userId} en liga ${leagueId}`);
+        }
+
+        if (userIds.length > 0) {
+            this.logger.log(
+                `Bono de fase ${phase}: ${userIds.length} usuario(s) en liga ${leagueId} (+${points} pts)`,
+            );
         }
     }
 
