@@ -128,6 +128,8 @@ module.exports = (options) => {
         entry: path.resolve(__dirname, 'src/main.ts'),
         externals: [
             { 'bcrypt': 'commonjs bcrypt' },
+            // pdfkit lee AFM desde node_modules; si webpack lo embebe, falla en runtime (500 al generar PDF).
+            { 'pdfkit': 'commonjs pdfkit' },
             function ({ request }, callback) {
                 if (request && request.startsWith('node:')) {
                     return callback(null, `commonjs ${request}`);

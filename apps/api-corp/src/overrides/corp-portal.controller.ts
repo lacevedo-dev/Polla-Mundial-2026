@@ -1,7 +1,6 @@
-﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, Res, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+﻿import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException, HttpCode, HttpStatus, Query, UploadedFile, UseInterceptors, StreamableFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import type { Response } from 'express';
 import { JwtAuthGuard } from '@corp-api/auth/guards/jwt-auth.guard';
 import { TenantMemberGuard } from '@corp-api/corporate-tenant/guards/tenant-member.guard';
 import { TenantAdminGuard } from '@corp-api/corporate-tenant/guards/tenant-admin.guard';
@@ -412,14 +411,14 @@ export class CorpPortalController {
     @Get('admin/ranking-report/pdf')
     async downloadRankingReportPdf(
         @Req() req: any,
-        @Res() res: Response,
         @Query('category') category?: string,
-    ) {
+    ): Promise<StreamableFile> {
         const { buffer, filename } = await this.rankingReport.getPdfBuffer(req.tenantId, category);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Length', buffer.length);
-        res.send(buffer);
+        return new StreamableFile(buffer, {
+            type: 'application/pdf',
+            disposition: `attachment; filename="${filename}"`,
+            length: buffer.length,
+        });
     }
 
     @UseGuards(TenantAdminGuard)
